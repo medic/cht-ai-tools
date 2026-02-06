@@ -1,0 +1,45 @@
+{
+  "name": "@medic/cht-ai-tools",
+  "version": "0.1.0",
+  "description": "AI development tools for Community Health Toolkit - installs CHT-specific skills, MCP servers, and tools into Claude Code",
+  "type": "module",
+  "bin": {
+    "cht-ai-tools": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cht",
+    "community-health-toolkit",
+    "medic",
+    "claude-code",
+    "ai-tools",
+    "cli"
+  ],
+  "author": "Medic Mobile",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/medic/cht-ai-tools.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  }
+}
