@@ -27,7 +27,7 @@ if (args.includes('--help') || args.includes('-h') || !command) {
     --mcp         Install MCP servers only
     --commands    Install slash commands only
     --hooks       Install hooks only
-    --all, -y     Install all components (non-interactive)
+    --all, --yes, -y  Install all components (non-interactive)
     --project     Install to ./.claude/ instead of ~/.claude/
     --help, -h    Show this help message
     --version     Show version number

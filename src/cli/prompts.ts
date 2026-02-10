@@ -14,6 +14,12 @@ export interface SelectionResult {
   hooks: string[];
 }
 
+const validCategories = new Set<keyof SelectionResult>(['skills', 'mcp', 'commands', 'hooks']);
+
+function isSelectionCategory(key: string): key is keyof SelectionResult {
+  return validCategories.has(key as keyof SelectionResult);
+}
+
 /**
  * Parse "category:name" selection strings into a SelectionResult
  */
@@ -21,8 +27,8 @@ function parseSelections(selections: string[]): SelectionResult {
   const result: SelectionResult = { skills: [], mcp: [], commands: [], hooks: [] };
   for (const sel of selections) {
     const [category, name] = sel.split(':');
-    if (category in result) {
-      result[category as keyof SelectionResult].push(name);
+    if (isSelectionCategory(category)) {
+      result[category].push(name);
     }
   }
   return result;

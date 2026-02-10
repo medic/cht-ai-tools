@@ -12,7 +12,7 @@ class TestableClaudeCodeTarget extends ClaudeCodeTarget {
   constructor(private basePath: string) {
     super();
   }
-  getConfigPath(): string {
+  getConfigPath(_location: 'global' | 'project'): string {
     return this.basePath;
   }
 }
@@ -253,6 +253,16 @@ describe('configureHook', () => {
     expect(stat.isFile()).toBe(true);
     // Check executable bit (owner execute = 0o100)
     expect(stat.mode & 0o111).toBeGreaterThan(0);
+  });
+
+  it('uses relative path for project-location hooks', async () => {
+    await target.configureHook(testHook, 'project');
+
+    const content = JSON.parse(
+      await fs.readFile(path.join(tempDir, 'settings.json'), 'utf-8')
+    );
+    const command = content.hooks.PreToolUse[0].hooks[0].command;
+    expect(command).toBe('bash .claude/hooks/test-hook.sh');
   });
 });
 

@@ -162,7 +162,7 @@ export class ClaudeCodeTarget implements Target {
     }
 
     // Merge new server into config
-    config.mcpServers![server.name] = serverEntry;
+    config.mcpServers[server.name] = serverEntry;
 
     // Write updated config
     await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
@@ -221,7 +221,7 @@ export class ClaudeCodeTarget implements Target {
       command: `bash ${scriptPath}`,
     };
 
-    const eventHooks = settings.hooks![hook.event] ?? [];
+    const eventHooks = settings.hooks[hook.event] ?? [];
 
     // Find existing matcher entry for this event
     const existingIndex = eventHooks.findIndex(
@@ -245,7 +245,7 @@ export class ClaudeCodeTarget implements Target {
       eventHooks.push(matcherEntry);
     }
 
-    settings.hooks![hook.event] = eventHooks;
+    settings.hooks[hook.event] = eventHooks;
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
   }
