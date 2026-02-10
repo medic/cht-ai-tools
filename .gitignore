@@ -23,6 +23,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Plans
+docs/plans/
+
 # Temp
 *.tmp
 *.temp
