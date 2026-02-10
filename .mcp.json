@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cht-docs": {
+      "type": "http",
+      "url": "https://mcp-docs.dev.medicmobile.org/mcp"
+    }
+  }
+}

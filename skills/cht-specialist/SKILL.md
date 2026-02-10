@@ -1,5 +1,5 @@
 ---
-name: "CHT Specialist"
+name: cht-specialist
 description: "Expert assistance with Community Health Toolkit (CHT) development, configuration, troubleshooting, and architecture. Use when working with CHT applications, forms (XLSForm/XForm), tasks.js, targets.js, contact-summary, app_settings.json, cht-conf CLI, Docker deployment, workflows, integrations, or any CHT-related questions. Provides guidance on building CHT apps, debugging issues, understanding architecture, and following best practices."
 ---
 

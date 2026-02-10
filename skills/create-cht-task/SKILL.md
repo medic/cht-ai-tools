@@ -1,5 +1,5 @@
 ---
-name: CHT Task Creator
+name: create-cht-task
 description: "This skill should be used when the user asks to 'create a task', 'help me create a CHT task', 'build a task', 'add a new task', 'generate tasks.js', 'create follow-up task', 'create reminder task', or mentions task creation for CHT applications. Provides guided, educational assistance for creating CHT tasks by analyzing existing forms and project context."
 ---
 

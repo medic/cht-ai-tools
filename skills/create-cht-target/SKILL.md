@@ -1,5 +1,5 @@
 ---
-name: CHT Target Creator
+name: create-cht-target
 description: "This skill should be used when the user asks to 'create a target', 'help me create a CHT target', 'build a target', 'add a KPI', 'generate targets.js', 'create indicator', 'add analytics target', or mentions target/indicator creation for CHT applications. Provides guided, educational assistance for creating CHT targets by analyzing existing forms and project context."
 ---
 
