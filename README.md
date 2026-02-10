@@ -5,7 +5,7 @@ AI development tools for the Community Health Toolkit (CHT). This CLI installs C
 ## Installation
 
 ```bash
-npx @medic/cht-ai-tools init
+npx @medic/cht-ai-tools install
 ```
 
 ## What It Installs
@@ -22,7 +22,7 @@ npx @medic/cht-ai-tools init
 ### Interactive Mode
 
 ```bash
-npx @medic/cht-ai-tools init
+npx @medic/cht-ai-tools install
 ```
 
 Follow the prompts to:
@@ -32,10 +32,39 @@ Follow the prompts to:
 ### Non-Interactive Mode
 
 ```bash
-npx @medic/cht-ai-tools init --yes
+npx @medic/cht-ai-tools install --all
 ```
 
-Installs all components to global location with default options.
+Installs all components to global location.
+
+### Selective Installation
+
+Install specific components without interactive prompts:
+
+```bash
+# Install only skills
+npx @medic/cht-ai-tools install --skills
+
+# Install skills and MCP servers
+npx @medic/cht-ai-tools install --skills --mcp
+
+# Install everything to current project
+npx @medic/cht-ai-tools install --all --project
+
+# Install hooks to current project
+npx @medic/cht-ai-tools install --hooks --project
+```
+
+#### Available Flags
+
+| Flag | Description |
+|------|-------------|
+| `--skills` | Install CHT skills |
+| `--mcp` | Install MCP servers |
+| `--commands` | Install slash commands |
+| `--hooks` | Install validation/formatting hooks |
+| `--all` | Install all components (non-interactive) |
+| `--project` | Install to `./.claude/` instead of `~/.claude/` |
 
 ## Components
 
@@ -138,7 +167,7 @@ node dist/index.js
 
 # Or link it globally for testing
 npm link
-cht-ai-tools init
+cht-ai-tools install
 ```
 
 #### Test installation to a temp directory
@@ -389,7 +418,7 @@ node dist/index.js
 src/
 ├── index.ts              # CLI entry point
 ├── cli/
-│   ├── init.ts           # Main init command
+│   ├── install.ts        # Main install command
 │   ├── prompts.ts        # Clack interactive prompts
 │   └── utils.ts          # File operation helpers
 ├── targets/              # AI tool adapters (extensible)

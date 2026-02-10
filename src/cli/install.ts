@@ -79,14 +79,19 @@ async function installSelectedItems(
   }
 }
 
-interface InitOptions {
+export interface InstallOptions {
   nonInteractive?: boolean;
+  skills?: boolean;
+  mcp?: boolean;
+  commands?: boolean;
+  hooks?: boolean;
+  project?: boolean;
 }
 
 /**
- * Main init command entry point
+ * Main install command entry point
  */
-export async function runInit(options: InitOptions = {}): Promise<void> {
+export async function runInstall(options: InstallOptions = {}): Promise<void> {
   console.clear();
 
   p.intro(pc.bgCyan(pc.black(' CHT AI Tools ')));
@@ -103,22 +108,39 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     );
   }
 
+  // Determine if component flags were passed
+  const hasComponentFlags = options.skills || options.mcp || options.commands || options.hooks;
+
   let location: InstallLocation;
   let selection: SelectionResult;
 
-  if (options.nonInteractive) {
-    location = 'global';
-    selection = allItems();
-    p.log.step(`Installing all components to ${pc.cyan('~/.claude/')} (non-interactive mode)`);
+  if (options.nonInteractive || hasComponentFlags) {
+    // Non-interactive: use flags to determine what to install
+    location = options.project ? 'project' : 'global';
+
+    if (hasComponentFlags) {
+      // Build selection from flags
+      const all = allItems();
+      selection = {
+        skills: options.skills ? all.skills : [],
+        mcp: options.mcp ? all.mcp : [],
+        commands: options.commands ? all.commands : [],
+        hooks: options.hooks ? all.hooks : [],
+      };
+    } else {
+      // --all / --yes: install everything
+      selection = allItems();
+    }
+
+    p.log.step(`Installing ${formatSelection(selection)} to ${pc.cyan(location === 'global' ? '~/.claude/' : './.claude/')}`);
   } else {
-    // Step 1: Choose installation location
+    // Interactive mode (no flags passed)
     location = await promptInstallLocation();
 
     p.log.step(
       `Installing to ${pc.cyan(location === 'global' ? '~/.claude/' : './.claude/')}`
     );
 
-    // Step 2: Select items
     selection = await promptItems();
 
     const totalItems =
@@ -135,10 +157,10 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     p.log.step(`Selected: ${formatSelection(selection)}`);
   }
 
-  // Step 3: Install items
+  // Install items
   await installSelectedItems(selection, location);
 
-  // Step 4: Show success message
+  // Show success message
   p.outro(
     pc.green('Installation complete!') +
       '\n\n' +
