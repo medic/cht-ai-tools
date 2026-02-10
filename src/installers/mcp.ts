@@ -1,5 +1,7 @@
 import type { Target, McpServer } from '../targets/base.js';
 
+// NOTE: This list is also defined in .mcp.json for the plugin system.
+// Keep both in sync when adding or modifying MCP servers.
 export const CHT_MCP_SERVERS: McpServer[] = [
   {
     name: 'cht-docs',

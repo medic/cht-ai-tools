@@ -10,7 +10,28 @@ if (args.includes('--version')) {
   process.exit(0);
 }
 
-const command = args.find(a => !a.startsWith('-') && !args[args.indexOf(a) - 1]?.startsWith('--target'));
+// Parse --target <name> or --target=<name>
+function parseTargetValue(): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--target' && i + 1 < args.length) {
+      return args[i + 1];
+    }
+    if (args[i].startsWith('--target=')) {
+      return args[i].slice('--target='.length);
+    }
+  }
+  return undefined;
+}
+
+const target = parseTargetValue();
+
+// Find the command, skipping flags and the --target value
+const command = args.find((a, i) => {
+  if (a.startsWith('-')) return false;
+  // Skip if this arg is the value of --target
+  if (i > 0 && args[i - 1] === '--target') return false;
+  return true;
+});
 
 if (args.includes('--help') || args.includes('-h') || !command) {
   console.log(`
@@ -50,15 +71,8 @@ if (command !== 'install') {
 // Parse flags
 const hasFlag = (flag: string) => args.includes(flag);
 
-// Parse --target <name> value
-let target: string | undefined;
-const targetIdx = args.indexOf('--target');
-if (targetIdx !== -1 && targetIdx + 1 < args.length) {
-  target = args[targetIdx + 1];
-}
-
 runInstall({
-  nonInteractive: hasFlag('--all') || hasFlag('--yes') || hasFlag('-y'),
+  installAll: hasFlag('--all') || hasFlag('--yes') || hasFlag('-y'),
   skills: hasFlag('--skills'),
   mcp: hasFlag('--mcp'),
   commands: hasFlag('--commands'),

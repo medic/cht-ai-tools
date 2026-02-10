@@ -19,9 +19,9 @@ Create symlinks so OpenCode discovers the CHT skills:
 
 ```bash
 mkdir -p ~/.config/opencode/skills
-ln -s ~/.config/opencode/cht-ai-tools/skills/cht-specialist ~/.config/opencode/skills/cht-specialist
-ln -s ~/.config/opencode/cht-ai-tools/skills/create-cht-task ~/.config/opencode/skills/create-cht-task
-ln -s ~/.config/opencode/cht-ai-tools/skills/create-cht-target ~/.config/opencode/skills/create-cht-target
+ln -sf ~/.config/opencode/cht-ai-tools/skills/cht-specialist ~/.config/opencode/skills/cht-specialist
+ln -sf ~/.config/opencode/cht-ai-tools/skills/create-cht-task ~/.config/opencode/skills/create-cht-task
+ln -sf ~/.config/opencode/cht-ai-tools/skills/create-cht-target ~/.config/opencode/skills/create-cht-target
 ```
 
 ### 3. Symlink commands

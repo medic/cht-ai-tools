@@ -139,7 +139,7 @@ async function resolveTarget(
 }
 
 export interface InstallOptions {
-  nonInteractive?: boolean;
+  installAll?: boolean;
   skills?: boolean;
   mcp?: boolean;
   commands?: boolean;
@@ -154,7 +154,8 @@ export interface InstallOptions {
 export async function runInstall(options: InstallOptions = {}): Promise<void> {
   p.intro(pc.bgCyan(pc.black(' CHT AI Tools ')));
 
-  const target = await resolveTarget(options.target, options.nonInteractive ?? false);
+  const isNonInteractive = (options.installAll || options.skills || options.mcp || options.commands || options.hooks) ?? false;
+  const target = await resolveTarget(options.target, isNonInteractive);
   const displayName = getTargetDisplayName(target);
   const supportsHooks = target.name !== 'opencode';
 
@@ -168,7 +169,7 @@ export async function runInstall(options: InstallOptions = {}): Promise<void> {
   let location: InstallLocation;
   let selection: SelectionResult;
 
-  if (options.nonInteractive || hasComponentFlags) {
+  if (isNonInteractive) {
     // Non-interactive: use flags to determine what to install
     location = options.project ? 'project' : 'global';
 
