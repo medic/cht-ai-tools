@@ -8,6 +8,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
 import type { Target, Skill, McpServer, Command, Hook, InstallOptions } from './base.js';
+import { readJsonConfig, pathExists } from './utils.js';
 
 interface McpServerEntry {
   type?: 'http' | 'stdio';
@@ -34,30 +35,6 @@ interface HookMatcher {
 interface SettingsConfig {
   hooks?: Record<string, HookMatcher[]>;
   [key: string]: unknown;
-}
-
-/**
- * Read and parse a JSON config file safely.
- * Returns the default value if the file doesn't exist.
- * Throws if the file exists but contains invalid JSON.
- */
-async function readJsonConfig<T>(filePath: string, defaultValue: T): Promise<T> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content) as T;
-  } catch (error: unknown) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`Invalid JSON in ${filePath}: ${error.message}`);
-    }
-    if (isNodeError(error) && error.code === 'ENOENT') {
-      return defaultValue;
-    }
-    throw error;
-  }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error;
 }
 
 export class ClaudeCodeTarget implements Target {
@@ -112,7 +89,7 @@ export class ClaudeCodeTarget implements Target {
     const targetDir = path.join(skillsDir, skill.name);
 
     // Check if skill already exists
-    const exists = await this.pathExists(targetDir);
+    const exists = await pathExists(targetDir);
     if (exists && !options.overwrite) {
       throw new Error(`Skill '${skill.name}' already exists at ${targetDir}. Use overwrite option to replace.`);
     }
@@ -181,7 +158,7 @@ export class ClaudeCodeTarget implements Target {
     const targetPath = path.join(commandsDir, `${cmd.name}.md`);
 
     // Check if command already exists
-    const exists = await this.pathExists(targetPath);
+    const exists = await pathExists(targetPath);
     if (exists && !options.overwrite) {
       throw new Error(`Command '${cmd.name}' already exists at ${targetPath}. Use overwrite option to replace.`);
     }
@@ -250,15 +227,4 @@ export class ClaudeCodeTarget implements Target {
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
   }
 
-  /**
-   * Helper to check if a path exists.
-   */
-  private async pathExists(filePath: string): Promise<boolean> {
-    try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
 }

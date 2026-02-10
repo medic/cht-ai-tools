@@ -1,7 +1,7 @@
 {
   "name": "@medic/cht-ai-tools",
   "version": "0.1.0",
-  "description": "AI development tools for Community Health Toolkit - installs CHT-specific skills, MCP servers, and tools into Claude Code",
+  "description": "AI development tools for Community Health Toolkit - installs CHT-specific skills, MCP servers, and tools into Claude Code or OpenCode",
   "type": "module",
   "bin": {
     "cht-ai-tools": "./dist/index.js"

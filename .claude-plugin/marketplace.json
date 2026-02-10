@@ -1,0 +1,19 @@
+{
+  "name": "cht-ai-tools",
+  "owner": {
+    "name": "Medic",
+    "email": "dev@medic.org"
+  },
+  "metadata": {
+    "description": "CHT AI development tools for Claude Code",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "cht-ai-tools",
+      "source": "./",
+      "description": "AI development tools for Community Health Toolkit (CHT) — skills, commands, hooks, and MCP server for CHT configuration development",
+      "version": "0.1.0"
+    }
+  ]
+}

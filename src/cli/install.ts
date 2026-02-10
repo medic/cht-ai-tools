@@ -3,18 +3,37 @@ import pc from 'picocolors';
 import {
   promptInstallLocation,
   promptItems,
+  promptTargetSelection,
   allItems,
   type InstallLocation,
   type SelectionResult,
 } from './prompts.js';
 import { ensureDir } from './utils.js';
+import type { Target } from '../targets/base.js';
 import { ClaudeCodeTarget } from '../targets/claude-code.js';
+import { getTargetByName, detectTargets, allTargetNames } from '../targets/registry.js';
 import {
   installSkills,
   installMcp,
   installCommands,
   installHooks,
 } from '../installers/index.js';
+
+const TARGET_DISPLAY_NAMES: Record<string, string> = {
+  'claude-code': 'Claude Code',
+  'opencode': 'OpenCode',
+};
+
+function getTargetDisplayName(target: Target): string {
+  return TARGET_DISPLAY_NAMES[target.name] ?? target.name;
+}
+
+function getDisplayPath(target: Target, location: InstallLocation): string {
+  if (target.name === 'opencode') {
+    return location === 'global' ? '~/.config/opencode/' : './.opencode/';
+  }
+  return location === 'global' ? '~/.claude/' : './.claude/';
+}
 
 /**
  * Format selection for display
@@ -32,7 +51,7 @@ function formatSelection(selection: SelectionResult): string {
  * Install selected items
  */
 async function installSelectedItems(
-  target: ClaudeCodeTarget,
+  target: Target,
   selection: SelectionResult,
   location: InstallLocation
 ): Promise<void> {
@@ -78,6 +97,47 @@ async function installSelectedItems(
   }
 }
 
+/**
+ * Resolve the target to use based on --target flag or auto-detection.
+ */
+async function resolveTarget(
+  targetName: string | undefined,
+  nonInteractive: boolean
+): Promise<Target> {
+  // Explicit --target flag
+  if (targetName) {
+    const target = getTargetByName(targetName);
+    if (!target) {
+      const known = allTargetNames().join(', ');
+      throw new Error(`Unknown target: '${targetName}'. Known targets: ${known}`);
+    }
+    return target;
+  }
+
+  // Auto-detect
+  const detected = await detectTargets();
+
+  if (detected.length === 1) {
+    return detected[0];
+  }
+
+  if (detected.length > 1) {
+    if (nonInteractive) {
+      const names = detected.map(t => t.name).join(', ');
+      throw new Error(
+        `Multiple targets detected (${names}). Use --target <name> to specify which one.`
+      );
+    }
+    return promptTargetSelection(detected);
+  }
+
+  // Nothing detected — default to Claude Code with warning
+  p.log.warn(
+    'No supported target detected. Defaulting to Claude Code.'
+  );
+  return new ClaudeCodeTarget();
+}
+
 export interface InstallOptions {
   nonInteractive?: boolean;
   skills?: boolean;
@@ -85,27 +145,22 @@ export interface InstallOptions {
   commands?: boolean;
   hooks?: boolean;
   project?: boolean;
+  target?: string;
 }
 
 /**
  * Main install command entry point
  */
 export async function runInstall(options: InstallOptions = {}): Promise<void> {
-  const target = new ClaudeCodeTarget();
-
   p.intro(pc.bgCyan(pc.black(' CHT AI Tools ')));
 
-  p.log.info(
-    `Install CHT-specific skills, MCP servers, and tools into ${pc.cyan('Claude Code')}`
-  );
+  const target = await resolveTarget(options.target, options.nonInteractive ?? false);
+  const displayName = getTargetDisplayName(target);
+  const supportsHooks = target.name !== 'opencode';
 
-  // Check if Claude Code is detected
-  const detected = await target.detect();
-  if (!detected) {
-    p.log.warn(
-      `Claude Code not detected. The ${pc.cyan('~/.claude/')} directory will be created.`
-    );
-  }
+  p.log.info(
+    `Install CHT-specific skills, MCP servers, and tools into ${pc.cyan(displayName)}`
+  );
 
   // Determine if component flags were passed
   const hasComponentFlags = options.skills || options.mcp || options.commands || options.hooks;
@@ -131,16 +186,24 @@ export async function runInstall(options: InstallOptions = {}): Promise<void> {
       selection = allItems();
     }
 
-    p.log.step(`Installing ${formatSelection(selection)} to ${pc.cyan(location === 'global' ? '~/.claude/' : './.claude/')}`);
+    // Filter out hooks if target doesn't support them
+    if (!supportsHooks && selection.hooks.length > 0) {
+      p.log.warn(`${displayName} does not support hooks. Skipping hook installation.`);
+      selection.hooks = [];
+    }
+
+    const displayPath = getDisplayPath(target, location);
+    p.log.step(`Installing ${formatSelection(selection)} to ${pc.cyan(displayPath)}`);
   } else {
     // Interactive mode (no flags passed)
-    location = await promptInstallLocation();
+    location = await promptInstallLocation(target);
 
+    const displayPath = getDisplayPath(target, location);
     p.log.step(
-      `Installing to ${pc.cyan(location === 'global' ? '~/.claude/' : './.claude/')}`
+      `Installing to ${pc.cyan(displayPath)}`
     );
 
-    selection = await promptItems();
+    selection = await promptItems(target);
 
     const totalItems =
       selection.skills.length +
@@ -163,6 +226,6 @@ export async function runInstall(options: InstallOptions = {}): Promise<void> {
   p.outro(
     pc.green('Installation complete!') +
       '\n\n' +
-      pc.dim('  Restart Claude Code to use CHT tools.')
+      pc.dim(`  Restart ${displayName} to use CHT tools.`)
   );
 }

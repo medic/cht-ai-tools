@@ -4,6 +4,7 @@ import { CHT_MCP_SERVERS } from '../installers/mcp.js';
 import { CHT_COMMANDS } from '../installers/commands.js';
 import { CHT_HOOKS } from '../installers/hooks.js';
 import { hookDisplayName } from '../targets/base.js';
+import type { Target } from '../targets/base.js';
 
 export type InstallLocation = 'global' | 'project';
 
@@ -47,21 +48,54 @@ export function allItems(): SelectionResult {
 }
 
 /**
+ * Prompt user to select a target when multiple are detected
+ */
+export async function promptTargetSelection(targets: Target[]): Promise<Target> {
+  const DISPLAY_NAMES: Record<string, string> = {
+    'claude-code': 'Claude Code',
+    'opencode': 'OpenCode',
+  };
+
+  const result = await p.select({
+    message: 'Multiple targets detected. Which platform would you like to configure?',
+    options: targets.map(t => ({
+      value: t.name,
+      label: DISPLAY_NAMES[t.name] ?? t.name,
+    })),
+  });
+
+  if (p.isCancel(result)) {
+    p.cancel('Installation cancelled.');
+    process.exit(0);
+  }
+
+  return targets.find(t => t.name === result)!;
+}
+
+/**
  * Prompt user to select installation location
  */
-export async function promptInstallLocation(): Promise<InstallLocation> {
+export async function promptInstallLocation(target: Target): Promise<InstallLocation> {
+  const isOpenCode = target.name === 'opencode';
+  const globalHint = isOpenCode
+    ? 'Install to ~/.config/opencode/ for all projects'
+    : 'Install to ~/.claude/ for all projects';
+  const projectHint = isOpenCode
+    ? 'Install to ./.opencode/ for this project only'
+    : 'Install to ./.claude/ for this project only';
+
   const location = await p.select({
     message: 'Where would you like to install CHT tools?',
     options: [
       {
         value: 'global' as const,
         label: 'Global',
-        hint: `Install to ~/.claude/ for all projects`,
+        hint: globalHint,
       },
       {
         value: 'project' as const,
         label: 'Project',
-        hint: `Install to ./.claude/ for this project only`,
+        hint: projectHint,
       },
     ],
   });
@@ -77,7 +111,9 @@ export async function promptInstallLocation(): Promise<InstallLocation> {
 /**
  * Prompt user to select individual items to install
  */
-export async function promptItems(): Promise<SelectionResult> {
+export async function promptItems(target: Target): Promise<SelectionResult> {
+  const supportsHooks = target.name !== 'opencode';
+
   const skillOptions = CHT_SKILLS.map(s => ({
     value: `skills:${s.name}`,
     label: s.name,
@@ -105,14 +141,19 @@ export async function promptItems(): Promise<SelectionResult> {
     ...mcpOptions.map(o => o.value),
   ];
 
+  const groups: Record<string, Array<{ value: string; label: string; hint?: string }>> = {
+    'Skills': skillOptions,
+    'MCP Servers': mcpOptions,
+    'Slash Commands': commandOptions,
+  };
+
+  if (supportsHooks) {
+    groups['Hooks'] = hookOptions;
+  }
+
   const selections = await p.groupMultiselect({
     message: 'Which items would you like to install?',
-    options: {
-      'Skills': skillOptions,
-      'MCP Servers': mcpOptions,
-      'Slash Commands': commandOptions,
-      'Hooks': hookOptions,
-    },
+    options: groups,
     initialValues: defaultValues,
     required: true,
   });
