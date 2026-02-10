@@ -8,6 +8,9 @@
   },
   "files": [
     "dist",
+    "skills",
+    "commands",
+    "hooks",
     "README.md"
   ],
   "scripts": {

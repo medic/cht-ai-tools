@@ -7,13 +7,13 @@ export const CHT_HOOKS: Hook[] = [
     event: 'PreToolUse',
     matcher: 'Bash',
     scriptName: 'validate-cht.sh',
-    sourcePath: getAssetPath('hooks/validate-cht.sh'),
+    sourcePath: getAssetPath('hooks/scripts/validate-cht.sh'),
   },
   {
     event: 'PostToolUse',
     matcher: 'Write',
     scriptName: 'format-cht.sh',
-    sourcePath: getAssetPath('hooks/format-cht.sh'),
+    sourcePath: getAssetPath('hooks/scripts/format-cht.sh'),
   },
 ];
 
