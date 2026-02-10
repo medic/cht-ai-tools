@@ -1,12 +1,9 @@
 {
-  "name": "cht-ai-tools",
+  "name": "medic-cht-ai-tools",
+  "description": "CHT AI development tools for Claude Code",
   "owner": {
     "name": "Medic",
     "email": "dev@medic.org"
-  },
-  "metadata": {
-    "description": "CHT AI development tools for Claude Code",
-    "version": "0.1.0"
   },
   "plugins": [
     {

@@ -155,7 +155,8 @@ The OpenCode manual setup (git clone + symlinks) requires only Git.
 ```
 cht-ai-tools/
 ├── .claude-plugin/           # Claude Code plugin manifest
-│   └── plugin.json
+│   ├── plugin.json
+│   └── marketplace.json
 ├── .opencode/                # OpenCode install guide
 │   └── INSTALL.md
 ├── src/
