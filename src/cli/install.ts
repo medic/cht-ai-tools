@@ -16,8 +16,6 @@ import {
   installHooks,
 } from '../installers/index.js';
 
-const target = new ClaudeCodeTarget();
-
 /**
  * Format selection for display
  */
@@ -34,6 +32,7 @@ function formatSelection(selection: SelectionResult): string {
  * Install selected items
  */
 async function installSelectedItems(
+  target: ClaudeCodeTarget,
   selection: SelectionResult,
   location: InstallLocation
 ): Promise<void> {
@@ -92,7 +91,7 @@ export interface InstallOptions {
  * Main install command entry point
  */
 export async function runInstall(options: InstallOptions = {}): Promise<void> {
-  console.clear();
+  const target = new ClaudeCodeTarget();
 
   p.intro(pc.bgCyan(pc.black(' CHT AI Tools ')));
 
@@ -158,7 +157,7 @@ export async function runInstall(options: InstallOptions = {}): Promise<void> {
   }
 
   // Install items
-  await installSelectedItems(selection, location);
+  await installSelectedItems(target, selection, location);
 
   // Show success message
   p.outro(

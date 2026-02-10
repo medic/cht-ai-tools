@@ -33,6 +33,13 @@ export interface InstallOptions {
   overwrite?: boolean;
 }
 
+/**
+ * Get the display name for a hook (scriptName without .sh extension).
+ */
+export function hookDisplayName(hook: Hook): string {
+  return hook.scriptName.replace(/\.sh$/, '');
+}
+
 export interface Target {
   name: string;
 

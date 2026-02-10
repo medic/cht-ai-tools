@@ -5,12 +5,22 @@ const args = process.argv.slice(2);
 
 declare const __VERSION__: string;
 
-if (args.includes('--help') || args.includes('-h')) {
+if (args.includes('--version')) {
+  console.log(__VERSION__);
+  process.exit(0);
+}
+
+const command = args.find(a => !a.startsWith('-'));
+
+if (args.includes('--help') || args.includes('-h') || !command) {
   console.log(`
   CHT AI Tools - Install CHT tools into Claude Code
 
   Usage:
     npx @medic/cht-ai-tools install [options]
+
+  Commands:
+    install         Install CHT tools into Claude Code
 
   Options:
     --skills      Install skills only
@@ -31,9 +41,9 @@ if (args.includes('--help') || args.includes('-h')) {
   process.exit(0);
 }
 
-if (args.includes('--version')) {
-  console.log(__VERSION__);
-  process.exit(0);
+if (command !== 'install') {
+  console.error(`Unknown command: ${command}\nRun with --help for usage information.`);
+  process.exit(1);
 }
 
 // Parse flags

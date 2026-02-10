@@ -1,4 +1,5 @@
 import type { Target, Hook } from '../targets/base.js';
+import { hookDisplayName } from '../targets/base.js';
 import { getAssetPath } from './common.js';
 
 export const CHT_HOOKS: Hook[] = [
@@ -21,7 +22,7 @@ export async function installHooks(
   location: 'global' | 'project',
   hookNames: string[]
 ): Promise<void> {
-  const hooks = CHT_HOOKS.filter(h => hookNames.includes(h.scriptName.replace('.sh', '')));
+  const hooks = CHT_HOOKS.filter(h => hookNames.includes(hookDisplayName(h)));
   for (const hook of hooks) {
     await target.configureHook(hook, location);
   }

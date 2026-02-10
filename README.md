@@ -63,7 +63,7 @@ npx @medic/cht-ai-tools install --hooks --project
 | `--mcp` | Install MCP servers |
 | `--commands` | Install slash commands |
 | `--hooks` | Install validation/formatting hooks |
-| `--all` | Install all components (non-interactive) |
+| `--all`, `-y`, `--yes` | Install all components (non-interactive) |
 | `--project` | Install to `./.claude/` instead of `~/.claude/` |
 
 ## Components
@@ -151,7 +151,7 @@ npm install
 npm run build
 
 # Run locally
-node dist/index.js
+node dist/index.js install
 ```
 
 ### Testing
@@ -163,7 +163,7 @@ node dist/index.js
 npm run build
 
 # Run the CLI
-node dist/index.js
+node dist/index.js install
 
 # Or link it globally for testing
 npm link
@@ -177,7 +177,7 @@ cht-ai-tools install
 mkdir /tmp/test-cht-project && cd /tmp/test-cht-project
 
 # Run the CLI (project-local install)
-node ~/Developer/Medic/cht-ai-tools/dist/index.js
+node ~/Developer/Medic/cht-ai-tools/dist/index.js install
 
 # Verify installed files
 ls -la .claude/
@@ -194,7 +194,7 @@ cat .claude/settings.json
 cp -r ~/.claude ~/.claude.backup
 
 # Run the CLI with global install
-node ~/Developer/Medic/cht-ai-tools/dist/index.js
+node ~/Developer/Medic/cht-ai-tools/dist/index.js install
 # Select "Global" when prompted
 
 # Verify
@@ -265,7 +265,7 @@ export const CHT_SKILLS: Skill[] = [
 
 ```bash
 npm run build
-node dist/index.js
+node dist/index.js install
 ```
 
 ### Adding a New Slash Command
@@ -304,41 +304,29 @@ npm run build
 
 ### Adding a New MCP Server
 
-1. **Update `src/installers/mcp.ts`**:
+1. **Add to the `CHT_MCP_SERVERS` array** in `src/installers/mcp.ts`:
 
 ```typescript
-import type { Target, McpServer } from '../targets/base.js';
-
-// Existing server
-export const CHT_MCP_SERVER: McpServer = {
-  name: 'cht-docs',
-  type: 'http',
-  url: 'https://mcp-docs.dev.medicmobile.org/mcp',
-};
-
-// Add new server
-export const MY_MCP_SERVER: McpServer = {
-  name: 'my-server',
-  type: 'http',  // or 'stdio' for local servers
-  url: 'https://my-server.example.com/mcp',
-};
-
-// For stdio-based servers:
-export const LOCAL_MCP_SERVER: McpServer = {
-  name: 'local-server',
-  type: 'stdio',
-  command: 'npx',
-  args: ['-y', '@my-org/my-mcp-server'],
-};
-
-export async function installMcp(
-  target: Target,
-  location: 'global' | 'project'
-): Promise<void> {
-  await target.configureMcp(CHT_MCP_SERVER, location);
-  // Add new server installation:
-  await target.configureMcp(MY_MCP_SERVER, location);
-}
+export const CHT_MCP_SERVERS: McpServer[] = [
+  {
+    name: 'cht-docs',
+    type: 'http',
+    url: 'https://mcp-docs.dev.medicmobile.org/mcp',
+  },
+  // Add your new server (HTTP):
+  {
+    name: 'my-server',
+    type: 'http',
+    url: 'https://my-server.example.com/mcp',
+  },
+  // Or add a stdio-based server:
+  {
+    name: 'local-server',
+    type: 'stdio',
+    command: 'npx',
+    args: ['-y', '@my-org/my-mcp-server'],
+  },
+];
 ```
 
 2. **Build and test**:
@@ -383,13 +371,15 @@ export const CHT_HOOKS: Hook[] = [
   {
     event: 'PreToolUse',
     matcher: 'Bash',
-    script: getAssetPath('hooks/validate-cht.sh'),
+    scriptName: 'validate-cht.sh',
+    sourcePath: getAssetPath('hooks/validate-cht.sh'),
   },
   // Add your new hook:
   {
     event: 'PostToolUse',      // 'PreToolUse' | 'PostToolUse' | 'Stop'
     matcher: 'Write',          // Optional: tool name to match (e.g., 'Bash', 'Write', 'Edit')
-    script: getAssetPath('hooks/my-hook.sh'),
+    scriptName: 'my-hook.sh',
+    sourcePath: getAssetPath('hooks/my-hook.sh'),
   },
 ];
 ```

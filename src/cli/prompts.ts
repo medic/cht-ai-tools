@@ -3,6 +3,7 @@ import { CHT_SKILLS } from '../installers/skills.js';
 import { CHT_MCP_SERVERS } from '../installers/mcp.js';
 import { CHT_COMMANDS } from '../installers/commands.js';
 import { CHT_HOOKS } from '../installers/hooks.js';
+import { hookDisplayName } from '../targets/base.js';
 
 export type InstallLocation = 'global' | 'project';
 
@@ -35,7 +36,7 @@ export function allItems(): SelectionResult {
     skills: CHT_SKILLS.map(s => s.name),
     mcp: CHT_MCP_SERVERS.map(s => s.name),
     commands: CHT_COMMANDS.map(c => c.name),
-    hooks: CHT_HOOKS.map(h => h.scriptName.replace('.sh', '')),
+    hooks: CHT_HOOKS.map(h => hookDisplayName(h)),
   };
 }
 
@@ -88,8 +89,8 @@ export async function promptItems(): Promise<SelectionResult> {
   }));
 
   const hookOptions = CHT_HOOKS.map(h => ({
-    value: `hooks:${h.scriptName.replace('.sh', '')}`,
-    label: h.scriptName.replace('.sh', ''),
+    value: `hooks:${hookDisplayName(h)}`,
+    label: hookDisplayName(h),
     hint: `${h.event} → ${h.matcher}`,
   }));
 

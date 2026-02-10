@@ -36,6 +36,30 @@ interface SettingsConfig {
   [key: string]: unknown;
 }
 
+/**
+ * Read and parse a JSON config file safely.
+ * Returns the default value if the file doesn't exist.
+ * Throws if the file exists but contains invalid JSON.
+ */
+async function readJsonConfig<T>(filePath: string, defaultValue: T): Promise<T> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(content) as T;
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in ${filePath}: ${error.message}`);
+    }
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return defaultValue;
+    }
+    throw error;
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
 export class ClaudeCodeTarget implements Target {
   readonly name = 'claude-code';
 
@@ -116,15 +140,9 @@ export class ClaudeCodeTarget implements Target {
     await fs.mkdir(configPath, { recursive: true });
 
     // Read existing config or create empty one
-    let config: McpConfig = { mcpServers: {} };
-    try {
-      const content = await fs.readFile(mcpConfigPath, 'utf-8');
-      config = JSON.parse(content) as McpConfig;
-      if (!config.mcpServers) {
-        config.mcpServers = {};
-      }
-    } catch {
-      // File doesn't exist, use default empty config
+    const config = await readJsonConfig<McpConfig>(mcpConfigPath, { mcpServers: {} });
+    if (!config.mcpServers) {
+      config.mcpServers = {};
     }
 
     // Build server entry based on type
@@ -190,16 +208,17 @@ export class ClaudeCodeTarget implements Target {
 
     // Read existing settings
     const settingsPath = path.join(configPath, 'settings.json');
-    let settings: SettingsConfig = { hooks: {} };
-    try {
-      const content = await fs.readFile(settingsPath, 'utf-8');
-      settings = JSON.parse(content) as SettingsConfig;
-      if (!settings.hooks) settings.hooks = {};
-    } catch { }
+    const settings = await readJsonConfig<SettingsConfig>(settingsPath, { hooks: {} });
+    if (!settings.hooks) settings.hooks = {};
+
+    // Use relative path for project installs so settings.json is portable
+    const scriptPath = location === 'project'
+      ? path.join('.claude', 'hooks', hook.scriptName)
+      : installedScript;
 
     const hookCommand: HookCommand = {
       type: 'command',
-      command: `bash ${installedScript}`,
+      command: `bash ${scriptPath}`,
     };
 
     const eventHooks = settings.hooks![hook.event] ?? [];
