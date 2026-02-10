@@ -1,16 +1,82 @@
 {
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
   "name": "medic-cht-ai-tools",
-  "description": "CHT AI development tools for Claude Code",
   "owner": {
     "name": "Medic",
     "email": "dev@medic.org"
   },
+  "metadata": {
+    "description": "CHT AI development tools for Claude Code",
+    "version": "0.1.0"
+  },
   "plugins": [
     {
-      "name": "cht-ai-tools",
-      "source": "./",
-      "description": "AI development tools for Community Health Toolkit (CHT) — skills, commands, hooks, and MCP server for CHT configuration development",
-      "version": "0.1.0"
+      "name": "cht-specialist",
+      "source": "./skills/cht-specialist",
+      "strict": false,
+      "description": "Expert assistance with CHT development, configuration, troubleshooting, and architecture",
+      "version": "0.1.0",
+      "skills": ["./"]
+    },
+    {
+      "name": "create-cht-task",
+      "source": "./skills/create-cht-task",
+      "strict": false,
+      "description": "Guided assistant for creating CHT task definitions in tasks.js",
+      "version": "0.1.0",
+      "skills": ["./"]
+    },
+    {
+      "name": "create-cht-target",
+      "source": "./skills/create-cht-target",
+      "strict": false,
+      "description": "Guided assistant for creating CHT target/indicator definitions in targets.js",
+      "version": "0.1.0",
+      "skills": ["./"]
+    },
+    {
+      "name": "cht-docs-mcp",
+      "source": "./.claude-plugin",
+      "strict": false,
+      "description": "MCP server for searching CHT documentation",
+      "version": "0.1.0",
+      "mcpServers": {
+        "cht-docs": {
+          "type": "http",
+          "url": "https://mcp-docs.dev.medicmobile.org/mcp"
+        }
+      }
+    },
+    {
+      "name": "cht-dev-hooks",
+      "source": "./hooks",
+      "strict": false,
+      "description": "Development hooks for validating CHT bash commands and formatting CHT configuration files",
+      "version": "0.1.0",
+      "hooks": {
+        "PreToolUse": [
+          {
+            "matcher": "Bash",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/validate-cht.sh"
+              }
+            ]
+          }
+        ],
+        "PostToolUse": [
+          {
+            "matcher": "Write",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/format-cht.sh"
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }
