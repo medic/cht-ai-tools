@@ -15,7 +15,7 @@ npx @medic/cht-ai-tools install
 | **CHT Skills** | `cht-specialist`, `create-cht-task`, `create-cht-target` |
 | **CHT Docs MCP** | MCP server for CHT documentation access |
 | **Slash Commands** | `/cht-task`, `/cht-target`, `/cht-specialist` |
-| **Validation Hooks** | Pre-commit validation for CHT config files |
+| **Hooks** | Pre-tool validation and post-tool formatting for CHT config files |
 
 ## Usage
 
@@ -113,13 +113,12 @@ Quick access to skills:
 - `/cht-target` - Create or modify target definitions
 - `/cht-specialist` - Get expert CHT assistance
 
-### Validation Hooks
+### Hooks
 
-Automatic validation of CHT configuration files:
+Automatic validation and formatting of CHT configuration files (`tasks.js`, `targets.js`, `contact-summary.templated.js`, `purge.js`):
 
-- `tasks.js` syntax checking
-- `targets.js` syntax checking
-- `contact-summary.templated.js` syntax checking
+- **validate-cht** (PreToolUse → Bash) - Syntax-checks CHT config files before commands run
+- **format-cht** (PostToolUse → Write) - Auto-formats CHT config files via ESLint after writes
 
 ## Configuration Locations
 
@@ -156,7 +155,18 @@ node dist/index.js install
 
 ### Testing
 
-#### Test the CLI locally
+```bash
+# Run the test suite
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Type check
+npm run typecheck
+```
+
+#### Manual CLI Testing
 
 ```bash
 # Build first
@@ -170,36 +180,20 @@ npm link
 cht-ai-tools install
 ```
 
-#### Test installation to a temp directory
+#### Test Installation to a Temp Directory
 
 ```bash
 # Create a test project
 mkdir /tmp/test-cht-project && cd /tmp/test-cht-project
 
 # Run the CLI (project-local install)
-node ~/Developer/Medic/cht-ai-tools/dist/index.js install
+npx /path/to/cht-ai-tools install --project
 
 # Verify installed files
-ls -la .claude/
 ls -la .claude/skills/
 ls -la .claude/commands/
 cat .claude/mcp_config.json
 cat .claude/settings.json
-```
-
-#### Test global installation
-
-```bash
-# Backup existing ~/.claude if needed
-cp -r ~/.claude ~/.claude.backup
-
-# Run the CLI with global install
-node ~/Developer/Medic/cht-ai-tools/dist/index.js install
-# Select "Global" when prompted
-
-# Verify
-ls -la ~/.claude/skills/
-cat ~/.claude/mcp_config.json
 ```
 
 #### Verify in Claude Code
@@ -223,10 +217,10 @@ This rebuilds on file changes. Run the CLI in another terminal to test.
 
 ### Adding a New Skill
 
-1. **Create the skill directory** in `src/assets/skills/`:
+1. **Create the skill directory** in `skills/` at the package root:
 
 ```
-src/assets/skills/my-new-skill/
+skills/my-new-skill/
 ├── SKILL.md           # Main skill definition (required)
 ├── references/        # Reference documentation
 │   └── *.md
@@ -270,10 +264,10 @@ node dist/index.js install
 
 ### Adding a New Slash Command
 
-1. **Create the command file** in `src/assets/commands/`:
+1. **Create the command file** in `commands/` at the package root:
 
 ```markdown
-<!-- src/assets/commands/my-command.md -->
+<!-- commands/my-command.md -->
 ---
 description: Brief description shown in command list
 ---
@@ -339,11 +333,11 @@ node dist/index.js
 
 ### Adding a New Hook
 
-1. **Create the hook script** in `src/assets/hooks/`:
+1. **Create the hook script** in `hooks/scripts/` at the package root:
 
 ```bash
 #!/bin/bash
-# src/assets/hooks/my-hook.sh
+# hooks/scripts/my-hook.sh
 # Description of what this hook does
 
 # Your validation/formatting logic here
@@ -358,7 +352,7 @@ exit 0
 2. **Make it executable**:
 
 ```bash
-chmod +x src/assets/hooks/my-hook.sh
+chmod +x hooks/scripts/my-hook.sh
 ```
 
 3. **Register the hook** in `src/installers/hooks.ts`:
@@ -372,14 +366,14 @@ export const CHT_HOOKS: Hook[] = [
     event: 'PreToolUse',
     matcher: 'Bash',
     scriptName: 'validate-cht.sh',
-    sourcePath: getAssetPath('hooks/validate-cht.sh'),
+    sourcePath: getAssetPath('hooks/scripts/validate-cht.sh'),
   },
   // Add your new hook:
   {
     event: 'PostToolUse',      // 'PreToolUse' | 'PostToolUse' | 'Stop'
     matcher: 'Write',          // Optional: tool name to match (e.g., 'Bash', 'Write', 'Edit')
     scriptName: 'my-hook.sh',
-    sourcePath: getAssetPath('hooks/my-hook.sh'),
+    sourcePath: getAssetPath('hooks/scripts/my-hook.sh'),
   },
 ];
 ```
@@ -405,26 +399,30 @@ node dist/index.js
 ## Architecture
 
 ```
-src/
-├── index.ts              # CLI entry point
-├── cli/
-│   ├── install.ts        # Main install command
-│   ├── prompts.ts        # Clack interactive prompts
-│   └── utils.ts          # File operation helpers
-├── targets/              # AI tool adapters (extensible)
-│   ├── base.ts           # Target interface
-│   └── claude-code.ts    # Claude Code implementation
-├── installers/           # Tool-agnostic installation logic
-│   ├── skills.ts
-│   ├── mcp.ts
-│   ├── commands.ts
-│   ├── hooks.ts
-│   ├── common.ts
-│   └── index.ts
-└── assets/               # Bundled assets
-    ├── skills/
-    ├── commands/
-    └── hooks/
+cht-ai-tools/
+├── src/
+│   ├── index.ts              # CLI entry point
+│   ├── cli/
+│   │   ├── install.ts        # Main install command
+│   │   ├── prompts.ts        # Clack interactive prompts
+│   │   └── utils.ts          # File operation helpers
+│   ├── targets/              # AI tool adapters (extensible)
+│   │   ├── base.ts           # Target interface
+│   │   └── claude-code.ts    # Claude Code implementation
+│   ├── installers/           # Tool-agnostic installation logic
+│   │   ├── skills.ts
+│   │   ├── mcp.ts
+│   │   ├── commands.ts
+│   │   ├── hooks.ts
+│   │   ├── common.ts         # Asset path resolution
+│   │   └── index.ts
+│   └── __tests__/
+│       └── claude-code.test.ts
+├── skills/                   # Bundled skill assets (package root)
+├── commands/                 # Bundled command assets
+└── hooks/                    # Bundled hook assets
+    ├── hooks.json            # Plugin hook definitions
+    └── scripts/
 ```
 
 ### Target Abstraction
