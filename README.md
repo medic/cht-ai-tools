@@ -12,7 +12,11 @@ Run the following slash commands inside Claude Code:
 
 ```
 /plugin marketplace add medic/cht-ai-tools
-/plugin install cht-ai-tools@medic-cht-ai-tools
+/plugin install cht-specialist@medic-cht-ai-tools
+/plugin install create-cht-task@medic-cht-ai-tools
+/plugin install create-cht-target@medic-cht-ai-tools
+/plugin install cht-docs-mcp@medic-cht-ai-tools
+/plugin install cht-dev-hooks@medic-cht-ai-tools
 ```
 
 Restart Claude Code after installation.
