@@ -8,9 +8,11 @@ AI development tools for the [Community Health Toolkit](https://communityhealtht
 
 #### As a plugin (recommended)
 
-```bash
-claude plugin marketplace add medic/cht-ai-tools
-claude plugin install cht-ai-tools@cht-ai-tools
+Run the following slash commands inside Claude Code:
+
+```
+/plugin marketplace add medic/cht-ai-tools
+/plugin install cht-ai-tools@medic-cht-ai-tools
 ```
 
 Restart Claude Code after installation.
@@ -117,6 +119,8 @@ Automatic validation and formatting of CHT configuration files (`tasks.js`, `tar
 - **validate-cht** (PreToolUse → Bash) - Syntax-checks CHT config files before commands run
 - **format-cht** (PostToolUse → Write) - Auto-formats CHT config files via ESLint after writes
 
+> **Note:** Hook installation merges into your existing `settings.json`. If you have custom hooks on the same event+matcher (e.g., other `PreToolUse → Bash` hooks), they will be preserved alongside the CHT hooks.
+
 ## Configuration Locations
 
 ### Claude Code
@@ -135,7 +139,7 @@ Automatic validation and formatting of CHT configuration files (`tasks.js`, `tar
 
 ## Requirements
 
-The plugin install method (`claude plugin add`) requires only Claude Code — no Node.js needed.
+The plugin install method (`/plugin marketplace add` + `/plugin install`) requires only Claude Code — no Node.js needed.
 
 The CLI install method (`npx`) requires:
 
