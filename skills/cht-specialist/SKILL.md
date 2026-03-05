@@ -1,6 +1,6 @@
 ---
 name: cht-specialist
-description: "Expert assistance with Community Health Toolkit (CHT) development, configuration, troubleshooting, and architecture. Use when working with CHT applications, forms (XLSForm/XForm), tasks.js, targets.js, contact-summary, app_settings.json, cht-conf CLI, Docker deployment, workflows, integrations, or any CHT-related questions. Provides guidance on building CHT apps, debugging issues, understanding architecture, and following best practices."
+description: "Expert assistance with Community Health Toolkit (CHT) development, configuration, troubleshooting, and architecture. Use when working with CHT applications, forms (XLSForm/XForm), tasks.js, targets.js, contact-summary.templated.js, app_settings.json, purge.js, cht-conf CLI, Docker deployment, workflows, integrations, CouchDB/PouchDB, offline-first architecture, replication, SMS messaging, contact hierarchy, user roles and permissions, or any CHT-related questions. Provides guidance on building CHT apps, debugging issues, understanding architecture, data models, and following best practices."
 ---
 
 # CHT Specialist
@@ -97,20 +97,7 @@ cht --url=https://medic:password@localhost --accept-self-signed-certs
 
 ### Docker CHT Instance
 
-```bash
-# Create directory structure
-mkdir -p ~/cht/{compose,certs,upgrade-service,couchdb}
-
-# Download compose files (check for latest version)
-cd ~/cht/
-curl -s -o ./compose/cht-core.yml https://staging.dev.medicmobile.org/_couch/builds_4/medic:medic:4.21.1/docker-compose/cht-core.yml
-curl -s -o ./compose/cht-couchdb.yml https://staging.dev.medicmobile.org/_couch/builds_4/medic:medic:4.21.1/docker-compose/cht-couchdb.yml
-curl -s -o ./upgrade-service/docker-compose.yml https://raw.githubusercontent.com/medic/cht-upgrade-service/main/docker-compose.yml
-
-# Start CHT
-cd ~/cht/upgrade-service
-docker compose up --detach
-```
+See [references/hosting-reference.md](references/hosting-reference.md) for Docker Compose setup, Kubernetes deployment, and monitoring.
 
 ---
 
@@ -310,12 +297,3 @@ The CHT provides an official MCP (Model Context Protocol) server for AI-assisted
 claude mcp add --transport http cht-kapa-docs https://mcp-docs.dev.medicmobile.org/mcp
 ```
 
----
-
-## External Links
-
-- [CHT Documentation](https://docs.communityhealthtoolkit.org)
-- [CHT GitHub](https://github.com/medic/cht-core)
-- [CHT Forum](https://forum.communityhealthtoolkit.org)
-- [XLSForm Reference](https://xlsform.org)
-- [CHT AI Tools](https://docs.communityhealthtoolkit.org/ai/)

@@ -126,47 +126,18 @@ Create the task with educational comments explaining each part.
 
 ### Task Schema Reference
 
-```javascript
-{
-  name: 'unique-task-name',        // Unique identifier for the task
-  icon: 'icon-name',               // Icon from resources.json
-  title: 'task.title.key',         // Translation key for display
-  appliesTo: 'reports',            // 'reports' or 'contacts'
-  appliesToType: ['form_id'],      // Form codes or contact types
-  appliesIf: function(c, r) {},    // Optional: filter conditions
-  actions: [{                      // What happens when task is clicked
-    form: 'action_form_id',
-    modifyContent: function(content, contact, report, event) {
-      // Pre-fill form fields
-    }
-  }],
-  events: [{
-    id: 'event-id',                // Unique within task
-    days: 7,                       // Days after reported_date (OR use dueDate)
-    start: 2,                      // Days before due to show task
-    end: 2                         // Days after due to hide task
-  }],
-  resolvedIf: function(contact, report, event, dueDate) {
-    // Return true when task is complete
-    return Utils.isFormSubmittedInWindow(
-      contact.reports,
-      'action_form_id',
-      Utils.addDate(dueDate, -event.start).getTime(),
-      Utils.addDate(dueDate, event.end + 1).getTime()
-    );
-  }
-}
-```
+See [references/tasks-schema.md](references/tasks-schema.md) for the complete schema. Key fields:
 
-### Utils Functions Available
+- `name`, `icon`, `title` (translation key)
+- `appliesTo` (`reports`|`contacts`), `appliesToType`, `appliesIf`
+- `events[]`: `id`, `days`|`dueDate`, `start`, `end`
+- `actions[]`: `form`, `modifyContent()`
+- `resolvedIf()`: return true when task is complete
+- `priority`: `level` + `label` (optional)
 
-| Function | Description |
-|----------|-------------|
-| `Utils.addDate(date, days)` | Add days to a date |
-| `Utils.isFormSubmittedInWindow(reports, form, start, end)` | Check if form submitted in window |
-| `Utils.getMostRecentReport(reports, form)` | Get latest report of type |
-| `Utils.getField(report, 'path.to.field')` | Safely get nested field |
-| `Utils.MS_IN_DAY` | Milliseconds in a day (86400000) |
+### Utils Functions
+
+Key functions: `Utils.addDate()`, `Utils.isFormSubmittedInWindow()`, `Utils.getMostRecentReport()`, `Utils.getField()`, `Utils.MS_IN_DAY`. See [references/utils-functions.md](references/utils-functions.md) for full details.
 
 ---
 
@@ -253,105 +224,14 @@ cht --local compile-app-settings upload-app-settings
 
 ## Common Task Patterns
 
-### Pattern: Report-Based Follow-up
+See [references/task-patterns.md](references/task-patterns.md) for 4 complete, working patterns:
 
-Trigger task X days after a specific form is submitted.
-
-```javascript
-{
-  name: 'followup-after-registration',
-  appliesTo: 'reports',
-  appliesToType: ['registration'],
-  events: [{ id: 'followup', days: 7, start: 2, end: 2 }],
-  actions: [{ form: 'followup_visit' }],
-  resolvedIf: function(c, r, e, d) {
-    return Utils.isFormSubmittedInWindow(c.reports, 'followup_visit',
-      Utils.addDate(d, -e.start).getTime(),
-      Utils.addDate(d, e.end + 1).getTime());
-  }
-}
-```
-
-### Pattern: Contact-Based Recurring
-
-Task for all contacts of a type on a schedule.
-
-```javascript
-{
-  name: 'monthly-assessment',
-  appliesTo: 'contacts',
-  appliesToType: ['person'],
-  appliesIf: function(contact) {
-    return contact.contact.type === 'person' && contact.contact.active;
-  },
-  events: [{
-    id: 'monthly',
-    start: 0,
-    end: 30,
-    dueDate: function(event, contact) {
-      // Custom logic for recurring due date
-      const lastAssessment = Utils.getMostRecentTimestamp(contact.reports, 'assessment');
-      return new Date(lastAssessment + 30 * Utils.MS_IN_DAY);
-    }
-  }],
-  actions: [{ form: 'assessment' }],
-  resolvedIf: function(c, r, e, d) {
-    return Utils.isFormSubmittedInWindow(c.reports, 'assessment',
-      Utils.addDate(d, -e.start).getTime(),
-      Utils.addDate(d, e.end + 1).getTime());
-  }
-}
-```
-
-### Pattern: Multiple Events (ANC Schedule)
-
-Multiple follow-ups from a single trigger.
-
-```javascript
-{
-  name: 'anc-visits',
-  appliesTo: 'reports',
-  appliesToType: ['pregnancy'],
-  events: [
-    { id: 'anc-1', days: 0, start: 7, end: 14 },
-    { id: 'anc-2', days: 30, start: 7, end: 14 },
-    { id: 'anc-3', days: 60, start: 7, end: 14 },
-    { id: 'anc-4', days: 90, start: 7, end: 14 }
-  ],
-  actions: [{ form: 'anc_visit' }],
-  resolvedIf: function(c, r, e, d) {
-    return Utils.isFormSubmittedInWindow(c.reports, 'anc_visit',
-      Utils.addDate(d, -e.start).getTime(),
-      Utils.addDate(d, e.end + 1).getTime());
-  }
-}
-```
-
-### Pattern: Conditional with Priority
-
-High-priority task based on risk indicators.
-
-```javascript
-{
-  name: 'high-risk-followup',
-  appliesTo: 'reports',
-  appliesToType: ['assessment'],
-  appliesIf: function(contact, report) {
-    return Utils.getField(report, 'risk_level') === 'high';
-  },
-  priority: {
-    level: 'high',
-    label: 'task.priority.high_risk'
-  },
-  events: [{ id: 'urgent', days: 1, start: 0, end: 1 }],
-  actions: [{ form: 'urgent_followup' }],
-  resolvedIf: function(c, r, e, d) {
-    return Utils.isFormSubmittedInWindow(c.reports, 'urgent_followup',
-      Utils.addDate(d, -e.start).getTime(),
-      Utils.addDate(d, e.end + 1).getTime());
-  }
-}
-```
+| Pattern | Use Case |
+|---------|----------|
+| Report-Based Follow-up | Task X days after form submission |
+| Contact-Based Recurring | Recurring task for all contacts of a type |
+| Multiple Events (ANC) | Multiple follow-ups from single trigger |
+| Conditional with Priority | High-priority based on risk indicators |
 
 ---
 

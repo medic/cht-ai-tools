@@ -136,6 +136,10 @@ Ask focused questions one at a time. Use the form analysis to offer relevant cho
 > - A) Count each report (`idType: 'report'`)
 > - B) Count unique contacts (`idType: 'contact'`) — avoids double-counting
 
+### Advanced Questions (ask only when relevant)
+
+Skip these for simple count/percent targets unless the user mentions roles, supervisors, or data concerns.
+
 **Q9: Role Visibility** (optional)
 > "Should this target be visible to specific user roles?"
 > - A) All users (default — no `context` needed)
@@ -169,39 +173,14 @@ Create the target with educational comments explaining each part.
 
 ### Target Schema Reference
 
-```javascript
-{
-  id: 'unique-target-id',              // Unique identifier
-  type: 'count',                       // 'count' or 'percent'
-  icon: 'icon-name',                   // Icon from resources.json
-  goal: 20,                            // Target goal (-1 for none)
-  translation_key: 'targets.key',      // Title translation
-  subtitle_translation_key: 'targets.subtitle',  // Optional subtitle
-  percentage_count_translation_key: 'targets.count.custom',  // Optional: custom "X of Y" text (has {{pass}} and {{total}} vars)
+See [references/targets-schema.md](references/targets-schema.md) for the complete schema. Key fields:
 
-  context: 'user.role === "chw"',      // Optional: JS expression for role-based visibility
-  visible: true,                       // Optional: hide from Targets tab (default: true)
-  aggregate: true,                     // Optional: show on TargetAggregates for supervisors (3.9+)
-
-  appliesTo: 'reports',                // 'reports' or 'contacts'
-  appliesToType: ['form_id'],          // Form codes or contact types
-  appliesIf: function(c, r) {},        // Filter (denominator for percent)
-
-  passesIf: function(c, r) {},         // For percent: numerator condition
-  date: 'reported',                    // 'reported', 'now', or function
-  idType: 'contact',                   // 'report', 'contact', or function
-
-  // For grouped targets:
-  groupBy: function(c, r) {},          // Group by value
-  passesIfGroupCount: { gte: 2 },      // Group pass criteria
-
-  // For DHIS2 integration:
-  dhis: {                              // Optional: DHIS2 data element mapping
-    dataElement: 'DHIS2_ELEMENT_ID',
-    dataSet: 'DHIS2_DATASET_ID'
-  }
-}
-```
+- `id`, `type` (`count`|`percent`), `icon`, `goal`, `translation_key`
+- `appliesTo` (`reports`|`contacts`), `appliesToType`, `appliesIf`
+- `passesIf` (percent only), `date`, `idType`
+- `context`, `visible`, `aggregate` (optional)
+- `groupBy`, `passesIfGroupCount` (grouped targets)
+- `dhis` (DHIS2 integration)
 
 ---
 
@@ -261,323 +240,27 @@ cht --local compile-app-settings upload-app-settings
 
 ## Common Target Patterns
 
-### Pattern: Simple Count (This Month)
+See [references/target-patterns.md](references/target-patterns.md) for 9 complete, working patterns:
 
-Count forms submitted this month.
-
-```javascript
-{
-  id: 'pregnancies-this-month',
-  type: 'count',
-  icon: 'pregnancy',
-  goal: 20,
-  translation_key: 'targets.pregnancies.title',
-  subtitle_translation_key: 'targets.this_month.subtitle',
-  appliesTo: 'reports',
-  appliesToType: ['pregnancy'],
-  date: 'reported'
-}
-```
-
-### Pattern: Simple Count (All Time)
-
-Cumulative count of all records.
-
-```javascript
-{
-  id: 'total-registrations',
-  type: 'count',
-  icon: 'person',
-  goal: -1,  // No specific goal
-  translation_key: 'targets.registrations.title',
-  subtitle_translation_key: 'targets.all_time.subtitle',
-  appliesTo: 'reports',
-  appliesToType: ['registration'],
-  date: 'now'
-}
-```
-
-### Pattern: Percentage with Condition
-
-Percent of deliveries that had facility delivery.
-
-```javascript
-{
-  id: 'facility-deliveries',
-  type: 'percent',
-  icon: 'hospital',
-  goal: 80,
-  translation_key: 'targets.facility_delivery.title',
-  appliesTo: 'reports',
-  appliesToType: ['delivery'],
-  date: 'reported',
-  // Denominator: all deliveries
-  appliesIf: function(contact, report) {
-    return true;  // Count all deliveries
-  },
-  // Numerator: facility deliveries only
-  passesIf: function(contact, report) {
-    return Utils.getField(report, 'delivery_place') === 'facility';
-  }
-}
-```
-
-### Pattern: Unique Contacts (Avoid Double-Counting)
-
-Count unique patients, not total reports.
-
-```javascript
-{
-  id: 'active-patients',
-  type: 'count',
-  icon: 'person',
-  goal: 50,
-  translation_key: 'targets.active_patients.title',
-  appliesTo: 'reports',
-  appliesToType: ['home_visit', 'assessment'],
-  date: 'reported',
-  idType: 'contact'  // Count unique contacts, not reports
-}
-```
-
-### Pattern: Percentage Based on Related Reports
-
-Percent of pregnancies with at least one ANC visit.
-
-```javascript
-{
-  id: 'pregnancies-with-anc',
-  type: 'percent',
-  icon: 'nurse',
-  goal: 100,
-  translation_key: 'targets.anc_coverage.title',
-  appliesTo: 'reports',
-  appliesToType: ['pregnancy'],
-  date: 'reported',
-  passesIf: function(contact, report) {
-    // Check if any ANC visit exists for this contact
-    return contact.reports.some(r =>
-      r.form === 'anc_visit' &&
-      r.reported_date >= report.reported_date
-    );
-  }
-}
-```
-
-### Pattern: GroupBy (Families with Multiple Visits)
-
-Percent of families with 2+ home visits this month.
-
-```javascript
-{
-  id: 'families-2-visits',
-  type: 'percent',
-  icon: 'family',
-  goal: 80,
-  translation_key: 'targets.family_visits.title',
-  appliesTo: 'reports',
-  appliesToType: ['home_visit'],
-  date: 'reported',
-  idType: function(contact, report) {
-    // Unique ID per family per day
-    const familyId = contact.contact.parent._id;
-    const date = new Date(report.reported_date).toISOString().split('T')[0];
-    return [`${familyId}~${date}`];
-  },
-  groupBy: function(contact, report) {
-    return contact.contact.parent._id;  // Group by family
-  },
-  passesIfGroupCount: { gte: 2 }  // Pass if 2+ visits
-}
-```
-
-### Pattern: Contact-Based Count (Active Pregnant Women)
-
-Count contacts meeting criteria. Note: `report` is `undefined` for contact-based targets.
-
-```javascript
-{
-  id: 'active-pregnancies',
-  type: 'count',
-  icon: 'pregnancy',
-  goal: -1,
-  translation_key: 'targets.active_pregnancies.title',
-  appliesTo: 'contacts',
-  appliesToType: ['person'],
-  date: 'now',
-  appliesIf: function(contact) {
-    // For contact-based: check contact.reports directly
-    return contact.reports.some(r =>
-      r.form === 'pregnancy' &&
-      r.fields &&
-      r.fields.edd &&
-      new Date(r.fields.edd) > Utils.now()
-    );
-  }
-}
-```
-
-### Pattern: Contact-Based Percent (Children Immunized)
-
-Percent of a contact population meeting criteria.
-
-```javascript
-{
-  id: 'under5-immunized',
-  type: 'percent',
-  icon: 'child',
-  goal: 100,
-  translation_key: 'targets.under5_immunized.title',
-  appliesTo: 'contacts',
-  appliesToType: ['person'],
-  date: 'now',
-  // Denominator: children under 5
-  appliesIf: function(contact) {
-    if (!contact.contact.date_of_birth) return false;
-    const ageMs = Date.now() - new Date(contact.contact.date_of_birth).getTime();
-    return ageMs < 5 * 365.25 * 24 * 60 * 60 * 1000;
-  },
-  // Numerator: completed immunization
-  passesIf: function(contact) {
-    return contact.reports.some(r =>
-      r.form === 'immunization' &&
-      r.fields &&
-      r.fields.schedule_complete === 'yes'
-    );
-  }
-}
-```
-
-### Pattern: Contact-Based with Context (Supervisor Aggregated)
-
-Target visible only to CHWs with aggregation enabled for supervisors.
-
-```javascript
-{
-  id: 'households-visited',
-  type: 'percent',
-  icon: 'home-visit',
-  goal: 100,
-  translation_key: 'targets.households_visited.title',
-  context: 'user.role === "chw"',
-  aggregate: true,
-  appliesTo: 'contacts',
-  appliesToType: ['clinic'],
-  date: 'reported',
-  passesIf: function(contact) {
-    return contact.reports.some(r => r.form === 'home_visit');
-  }
-}
-```
+| Pattern | Key Concept |
+|---------|------------|
+| Simple Count (This Month) | `date: 'reported'` |
+| Simple Count (All Time) | `date: 'now'` |
+| Percentage with Condition | `passesIf` for numerator |
+| Unique Contacts | `idType: 'contact'` |
+| Related Reports Check | `contact.reports.some()` |
+| GroupBy | `groupBy` + `passesIfGroupCount` |
+| Contact-Based Count | `appliesTo: 'contacts'` |
+| Contact-Based Percent | Contact `appliesIf` + `passesIf` |
+| Supervisor Aggregated | `context` + `aggregate: true` |
 
 ---
 
 ## Best Practice: Use Form Calculations for Complex Logic
 
-**When a target requires multiple field conditions, add a calculated field in the XLSForm instead of cluttering targets.js.**
+When a target requires 3+ field conditions, prefer adding a calculated field in the XLSForm over complex `targets.js` logic. For cross-report checks or shared logic, use `targets-extras.js` instead.
 
-### ❌ Bad: Complex logic in targets.js
-
-```javascript
-passesIf: function(contact, report) {
-  return Utils.getField(report, 'delivery_place') === 'facility' &&
-         Utils.getField(report, 'skilled_attendant') === 'yes' &&
-         Utils.getField(report, 'complications') === 'none';
-}
-```
-
-### ✅ Good: Add calculation to XLSForm
-
-**In the XLSForm:**
-
-| type | name | calculation |
-|------|------|-------------|
-| calculate | is_safe_delivery | if(${delivery_place} = 'facility' and ${skilled_attendant} = 'yes' and ${complications} = 'none', 'yes', 'no') |
-
-**In targets.js:**
-
-```javascript
-passesIf: function(contact, report) {
-  return Utils.getField(report, 'is_safe_delivery') === 'yes';
-}
-```
-
-### When to Suggest Form Calculations
-
-Recommend adding a calculated field when:
-- **3+ field references** from the same form
-- **Complex boolean logic** (multiple AND/OR)
-- **Logic reused** in tasks, targets, and contact-summary
-
-### Workflow Integration
-
-During **Step 4 (Gather Requirements)**, if user describes complex conditions:
-
-1. **Identify** the fields involved
-2. **Suggest** adding a calculated field
-3. **Ask user** if they want you to add it to the XLSForm
-4. **If yes**: Execute `scripts/add-xlsform-calculation.py`
-5. **Generate** a simple target referencing that field
-
-> **Recommendation:** I notice this target needs multiple conditions. I recommend adding a calculated field `is_safe_delivery` to your form. Would you like me to add this calculation?
-
-### When to Suggest targets-extras.js Instead
-
-Use an **extras file** instead of a form calculation when:
-- Logic needs **access to `contact.reports`** (cross-report checks)
-- Logic is **shared across multiple targets**
-- Logic involves **contact properties** not in any form
-- Logic requires **JavaScript operations** not expressible in XLSForm calculations
-
-```javascript
-// targets-extras.js
-module.exports = {
-  isActivePregnancy: function(contact) {
-    return contact.reports.some(r =>
-      r.form === 'pregnancy' &&
-      r.fields && r.fields.edd &&
-      new Date(r.fields.edd) > new Date()
-    );
-  },
-
-  hasRecentVisit: function(contact, formName, daysAgo) {
-    const cutoff = Date.now() - (daysAgo * 86400000);
-    return contact.reports.some(r =>
-      r.form === formName && r.reported_date >= cutoff
-    );
-  }
-};
-```
-
-```javascript
-// targets.js
-const extras = require('./targets-extras');
-
-module.exports = [
-  {
-    id: 'pregnant-with-recent-anc',
-    type: 'percent',
-    appliesTo: 'contacts',
-    appliesToType: ['person'],
-    appliesIf: function(contact) {
-      return extras.isActivePregnancy(contact);
-    },
-    passesIf: function(contact) {
-      return extras.hasRecentVisit(contact, 'anc_visit', 30);
-    }
-  }
-];
-```
-
-**Decision guide:**
-
-| Condition | Use Form Calculation | Use targets-extras.js |
-|-----------|---------------------|----------------------|
-| 3+ fields from same form | Yes | No |
-| Cross-report checks | No | Yes |
-| Shared across targets | Either | Yes (preferred) |
-| Shared across targets + tasks | Form calc (if possible) | Yes |
-| Contact property checks | No | Yes |
+See [references/form-calculations-guide.md](references/form-calculations-guide.md) for complete examples, workflow integration, and a decision guide for choosing between form calculations and extras files.
 
 ---
 
@@ -640,17 +323,9 @@ grep "targets\." translations/messages-en.properties | sort
 
 ---
 
-## Utils Functions Available
+## Utils Functions
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `Utils.getField(report, path)` | Safely get nested field | `Utils.getField(r, 'delivery_place')` |
-| `Utils.getMostRecentReport(reports, form)` | Get latest report | `Utils.getMostRecentReport(contact.reports, 'pregnancy')` |
-| `Utils.getMostRecentTimestamp(reports, form)` | Get latest timestamp | `Utils.getMostRecentTimestamp(contact.reports, 'visit')` |
-| `Utils.isFormSubmittedInWindow(reports, form, start, end)` | Check form in time window | Used in cross-report checks |
-| `Utils.addDate(date, days)` | Add days to date | `Utils.addDate(new Date(), -30)` |
-| `Utils.now()` | Get current date | `Utils.now()` |
-| `Utils.MS_IN_DAY` | Milliseconds constant | `30 * Utils.MS_IN_DAY` |
+See [references/counting-modes.md](references/counting-modes.md) for `idType`, `groupBy`, and `date` filter details. Key functions: `Utils.getField()`, `Utils.getMostRecentReport()`, `Utils.isFormSubmittedInWindow()`, `Utils.addDate()`, `Utils.now()`, `Utils.MS_IN_DAY`.
 
 ---
 
@@ -680,55 +355,13 @@ Targets run on the client device with only replicated data. Deep lineage referen
 
 ## Testing Targets
 
-### Manual Verification
-
-1. Deploy targets: `cht --local compile-app-settings upload-app-settings`
-2. Create test data matching your target conditions
-3. Check the Targets tab to verify counts/percentages
-4. Test edge cases: zero records, boundary dates, duplicate reports
-
-### Using cht-conf-test-harness
-
-For automated testing of target logic:
-
-```bash
-npm install cht-conf-test-harness --save-dev
-```
-
-```javascript
-const { expect } = require('chai');
-const Harness = require('cht-conf-test-harness');
-const harness = new Harness();
-
-describe('deliveries-this-month target', () => {
-  before(async () => await harness.start());
-  after(async () => await harness.stop());
-
-  it('should count delivery reports', async () => {
-    await harness.setNow('2024-01-15');
-    const result = await harness.getTargets({ type: 'delivery' });
-    const target = result.find(t => t.id === 'deliveries-this-month');
-    expect(target.value.total).to.equal(1);
-  });
-});
-```
+See [references/testing-targets.md](references/testing-targets.md) for manual verification steps and `cht-conf-test-harness` examples.
 
 ---
 
 ## Cross-Skill Integration
 
-Targets often share logic with tasks and contact-summary:
-
-| Shared Logic | Example |
-|-------------|---------|
-| Form calculations | `is_high_risk` used in targets AND tasks AND contact-summary |
-| `targets-extras.js` | Reusable functions shared across targets |
-| Translation keys | Same subtitle keys across multiple targets |
-
-When creating a target that uses the same field conditions as an existing task or card, check for:
-- Existing calculated fields in the XLSForm (reuse them)
-- Existing extras files (`targets-extras.js`, `contact-summary-extras.js`)
-- Shared translation keys in `translations/messages-*.properties`
+When creating targets, check for existing calculated fields in XLSForms, extras files (`targets-extras.js`, `contact-summary-extras.js`), and shared translation keys — reuse rather than duplicate.
 
 ---
 
