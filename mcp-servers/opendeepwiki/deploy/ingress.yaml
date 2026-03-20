@@ -24,4 +24,4 @@ spec:
               service:
                 name: opendeepwiki
                 port:
-                  number: 5085
+                  number: 8080

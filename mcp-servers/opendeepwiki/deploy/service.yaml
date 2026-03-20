@@ -11,8 +11,8 @@ spec:
     app.kubernetes.io/name: opendeepwiki
   ports:
     - name: backend
-      port: 5085
-      targetPort: 5085
+      port: 8080
+      targetPort: 8080
     - name: frontend
       port: 3000
       targetPort: 3000

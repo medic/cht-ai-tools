@@ -15,20 +15,54 @@ AI Agent (Claude Code / Cursor)
 │                                              │
 │  /api/mcp?owner=medic&name=cht-core    ──┐   │
 │  /api/mcp?owner=medic&name=cht-conf    ──┤   │  ← public (read-only)
-│  /api/mcp?owner=medic&name=cht-watchdog──┘   │
+│  /api/mcp?owner=medic&name=cht-watchdog──┤   │
+│  /api/mcp?owner=medic&name=cht-sync    ──┘   │
 │                                              │
 │  Web UI (port 3000)                          │  ← not routed, admin via port-forward
-│  Backend API (port 5085)                     │
+│  Backend API (port 8080)                     │
 │  SQLite + cloned repos on EBS PVC            │
 └──────────────────────────────────────────────┘
 ```
 
-**MCP tools exposed per indexed repo:**
-- `read_wiki_structure` — get the wiki table of contents
-- `read_wiki_contents` — read a specific wiki page
-- `ask_question` — ask a natural-language question about the codebase
+**MCP tools exposed per indexed repo** ([source](https://github.com/AIDotNet/OpenDeepWiki/blob/6546253/src/OpenDeepWiki/MCP/McpRepositoryTools.cs)):
 
-## Prerequisites
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `ListRepositories` | *(none)* | List all repositories the caller can access |
+| `GetDocumentCatalog` | `owner`, `name`, `language?` | Get the wiki table of contents (document paths and titles) |
+| `ReadDocument` | `owner`, `name`, `path`, `startLine?`, `endLine?`, `language?` | Read a specific wiki page (max 200 lines per request) |
+| `SearchDocuments` | `owner`, `name`, `query`, `language?` | Full-text search across all documents, returns matching paths and snippets |
+
+## MCP Client Configuration
+
+### Claude Code
+
+Add to project or global `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "cht-core-wiki": {
+      "type": "http",
+      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-core"
+    },
+    "cht-conf-wiki": {
+      "type": "http",
+      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-conf"
+    },
+    "cht-watchdog-wiki": {
+      "type": "http",
+      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-watchdog"
+    },
+    "cht-sync-wiki": {
+      "type": "http",
+      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-sync"
+    }
+  }
+}
+```
+
+## System Admin Prerequisites
 
 - EKS cluster with the AWS ALB Ingress Controller
 - `kubectl` configured for the target cluster
@@ -47,12 +81,14 @@ kubectl apply -f mcp-servers/namespace.yaml
 
 ### 2. Create the API key secret
 
-Do NOT commit real keys. Create the secret directly:
+Do NOT commit real keys. Create the secret directly with all three API key fields (same key for all):
 
 ```bash
 kubectl create secret generic opendeepwiki-secret \
   --namespace=mcp-servers \
-  --from-literal=CHAT_API_KEY='sk-ant-your-actual-key'
+  --from-literal=CHAT_API_KEY='sk-ant-your-actual-key' \
+  --from-literal=WIKI_CATALOG_API_KEY='sk-ant-your-actual-key' \
+  --from-literal=WIKI_CONTENT_API_KEY='sk-ant-your-actual-key'
 ```
 
 ### 3. Apply all manifests
@@ -91,7 +127,7 @@ Then open http://localhost:8090 in your browser.
 1. In the web UI, submit: `https://github.com/medic/cht-conf`
 2. Monitor indexing progress:
    ```bash
-   kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki -f --container koalawiki
+   kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki -f --container opendeepwiki
    ```
 3. Once complete, browse the generated wiki in the web UI to verify quality
 
@@ -141,8 +177,8 @@ Once you're satisfied with the cost, repeat the port-forward + web UI submission
 Port-forward to the backend and hit the re-index API:
 
 ```bash
-kubectl port-forward -n mcp-servers svc/opendeepwiki 5085:5085
-curl -X POST http://localhost:5085/api/reindex
+kubectl port-forward -n mcp-servers svc/opendeepwiki 8080:8080
+curl -X POST http://localhost:8080/api/reindex
 ```
 
 ## Security
@@ -157,64 +193,46 @@ To prevent unauthorized cost exposure:
 2. **All write operations** (adding repos, triggering re-indexes) require `kubectl port-forward`, which requires cluster access
 3. **Set a spend limit** in the [Anthropic console](https://console.anthropic.com/settings/billing) as an additional safety net
 
-### Anthropic API key
+### Anthropic API keys
 
-The API key is stored in a Kubernetes Secret (`opendeepwiki-secret`). It is never placed in the ConfigMap or committed to git. The `deploy/secret.yaml` contains only a `REPLACE_ME` placeholder — create the real secret via `kubectl create secret` as shown above.
-
-## Cost Estimates
-
-Using Claude Sonnet 4.6 via Anthropic API with weekly re-indexing:
-
-| Repository | Estimated size | Initial index | Weekly re-index |
-|---|---|---|---|
-| cht-conf | ~15k LOC | ~$1-3 | ~$0.50 |
-| cht-watchdog | ~5k LOC | ~$0.50-1 | ~$0.25 |
-| cht-core | ~200k+ LOC | ~$15-30 | ~$3-8 |
-| **Total** | | **~$17-34** | **~$4-9/week** |
-
-**Estimated monthly cost: $20-40** (all three repos, weekly re-indexing).
+Three API key fields are stored in a Kubernetes Secret (`opendeepwiki-secret`): `CHAT_API_KEY`, `WIKI_CATALOG_API_KEY`, and `WIKI_CONTENT_API_KEY`. All three use the same Anthropic key. They are never placed in the ConfigMap or committed to git. The `deploy/secret.yaml` contains only `REPLACE_ME` placeholders — create the real secret via `kubectl create secret` as shown above.
 
 ## Environment Variables
 
+### ConfigMap (`opendeepwiki-config`)
+
 | Variable | Value | Description |
 |---|---|---|
-| `CHAT_MODEL` | `claude-sonnet-4-6` | Primary model (must support function calling) |
-| `ANALYSIS_MODEL` | `claude-sonnet-4-6` | Model for directory structure analysis |
-| `MODEL_PROVIDER` | `Anthropic` | AI provider |
-| `ENDPOINT` | `https://api.anthropic.com` | Anthropic API endpoint |
-| `CHAT_API_KEY` | *(in Secret)* | Anthropic API key — never in ConfigMap |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | ASP.NET runtime environment |
+| `URLS` | `http://+:8080` | Backend listen address |
 | `DB_TYPE` | `sqlite` | Database backend |
-| `DB_CONNECTION_STRING` | `Data Source=/data/KoalaWiki.db` | SQLite file path inside PVC |
-| `LANGUAGE` | `English` | Language for generated documentation |
-| `TASK_MAX_SIZE_PER_USER` | `5` | Max concurrent indexing tasks per user |
-| `UPDATE_INTERVAL` | `7` | Days between automatic incremental re-indexes |
-| `EnableSmartFilter` | `true` | AI-powered filtering of irrelevant directories |
-| `KOALAWIKI_REPOSITORIES` | `/repositories` | Path for cloned repo storage inside PVC |
+| `CONNECTION_STRING` | `Data Source=/data/opendeepwiki.db` | SQLite file path inside PVC |
+| `CHAT_REQUEST_TYPE` | `Anthropic` | Primary AI provider type |
+| `ENDPOINT` | `https://api.anthropic.com` | Primary API endpoint |
+| `WIKI_CATALOG_MODEL` | `claude-haiku-4-5-20251001` | Model for wiki structure/catalog generation |
+| `WIKI_CATALOG_ENDPOINT` | `https://api.anthropic.com` | Catalog generation endpoint |
+| `WIKI_CATALOG_REQUEST_TYPE` | `Anthropic` | Catalog generation provider type |
+| `WIKI_CONTENT_MODEL` | `claude-haiku-4-5-20251001` | Model for wiki page content generation |
+| `WIKI_CONTENT_ENDPOINT` | `https://api.anthropic.com` | Content generation endpoint |
+| `WIKI_CONTENT_REQUEST_TYPE` | `Anthropic` | Content generation provider type |
+| `WIKI_PARALLEL_COUNT` | `3` | Max concurrent wiki generation tasks |
+| `WIKI_LANGUAGES` | `en` | Languages for generated documentation |
+| `REPOSITORIES_DIRECTORY` | `/data` | Path for cloned repo storage inside PVC |
+| `READ_MAX_TOKENS` | `140000` | Max tokens read from files during indexing (70% of 200K context) |
+| `AUTO_CONTEXT_COMPRESS_ENABLED` | `true` | AI-powered conversation compression for MCP chat sessions |
+| `AUTO_CONTEXT_COMPRESS_TOKEN_LIMIT` | `100000` | Token count that triggers compression |
+| `AUTO_CONTEXT_COMPRESS_MAX_TOKEN_LIMIT` | `200000` | Hard ceiling matching Haiku 4.5 context window |
+| `JWT_SECRET_KEY` | *(change in ConfigMap)* | Secret for JWT token signing |
 
-## MCP Client Configuration
+### Secret (`opendeepwiki-secret`)
 
-### Claude Code
+| Variable | Description |
+|---|---|
+| `CHAT_API_KEY` | Anthropic API key for primary chat |
+| `WIKI_CATALOG_API_KEY` | Anthropic API key for catalog generation |
+| `WIKI_CONTENT_API_KEY` | Anthropic API key for content generation |
 
-Add to project or global `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "cht-core-wiki": {
-      "type": "http",
-      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-core"
-    },
-    "cht-conf-wiki": {
-      "type": "http",
-      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-conf"
-    },
-    "cht-watchdog-wiki": {
-      "type": "http",
-      "url": "https://opendeepwiki.dev.medicmobile.org/api/mcp?owner=medic&name=cht-watchdog"
-    }
-  }
-}
-```
+All three keys use the same Anthropic API key. They are separated because OpenDeepWiki supports using different providers/keys for each stage.
 
 ### Cursor
 
@@ -224,7 +242,7 @@ Add the same URLs under Settings > MCP Servers.
 
 **Pod in CrashLoopBackOff:**
 ```bash
-kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki --previous --container koalawiki
+kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki --previous --container opendeepwiki
 ```
 Common causes: invalid API key, wrong model name, PVC not bound.
 
@@ -234,11 +252,9 @@ The repository hasn't been indexed yet. Port-forward to the web UI and check ind
 **Indexing appears stuck:**
 Check logs and consider lowering `TASK_MAX_SIZE_PER_USER` to serialize work:
 ```bash
-kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki -f --container koalawiki
+kubectl logs -n mcp-servers -l app.kubernetes.io/name=opendeepwiki -f --container opendeepwiki
 ```
 
 **Unexpected Anthropic costs:**
-- Increase `UPDATE_INTERVAL` to re-index less frequently
-- Set `TASK_MAX_SIZE_PER_USER: "1"` to limit parallel indexing
-- Ensure `EnableSmartFilter: "true"` to skip irrelevant directories (e.g. `node_modules`, vendored code)
+- Reduce `WIKI_PARALLEL_COUNT` to `"1"` to serialize indexing
 - Check the Anthropic dashboard and lower the monthly spend limit

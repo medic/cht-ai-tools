@@ -6,14 +6,40 @@ metadata:
   labels:
     app.kubernetes.io/name: opendeepwiki
 data:
-  CHAT_MODEL: "claude-sonnet-4-6"
-  ANALYSIS_MODEL: "claude-sonnet-4-6"
-  MODEL_PROVIDER: "Anthropic"
-  ENDPOINT: "https://api.anthropic.com"
+  # Runtime
+  ASPNETCORE_ENVIRONMENT: "Production"
+  URLS: "http://+:8080"
+
+  # Database
   DB_TYPE: "sqlite"
-  DB_CONNECTION_STRING: "Data Source=/data/KoalaWiki.db"
-  LANGUAGE: "English"
-  TASK_MAX_SIZE_PER_USER: "5"
-  UPDATE_INTERVAL: "7"
-  EnableSmartFilter: "true"
-  KOALAWIKI_REPOSITORIES: "/repositories"
+  CONNECTION_STRING: "Data Source=/data/opendeepwiki.db"
+
+  # Primary AI config
+  CHAT_REQUEST_TYPE: "Anthropic"
+  ENDPOINT: "https://api.anthropic.com"
+
+  # Wiki catalog generation (directory structure analysis)
+  WIKI_CATALOG_MODEL: "claude-haiku-4-5-20251001"
+  WIKI_CATALOG_ENDPOINT: "https://api.anthropic.com"
+  WIKI_CATALOG_REQUEST_TYPE: "Anthropic"
+
+  # Wiki content generation (page content)
+  WIKI_CONTENT_MODEL: "claude-haiku-4-5-20251001"
+  WIKI_CONTENT_ENDPOINT: "https://api.anthropic.com"
+  WIKI_CONTENT_REQUEST_TYPE: "Anthropic"
+
+  # Processing
+  WIKI_PARALLEL_COUNT: "3"
+  WIKI_LANGUAGES: "en"
+  REPOSITORIES_DIRECTORY: "/data"
+
+  # File reading limit during indexing — 70% of Haiku 4.5 context window (200K)
+  READ_MAX_TOKENS: "140000"
+
+  # Chat conversation compression for ask_question MCP sessions
+  AUTO_CONTEXT_COMPRESS_ENABLED: "true"
+  AUTO_CONTEXT_COMPRESS_TOKEN_LIMIT: "100000"
+  AUTO_CONTEXT_COMPRESS_MAX_TOKEN_LIMIT: "200000"
+
+  # Auth
+  JWT_SECRET_KEY: "REPLACE-WITH-A-LONG-RANDOM-STRING"
