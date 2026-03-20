@@ -6,9 +6,9 @@ metadata:
   labels:
     app.kubernetes.io/name: opendeepwiki
 spec:
-  replicas: 1  
+  replicas: 1
   strategy:
-    type: Recreate  
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: opendeepwiki
@@ -17,12 +17,21 @@ spec:
       labels:
         app.kubernetes.io/name: opendeepwiki
     spec:
+      securityContext:
+        fsGroup: 1000  # ensures the PVC is group-writable by the container process
+      initContainers:
+        - name: init-data-dir
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /data && chmod 777 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
-        - name: koalawiki
-          image: ghcr.io/aiddotnet/opendeepwiki:latest
+        - name: opendeepwiki
+          image: public.ecr.aws/medic/opendeepwiki-web:backend-mar16-nogoogleauth
           ports:
             - name: backend
-              containerPort: 5085
+              containerPort: 8080
           envFrom:
             - configMapRef:
                 name: opendeepwiki-config
@@ -31,9 +40,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: data
-              mountPath: /repositories
-              subPath: repositories
+            - name: prompts
+              mountPath: /app/prompts
+              readOnly: true
           resources:
             requests:
               cpu: 500m
@@ -42,26 +51,26 @@ spec:
               cpu: "2"
               memory: 2Gi
           readinessProbe:
-            httpGet:
-              path: /
-              port: 5085
+            tcpSocket:
+              port: 8080
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /
-              port: 5085
+            tcpSocket:
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 30
 
-        - name: koalawiki-web
-          image: ghcr.io/aiddotnet/opendeepwiki-web:latest
+        - name: opendeepwiki-web
+          image: public.ecr.aws/medic/opendeepwiki-web:1.0.0
           ports:
             - name: frontend
               containerPort: 3000
           env:
-            - name: API_URL
-              value: "http://localhost:5085"
+            - name: NODE_ENV
+              value: "production"
+            - name: API_PROXY_URL
+              value: "http://localhost:8080"
           resources:
             requests:
               cpu: 100m
@@ -80,3 +89,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: opendeepwiki-data
+        - name: prompts
+          configMap:
+            name: opendeepwiki-prompts
