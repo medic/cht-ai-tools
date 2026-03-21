@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opendeepwiki
+  namespace: mcp-servers
+  labels:
+    app.kubernetes.io/name: opendeepwiki
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: opendeepwiki
+  ports:
+    - name: backend
+      port: 8080
+      targetPort: 8080
+    - name: frontend
+      port: 3000
+      targetPort: 3000
