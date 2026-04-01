@@ -116,6 +116,8 @@ Commands: `/create-form [design.xlsx] [sheet-name]`, `/deploy`
 
 Requirements: Python 3.10+ (dependencies auto-managed by `uv run`), Node.js 18+ (deployment server), `cht-conf` installed globally
 
+See [docs/cht-form-builder.md](docs/cht-form-builder.md) for the full guide (architecture, agent pipeline, validation, deployment).
+
 ### CHT Docs MCP Server
 
 Direct access to CHT documentation through the Model Context Protocol:
