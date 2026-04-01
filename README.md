@@ -15,6 +15,7 @@ Run the following slash commands inside Claude Code:
 /plugin install cht-specialist@medic-cht-ai-tools
 /plugin install create-cht-task@medic-cht-ai-tools
 /plugin install create-cht-target@medic-cht-ai-tools
+/plugin install cht-form-builder@medic-cht-ai-tools
 /plugin install cht-docs-mcp@medic-cht-ai-tools
 /plugin install cht-dev-hooks@medic-cht-ai-tools
 ```
@@ -43,9 +44,9 @@ npx @medic/cht-ai-tools install --target opencode
 
 | Component | Claude Code | OpenCode |
 |-----------|:-----------:|:--------:|
-| **CHT Skills** (`cht-specialist`, `create-cht-task`, `create-cht-target`) | ✓ | ✓ |
+| **CHT Skills** (`cht-specialist`, `create-cht-task`, `create-cht-target`, `cht-form-builder`) | ✓ | ✓ |
 | **CHT Docs MCP** (documentation access) | ✓ | ✓ |
-| **Slash Commands** (`/cht-task`, `/cht-target`, `/cht-specialist`) | ✓ | ✓ |
+| **Slash Commands** (`/cht-task`, `/cht-target`, `/cht-specialist`, `/create-form`, `/deploy`) | ✓ | ✓ |
 | **Hooks** (validation & formatting) | ✓ | — |
 
 ## CLI Usage
@@ -100,6 +101,23 @@ KPI/indicator creation with:
 - Goal configuration
 - Form field integration
 
+### CHT Form Builder Skill
+
+Generate CHT XLSForm application forms from Excel design documents or conversational input:
+
+- **Design parsing** — reads French/English Excel design sheets with questions, types, and conditions
+- **Project-aware** — analyzes existing forms, contact-summary, and tasks to avoid conflicts
+- **Smart calculates** — infers intermediate calculate fields from design structure
+- **Auto-translate** — detects project languages and translates all labels
+- **Validation hook** — catches structural and CHT-specific errors on write
+- **Deployment UI** — localhost web page for deploying with cht-conf (credentials never touch the AI)
+
+Commands: `/create-form [design.xlsx] [sheet-name]`, `/deploy`
+
+Requirements: Python 3.10+ (dependencies auto-managed by `uv run`), Node.js 18+ (deployment server), `cht-conf` installed globally
+
+See [docs/cht-form-builder.md](docs/cht-form-builder.md) for the full guide (architecture, agent pipeline, validation, deployment).
+
 ### CHT Docs MCP Server
 
 Direct access to CHT documentation through the Model Context Protocol:
@@ -115,6 +133,8 @@ Quick access to skills:
 - `/cht-task` - Create or modify task definitions
 - `/cht-target` - Create or modify target definitions
 - `/cht-specialist` - Get expert CHT assistance
+- `/create-form` - Generate a form from a design document or conversation
+- `/deploy` - Launch the local deployment UI
 
 ### Hooks (Claude Code only)
 
@@ -188,8 +208,8 @@ cht-ai-tools/
 │       └── registry.test.ts
 ├── skills/                   # Bundled skill assets (package root)
 ├── commands/                 # Bundled command assets
+├── plugins/                  # MCP-only plugins
 └── hooks/                    # Bundled hook assets
-    ├── hooks.json            # Plugin hook definitions
     └── scripts/
 ```
 
