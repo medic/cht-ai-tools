@@ -35,6 +35,13 @@
       "skills": ["./"]
     },
     {
+      "name": "cht-form-builder",
+      "source": "./skills/cht-form-builder",
+      "strict": false,
+      "description": "Generate CHT application forms from Excel designs or conversational input, with a local deployment UI",
+      "version": "0.1.0"
+    },
+    {
       "name": "cht-docs-mcp",
       "source": "./.claude-plugin",
       "strict": false,

@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHT Deploy — Deployment Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --navy: #1a2332;
+      --navy-light: #243044;
+      --teal: #0ea5e9;
+      --teal-dark: #0284c7;
+      --teal-glow: rgba(14, 165, 233, 0.15);
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, 0.15);
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, 0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.15);
+      --gray-50: #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-300: #cbd5e1;
+      --gray-400: #94a3b8;
+      --gray-500: #64748b;
+      --gray-600: #475569;
+      --gray-700: #334155;
+      --terminal-bg: #0d1117;
+      --terminal-text: #c9d1d9;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      background: var(--gray-100);
+      color: var(--navy);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── Header ─── */
+    .header {
+      background: var(--navy);
+      padding: 20px 0;
+      border-bottom: 3px solid var(--teal);
+    }
+
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      border: 2.5px solid var(--teal);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .logo-icon::before,
+    .logo-icon::after {
+      content: '';
+      position: absolute;
+      background: var(--teal);
+      border-radius: 1px;
+    }
+
+    .logo-icon::before {
+      width: 16px;
+      height: 3px;
+    }
+
+    .logo-icon::after {
+      width: 3px;
+      height: 16px;
+    }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: var(--gray-400);
+      margin-top: 1px;
+    }
+
+    /* ─── Main ─── */
+    .main {
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ─── Cards ─── */
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid var(--gray-200);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-600);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    /* ─── Connection ─── */
+    .connection-form {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .input-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper input,
+    .connection-form input[type="url"] {
+      width: 100%;
+      padding: 10px 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm);
+      background: var(--gray-50);
+      color: var(--navy);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-wrapper input:focus,
+    .connection-form input[type="url"]:focus {
+      outline: none;
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px var(--teal-glow);
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--gray-400);
+      padding: 4px;
+      display: flex;
+      align-items: center;
+    }
+
+    .password-toggle:hover {
+      color: var(--gray-600);
+    }
+
+    .password-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .connection-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    .btn {
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 22px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-teal {
+      background: var(--teal);
+      color: #fff;
+    }
+
+    .btn-teal:hover {
+      background: var(--teal-dark);
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+    }
+
+    .btn-teal:active {
+      transform: scale(0.97);
+    }
+
+    /* ─── Status Badge ─── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 20px;
+      transition: all 0.3s;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transition: background 0.3s;
+    }
+
+    .status-disconnected {
+      background: var(--gray-100);
+      color: var(--gray-500);
+    }
+
+    .status-disconnected .status-dot {
+      background: var(--gray-400);
+    }
+
+    .status-connecting {
+      background: var(--amber-dim);
+      color: var(--amber);
+    }
+
+    .status-connecting .status-dot {
+      background: var(--amber);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .status-connected {
+      background: var(--green-dim);
+      color: var(--green);
+    }
+
+    .status-connected .status-dot {
+      background: var(--green);
+    }
+
+    .status-error {
+      background: var(--red-dim);
+      color: var(--red);
+    }
+
+    .status-error .status-dot {
+      background: var(--red);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* ─── Actions Grid ─── */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .action-card {
+      background: var(--gray-50);
+      border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 18px;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .action-card.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+      filter: grayscale(0.3);
+    }
+
+    .action-card:not(.disabled):hover {
+      border-color: var(--teal);
+      box-shadow: 0 2px 12px rgba(14, 165, 233, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .action-card:not(.disabled):active {
+      transform: translateY(0);
+    }
+
+    .action-card.deploy-all {
+      background: var(--navy);
+      border-color: var(--navy-light);
+      color: #fff;
+    }
+
+    .action-card.deploy-all .action-desc {
+      color: var(--gray-400);
+    }
+
+    .action-card.deploy-all:not(.disabled):hover {
+      border-color: var(--teal);
+      background: var(--navy-light);
+    }
+
+    .action-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      font-size: 18px;
+      background: var(--teal-glow);
+      color: var(--teal);
+    }
+
+    .deploy-all .action-icon {
+      background: rgba(255,255,255,0.1);
+      color: var(--teal);
+    }
+
+    .action-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .action-desc {
+      font-size: 12px;
+      color: var(--gray-500);
+      line-height: 1.4;
+    }
+
+    .action-status {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gray-300);
+      transition: background 0.3s;
+    }
+
+    .action-status.running {
+      background: var(--teal);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .action-status.success {
+      background: var(--green);
+    }
+
+    .action-status.error {
+      background: var(--red);
+    }
+
+    /* ─── Terminal ─── */
+    .terminal {
+      background: var(--terminal-bg);
+      border-radius: var(--radius);
+      border: 1px solid #21262d;
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #21262d;
+      background: #161b22;
+    }
+
+    .terminal-title {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--gray-400);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-title::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .btn-clear {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      background: transparent;
+      border: 1px solid #30363d;
+      color: var(--gray-400);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-clear:hover {
+      background: #21262d;
+      color: var(--terminal-text);
+    }
+
+    .terminal-body {
+      padding: 14px 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--terminal-text);
+    }
+
+    .terminal-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .terminal-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .terminal-body::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 3px;
+    }
+
+    .log-line {
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .log-info { color: var(--teal); }
+    .log-success { color: var(--green); }
+    .log-warning { color: var(--amber); }
+    .log-error { color: var(--red); }
+    .log-dim { color: var(--gray-500); }
+
+    /* ─── Footer ─── */
+    .footer {
+      background: var(--gray-50);
+      border-top: 1px solid var(--gray-200);
+      padding: 14px 0;
+    }
+
+    .footer-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    .footer-security {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-security svg {
+      width: 14px;
+      height: 14px;
+      color: var(--green);
+    }
+
+    .footer-timer {
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--gray-400);
+    }
+
+    /* ─── Form Picker Modal ─── */
+    .form-picker-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form-picker-overlay.visible {
+      display: flex;
+    }
+
+    .form-picker {
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      width: 420px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-picker-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .form-picker-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--navy);
+    }
+
+    .form-picker-body {
+      padding: 12px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .form-picker-actions {
+      padding: 12px 20px;
+      border-top: 1px solid var(--gray-200);
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .form-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .form-item:last-child {
+      border-bottom: none;
+    }
+
+    .form-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--teal);
+    }
+
+    .form-item label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: var(--navy);
+      cursor: pointer;
+    }
+
+    .form-item.default label {
+      font-weight: 600;
+      color: var(--teal);
+    }
+
+    .form-item.default::after {
+      content: 'new';
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--teal);
+      background: var(--teal-glow);
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+
+    .form-picker-select-all {
+      font-size: 12px;
+      color: var(--teal);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-weight: 500;
+    }
+
+    .form-picker-select-all:hover {
+      text-decoration: underline;
+    }
+
+    .btn-secondary {
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius-sm);
+      background: #fff;
+      color: var(--gray-600);
+      cursor: pointer;
+    }
+
+    .btn-secondary:hover {
+      background: var(--gray-50);
+    }
+
+    .btn-sm {
+      font-size: 13px;
+      padding: 8px 16px;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 700px) {
+      .actions-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .input-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo-icon"></div>
+      <div class="header-text">
+        <h1>CHT Deploy</h1>
+        <p id="projectPath">Deployment console</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- Connection Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Connection</h2>
+        <div class="status-badge status-disconnected" id="statusBadge">
+          <span class="status-dot"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="connection-form">
+          <div class="input-group">
+            <label for="instanceUrl">Instance URL</label>
+            <input type="url" id="instanceUrl" placeholder="https://your-instance.app.medicmobile.org">
+          </div>
+          <div class="input-row">
+            <div class="input-group">
+              <label for="username">Username</label>
+              <div class="input-wrapper">
+                <input type="text" id="username" placeholder="admin">
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="password">Password</label>
+              <div class="input-wrapper">
+                <input type="password" id="password" placeholder="password">
+                <button class="password-toggle" id="passwordToggle" type="button" aria-label="Toggle password visibility">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="eyeIcon">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="connection-actions">
+            <button class="btn btn-teal" id="connectBtn">Test Connection</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Actions</h2>
+      </div>
+      <div class="card-body">
+        <div class="actions-grid" id="actionsGrid">
+
+          <div class="action-card disabled" data-action="compile-settings">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </div>
+            <div class="action-name">Compile Settings</div>
+            <div class="action-desc">Compile app_settings.json</div>
+          </div>
+
+          <div class="action-card disabled" data-action="upload-settings">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="action-name">Upload Settings</div>
+            <div class="action-desc">Upload app settings to instance</div>
+          </div>
+
+          <div class="action-card disabled" data-action="upload-forms">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <div class="action-name">Convert &amp; Upload Forms</div>
+            <div class="action-desc">Convert and upload all app forms</div>
+          </div>
+
+          <div class="action-card disabled" data-action="upload-resources">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <div class="action-name">Upload Resources</div>
+            <div class="action-desc">Upload icons and media files</div>
+          </div>
+
+          <div class="action-card disabled" data-action="upload-translations">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div class="action-name">Upload Translations</div>
+            <div class="action-desc">Upload translation files</div>
+          </div>
+
+          <div class="action-card deploy-all disabled" data-action="deploy-all">
+            <div class="action-status"></div>
+            <div class="action-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+            </div>
+            <div class="action-name">Deploy All</div>
+            <div class="action-desc">Run full deployment pipeline</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal Output -->
+    <div class="terminal">
+      <div class="terminal-header">
+        <span class="terminal-title">Output</span>
+        <button class="btn-clear" id="clearBtn">Clear</button>
+      </div>
+      <div class="terminal-body" id="terminalBody">
+        <div class="log-line log-dim">Ready. Connect to an instance to begin.</div>
+      </div>
+    </div>
+
+  <!-- Form Picker Modal -->
+  <div class="form-picker-overlay" id="formPickerOverlay">
+    <div class="form-picker">
+      <div class="form-picker-header">
+        <h3>Select forms to upload</h3>
+        <button class="form-picker-select-all" id="formSelectAll">Select all</button>
+      </div>
+      <div class="form-picker-body" id="formPickerBody">
+        <div class="log-line log-dim" style="padding:20px 0;text-align:center;">Loading forms...</div>
+      </div>
+      <div class="form-picker-actions">
+        <button class="btn-secondary" id="formPickerCancel">Cancel</button>
+        <button class="btn btn-teal btn-sm" id="formPickerConfirm">Convert & Upload</button>
+      </div>
+    </div>
+  </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-security">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Credentials never leave your machine — sent per-request, never stored</span>
+      </div>
+      <div class="footer-timer" id="timerDisplay">Auto-shutdown in 30:00</div>
+    </div>
+  </footer>
+
+  <script>
+    // ─── Project Path ───
+    // When served by deploy-server.js, GET /api/project-info returns { path, name }
+    // In mockup mode, show a placeholder
+    (function loadProjectInfo() {
+      fetch('/api/project-info')
+        .then(function(r) { return r.json(); })
+        .then(function(info) {
+          var el = document.getElementById('projectPath');
+          el.textContent = info.path || 'Deployment console';
+          el.title = info.path || '';
+        })
+        .catch(function() {
+          // Mockup mode — no server running
+          var el = document.getElementById('projectPath');
+          el.textContent = 'Deployment console — start deploy-server.js to connect';
+        });
+    })();
+
+    // ─── State ───
+    let connected = false;
+    let timerSeconds = 30 * 60;
+    let timerInterval = null;
+
+    // ─── DOM refs ───
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const connectBtn = document.getElementById('connectBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const terminalBody = document.getElementById('terminalBody');
+    const passwordInput = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const actionsGrid = document.getElementById('actionsGrid');
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    // ─── Password Toggle ───
+    passwordToggle.addEventListener('click', function() {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      passwordToggle.setAttribute('aria-label',
+        isPassword ? 'Hide password' : 'Show password'
+      );
+    });
+
+    // ─── Terminal Logging ───
+    function log(message, level) {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+
+      const prefix = document.createElement('span');
+      const text = document.createTextNode(' ' + message);
+
+      switch (level) {
+        case 'info':
+          prefix.className = 'log-info';
+          prefix.textContent = '[INFO]';
+          break;
+        case 'success':
+          prefix.className = 'log-success';
+          prefix.textContent = '[SUCCESS]';
+          break;
+        case 'warning':
+          prefix.className = 'log-warning';
+          prefix.textContent = '[WARNING]';
+          break;
+        case 'error':
+          prefix.className = 'log-error';
+          prefix.textContent = '[ERROR]';
+          break;
+        default:
+          prefix.className = 'log-dim';
+          prefix.textContent = '';
+          line.appendChild(document.createTextNode(message));
+          terminalBody.appendChild(line);
+          terminalBody.scrollTop = terminalBody.scrollHeight;
+          return;
+      }
+
+      line.appendChild(prefix);
+      line.appendChild(text);
+      terminalBody.appendChild(line);
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+
+    // ─── Clear Terminal ───
+    clearBtn.addEventListener('click', function() {
+      terminalBody.textContent = '';
+      log('Terminal cleared.', 'dim');
+    });
+
+    // ─── Status Update ───
+    function setStatus(state, text) {
+      statusBadge.className = 'status-badge status-' + state;
+      statusText.textContent = text;
+    }
+
+    // ─── Enable/Disable Actions ───
+    function setActionsEnabled(enabled) {
+      const cards = actionsGrid.querySelectorAll('.action-card');
+      cards.forEach(function(card) {
+        if (enabled) {
+          card.classList.remove('disabled');
+        } else {
+          card.classList.add('disabled');
+        }
+      });
+    }
+
+    // ─── Action Status ───
+    function setActionStatus(action, status) {
+      const card = actionsGrid.querySelector('[data-action="' + action + '"]');
+      if (!card) return;
+      const dot = card.querySelector('.action-status');
+      dot.className = 'action-status';
+      if (status) {
+        dot.classList.add(status);
+      }
+    }
+
+    function resetAllActionStatuses() {
+      const dots = actionsGrid.querySelectorAll('.action-status');
+      dots.forEach(function(dot) {
+        dot.className = 'action-status';
+      });
+    }
+
+    // ─── Connect ───
+    connectBtn.addEventListener('click', function() {
+      if (connected) {
+        connected = false;
+        setStatus('disconnected', 'Disconnected');
+        setActionsEnabled(false);
+        resetAllActionStatuses();
+        connectBtn.textContent = 'Test Connection';
+        log('Disconnected from instance.', 'info');
+        return;
+      }
+
+      const url = document.getElementById('instanceUrl').value;
+      if (!url) {
+        log('Please enter an instance URL.', 'error');
+        return;
+      }
+
+      setStatus('connecting', 'Connecting...');
+      connectBtn.disabled = true;
+      log('Testing connection to ' + url + '...', 'info');
+
+      setTimeout(function() {
+        connected = true;
+        setStatus('connected', 'Connected');
+        setActionsEnabled(true);
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Disconnect';
+        log('Connection successful — CHT instance ready', 'success');
+        loadForms();
+        startTimer();
+      }, 1500);
+    });
+
+    // ─── Form Picker ───
+    var availableForms = [];
+    var defaultForm = null;
+    var selectedForms = [];
+    var formPickerOverlay = document.getElementById('formPickerOverlay');
+    var formPickerBody = document.getElementById('formPickerBody');
+    var formSelectAll = document.getElementById('formSelectAll');
+    var formPickerCancel = document.getElementById('formPickerCancel');
+    var formPickerConfirm = document.getElementById('formPickerConfirm');
+
+    function loadForms() {
+      fetch('/api/forms')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          availableForms = data.forms || [];
+          defaultForm = data.defaultForm || null;
+        })
+        .catch(function() {
+          // Mockup mode — generate demo forms
+          availableForms = ['anc_followup', 'delivery_registration', 'home_visit', 'patient_assessment_under_5', 'pregnancy_registration'];
+          defaultForm = 'patient_assessment_under_5';
+        });
+    }
+
+    function showFormPicker() {
+      formPickerBody.textContent = '';
+      if (availableForms.length === 0) {
+        var msg = document.createElement('div');
+        msg.className = 'log-line log-dim';
+        msg.style.padding = '20px 0';
+        msg.style.textAlign = 'center';
+        msg.textContent = 'No forms found in forms/app/';
+        formPickerBody.appendChild(msg);
+        formPickerOverlay.classList.add('visible');
+        return;
+      }
+
+      availableForms.forEach(function(form) {
+        var item = document.createElement('div');
+        item.className = 'form-item';
+        if (form === defaultForm) item.classList.add('default');
+
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'form-' + form;
+        cb.value = form;
+        cb.checked = (form === defaultForm);
+
+        var lbl = document.createElement('label');
+        lbl.htmlFor = 'form-' + form;
+        lbl.textContent = form;
+
+        item.appendChild(cb);
+        item.appendChild(lbl);
+        formPickerBody.appendChild(item);
+      });
+
+      formPickerOverlay.classList.add('visible');
+    }
+
+    function hideFormPicker() {
+      formPickerOverlay.classList.remove('visible');
+    }
+
+    formSelectAll.addEventListener('click', function() {
+      var checkboxes = formPickerBody.querySelectorAll('input[type="checkbox"]');
+      var allChecked = Array.from(checkboxes).every(function(cb) { return cb.checked; });
+      checkboxes.forEach(function(cb) { cb.checked = !allChecked; });
+      formSelectAll.textContent = allChecked ? 'Select all' : 'Deselect all';
+    });
+
+    formPickerCancel.addEventListener('click', hideFormPicker);
+
+    formPickerOverlay.addEventListener('click', function(e) {
+      if (e.target === formPickerOverlay) hideFormPicker();
+    });
+
+    formPickerConfirm.addEventListener('click', function() {
+      var checkboxes = formPickerBody.querySelectorAll('input[type="checkbox"]:checked');
+      selectedForms = Array.from(checkboxes).map(function(cb) { return cb.value; });
+      hideFormPicker();
+
+      if (selectedForms.length === 0) {
+        log('No forms selected — skipping form upload', 'warning');
+        return;
+      }
+
+      log('Converting and uploading ' + selectedForms.length + ' form(s): ' + selectedForms.join(', '), 'info');
+      setActionStatus('upload-forms', 'running');
+
+      setTimeout(function() {
+        setActionStatus('upload-forms', 'success');
+        log(selectedForms.length + ' form(s) converted and uploaded', 'success');
+      }, 1500 + Math.random() * 1000);
+    });
+
+    // ─── Action Simulation ───
+    const actionLabels = {
+      'compile-settings': { name: 'Compiling app_settings.json', success: 'Settings compiled successfully' },
+      'upload-settings': { name: 'Uploading app settings', success: 'App settings uploaded' },
+      'upload-resources': { name: 'Uploading resources', success: 'All resources uploaded' },
+      'upload-translations': { name: 'Uploading translations', success: 'Translations uploaded' }
+    };
+
+    function runAction(action) {
+      return new Promise(function(resolve) {
+        // Form upload opens the picker instead
+        if (action === 'upload-forms') {
+          showFormPicker();
+          resolve();
+          return;
+        }
+
+        var info = actionLabels[action];
+        if (!info) { resolve(); return; }
+
+        setActionStatus(action, 'running');
+        log(info.name + '...', 'info');
+
+        setTimeout(function() {
+          setActionStatus(action, 'success');
+          log(info.success, 'success');
+          resolve();
+        }, 1200 + Math.random() * 800);
+      });
+    }
+
+    actionsGrid.addEventListener('click', function(e) {
+      var card = e.target.closest('.action-card');
+      if (!card || card.classList.contains('disabled')) return;
+
+      var action = card.getAttribute('data-action');
+
+      if (action === 'deploy-all') {
+        log('Starting full deployment pipeline...', 'info');
+        resetAllActionStatuses();
+        // For deploy-all, upload ALL forms (no picker)
+        var actions = ['compile-settings', 'upload-settings'];
+        setActionStatus('deploy-all', 'running');
+
+        var chain = Promise.resolve();
+        actions.forEach(function(a) {
+          chain = chain.then(function() { return runAction(a); });
+        });
+        // Add form upload with all forms
+        chain = chain.then(function() {
+          setActionStatus('upload-forms', 'running');
+          log('Converting and uploading all forms...', 'info');
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              setActionStatus('upload-forms', 'success');
+              log(availableForms.length + ' form(s) converted and uploaded', 'success');
+              resolve();
+            }, 1500);
+          });
+        });
+        // Continue with resources and translations
+        chain = chain.then(function() { return runAction('upload-resources'); });
+        chain = chain.then(function() { return runAction('upload-translations'); });
+        chain.then(function() {
+          setActionStatus('deploy-all', 'success');
+          log('Deployment complete!', 'success');
+        });
+      } else {
+        runAction(action);
+      }
+    });
+
+    // ─── Countdown Timer ───
+    function startTimer() {
+      timerSeconds = 30 * 60;
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(function() {
+        timerSeconds--;
+        if (timerSeconds <= 0) {
+          clearInterval(timerInterval);
+          timerDisplay.textContent = 'Server shutting down...';
+          return;
+        }
+        var m = Math.floor(timerSeconds / 60);
+        var s = timerSeconds % 60;
+        timerDisplay.textContent = 'Auto-shutdown in ' + m + ':' + (s < 10 ? '0' : '') + s;
+      }, 1000);
+    }
+  </script>
+
+</body>
+</html>
