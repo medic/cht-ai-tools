@@ -15,28 +15,25 @@
       "source": "./skills/cht-specialist",
       "strict": false,
       "description": "Expert assistance with CHT development, configuration, troubleshooting, and architecture",
-      "version": "0.1.0",
-      "skills": ["./"]
+      "version": "0.1.0"
     },
     {
       "name": "create-cht-task",
       "source": "./skills/create-cht-task",
       "strict": false,
       "description": "Guided assistant for creating CHT task definitions in tasks.js",
-      "version": "0.1.0",
-      "skills": ["./"]
+      "version": "0.1.0"
     },
     {
       "name": "create-cht-target",
       "source": "./skills/create-cht-target",
       "strict": false,
       "description": "Guided assistant for creating CHT target/indicator definitions in targets.js",
-      "version": "0.1.0",
-      "skills": ["./"]
+      "version": "0.1.0"
     },
     {
       "name": "cht-docs-mcp",
-      "source": "./.claude-plugin",
+      "source": "./plugins/cht-docs-mcp",
       "strict": false,
       "description": "MCP server for searching CHT documentation",
       "version": "0.1.0",
