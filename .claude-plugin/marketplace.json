@@ -35,6 +35,14 @@
       "skills": ["./"]
     },
     {
+      "name": "cht-pr-review",
+      "source": "./skills/cht-pr-review",
+      "strict": false,
+      "description": "Review a pull request to confirm if it delivers what its linked issue and its own description promise",
+      "version": "0.1.0",
+      "skills": ["./"]
+    },
+    {
       "name": "cht-docs-mcp",
       "source": "./.claude-plugin",
       "strict": false,

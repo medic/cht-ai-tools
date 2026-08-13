@@ -22,6 +22,7 @@ mkdir -p ~/.config/opencode/skills
 ln -sf ~/.config/opencode/cht-ai-tools/skills/cht-specialist ~/.config/opencode/skills/cht-specialist
 ln -sf ~/.config/opencode/cht-ai-tools/skills/create-cht-task ~/.config/opencode/skills/create-cht-task
 ln -sf ~/.config/opencode/cht-ai-tools/skills/create-cht-target ~/.config/opencode/skills/create-cht-target
+ln -sf ~/.config/opencode/cht-ai-tools/skills/cht-pr-review ~/.config/opencode/skills/cht-pr-review
 ```
 
 ### 3. Symlink commands
@@ -31,6 +32,7 @@ mkdir -p ~/.config/opencode/commands
 ln -sf ~/.config/opencode/cht-ai-tools/commands/cht-specialist.md ~/.config/opencode/commands/cht-specialist.md
 ln -sf ~/.config/opencode/cht-ai-tools/commands/cht-task.md ~/.config/opencode/commands/cht-task.md
 ln -sf ~/.config/opencode/cht-ai-tools/commands/cht-target.md ~/.config/opencode/commands/cht-target.md
+ln -sf ~/.config/opencode/cht-ai-tools/commands/cht-pr-review.md ~/.config/opencode/commands/cht-pr-review.md
 ```
 
 ### 4. Configure MCP server
@@ -72,6 +74,7 @@ Use slash commands directly:
 - `/cht-task` — Create or modify CHT task definitions
 - `/cht-target` — Create or modify CHT target definitions
 - `/cht-specialist` — Get expert CHT assistance
+- `/cht-pr-review` — Review a pull request or diff in a CHT project
 
 ## Updating
 
