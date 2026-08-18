@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 #
-# Print the full list of files a pull request touches, then the patch with
-# generated files excluded.
+# Print the patch for a pull request, with the bodies of generated files
+# replaced by a note.
 #
-# Excluded files still appear in the file list above the patch, because an
-# undisclosed change to one of them is a finding.
+# Excluded files keep their `diff --git` header, so an undisclosed change to
+# one of them is still visible as a finding.
 #
 # Usage: pr-diff.sh [pr-number]
 #   With no argument, resolves the PR from the current branch.
 
 set -euo pipefail
+
+# Paths whose patch body is dropped, matched as regexes against the end of the
+# post-image path in the patch, at a "/" boundary. Add generated or vendored
+# paths here.
+readonly EXCLUDE=(
+  'package-lock\.json'
+)
 
 die() {
   echo "pr-diff.sh: $*" >&2
@@ -18,41 +25,28 @@ die() {
 
 command -v gh >/dev/null 2>&1 || die "the gh CLI is not on PATH"
 
-# Files whose patch body is dropped. Add generated or vendored paths here.
-readonly EXCLUDE='package-lock.json'
+gh_err="$(mktemp)"
+trap 'rm -f "$gh_err"' EXIT
 
 pr="${1:-}"
-if [[ -z "$pr" ]]; then
-  pr="$(gh pr view --json number --jq .number 2>/dev/null)" \
-    || die "no PR number given, and no PR found for the current branch"
-fi
-[[ "$pr" =~ ^[0-9]+$ ]] || die "not a PR number: '$pr'"
+[[ -z "$pr" || "$pr" =~ ^[0-9]+$ ]] || die "not a PR number: '$pr'"
 
-files="$(gh pr diff "$pr" --name-only)" \
-  || die "could not read the diff for PR #${pr} (is gh authenticated for this repo?)"
-[[ -n "$files" ]] || die "PR #${pr} changes no files"
+# $pr is unquoted so that no argument leaves gh to resolve the current branch; it is either empty or digits.
+patch="$(gh pr diff $pr 2>"$gh_err")" \
+  || die "could not read the diff for PR '${pr}': $(tr '\n' ' ' <"$gh_err")"
+[[ -n "$patch" ]] || die "PR '${pr}' changes no files"
 
-echo "=== files changed ($(echo "$files" | wc -l | tr -d ' ')) ==="
-echo "$files" | awk -v excl="$EXCLUDE" '
-  BEGIN { n = split(excl, e, ","); for (i = 1; i <= n; i++) ex[e[i]] = 1 }
-  { print ($0 in ex) ? $0 "   [patch excluded below]" : $0 }
-'
-
-echo
-echo "=== patch ==="
-gh pr diff "$pr" | awk -v excl="$EXCLUDE" '
-  BEGIN { n = split(excl, e, ","); for (i = 1; i <= n; i++) ex[e[i]] = 1 }
-  # A malformed path here fails open: the file stays in the patch, costing
-  # tokens but never hiding a change from the review.
+alternation="$(IFS='|'; echo "${EXCLUDE[*]}")"
+# The "b/" path ends the header line, so anchoring to end-of-line reads it without
+# splitting on whitespace, which would mangle a path containing a space. Git wraps
+# the pair in double quotes when it has to escape a path, hence the optional quote.
+exclude_re="/(${alternation})\"?\$"
+EXCLUDE_RE="$exclude_re" awk '
   /^diff --git / {
-    path = $3
-    sub(/^a\//, "", path)
-    skip = (path in ex)
-    if (skip) dropped[path] = 1
+    skip = ($0 ~ ENVIRON["EXCLUDE_RE"])
+    print
+    if (skip) print "(patch body excluded to save tokens: this file is generated)"
+    next
   }
-  !skip { print }
-  END {
-    for (p in dropped)
-      print "(patch body excluded to save tokens: " p " - see the file list above)"
-  }
-'
+  !skip
+' <<< "$patch"

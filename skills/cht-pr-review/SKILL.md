@@ -21,8 +21,6 @@ Review whether a pull request completely delivers what it claims to deliver.
 
 This is **not** a code-quality review. Do not report style issues, nitpicks, or bugs here unless they mean a stated requirement is not actually met.
 
-The scripts below live alongside this file, not in the repo under review; `${CLAUDE_SKILL_DIR}` resolves to this skill's own directory. If it reaches you unexpanded, substitute the directory this file was loaded from.
-
 ## 0. Gather the stated intent
 
 ```
@@ -43,7 +41,7 @@ Derive a requirement only from a statement about **behaviour** — what the code
 ${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh <pr>
 ```
 
-It prints every file the PR touches, then the patch with generated files excluded.
+It prints the patch. Generated files still appear by path, but their patch body is replaced by a note — an undisclosed change to one of them is still a finding. Its `diff --git` headers are the complete list of changed files, and the only file list you can obtain.
 
 - Then read and search the working tree to follow the code **outward**: registration sites, exports, barrel files, command tables, call sites, and anything the new code must be wired into in order to actually run.
 - A requirement counts as delivered only if the whole path from user entrypoint to new code is complete. New code that is never registered, exported, or called delivers nothing, even when it is correct in isolation.
@@ -62,9 +60,9 @@ Then, separately, list **Preconditions to confirm**: operational facts the chang
 
 ## 4. Undisclosed changes
 
-Does the PR change anything its description never mentions? Report both directions, but this one matters most: an unmentioned change is the finding a human reviewer is most likely to miss.
+Does the PR change anything its description never mentions? Report both directions, but this one matters most: an unmentioned change is the finding a human reviewer is most likely to miss. Do not include changes supporting a stated requirement (even if those changes were not explicitly mentioned).
 
-Do not limit this to source files. Walk the full file list from section 2, including the files whose patch was excluded.
+Do not limit this to source files. Walk the full file list from the `diff --git` headers in section 2, including the files whose patch was excluded.
 
 ## 5. Better approach
 
@@ -74,7 +72,7 @@ Does an existing module, helper, or established pattern in this repo already sol
 
 ## Output
 
-Report sections 3, 4, and 5 under the headings "Requirements", "Undisclosed Changes", and "Alternative Approaches". Be brief and cite `file:line` for every claim.
+Report sections 3, 4, and 5 under the headings "Requirements", "Undisclosed Changes", and "Alternative Approaches". Be brief and cite `file:line` for every claim. If there is nothing to report for a section, just say "None".
 
 Use GitHub flavored Markdown. Write impersonally — report what the code does and what was checked, never narrating yourself ("I traced…", "I confirmed…").
 
