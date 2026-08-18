@@ -33,7 +33,7 @@ Pass no argument to resolve the PR from the current branch. If the script exits 
 
 Write out the concrete requirements from those sources as a bullet list, in your own words, including sub-tasks and acceptance criteria.
 
-Derive a requirement only from a statement about **behaviour** — what the code will do, or an acceptance criterion. Rationale and motivation ("this is faster", "this makes batch jobs possible") are not requirements. List any claim you decline to treat as a requirement under "Claims not treated as requirements" so the reader can disagree with the call.
+Derive a requirement only from a statement about **behaviour** — what the code will do, or an acceptance criterion. Rationale and motivation ("this is faster", "this makes batch jobs possible") are not requirements.
 
 ## 2. Read the change, then follow it out of the diff
 
@@ -72,8 +72,18 @@ Does an existing module, helper, or established pattern in this repo already sol
 
 ## Output
 
-Report sections 3, 4, and 5 under the headings "Requirements", "Undisclosed Changes", and "Alternative Approaches". Be brief and cite `file:line` for every claim. If there is nothing to report for a section, just say "None".
+Report sections 3, 4, and 5 under the headings "Requirements", "Undisclosed Changes", and "Alternative Approaches".
 
-Use GitHub flavored Markdown. Write impersonally — report what the code does and what was checked, never narrating yourself ("I traced…", "I confirmed…").
+One line per item, in this shape:
+
+- **Delivered** — <requirement> — `path/to/file.js:42`
+- **Not delivered** — <requirement> — <what is missing>
+- **Pending verification** — <requirement> — <what would settle it>
+
+At most one sentence beyond the citation. Cite `file:line` for every claim. If there is nothing to report for a section, write "None" and nothing else.
+
+No preamble, no closing summary, no overall verdict. Do not restate a requirement's rationale, explain why a citation satisfies it, or describe what was examined.
+
+Use GitHub flavored Markdown. Write impersonally - report what the code does, never narrating yourself ("I traced…", "I confirmed…").
 
 Return the report as your response and stop there. If you could not establish the PR's intent (section 0 or 1), say so plainly as the report.
