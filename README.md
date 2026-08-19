@@ -103,9 +103,7 @@ KPI/indicator creation with:
 
 ### CHT PR Review Skill
 
-> **Status:** stub — content not yet implemented.
-
-Review of CHT pull requests and diffs against CHT conventions and common pitfalls.
+Review a pull request to confirm if it delivers what its linked issue and its own description promise
 
 ### CHT Docs MCP Server
 
@@ -122,7 +120,7 @@ Quick access to skills:
 - `/cht-task` - Create or modify task definitions
 - `/cht-target` - Create or modify target definitions
 - `/cht-specialist` - Get expert CHT assistance
-- `/cht-pr-review` - Review a pull request or diff in a CHT project
+- `/cht-pr-review` - Review a pull request to confirm if it delivers what its linked issue and its own description promise
 
 ### Hooks (Claude Code only)
 

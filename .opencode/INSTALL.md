@@ -74,7 +74,7 @@ Use slash commands directly:
 - `/cht-task` — Create or modify CHT task definitions
 - `/cht-target` — Create or modify CHT target definitions
 - `/cht-specialist` — Get expert CHT assistance
-- `/cht-pr-review` — Review a pull request or diff in a CHT project
+- `/cht-pr-review` — Review a pull request to confirm if it delivers what its linked issue and its own description promise.
 
 ## Updating
 

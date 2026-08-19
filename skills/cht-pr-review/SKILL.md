@@ -1,8 +1,8 @@
 ---
 name: cht-pr-review
-description: Review a pull request to confirm if it delivers what its linked issue and its own description promise. Checks requirement-by-requirement delivery, undisclosed changes, and whether an existing pattern in the repo solves it better. Use when asked whether a PR addresses its issue, matches its description, or could be solved a better way. Does not review code correctness or style. Requires the `gh` CLI.
+description: Review a pull request to confirm if it delivers what its linked issue and its own description promise. Checks requirement-by-requirement delivery, undisclosed changes, and whether an existing pattern in the repo solves it better. Use when asked whether a PR addresses its issue, matches its description, or could be solved a better way. Does not review code correctness or style. Requires the `gh` CLI and `jq`.
 argument-hint: "[pr-number]"
-# Keep these tools synced up with what is configured in the review.yml workflow
+# Keep these tools synced with what is configured in the CI workflow jobs using this skill
 allowed-tools:
   - Read
   - Grep

@@ -37,9 +37,6 @@ patch="$(gh pr diff $pr 2>"$gh_err")" \
 [[ -n "$patch" ]] || die "PR '${pr}' changes no files"
 
 alternation="$(IFS='|'; echo "${EXCLUDE[*]}")"
-# The "b/" path ends the header line, so anchoring to end-of-line reads it without
-# splitting on whitespace, which would mangle a path containing a space. Git wraps
-# the pair in double quotes when it has to escape a path, hence the optional quote.
 exclude_re="/(${alternation})\"?\$"
 EXCLUDE_RE="$exclude_re" awk '
   /^diff --git / {
