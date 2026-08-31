@@ -43,16 +43,34 @@ echo "=== PR #${pr} ==="
 jq -r '"title: \(.title)\nbase:  \(.baseRefName)\nhead:  \(.headRefOid)"' <<<"$pr_json"
 print_body_and_comments "$pr_json"
 
-issue_urls="$(jq -r '
-  (.url | sub("/pull/[0-9]+$"; "")) as $repo
-  | [ (.closingIssuesReferences // [])[].url,
-      ((.title // "") | capture("^\\S+\\(#(?<num>[0-9]+)\\):") | "\($repo)/issues/\(.num)") ]
-  | unique[]
-' <<<"$pr_json")" || die "could not read the issue references of PR #${pr}"
+closing_urls="$(jq -r '(.closingIssuesReferences // [])[].url' <<<"$pr_json")" \
+  || die "could not read the issue references of PR #${pr}"
+
+repo_url="$(jq -r '.url | sub("/pull/[0-9]+$"; "")' <<<"$pr_json")"
 
 issues=()
-if [[ -n "$issue_urls" ]]; then
-  mapfile -t issues <<<"$issue_urls"
+if [[ -n "$closing_urls" ]]; then
+  mapfile -t issues <<<"$closing_urls"
+fi
+
+title_num="$(jq -r '(.title // "") | capture("^\\S+\\(#(?<num>[0-9]+)\\)!?:") // {} | .num // empty' <<<"$pr_json")"
+if [[ -n "$title_num" ]] && ! grep -qxF "${repo_url}/issues/${title_num}" <<<"$closing_urls"; then
+  nwo="$(jq -r '.url | capture("^https?://[^/]+/(?<nwo>[^/]+/[^/]+)/pull/[0-9]+$") // {} | .nwo // empty' <<<"$pr_json")"
+  [[ -n "$nwo" ]] || die "could not read the repository from the URL of PR #${pr}"
+  if ! kind="$(gh api "repos/${nwo}/issues/${title_num}" \
+      --jq 'if .pull_request then "pr" else "issue" end' 2>"$gh_err")"; then
+    echo "--- warning ---"
+    echo "#${title_num}, from the title, could not be read: $(gh_error)"
+    echo "It is included below without confirming that it is an issue rather than"
+    echo "a pull request; weigh it accordingly and say so in the report."
+    issues+=("${repo_url}/issues/${title_num}")
+  elif [[ "$kind" == "pr" ]]; then
+    echo "--- warning ---"
+    echo "#${title_num}, from the title, is a pull request, not an issue. It is"
+    echo "ignored: it is not a statement of intent for PR #${pr}. Say so in the report."
+  else
+    issues+=("${repo_url}/issues/${title_num}")
+  fi
 fi
 
 if (( ${#issues[@]} == 0 )); then
