@@ -35,6 +35,8 @@ Write out the concrete requirements from those sources as a bullet list, in your
 
 Derive a requirement only from a statement about **behaviour** — what the code will do, or an acceptance criterion. Rationale and motivation ("this is faster", "this makes batch jobs possible") are not requirements.
 
+Requirements come from the issue and the PR description only. Reviewer feedback — the `reviews` and `inline review comments` sections — is context, not a source of requirements: use it to clarify a requirement you already have, and in sections 4 and 5, but never turn a review comment into a bullet of its own. A thread marked `resolved` or `outdated` may already have been dealt with; treat neither marker as proof either way, and do not report an unresolved thread as a missing requirement.
+
 ## 2. Read the change, then follow it out of the diff
 
 ```
