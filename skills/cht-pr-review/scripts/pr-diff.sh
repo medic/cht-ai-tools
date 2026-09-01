@@ -16,6 +16,10 @@ set -euo pipefail
 # paths here.
 readonly EXCLUDE=(
   'package-lock\.json'
+  'yarn\.lock'
+  'pnpm-lock\.yaml'
+  '.*\.min\.(js|css)'
+  'dist/.*'
 )
 
 die() {
