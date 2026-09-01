@@ -26,10 +26,20 @@ gh_error() { tr '\n' ' ' <"$gh_err"; }
 
 ignored_json="$(jq -cn '$ARGS.positional' --args -- "${IGNORED_USERS[@]}")"
 readonly ignored_json
-readonly JQ_DROP_IGNORED='
+readonly JQ_HELPERS='
   def drop_ignored:
     ((.author.login // "") | sub("\\[bot\\]$"; "")) as $login
     | select(($ignored | index($login)) == null);
+
+  # Drop HTML comments (e.g. from the templates)
+  def clean_body:
+    (. // "")
+    | [ split("```") | to_entries[]
+        | if (.key % 2) == 0 then (.value | gsub("<!--(?s:.*?)-->"; "")) else .value end ]
+    | join("```")
+    | gsub("\n[ \t]*(\n[ \t]*)+"; "\n\n")
+    | sub("^\\s+"; "")
+    | sub("\\s+$"; "");
 '
 
 pr="${1:-}"
@@ -43,11 +53,14 @@ pr="$(jq -r .number <<<"$pr_json")"
 print_body_and_comments() {
   local json="$1"
   echo "--- description ---"
-  jq -r 'if (.body // "") == "" then "(no description)" else .body end' <<<"$json"
+  jq -r --argjson ignored "$ignored_json" "$JQ_HELPERS"'(.body | clean_body) as $b
+    | if $b == "" then "(no description)" else $b end' <<<"$json"
   echo "--- comments ---"
-  jq -r --argjson ignored "$ignored_json" "$JQ_DROP_IGNORED"'[ (.comments // [])[]
+  jq -r --argjson ignored "$ignored_json" "$JQ_HELPERS"'[ (.comments // [])[]
     | drop_ignored
-    | "[\(.author.login // "deleted-user")] \(.body // "")" ]
+    | (.body | clean_body) as $b
+    | select($b != "")
+    | "[\(.author.login // "deleted-user")] \($b)" ]
     | if length == 0 then "(no comments)" else .[] end' <<<"$json"
 }
 
@@ -58,10 +71,11 @@ print_body_and_comments "$pr_json"
 # `gh pr view --json comments` returns only issue-style comments; the review bodies and the inline threads on the diff
 # have to be asked for separately.
 echo "--- reviews ---"
-jq -r --argjson ignored "$ignored_json" "$JQ_DROP_IGNORED"'[ (.reviews // [])[]
+jq -r --argjson ignored "$ignored_json" "$JQ_HELPERS"'[ (.reviews // [])[]
   | drop_ignored
-  | select((.body // "") != "")
-  | "[\(.author.login // "deleted-user")] (\(.state))\n\(.body)" ]
+  | (.body | clean_body) as $b
+  | select($b != "")
+  | "[\(.author.login // "deleted-user")] (\(.state))\n\($b)" ]
   | if length == 0 then "(no reviews)" else .[] end' <<<"$pr_json"
 
 # Threads come from GraphQL rather than /pulls/N/comments: only GraphQL reports
@@ -78,7 +92,7 @@ if threads_json="$(gh api graphql -F id="$(jq -r .id <<<"$pr_json")" -f query='
             comments(first:50) {
               pageInfo { hasNextPage }
               nodes { author { login } body } } } } } } }' 2>"$gh_err")"; then
-  jq -r --argjson ignored "$ignored_json" "$JQ_DROP_IGNORED"'
+  jq -r --argjson ignored "$ignored_json" "$JQ_HELPERS"'
     (.data.node.reviewThreads // null) as $rt
     | if $rt == null then
         ["(could not be read: \((.errors // []) | map(.message) | join("; ")
@@ -91,7 +105,9 @@ if threads_json="$(gh api graphql -F id="$(jq -r .id <<<"$pr_json")" -f query='
               truncated: .comments.pageInfo.hasNextPage,
               comments: [ .comments.nodes[]
                           | drop_ignored
-                          | "  [\(.author.login // "deleted-user")] \(.body)" ] }
+                          | (.body | clean_body) as $b
+                          | select($b != "")
+                          | "  [\(.author.login // "deleted-user")] \($b)" ] }
           | select((.comments | length) > 0)
           | "\(.loc) (\(.status))\(if .truncated then " [further replies not shown]" else "" end)\n\(.comments | join("\n"))" ] as $t
         | if ($t | length) == 0 then ["(no inline review comments)"]
