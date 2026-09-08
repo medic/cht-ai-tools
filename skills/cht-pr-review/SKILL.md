@@ -9,6 +9,8 @@ allowed-tools:
   - Glob
   - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh:*)
   - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh:*)
+  - mcp__cht-docs__ask_question
+  - mcp__cht-docs__search_docs
 disallowed-tools:
   - Edit
   - Write
@@ -68,9 +70,15 @@ Do not limit this to source files. Walk the full file list from the `diff --git`
 
 ## 5. Better approach
 
-Does an existing module, helper, or established pattern in this repo already solve this, or could it be updated to solve it better (more efficiently/simply)? Cite it by path.
+Does an existing module, helper, or established pattern in this repo already solve this, or could it be updated to solve it better (more efficiently/simply)? Cite it by path. Use the MCP calls described below to check the CHT documentation. Cite this documentation when relevant.
 
 "No better approach found" is a correct and expected answer — do not invent hypothetical designs to fill space.
+
+### Asking the documentation
+
+`mcp__cht-docs__ask_question` answers a question; `mcp__cht-docs__search_docs` is the narrower lookup. At most three queries per review.
+
+If the tools are unavailable, write "documentation not consulted" in the report rather than answering from memory.
 
 ## Output
 
