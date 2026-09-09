@@ -1,6 +1,6 @@
 ---
 name: cht-pr-review
-description: Review a pull request to confirm if it delivers what its linked issue and its own description promise. Checks requirement-by-requirement delivery, undisclosed changes, and whether an existing pattern in the repo solves it better. Use when asked whether a PR addresses its issue, matches its description, or could be solved a better way. Does not review code correctness or style. Requires the `gh` CLI and `jq`.
+description: Review a pull request to confirm if it delivers what its linked issue and its own description promise. Checks requirement-by-requirement delivery, undisclosed changes, and whether an existing pattern in the repo solves it better. Use when asked whether a PR addresses its issue, matches its description, or could be solved a better way. Does not review code correctness or style. Requires the `gh` CLI and `jq`. Assumes the current working tree is at the head of the PR to be reviewed.
 argument-hint: "[pr-number]"
 # Keep these tools synced with what is configured in the CI workflow jobs using this skill
 allowed-tools:
@@ -15,6 +15,15 @@ disallowed-tools:
   - Edit
   - Write
   - NotebookEdit
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: bash
+          args:
+            - ${CLAUDE_PLUGIN_ROOT}/scripts/verify-citations.sh
+          once: true
+          timeout: 60
 ---
 
 # PR review: completeness
@@ -90,7 +99,7 @@ One line per item, in this shape:
 - **Not delivered** — <requirement> — <what is missing>
 - **Pending verification** — <requirement> — <what would settle it>
 
-At most one sentence beyond the citation. Cite `file:line` for every claim. If there is nothing to report for a section, write "None" and nothing else.
+At most one sentence beyond the citation. Cite `file:line` for every claim. Every `file:line` is checked against the working tree when the review finishes, and a report holding one that does not resolve is handed back to you to correct. If there is nothing to report for a section, write "None" and nothing else.
 
 No preamble, no closing summary, no overall verdict. Do not restate a requirement's rationale, explain why a citation satisfies it, or describe what was examined.
 
