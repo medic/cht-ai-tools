@@ -5,6 +5,7 @@ export const CHT_SKILLS: Skill[] = [
   { name: 'cht-specialist', sourcePath: getAssetPath('skills/cht-specialist') },
   { name: 'create-cht-task', sourcePath: getAssetPath('skills/create-cht-task') },
   { name: 'create-cht-target', sourcePath: getAssetPath('skills/create-cht-target') },
+  { name: 'cht-pr-review', sourcePath: getAssetPath('skills/cht-pr-review') },
 ];
 
 export async function installSkills(

@@ -15,6 +15,7 @@ Run the following slash commands inside Claude Code:
 /plugin install cht-specialist@medic-cht-ai-tools
 /plugin install create-cht-task@medic-cht-ai-tools
 /plugin install create-cht-target@medic-cht-ai-tools
+/plugin install cht-pr-review@medic-cht-ai-tools
 /plugin install cht-docs-mcp@medic-cht-ai-tools
 /plugin install cht-dev-hooks@medic-cht-ai-tools
 ```
@@ -43,9 +44,9 @@ npx @medic/cht-ai-tools install --target opencode
 
 | Component | Claude Code | OpenCode |
 |-----------|:-----------:|:--------:|
-| **CHT Skills** (`cht-specialist`, `create-cht-task`, `create-cht-target`) | ✓ | ✓ |
+| **CHT Skills** (`cht-specialist`, `create-cht-task`, `create-cht-target`, `cht-pr-review`) | ✓ | ✓ |
 | **CHT Docs MCP** (documentation access) | ✓ | ✓ |
-| **Slash Commands** (`/cht-task`, `/cht-target`, `/cht-specialist`) | ✓ | ✓ |
+| **Slash Commands** (`/cht-task`, `/cht-target`, `/cht-specialist`, `/cht-pr-review`) | ✓ | ✓ |
 | **Hooks** (validation & formatting) | ✓ | — |
 
 ## CLI Usage
@@ -100,6 +101,10 @@ KPI/indicator creation with:
 - Goal configuration
 - Form field integration
 
+### CHT PR Review Skill
+
+Review a pull request to confirm if it delivers what its linked issue and its own description promise
+
 ### CHT Docs MCP Server
 
 Direct access to CHT documentation through the Model Context Protocol:
@@ -115,6 +120,7 @@ Quick access to skills:
 - `/cht-task` - Create or modify task definitions
 - `/cht-target` - Create or modify target definitions
 - `/cht-specialist` - Get expert CHT assistance
+- `/cht-pr-review` - Review a pull request to confirm if it delivers what its linked issue and its own description promise
 
 ### Hooks (Claude Code only)
 

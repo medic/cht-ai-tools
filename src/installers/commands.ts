@@ -5,6 +5,7 @@ export const CHT_COMMANDS: Command[] = [
   { name: 'cht-task', sourcePath: getAssetPath('commands/cht-task.md') },
   { name: 'cht-target', sourcePath: getAssetPath('commands/cht-target.md') },
   { name: 'cht-specialist', sourcePath: getAssetPath('commands/cht-specialist.md') },
+  { name: 'cht-pr-review', sourcePath: getAssetPath('commands/cht-pr-review.md') },
 ];
 
 export async function installCommands(
