@@ -548,9 +548,9 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 
 ## Corrections this research makes to files outside `specs/`
 
-- `.env.example`: rename `LANGFUSE_HOST` to `LANGFUSE_BASE_URL` (R-8); add the proposed
-  `AGENT_WATCHDOG_RUN_TIMEOUT_MS`, `AGENT_WATCHDOG_PROJECT_CONCURRENCY` and optional
-  `AGENT_WATCHDOG_CHROMIUM_PATH`; give `AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT` and
-  `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN` their documented defaults (2.00 and 25.00).
+- `.env.example` (applied 2026-09-19): `LANGFUSE_HOST` renamed to `LANGFUSE_BASE_URL` (R-8);
+  `AGENT_WATCHDOG_RUN_TIMEOUT_MS`, `AGENT_WATCHDOG_PROJECT_CONCURRENCY` and the optional
+  `AGENT_WATCHDOG_CHROMIUM_PATH` added; `AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT` and
+  `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN` given their documented defaults (2.00 and 25.00).
 - Spec "Notes for `/speckit.plan`": the verification note's CLI wording (checks loaded through
   `--settings`) is superseded by R-3; the note is otherwise adopted.
