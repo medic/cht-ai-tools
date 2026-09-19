@@ -1,0 +1,152 @@
+# Quickstart: Watchdog Slack Loop
+
+**Feature**: `001-watchdog-slack-loop` | **Date**: 2026-09-19 | **Plan**: [plan.md](./plan.md)
+
+How to run the pipeline and prove each user story end to end. Commands and flags follow
+[contracts/cli.md](./contracts/cli.md); exit codes follow [contracts/exit-codes.md](./contracts/exit-codes.md);
+artefact paths follow [contracts/run-directory.md](./contracts/run-directory.md). Nothing here posts
+to Slack unless the step says so.
+
+## Prerequisites
+
+- Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
+- A Chromium for rendering: `npx playwright-core install chromium-headless-shell`, or set
+  `AGENT_WATCHDOG_CHROMIUM_PATH` to a system Chromium.
+- Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY`; a Grafana service-account
+  token with the Viewer role on the watchdog you point at (`AGENT_WATCHDOG_GRAFANA_TOKEN`,
+  `AGENT_WATCHDOG_GRAFANA_URL`, `AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID`); Langfuse keys and
+  `LANGFUSE_BASE_URL`. `SLACK_BOT_TOKEN` and `AGENT_WATCHDOG_SLACK_CHANNEL_ID` are needed only for
+  the steps that post or read Slack.
+- Local paths: `AGENT_WATCHDOG_DATA_DIR=./.data` and `AGENT_WATCHDOG_CONFIG_DIR=./config/local`
+  (copy `config/defaults/` and edit `projects.yaml`).
+
+Every command below is `node --env-file=.env bin/agent-watchdog.js …`, abbreviated to
+`agent-watchdog …`.
+
+## 1. Lint and unit tests (no network, no credentials)
+
+```sh
+npm run lint          # zero warnings
+npm test              # mocha + nyc; test/ mirrors src/
+```
+
+Expected: both exit 0; coverage is printed and compared against `main` in CI.
+
+## 2. Deterministic analysis on recorded fixtures (User Story 1)
+
+```sh
+npm run replay:eval
+```
+
+Runs every recorded fixture run under `test/fixtures/runs/` through the analysis and gate without
+the model, then compares with the stored expectations.
+
+Expected: the seeded-anomaly day yields exactly one candidate on the seeded project and metric
+with the FR-014 rule that fired; the quiet day yields no candidates and a `heartbeat` brief; the
+labelled feedback set shows no regression; exit 0.
+
+## 3. Preview run against a real watchdog (User Story 3, scenario 5)
+
+```sh
+agent-watchdog run --dry-run --date "$(date -u -d yesterday +%F)" > payload.json
+```
+
+Expected: exit 0; `payload.json` is the exact Slack payload (parent, replies, image reference)
+with `slack_file_id: null`; under `.data/runs/<date>/` every artefact of a real run exists,
+including `rollup/report.html`, `rollup/brief.png` and `run.json` with `status: previewed`; the
+footer contains the trace link and the cost in USD; nothing was posted.
+
+## 4. One stage at a time (User Story 3, scenario 6)
+
+```sh
+agent-watchdog run --date <date> --stage collect
+agent-watchdog run --date <date> --stage analyze
+agent-watchdog run --date <date> --stage agent --project <host>
+agent-watchdog run --date <date> --stage rollup
+agent-watchdog run --date <date> --stage render
+```
+
+Expected: each stage reads the previous stage's files and writes its own; deleting
+`changes.json` and re-running `--stage agent` exits 65 with the missing file named; re-running a
+stage overwrites its outputs atomically.
+
+## 5. Replay with a changed prompt (User Story 3, scenario 3)
+
+```sh
+cp -r prompts prompts-experiment && $EDITOR prompts-experiment/pass-first.md
+agent-watchdog replay --date <date> --prompts ./prompts-experiment --label experiment > diff.json
+```
+
+Expected: findings are regenerated under `.data/runs-replay/<date>/experiment/`; `diff.json` lists
+items added, removed and changed; the log contains no request to the Grafana or Slack hosts (only
+the model API and recorded tool results were used); exit 0. This is the diff attached to a prompt
+PR.
+
+## 6. Engine parity (User Story 3, scenario 7)
+
+```sh
+AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date <date> --project <host>
+node smoke/agent-parity.js --date <date> --project <host>
+```
+
+Expected: the CLI engine drives `claude -p` with the same skill, tools, prompts and schema; the
+parity script reports identical `findings.pass<n>.json` after gate normalisation and identical
+gate verdicts, and exits non-zero on any difference.
+
+## 7. Feedback loop (User Story 2)
+
+Unit level: `npm test -- --grep feedback` exercises recorded thread and reaction payloads under
+`test/fixtures/slack/`.
+
+Live, in a test channel: post once with `agent-watchdog run --date <date>` (needs the Slack
+token), add a thumbs-down and a thread note such as "known migration, expected until 1 October"
+to one reply, then run `agent-watchdog run --dry-run --date <next date>`.
+
+Expected: `feedback.jsonl` gains records with the item id, verdict, note, author and a parsed
+horizon; `memory/history/<run_id>.patch` shows the note entering memory; the next preview does not
+flag the same pattern before the horizon unless it exceeds the noted expectation.
+
+## 8. Readiness check (User Story 5)
+
+```sh
+agent-watchdog check https://<cht-host>
+agent-watchdog check https://<host-below-3.12>
+```
+
+Expected: the first prints each prerequisite as met and exits 0; the second reports the unmet
+version prerequisite in plain language and exits 1; an unreachable host exits 69.
+
+## 9. Corpus distillation (User Story 6)
+
+```sh
+cp test/fixtures/corpus/* .data/knowledge-corpus/raw/
+agent-watchdog distill
+agent-watchdog distill        # second run
+```
+
+Expected: the first run writes one proposed card per distinct pattern under
+`.data/corpus/cards.proposed/` with sources cited and identifiers scrubbed or flagged, and updates
+`.data/corpus/index.json`; the second run processes nothing because hashes are unchanged.
+
+## 10. Container contract
+
+```sh
+docker build -t agent-watchdog:dev .
+docker run --rm --read-only --tmpfs /tmp -v "$PWD/.data:/data" -v "$PWD/config/local:/etc/agent-watchdog:ro" \
+  --env-file .env --user 10001:10001 agent-watchdog:dev run --dry-run --date <date>
+```
+
+Expected: the run behaves as in step 3 inside the image with a read-only root filesystem; the
+image runs as the fixed non-root user; `docker run --rm agent-watchdog:dev --version` prints the
+package version.
+
+## 11. Publishing for real (operators only)
+
+```sh
+agent-watchdog run --date <date>
+```
+
+Only against the configured `#agents` channel with `AGENT_WATCHDOG_DRY_RUN=false`. Expected: one
+parent message from `agent-watchdog` with at most three bullets, the image, and the footer; one
+threaded reply per item; `publication.json` holds `ts` and permalinks; exit 0. A second run for the
+same date exits 75 unless `--force` is given, and a forced run links the superseded post.

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/medic/cht-ai-tools/packages/agent-watchdog/schema/findings.schema.json",
+  "title": "agent-watchdog findings (one project, one pass)",
+  "description": "Structured output of an analysis pass. Identity, links and persistence are derived by code; the model never emits URLs except reference_urls that appeared in tool results.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_url", "pass", "items", "not_selected", "changes", "converged", "notes"],
+  "properties": {
+    "project_url": { "type": "string", "description": "Must equal the project this session was opened for." },
+    "pass": { "type": "integer", "description": "1-based pass number." },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+    "not_selected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "reason"],
+        "properties": {
+          "candidate_id": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "description": "Empty on pass 1. Later passes record every addition, removal or change with a reason (FR-056).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_key", "change", "reason"],
+        "properties": {
+          "item_key": { "$ref": "#/$defs/item_key" },
+          "change": { "type": "string", "enum": ["added", "removed", "changed"] },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "converged": { "type": "boolean", "description": "The model's own view; code decides convergence from the diff (FR-057)." },
+    "notes": { "type": "string", "description": "Observations for the roll-up that are not items; may be empty." }
+  },
+  "$defs": {
+    "item_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "pattern_card"],
+      "properties": {
+        "metric": { "type": "string", "description": "A metric key collected this run." },
+        "pattern_card": { "type": ["string", "null"], "description": "Card id from the merged index, or null." }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window", "value", "unit"],
+      "properties": {
+        "window": { "type": "string", "enum": ["current", "previous_day", "previous_week", "previous_cycle", "trailing_14d"] },
+        "value": { "type": "number", "description": "Must equal a computed value for this metric and window." },
+        "unit": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "dashboard_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dashboard_uid", "panel_id", "from", "to"],
+      "properties": {
+        "dashboard_uid": { "type": "string" },
+        "panel_id": { "type": "integer" },
+        "from": { "type": "string", "description": "ISO-8601 UTC start of the window to link." },
+        "to": { "type": "string", "description": "ISO-8601 UTC end of the window to link." }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_key", "severity", "evidence", "why_now", "suggested_check", "dashboard_ref", "confidence", "candidate_ids", "reference_urls"],
+      "properties": {
+        "item_key": { "$ref": "#/$defs/item_key" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "why_now": { "type": "string" },
+        "suggested_check": { "type": "string" },
+        "dashboard_ref": { "$ref": "#/$defs/dashboard_ref" },
+        "confidence": { "type": "number", "description": "0 to 1; range checked by the gate, not the schema." },
+        "candidate_ids": { "type": "array", "items": { "type": "string" } },
+        "reference_urls": { "type": "array", "items": { "type": "string" }, "description": "Each must have appeared in a tool result during this run and be on the host allow-list." }
+      }
+    }
+  }
+}

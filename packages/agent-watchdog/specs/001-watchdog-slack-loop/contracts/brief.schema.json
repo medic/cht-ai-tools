@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/medic/cht-ai-tools/packages/agent-watchdog/schema/brief.schema.json",
+  "title": "agent-watchdog brief draft (roll-up output)",
+  "description": "Structured output of the roll-up call. Bullets reference items by id; the gate checks every number against computed data and every structural limit before publication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["headline", "bullets", "thread_order", "expected_load_notice", "memory_update", "proposals"],
+  "properties": {
+    "headline": { "type": "string", "description": "One line; no URLs." },
+    "bullets": {
+      "type": "array",
+      "description": "At most 3 (checked by the gate). Each is one item rendered for the post body.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "text"],
+        "properties": {
+          "item_id": { "type": "string", "description": "An accepted item id from this run." },
+          "text": { "type": "string", "description": "At most 2 lines of at most 120 characters; numbers must match evidence; no URLs." }
+        }
+      }
+    },
+    "thread_order": { "type": "array", "items": { "type": "string" }, "description": "Every accepted item id, highest rank first; the first three must equal the bullets." },
+    "expected_load_notice": { "type": ["string", "null"] },
+    "memory_update": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replace_with"],
+      "properties": {
+        "replace_with": { "type": ["string", "null"], "description": "Full new memory text within the cap, or null for no change; code stores the diff." }
+      }
+    },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "title", "body"],
+        "properties": {
+          "type": { "type": "string", "enum": ["skill", "prompt", "threshold", "pattern_card"] },
+          "title": { "type": "string" },
+          "body": { "type": "string", "description": "Pattern-level; identifiers are masked and flagged by code (FR-033)." }
+        }
+      }
+    }
+  }
+}
