@@ -101,6 +101,22 @@ const replyFor = ({ item, links, runId }) => {
   };
 };
 
+// Notes nobody could match to an item are surfaced in the thread so a human can clarify (US2 scenario 4).
+const unmatchedReply = ({ unmatchedNotes, runId, date }) => {
+  const notes = (unmatchedNotes || []).map((n) => (typeof n === 'string' ? n : n.note)).filter(Boolean);
+  if (!notes.length) {
+    return [];
+  }
+  const text = template('unmatched')({ count_text: String(notes.length), notes }).trim();
+  return [{
+    item_id: null,
+    kind: 'unmatched_notes',
+    text,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    metadata: { event_type: BRIEF_EVENT, event_payload: { run_id: runId, date, kind: 'unmatched_notes' } },
+  }];
+};
+
 const briefMetadata = ({ runId, date, kind }) => ({
   event_type: BRIEF_EVENT,
   event_payload: { run_id: runId, date, kind },
@@ -110,7 +126,9 @@ const briefMetadata = ({ runId, date, kind }) => ({
  * Build the payload for a brief.
  * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel
  */
-const buildPayload = ({ brief, items = [], links = new Map(), runId, date, audience, channel = null }) => {
+const buildPayload = ({
+  brief, items = [], links = new Map(), runId, date, audience, channel = null, unmatchedNotes = [],
+}) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
 
@@ -145,7 +163,10 @@ const buildPayload = ({ brief, items = [], links = new Map(), runId, date, audie
       path: brief.image ? brief.image.path : null,
       slack_file_id: brief.image ? brief.image.slack_file_id : null,
     },
-    replies: [...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+    replies: [
+      ...[...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+      ...unmatchedReply({ unmatchedNotes, runId, date }),
+    ],
   };
 };
 

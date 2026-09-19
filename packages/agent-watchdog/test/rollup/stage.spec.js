@@ -86,7 +86,8 @@ describe('cli/stages/rollup', () => {
     expect(brief.footer).to.include({ trace_url: 'https://langfuse.example.org/trace/t1', cost_usd: 0.05 });
     expect(brief.checked.candidates).to.equal(1);
     const output = await runDir.readJson('rollup/rollup-output.json');
-    expect(output).to.have.keys(['memory_update', 'proposals']);
+    expect(output).to.have.keys(['memory_update', 'proposals', 'memory']);
+    expect(output.memory).to.include({ applied: false, reason: 'no change' });
   });
 
   it('writes a heartbeat without calling the engine when no project produced items', async () => {

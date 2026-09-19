@@ -27,6 +27,9 @@ const run = async (ctx) => {
   const projects = wanted.length ? discovery.projects.filter((p) => wanted.includes(p.host)) : discovery.projects;
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
   const globalSource = thresholdsAreDeployed(policy, config);
+  const horizons = runDir.exists('feedback.ingested.json')
+    ? ((await runDir.readJson('feedback.ingested.json')).horizons || [])
+    : [];
   let total = 0;
 
   for (const project of projects) {
@@ -37,11 +40,14 @@ const run = async (ctx) => {
     const active = activeWindow(defaults, project, runStart);
     const changes = computeChanges({ windows: stored.windows, project, activeWindow: active });
     const thresholds = effectiveThresholds(policy.thresholds, project.thresholds, { globalSource });
-    const candidates = suppressByHorizon(computeCandidates({
-      changes, project, thresholds, policy, date: ctx.date, windows: stored.windows,
-    }), []);
+    const raw = computeCandidates({ changes, project, thresholds, policy, date: ctx.date, windows: stored.windows });
+    const { kept: candidates, suppressed } = suppressByHorizon(raw, horizons, { date: ctx.date });
     await runDir.writeJson(`${project.slug}/changes.json`, changes);
     await runDir.writeJson(`${project.slug}/candidates.json`, candidates);
+    await runDir.writeJson(`${project.slug}/suppressed.json`, suppressed);
+    if (suppressed.length) {
+      logger.info('analyze.suppressed', { project: project.host, suppressed });
+    }
     total += candidates.length;
     logger.info('analyze.project', {
       project: project.host,

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const { requireInputs } = require('./index');
 const { rankItems } = require('../../rollup/rank');
 const { composeBrief } = require('../../rollup/brief');
+const { applyMemoryUpdate } = require('../../rollup/memory');
 
 const name = 'rollup';
 const inputs = ['discovery.json'];
@@ -87,9 +88,19 @@ const run = async (ctx) => {
     await runDir.writeJson(`rollup/verification.draft${attempt}.json`, report);
   }
   await runDir.writeJson('rollup/brief.json', composed.brief);
+  const memoryUpdate = composed.memoryUpdate || null;
+  const memory = await applyMemoryUpdate({
+    dataDir: (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir,
+    runDir,
+    runId: ctx.runId || runDir.runId,
+    replaceWith: memoryUpdate && memoryUpdate.replace_with !== undefined ? memoryUpdate.replace_with : null,
+    maxTokens: (ctx.config.behaviour && ctx.config.behaviour.memoryMaxTokens) || 4000,
+  });
+  logger.info('rollup.memory', memory);
   await runDir.writeJson('rollup/rollup-output.json', {
     memory_update: composed.memoryUpdate,
     proposals: composed.proposals,
+    memory,
   });
   logger.info('rollup.done', {
     kind: composed.brief.kind,

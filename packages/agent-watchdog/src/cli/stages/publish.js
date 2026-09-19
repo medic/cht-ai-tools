@@ -27,7 +27,14 @@ const run = async (ctx) => {
   const channel = ctx.config.endpoints.slackChannelId || null;
 
   const payload = buildPayload({
-    brief, items, links, runId: ctx.runId, date: ctx.date, audience: 'internal', channel,
+    brief,
+    items,
+    links,
+    runId: ctx.runId,
+    date: ctx.date,
+    audience: 'internal',
+    channel,
+    unmatchedNotes: ctx.feedbackUnmatched || [],
   });
   await runDir.writeJson('rollup/payload.json', payload);
 

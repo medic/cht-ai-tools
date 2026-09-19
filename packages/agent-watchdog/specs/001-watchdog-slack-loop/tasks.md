@@ -132,20 +132,20 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ### Tests for User Story 2
 
-- [ ] T061 [P] [US2] Write failing tests `test/feedback/ingest.spec.js`: `conversations.replies` per stored parent `ts` with `include_all_metadata`, paging by `cursor`; `reactions.get` with `full: true` per bot message; `+1` and `thumbsup` map to `up`, `-1` and `thumbsdown` to `down`; a previously recorded reaction now absent is `retracted`; a reaction on the parent targets the brief; bot messages identified by `bot_id` or `agent_watchdog.item` metadata; fallback to `conversations.history` when `publication.json` is missing; `--since` overrides the look-back
-- [ ] T062 [P] [US2] Write failing tests `test/feedback/match.spec.js` and `test/feedback/parse-notes.spec.js`: notes matched by explicit reference (item id, metric name, project host); unmatched notes recorded with `matched: false` and surfaced in the next brief's thread; `horizon` parsed from notes such as "expected until 1 October" through the feedback-parse model call with a deterministic date-parsing fallback
-- [ ] T063 [P] [US2] Write failing tests `test/feedback/store.spec.js`: `feedback.jsonl` append with `feedback_id` de-duplication and the fields `date`, `run_id`, `target`, `item_id`, `kind`, `verdict`, `note`, `horizon`, `author`, `matched`, `source_ts`
-- [ ] T064 [P] [US2] Write failing tests `test/rollup/feedback-influence.spec.js` and `test/analyze/horizon.spec.js`: repeatedly dismissed patterns rank lower and confirmed ones higher; a pattern with a stated horizon is not flagged before the horizon unless it exceeds the noted expectation; two thumbs-up raise confidence in memory
-- [ ] T065 [P] [US2] Write failing tests `test/rollup/memory.spec.js`: `memory_update.replace_with` accepted only within `ceil(chars / 4) * 1.1 <= AGENT_WATCHDOG_MEMORY_MAX_TOKENS`; every change written as a unified diff to `memory/history/<run_id>.patch` and copied to `runs/<run_id>/memory.patch`; `version` incremented
-- [ ] T066 [P] [US2] Write failing tests `test/corpus/outcomes.spec.js`: confirmed and dismissed items with notes appended to `corpus/outcomes/<date>.jsonl` (FR-030); compaction of `feedback.jsonl` refuses to drop records whose outcomes are not yet appended
+- [X] T061 [P] [US2] Write failing tests `test/feedback/ingest.spec.js`: `conversations.replies` per stored parent `ts` with `include_all_metadata`, paging by `cursor`; `reactions.get` with `full: true` per bot message; `+1` and `thumbsup` map to `up`, `-1` and `thumbsdown` to `down`; a previously recorded reaction now absent is `retracted`; a reaction on the parent targets the brief; bot messages identified by `bot_id` or `agent_watchdog.item` metadata; fallback to `conversations.history` when `publication.json` is missing; `--since` overrides the look-back
+- [X] T062 [P] [US2] Write failing tests `test/feedback/match.spec.js` and `test/feedback/parse-notes.spec.js`: notes matched by explicit reference (item id, metric name, project host); unmatched notes recorded with `matched: false` and surfaced in the next brief's thread; `horizon` parsed from notes such as "expected until 1 October" through the feedback-parse model call with a deterministic date-parsing fallback
+- [X] T063 [P] [US2] Write failing tests `test/feedback/store.spec.js`: `feedback.jsonl` append with `feedback_id` de-duplication and the fields `date`, `run_id`, `target`, `item_id`, `kind`, `verdict`, `note`, `horizon`, `author`, `matched`, `source_ts`
+- [X] T064 [P] [US2] Write failing tests `test/rollup/feedback-influence.spec.js` and `test/analyze/horizon.spec.js`: repeatedly dismissed patterns rank lower and confirmed ones higher; a pattern with a stated horizon is not flagged before the horizon unless it exceeds the noted expectation; two thumbs-up raise confidence in memory
+- [X] T065 [P] [US2] Write failing tests `test/rollup/memory.spec.js`: `memory_update.replace_with` accepted only within `ceil(chars / 4) * 1.1 <= AGENT_WATCHDOG_MEMORY_MAX_TOKENS`; every change written as a unified diff to `memory/history/<run_id>.patch` and copied to `runs/<run_id>/memory.patch`; `version` incremented
+- [X] T066 [P] [US2] Write failing tests `test/corpus/outcomes.spec.js`: confirmed and dismissed items with notes appended to `corpus/outcomes/<date>.jsonl` (FR-030); compaction of `feedback.jsonl` refuses to drop records whose outcomes are not yet appended
 
 ### Implementation for User Story 2
 
-- [ ] T067 [US2] Implement `src/feedback/ingest.js`, `src/feedback/match.js`, `src/feedback/parse-notes.js` (uses `AGENT_WATCHDOG_MODEL_FEEDBACK` and `prompts/feedback-parse.md`), `src/feedback/store.js` and the stage runner `src/cli/stages/feedback.js`
-- [ ] T068 [US2] Add feedback influence to `src/rollup/rank.js` and horizon suppression to `src/analyze/candidates.js`
-- [ ] T069 [US2] Implement `src/rollup/memory.js` and wire the roll-up's `memory_update` into `src/cli/stages/rollup.js`
-- [ ] T070 [US2] Implement `src/corpus/outcomes.js` and wire it into `src/cli/commands/run.js` after feedback ingestion
-- [ ] T071 [US2] Write `test/e2e/us2.spec.js` covering the five US2 acceptance scenarios on `test/fixtures/slack/`
+- [X] T067 [US2] Implement `src/feedback/ingest.js`, `src/feedback/match.js`, `src/feedback/parse-notes.js` (uses `AGENT_WATCHDOG_MODEL_FEEDBACK` and `prompts/feedback-parse.md`), `src/feedback/store.js` and the stage runner `src/cli/stages/feedback.js`
+- [X] T068 [US2] Add feedback influence to `src/rollup/rank.js` and horizon suppression to `src/analyze/candidates.js`
+- [X] T069 [US2] Implement `src/rollup/memory.js` and wire the roll-up's `memory_update` into `src/cli/stages/rollup.js`
+- [X] T070 [US2] Implement `src/corpus/outcomes.js` and wire it into `src/cli/commands/run.js` after feedback ingestion
+- [X] T071 [US2] Write `test/e2e/us2.spec.js` covering the five US2 acceptance scenarios on `test/fixtures/slack/`
 
 **Checkpoint**: Feedback left on day N changes day N+1's ranking and memory in replay (SC-003).
 

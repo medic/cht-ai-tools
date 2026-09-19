@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "1758088802.000300",
+      "thread_ts": "1758088800.000100",
+      "bot_id": "B001",
+      "app_id": "A001",
+      "text": "gamma.example.org up{job=\"cht\"}: 0 now vs 1 yesterday",
+      "metadata": {
+        "event_type": "agent_watchdog.item",
+        "event_payload": {
+          "run_id": "2026-09-17",
+          "item_id": "a09c1ddc330a",
+          "project_url": "https://gamma.example.org",
+          "metric": "up{job=\"cht\"}"
+        }
+      },
+      "reactions": [
+        {
+          "name": "+1",
+          "users": [
+            "U1"
+          ],
+          "count": 2
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "ts": "1758095000.000400",
+      "thread_ts": "1758088800.000100",
+      "user": "U1",
+      "text": "alpha.example.org sentinel backlog: known migration, expected until 1 October"
+    },
+    {
+      "type": "message",
+      "ts": "1758096000.000500",
+      "thread_ts": "1758088800.000100",
+      "user": "U4",
+      "text": "what is this?"
+    }
+  ],
+  "has_more": false,
+  "response_metadata": {
+    "next_cursor": ""
+  }
+}

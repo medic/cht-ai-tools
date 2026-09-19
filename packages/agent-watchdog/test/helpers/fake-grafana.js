@@ -50,11 +50,15 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' },
 });
 
-const createFakeGrafana = ({ fixtureDir, baseUrl = 'https://watchdog.example.org', token = 'glsa_test', datasourceUid = 'PBFA97CFB590B2093' }) => {
+const createFakeGrafana = ({
+  fixtureDir, baseUrl = 'https://watchdog.example.org', token = 'glsa_test', datasourceUid = 'PBFA97CFB590B2093',
+  runStart: runStartOverride = null,
+}) => {
   const grafanaDir = path.join(fixtureDir, 'grafana');
   const read = (name) => JSON.parse(fs.readFileSync(path.join(grafanaDir, name), 'utf8'));
   const series = read('series.json');
-  const runStart = Date.parse(series.run_start) / 1000;
+  // The fixture describes one day; an override replays the same day's shapes at another run start.
+  const runStart = Date.parse(runStartOverride || series.run_start) / 1000;
   const calls = [];
 
   const levelFor = (host, metric, dayIndex) => {
@@ -169,7 +173,7 @@ const createFakeGrafana = ({ fixtureDir, baseUrl = 'https://watchdog.example.org
           scrapeUrl: `http://json-exporter:7979/probe?module=default&target=https%3A%2F%2F${host}%2Fapi%2Fv2%2Fmonitoring`,
           globalUrl: `http://json-exporter:7979/probe?target=https://${host}`,
           lastError: down ? 'Failed to fetch JSON response. TARGET: https://' + host : '',
-          lastScrape: series.run_start,
+          lastScrape: new Date(runStart * 1000).toISOString(),
           lastScrapeDuration: 0.42,
           health: down ? 'down' : 'up',
           scrapeInterval: '5m',

@@ -119,6 +119,48 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
 };
 
 /** Horizon suppression from feedback notes (FR-029) is filled in by User Story 2; the call site is stable. */
-const suppressByHorizon = (candidates) => candidates;
+const isNil = (value) => value === null || value === undefined;
+
+const EXCEEDS_FACTOR = 1.25;
+
+/** Does the candidate exceed what the reviewer noted as expected? Otherwise the horizon suppresses it. */
+const exceedsExpectation = (candidate, horizon) => {
+  if (!isNil(horizon.expected_max)) {
+    return candidate.observed > horizon.expected_max;
+  }
+  if (!isNil(horizon.observed_value)) {
+    return candidate.observed > EXCEEDS_FACTOR * horizon.observed_value;
+  }
+  return false;
+};
+
+/**
+ * Honour reviewer horizons (FR-029): a candidate for a project and metric with a horizon on or after the
+ * run date is suppressed unless it exceeds the noted expectation.
+ * @returns {{ kept: object[], suppressed: Array<{ candidate_id, item_id, horizon, reason }> }}
+ */
+const suppressByHorizon = (candidates, horizons = [], { date = null } = {}) => {
+  if (!horizons.length) {
+    return { kept: candidates, suppressed: [] };
+  }
+  const kept = [];
+  const suppressed = [];
+  for (const candidate of candidates) {
+    const horizon = horizons.find((h) => h.project_url === candidate.project_url
+      && h.metric === candidate.metric
+      && (date === null || h.horizon >= date));
+    if (!horizon || exceedsExpectation(candidate, horizon)) {
+      kept.push(candidate);
+      continue;
+    }
+    suppressed.push({
+      candidate_id: candidate.candidate_id,
+      item_id: horizon.item_id || null,
+      horizon: horizon.horizon,
+      reason: `within the expectation a reviewer noted until ${horizon.horizon}`,
+    });
+  }
+  return { kept, suppressed };
+};
 
 module.exports = { computeCandidates, suppressByHorizon };

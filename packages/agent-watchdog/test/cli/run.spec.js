@@ -157,6 +157,44 @@ describe('cli/commands/run', () => {
     expect(ctx.deps.engine).to.equal(t.args.deps.engine);
   });
 
+  it('wires ingested feedback into the corpus outcomes and the roll-up context', async () => {
+    const { stages } = fakeStages();
+    const ingested = {
+      run_id: '2026-09-18',
+      records: [],
+      unmatched: [{ feedback_id: 'ffffffffffff' }],
+      horizons: [{ item_id: 'aaaaaaaaaaaa', project_url: 'https://a', metric: 'm', horizon: '2026-10-01' }],
+      by_item: {
+        aaaaaaaaaaaa: { project_url: 'https://a', metric: 'm', pattern_card: null, up: 0, down: 1, notes: [], verdict: 'dismissed' },
+        bbbbbbbbbbbb: { project_url: 'https://a', metric: 'n', pattern_card: null, up: 2, down: 0, notes: [], verdict: 'confirmed' },
+        cccccccccccc: { project_url: 'https://a', metric: 'o', pattern_card: null, up: 1, down: 1, notes: [], verdict: 'contested' },
+      },
+      brief: { up: 1, down: 0, notes: [] },
+    };
+    stages.feedback = {
+      name: 'feedback',
+      inputs: [],
+      run: sinon.spy(async (ctx) => {
+        await ctx.runDir.writeJson('feedback.ingested.json', ingested);
+        return { records: 4 };
+      }),
+    };
+    const t = base(dataDir, { deps: { stages } });
+    expect(await runCommand(t.args)).to.equal(0);
+    const outcomes = fs.readFileSync(path.join(dataDir, 'corpus', 'outcomes', '2026-09-18.jsonl'), 'utf8')
+      .trim().split('\n').map(JSON.parse);
+    expect(outcomes.map((o) => o.outcome).sort()).to.deep.equal(['confirmed', 'dismissed']);
+    const analyzeCtx = stages.analyze.run.firstCall.args[0];
+    expect(analyzeCtx.feedbackHorizons).to.have.length(1);
+    const rollupCtx = stages.rollup.run.firstCall.args[0];
+    expect(rollupCtx.feedbackByItem).to.be.instanceOf(Map);
+    expect(rollupCtx.feedbackByItem.size).to.equal(3);
+    expect(rollupCtx.feedbackUnmatched).to.have.length(1);
+    expect(rollupCtx.feedbackBrief).to.deep.equal({ up: 1, down: 0, notes: [] });
+    expect(rollupCtx.memory).to.equal('');
+    expect(rollupCtx.previousItemIds).to.be.instanceOf(Map);
+  });
+
   it('records a heartbeat when the roll-up produced no items', async () => {
     const { stages } = fakeStages({ rollup: { kind: 'heartbeat', items: 0, bullets: 0, degraded: false } });
     const t = base(dataDir, { deps: { stages } });

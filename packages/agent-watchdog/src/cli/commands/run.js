@@ -11,6 +11,9 @@ const { writeResult } = require('../streams');
 const { createTracer } = require('../../trace/langfuse');
 const { createFindingsGate } = require('../gate');
 const { createQueryWindow } = require('../../collect/query-window');
+const { appendOutcomes } = require('../../corpus/outcomes');
+const { readMemory } = require('../../rollup/memory');
+const { previousItemCounts } = require('../../rollup/history');
 const pkg = require('../../../package.json');
 
 const todayUtc = (now) => now.toISOString().slice(0, 10);
@@ -308,6 +311,10 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       const stage = (deps.stages && deps.stages[name]) || loadStage(name);
       requireInputs(runDir, stage.inputs || []);
       currentStage = name;
+      if (name === 'rollup') {
+        ctx.memory = (await readMemory(dataDir)).text;
+        ctx.previousItemIds = await previousItemCounts(dataDir, runId);
+      }
       await runDir.stageStart(name);
       const stageCtx = ctx.forStage(name);
       stageCtx.logger.info('stage.start', {});
@@ -319,6 +326,15 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       if (name === 'agent' && result) {
         agentResult = result;
         ctx.costSoFar = result.cost_usd || 0;
+      }
+      if (name === 'feedback' && runDir.exists('feedback.ingested.json')) {
+        const ingested = await runDir.readJson('feedback.ingested.json');
+        ctx.feedbackByItem = new Map(Object.entries(ingested.by_item || {}));
+        ctx.feedbackHorizons = ingested.horizons || [];
+        ctx.feedbackUnmatched = ingested.unmatched || [];
+        ctx.feedbackBrief = ingested.brief || null;
+        const { appended } = await appendOutcomes({ dataDir, date, runId, byItem: ingested.by_item || {} });
+        log.info('corpus.outcomes', { appended, items: ctx.feedbackByItem.size });
       }
       if (name === 'collect' && runDir.exists('discovery.json')) {
         ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });

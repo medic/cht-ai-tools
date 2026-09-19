@@ -128,3 +128,38 @@ describe('publish/payload', () => {
     }
   });
 });
+
+describe('publish/payload: unmatched feedback notes', () => {
+  const { buildPayload } = require('../../src/publish/payload');
+  const { makeBrief, makeItem } = require('../rollup/factories');
+
+  const base = () => ({
+    brief: makeBrief({ kind: 'brief', bullets: [] }),
+    items: [makeItem()],
+    links: new Map(),
+    runId: '2026-09-19',
+    date: '2026-09-19',
+    audience: 'internal',
+  });
+
+  it('adds one extra threaded reply listing the notes, escaped, with brief metadata', () => {
+    const payload = buildPayload({
+      ...base(),
+      unmatchedNotes: [{ note: 'is anyone looking at <the other one>?' }, 'plain string note'],
+    });
+    const extra = payload.replies[payload.replies.length - 1];
+    expect(extra.item_id).to.equal(null);
+    expect(extra.kind).to.equal('unmatched_notes');
+    expect(extra.text).to.include('&lt;the other one&gt;');
+    expect(extra.text).to.include('plain string note');
+    expect(extra.text).to.include('(2)');
+    expect(extra.metadata.event_type).to.equal('agent_watchdog.brief');
+    expect(extra.metadata.event_payload.kind).to.equal('unmatched_notes');
+    expect(payload.replies).to.have.length(2);
+  });
+
+  it('adds nothing when there are no unmatched notes', () => {
+    expect(buildPayload({ ...base(), unmatchedNotes: [] }).replies).to.have.length(1);
+    expect(buildPayload(base()).replies).to.have.length(1);
+  });
+});

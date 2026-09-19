@@ -127,8 +127,10 @@ describe('analyze/candidates', () => {
     expect(fired[0].threshold).to.deep.equal({ source: 'project', value: 80 });
   });
 
-  it('exposes the horizon suppression hook as a pass-through until feedback exists', () => {
+  it('keeps the candidate list untouched when there are no horizons', () => {
     const candidates = [{ candidate_id: 'a' }];
-    expect(suppressByHorizon(candidates, [])).to.equal(candidates);
+    const result = suppressByHorizon(candidates, [], { date: '2026-09-18' });
+    expect(result.kept).to.equal(candidates);
+    expect(result.suppressed).to.deep.equal([]);
   });
 });
