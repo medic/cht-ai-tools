@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 4)
+**Status**: Draft (revision 5)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -275,9 +275,11 @@ Analysis
   project. The system MUST NOT change them itself. It MUST compute, per project and metric, the
   observed distribution of changes and the confirmed and dismissed rate of past items, and MUST
   produce threshold suggestions as reviewable proposals that show the evidence and the effect on
-  the last thirty days of items. Initial defaults: [NEEDS CLARIFICATION: starting
-  percentage-change and deviation values, to be set with the hosting team and then tuned through
-  the proposal mechanism].
+  the last thirty days of items. Initial defaults: a candidate is raised on a change of 50% or
+  more versus the previous day, a deviation of 2.5 standard deviations or more versus the
+  trailing fourteen days, or a monotonic rise lasting six hours or more. Severities are low,
+  medium and high; high is reserved for a scrape target down, an outbound push backlog above
+  zero, or a sentinel backlog above three times its baseline.
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
   they appear in the watchdog, PromQL where it helps the reader confirm. Emoji are permitted as
@@ -375,8 +377,7 @@ Persistence and reproducibility
 - **FR-040**: The system MUST NOT retain raw metric series longer than a short configurable
   period, because the hosted watchdog is the source of record; computed changes, candidates,
   items, feedback and memory — the inputs the model saw — MUST be retained for the long period.
-  Defaults: [NEEDS CLARIFICATION: proposed 45 days for raw series and rendered images, 400 days
-  for everything else].
+  Defaults: 14 days for raw series and rendered images, 30 days for everything else.
 - **FR-041**: The system MUST support offline replay of any stored run from its retained inputs;
   replay MUST NOT contact the metrics source or Slack.
 - **FR-042**: Runs MUST be idempotent per date; a second run on the same date MUST require an
@@ -394,8 +395,8 @@ Security and trust boundaries
 Operations
 
 - **FR-047**: The system MUST run once daily at a configured time and MUST prevent overlapping
-  runs. [NEEDS CLARIFICATION: post time and target channel — proposed 06:00 UTC to the hosting
-  team's channel].
+  runs. Defaults: the run starts at 06:00 UTC and posts to the `#agents` Slack channel as the
+  bot named `agent-watchdog`.
 - **FR-048**: The system MUST provide a readiness check for a CHT URL that reports unmet
   prerequisites (minimum supported version, host-metrics exporter present) in plain language.
 - **FR-049**: The system MUST record one trace per run with a span per stage and usage per model
@@ -461,7 +462,8 @@ Configuration
 - **SC-001**: On every scheduled day exactly one of brief, quiet-day heartbeat or failure notice
   is posted; measured over any 30-day window this holds on at least 99% of days.
 - **SC-002**: In the first 60 days no more than 30% of flagged items receive a thumbs-down without
-  a thumbs-up, and the rate falls month over month.
+  a thumbs-up, and the rate falls month over month. The rate is measured from the run outcomes
+  appended to the knowledge corpus (FR-030), which fall outside the FR-040 retention limits.
 - **SC-003**: Feedback left on day N is reflected in day N+1's memory and ranking every time,
   verified by replay.
 - **SC-004**: Zero published numbers, project names or links fail verification; every published
@@ -565,6 +567,18 @@ Configuration
   two) in one session; later passes review earlier items, re-query the documentation service
   with new or clarifying questions, record every change with a reason, and stop early when a
   pass changes nothing.
+- Q: What are the starting candidate thresholds and severity levels? → A: a candidate is raised
+  on a change of 50% or more versus the previous day, 2.5 standard deviations or more versus the
+  trailing fourteen days, or a monotonic rise lasting six hours or more; severities are low,
+  medium and high, with high reserved for a scrape target down, an outbound push backlog above
+  zero, or a sentinel backlog above three times its baseline.
+- Q: What are the default retention periods? → A: 14 days for raw series and rendered images,
+  30 days for everything else.
+- Q: When and where is the daily brief posted? → A: 06:00 UTC, to the `#agents` Slack channel,
+  as the bot named `agent-watchdog`.
+- Q: Where is the SC-002 thumbs-down rate measured from, given 30-day retention of items and
+  feedback? → A: from the run outcomes appended to the knowledge corpus (FR-030), which fall
+  outside the FR-040 retention limits.
 
 ## Notes for `/speckit.plan` *(not requirements)*
 
