@@ -315,6 +315,7 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 | `entries` | Entry[] | Per `project_url` and `metric`: `distribution` (percentiles of daily percentage change and deviation), `outcomes` `{ confirmed, dismissed, unreviewed }`, `current_threshold`, `suggested_threshold`, `effect_last_30d` `{ items_kept, items_dropped, confirmed_kept }`. |
 | `pass_change_rate` | number | Share of projects where a later pass changed the outcome (FR-058). |
 | `proposals` | string[] | Threshold proposal ids written from this report. |
+| `feedback_rate` | object | `{ window_days: 60, overall, by_month: [{ month, rate, items }] }`, computed from `corpus/outcomes/`, which outlive run-record retention (SC-002). |
 
 ### Expected-Load Window
 
@@ -360,7 +361,10 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   computed value for the metric with the same display formatter, and requires every token to match
   one formatted value. Formatter, fixed in code: integers with thousands separators; other values to
   three significant figures; percentages with one decimal and a `%` sign; durations as `Nh` or
-  `Nd`.
+  `Nd`. Numerals inside backtick code spans are exempt from matching; instead each code span must
+  equal, character for character, a PromQL expression from a collected panel target or a metric
+  name collected this run, otherwise `numbers_match` fails. Bullet text outside code spans never
+  contains PromQL.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,

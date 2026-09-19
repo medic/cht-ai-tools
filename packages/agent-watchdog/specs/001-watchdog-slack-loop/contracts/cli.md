@@ -47,6 +47,7 @@ source or Slack (FR-041, US3 scenario 3).
 | `--skill` | directory | package `skill/cht-watchdog/` | Alternative skill under test. |
 | `--label` | string | timestamp | Output under `runs-replay/<run_id>/<label>/`. |
 | `--compare` | flag | on | Print a JSON comparison of items before and after to stdout. |
+| `--from`, `--to` | `YYYY-MM-DD` | none | Replay every stored run in the inclusive range with bounded concurrency; one comparison per run plus a summary (SC-006). Mutually exclusive with `--date`. |
 
 Recorded tool results are served to the model from `tool-calls.jsonl`; a query with no recording
 returns an explicit `unavailable` result and is counted in the comparison.

@@ -135,7 +135,10 @@ packages/agent-watchdog/
 ├── bin/
 │   └── agent-watchdog.js          # entrypoint: parseArgs, command dispatch, exit codes
 ├── src/
-│   ├── cli/                       # command handlers: run, replay, distill, calibrate, check, purge, tools-server
+│   ├── cli/                       # index.js (parseArgs, dispatch), exit-codes.js, streams.js,
+│   │                              # commands/ (run, replay, distill, calibrate, check, purge, tools-server),
+│   │                              # stages/ (feedback, collect, analyze, agent, rollup, render, publish)
+│   ├── model/                     # identity.js (item_id, run_id, candidate_id, feedback_id), schemas.js (zod)
 │   ├── config/                    # zod schemas, env + files + flags precedence, redaction, hard caps
 │   ├── log/                       # JSON logger bound to run_id, monotonic stage timestamps
 │   ├── store/                     # run directory, atomic writes, gzip, retention purge
@@ -145,7 +148,7 @@ packages/agent-watchdog/
 │   ├── agent/                     # definition.js, prompt-assembly.js, engine-sdk.js, engine-cli.js,
 │   │                              # session-loop.js, hooks.js, tools/ (watchdog MCP tools, replay shim,
 │   │                              # stdio server)
-│   ├── verify/                    # gate.js and one module per check
+│   ├── verify/                    # gate.js, format.js, checks/ (one module per check)
 │   ├── rollup/                    # rank.js, brief.js, deterministic-brief.js, memory.js, proposals.js
 │   ├── links/                     # build.js (dashboard deep links), allowlist.js, resolve.js
 │   ├── render/                    # report.js (Handlebars), browser.js (playwright-core screenshot)
@@ -161,10 +164,14 @@ packages/agent-watchdog/
 ├── schema/                        # findings.schema.json, brief.schema.json (generated from zod, committed)
 ├── templates/                     # report.hbs, slack/*.hbs
 ├── config/defaults/               # thresholds.yaml, dashboards.yaml, projects.yaml
-├── test/                          # mirrors src/; fixtures/ (recorded, scrubbed runs, feedback labels)
+├── scripts/                       # build-schema.js, replay-eval.js, record-fixtures.js, build-card-index.js,
+│                                  # scan-secrets.js
+├── test/                          # mirrors src/ for unit tests; fixtures/ (recorded, scrubbed runs, labels);
+│                                  # helpers/; e2e/ (one spec per story); perf/ (fifty projects, thirty-day replay)
 ├── smoke/                         # credential-needing scripts: grafana, slack, agent-parity, render
 ├── Dockerfile
 ├── .env.example  .nvmrc  package.json  eslint.config.js  .mocharc.yml  .nycrc  release.config.js
+├── commitlint.config.js
 └── AGENTS.md  README.md  LICENSE
 ```
 

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 5)
+**Status**: Draft (revision 6)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -214,8 +214,9 @@ name in a later replay.
 - Metrics source unreachable or timing out: post a failure notice, exit non-zero, publish no
   partial brief.
 - Slack unavailable after retries: persist everything, mark the run unposted, exit non-zero.
-- Model output invalid or the verification gate fails twice: publish a degraded brief built from
-  deterministic candidates only, with an explicit notice.
+- Model output invalid or the verification gate fails a third time, after two returns to the
+  analysis (FR-017): publish a degraded brief built from deterministic candidates only, with an
+  explicit notice.
 - Tool loop, token or cost bound reached: stop, use what was gathered, say so in the post.
 - Second run on the same date: refuse unless explicitly forced; a forced run supersedes and
   links the earlier post.
@@ -596,17 +597,19 @@ Decisions already taken during design that belong in the plan, listed so they ar
   placing per-project data last.
 - Passes: one SDK session per project, driven as a multi-turn conversation (streaming input or
   session resume) so pass N sees pass N-1's tool results; pass prompts live in
-  `prompts/pass-first.md` and `prompts/pass-review.md`; each pass ends with the `Stop` hook and
-  writes `findings.pass<N>.json`; the harness diffs passes and applies the convergence rule.
+  `prompts/pass-first.md` and `prompts/pass-review.md`; each pass returns schema-validated
+  structured output that the harness writes to `findings.pass<N>.json`; the harness diffs passes
+  and applies the convergence rule.
 - Configuration: `AGENT_WATCHDOG_`-prefixed environment variables for the harness's own settings,
   vendor-standard names for vendor credentials (`ANTHROPIC_API_KEY`, `SLACK_BOT_TOKEN`,
   `LANGFUSE_*`); a committed `.env.example` documents every variable and default; local runs use
   Node's `--env-file`; in the cluster, non-secrets arrive through a ConfigMap `envFrom` and secrets
   through an External Secrets-managed Secret; a zod schema validates everything at startup and the
   redacted effective configuration is written to `runs/<date>/config.effective.json`.
-- Verification: implemented once under `src/verify/`, wired as the SDK `Stop` hook and as a
-  `PostToolUse` hook on the write of the findings file, and called again by the harness before
-  publish; the CLI path loads the same checks through `--settings`.
+- Verification: implemented once under `src/verify/` and called by the harness after every model
+  turn on both engines and again before publish; the SDK engine also runs it in the `Stop` hook as
+  a second line of defence. `claude --bare` skips hook surfaces (research.md R-3), so no check
+  depends on hooks.
 - Reference sources: cht-docs-mcp via the SDK's `mcpServers` option and `--mcp-config` on the CLI,
   with the cht-watchdog repository indexed. The allow-list exposes the search tools, whose results
   carry source URLs the gate can check, and leaves the service's synthesised-answer tool off by
