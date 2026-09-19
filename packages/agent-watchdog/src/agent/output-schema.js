@@ -1,0 +1,102 @@
+'use strict';
+// Structured-output schemas for the analysis pass and the roll-up, defined once in zod and exported as
+// JSON Schema 2020-12 (contracts/findings.schema.json, contracts/brief.schema.json). The model never emits
+// URLs except reference_urls; identity, links and persistence are derived by code.
+const { z } = require('zod');
+
+const SCHEMA_BASE = 'https://github.com/medic/cht-ai-tools/packages/agent-watchdog/schema';
+
+const TEXT = {
+  referenceUrls: 'Each must have appeared in a tool result during this run and be on the host allow-list.',
+  changes: 'Empty on pass 1. Later passes record every addition, removal or change with a reason (FR-056).',
+  findings: 'Structured output of an analysis pass. Identity, links and persistence are derived by code; '
+    + 'the model never emits URLs except reference_urls that appeared in tool results.',
+  threadOrder: 'Every accepted item id, highest rank first; the first three must equal the bullets.',
+  replaceWith: 'Full new memory text within the cap, or null for no change; code stores the diff.',
+  brief: 'Structured output of the roll-up call. Bullets reference items by id; the gate checks every number '
+    + 'against computed data and every structural limit before publication.',
+};
+
+const WindowName = z.enum(['current', 'previous_day', 'previous_week', 'previous_cycle', 'trailing_14d']);
+const Severity = z.enum(['low', 'medium', 'high']);
+
+const itemKey = z.object({
+  metric: z.string().describe('A metric key collected this run.'),
+  pattern_card: z.string().nullable().describe('Card id from the merged index, or null.'),
+}).strict().meta({ id: 'item_key' });
+
+const evidence = z.object({
+  window: WindowName,
+  value: z.number().describe('Must equal a computed value for this metric and window.'),
+  unit: z.string(),
+  note: z.string().optional(),
+}).strict().meta({ id: 'evidence' });
+
+const dashboardRef = z.object({
+  dashboard_uid: z.string(),
+  panel_id: z.number().int(),
+  from: z.string().describe('ISO-8601 UTC start of the window to link.'),
+  to: z.string().describe('ISO-8601 UTC end of the window to link.'),
+}).strict().meta({ id: 'dashboard_ref' });
+
+const item = z.object({
+  item_key: itemKey,
+  severity: Severity,
+  evidence: z.array(evidence),
+  why_now: z.string(),
+  suggested_check: z.string(),
+  dashboard_ref: dashboardRef,
+  confidence: z.number().describe('0 to 1; range checked by the gate, not the schema.'),
+  candidate_ids: z.array(z.string()),
+  reference_urls: z.array(z.string()).describe(TEXT.referenceUrls),
+}).strict().meta({ id: 'item' });
+
+const findingsSchema = z.object({
+  project_url: z.string().describe('Must equal the project this session was opened for.'),
+  pass: z.number().int().describe('1-based pass number.'),
+  items: z.array(item),
+  not_selected: z.array(z.object({ candidate_id: z.string(), reason: z.string() }).strict()),
+  changes: z.array(z.object({
+    item_key: itemKey,
+    change: z.enum(['added', 'removed', 'changed']),
+    reason: z.string(),
+  }).strict()).describe(TEXT.changes),
+  converged: z.boolean().describe("The model's own view; code decides convergence from the diff (FR-057)."),
+  notes: z.string().describe('Observations for the roll-up that are not items; may be empty.'),
+}).strict().meta({
+  title: 'agent-watchdog findings (one project, one pass)',
+  description: TEXT.findings,
+});
+
+const briefSchema = z.object({
+  headline: z.string().describe('One line; no URLs.'),
+  bullets: z.array(z.object({
+    item_id: z.string().describe('An accepted item id from this run.'),
+    text: z.string().describe('At most 2 lines of at most 120 characters; numbers must match evidence; no URLs.'),
+  }).strict()).describe('At most 3 (checked by the gate). Each is one item rendered for the post body.'),
+  thread_order: z.array(z.string()).describe(TEXT.threadOrder),
+  expected_load_notice: z.string().nullable(),
+  memory_update: z.object({
+    replace_with: z.string().nullable().describe(TEXT.replaceWith),
+  }).strict(),
+  proposals: z.array(z.object({
+    type: z.enum(['skill', 'prompt', 'threshold', 'pattern_card']),
+    title: z.string(),
+    body: z.string().describe('Pattern-level; identifiers are masked and flagged by code (FR-033).'),
+  }).strict()),
+}).strict().meta({
+  title: 'agent-watchdog brief draft (roll-up output)',
+  description: TEXT.brief,
+});
+
+const withId = (generated, name) => {
+  const { $schema, ...rest } = generated;
+  return { $schema, $id: `${SCHEMA_BASE}/${name}.schema.json`, ...rest };
+};
+
+const toJsonSchemas = () => ({
+  findings: withId(z.toJSONSchema(findingsSchema, { target: 'draft-2020-12' }), 'findings'),
+  brief: withId(z.toJSONSchema(briefSchema, { target: 'draft-2020-12' }), 'brief'),
+});
+
+module.exports = { findingsSchema, briefSchema, toJsonSchemas, WindowName, Severity };

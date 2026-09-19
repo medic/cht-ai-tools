@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.nyc_output/
+.data/
+runs/
+runs-replay/
+knowledge-corpus/raw/
+.env
+*.log

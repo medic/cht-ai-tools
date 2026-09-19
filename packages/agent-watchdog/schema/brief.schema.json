@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/medic/cht-ai-tools/packages/agent-watchdog/schema/brief.schema.json",
+  "type": "object",
+  "properties": {
+    "headline": {
+      "type": "string",
+      "description": "One line; no URLs."
+    },
+    "bullets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "description": "An accepted item id from this run."
+          },
+          "text": {
+            "type": "string",
+            "description": "At most 2 lines of at most 120 characters; numbers must match evidence; no URLs."
+          }
+        },
+        "required": [
+          "item_id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "At most 3 (checked by the gate). Each is one item rendered for the post body."
+    },
+    "thread_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Every accepted item id, highest rank first; the first three must equal the bullets."
+    },
+    "expected_load_notice": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "memory_update": {
+      "type": "object",
+      "properties": {
+        "replace_with": {
+          "description": "Full new memory text within the cap, or null for no change; code stores the diff.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "replace_with"
+      ],
+      "additionalProperties": false
+    },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "skill",
+              "prompt",
+              "threshold",
+              "pattern_card"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "Pattern-level; identifiers are masked and flagged by code (FR-033)."
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "headline",
+    "bullets",
+    "thread_order",
+    "expected_load_notice",
+    "memory_update",
+    "proposals"
+  ],
+  "additionalProperties": false,
+  "title": "agent-watchdog brief draft (roll-up output)",
+  "description": "Structured output of the roll-up call. Bullets reference items by id; the gate checks every number against computed data and every structural limit before publication."
+}

@@ -1,0 +1,26 @@
+# Global candidate thresholds and severity rules. Initial defaults from the spec (FR-014).
+# The system suggests changes as proposals and never edits this file (FR-032).
+trailing_days: 14                       # history needed for deviation; below it, unavailable
+candidate_rules:
+  pct_change_vs_previous_day: 50        # percent, absolute change in either direction
+  deviation_sigma_vs_trailing: 2.5      # standard deviations versus the trailing window
+  monotonic_rise_hours: 6               # sustained non-decreasing rise ending now
+severity:
+  default: low
+  medium_when:
+    - two_or_more_rules_fire
+  high_when:                            # fixed list from FR-014; keys are metric roles
+    - role: scrape_target
+      condition: down
+    - role: outbound_push_backlog
+      condition: gt
+      value: 0
+    - role: sentinel_backlog
+      condition: gt_multiple_of_baseline
+      value: 3
+metric_roles:                           # maps roles above to metric keys (research.md R-6)
+  scrape_target: up{job="cht"}
+  outbound_push_backlog: cht_outbound_push_backlog_count
+  sentinel_backlog: cht_sentinel_backlog_count
+display:
+  persisting_days_label: persisting {n} days

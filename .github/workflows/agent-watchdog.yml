@@ -1,0 +1,97 @@
+name: agent-watchdog
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/agent-watchdog/**', '.github/workflows/agent-watchdog.yml']
+  pull_request:
+    paths: ['packages/agent-watchdog/**', '.github/workflows/agent-watchdog.yml']
+
+defaults:
+  run:
+    working-directory: packages/agent-watchdog
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/agent-watchdog/package-lock.json
+      - run: npm ci
+      - run: npm run lint -- --max-warnings=0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/agent-watchdog/package-lock.json
+      - run: npm ci
+      # Coverage thresholds live in .nycrc and are raised as coverage grows (constitution quality gate 2).
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: packages/agent-watchdog/coverage/lcov.info
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  replay-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      # Replay evaluation over recorded fixtures; required for any change to prompts, skill, schema or analysis.
+      - run: npm run replay:eval
+
+  scan-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      - run: node scripts/scan-secrets.js .
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: packages/agent-watchdog
+          push: false
+          tags: agent-watchdog:ci
