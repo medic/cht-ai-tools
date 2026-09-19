@@ -136,7 +136,7 @@ const search = [overview, details, api, replication].map((d) => ({
   folderTitle: 'CHT',
 }));
 
-const levels = (base, noise = 0.03) => Object.fromEntries(HOSTS.map((h) => [h, { base, noise }]));
+const levels = (base, noise = 0.02) => Object.fromEntries(HOSTS.map((h) => [h, { base, noise }]));
 
 const baseMetrics = () => ({
   cht_outbound_push_backlog_count: { unit: 'count', levels: levels(0, 0) },

@@ -1,0 +1,10 @@
+*{{mrkdwn headline}}*
+{{#each bullets}}
+• {{mrkdwn text}}
+{{/each}}
+{{#if has_expected_load_notice}}
+_{{mrkdwn expected_load_notice}}_
+{{/if}}
+{{#if has_degradation_notice}}
+_{{mrkdwn degradation_notice}}_
+{{/if}}

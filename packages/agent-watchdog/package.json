@@ -15,8 +15,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "test": "mocha",
-    "test:coverage": "nyc mocha",
+    "test": "mocha 'test/**/*.spec.js'",
+    "test:coverage": "nyc mocha 'test/**/*.spec.js'",
     "replay:eval": "node scripts/replay-eval.js",
     "schema:build": "node scripts/build-schema.js",
     "smoke:grafana": "node smoke/grafana.js",

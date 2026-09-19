@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "cht-docs": {
+      "type": "http",
+      "url": "${AGENT_WATCHDOG_DOCS_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${AGENT_WATCHDOG_DOCS_MCP_TOKEN}"
+      },
+      "tools": [
+        { "name": "search_docs", "permission_policy": "always_allow" },
+        { "name": "get_sources", "permission_policy": "always_allow" },
+        { "name": "ask_question", "permission_policy": "always_deny" }
+      ]
+    },
+    "watchdog": {
+      "type": "sdk",
+      "note": "Served in-process by src/agent/tools/sdk-server.js under the SDK engine, and over stdio by the tools-server command under the CLI engine."
+    }
+  }
+}

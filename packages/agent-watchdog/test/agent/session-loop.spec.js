@@ -1,0 +1,223 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { runProjectSession } = require('../../src/agent/session-loop');
+const { loadDefinition } = require('../../src/agent/definition');
+const { PACKAGE_PATHS } = require('../../src/config/schema');
+const { RunDir } = require('../../src/store/run-dir');
+const { createFakeEngine } = require('../helpers/fake-engine');
+const { createLogger } = require('../../src/log/logger');
+const { schemas } = require('../../src/model/schemas');
+const { tempDir, removeDir } = require('../helpers/fixtures');
+const { Writable } = require('node:stream');
+
+const env = { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp' };
+const definition = loadDefinition({ paths: PACKAGE_PATHS, env });
+const project = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
+const logger = createLogger({ level: 'error', stream: new Writable({ write(c, e, cb) {
+  cb(); 
+} }) });
+const config = (overrides = {}) => ({
+  model: { name: 'claude-fable-5-1', effort: 'max' },
+  bounds: {
+    maxTurns: 20, maxBudgetUsdProject: 2, modelTimeoutMs: 900000, verifyMaxRetries: 2, passes: 2, passConvergence: true,
+    ...overrides,
+  },
+});
+
+const candidates = [{
+  candidate_id: 'cand00000001', project_url: project.url, metric: 'cht_sentinel_backlog_count', rule: 'monotonic',
+  observed: 7,
+}];
+const changes = [{ metric: 'cht_sentinel_backlog_count', current_value: 912, previous_day_value: 300 }];
+
+const findings = (items, extra = {}) => ({
+  project_url: project.url, pass: 1, items, not_selected: [], changes: [], converged: false, notes: '', ...extra,
+});
+const modelItem = (value = 912, severity = 'high') => ({
+  item_key: { metric: 'cht_sentinel_backlog_count', pattern_card: null }, severity,
+  evidence: [{ window: 'current', value, unit: 'count' }], why_now: 'climbing', suggested_check: 'check sentinel',
+  dashboard_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 3, from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z' },
+  confidence: 0.9, candidate_ids: ['cand00000001'], reference_urls: [],
+});
+const acceptedItem = (value = 912, severity = 'high') => ({
+  item_id: 'abcdefabcdef', project_url: project.url, metric: 'cht_sentinel_backlog_count', severity,
+  evidence: [{ window: 'current', value, unit: 'count' }], why_now: 'climbing', suggested_check: 'check sentinel',
+  dashboard_ref: {
+    dashboard_uid: 'oa2OfL-Vk', panel_id: 3, project_url: project.url,
+    from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z',
+  },
+  confidence: 0.9, persisting_days: 1, pattern_card: null, candidate_ids: ['cand00000001'], reference_urls: [],
+  rank: null,
+  placement: null, pass_history: [],
+});
+const report = (outcome, reasons = []) => ({
+  subject: 'pass', subject_ref: 'alpha-example-org/pass1', attempt: 1, outcome,
+  checks: [{ name: 'numbers_match', status: outcome === 'accepted' ? 'pass' : 'fail', reasons }],
+});
+// A gate that accepts whatever it is given unless the evidence value is 913.
+const acceptingGate = async ({ findings: f }) => {
+  const bad = f && f.items.some((i) => i.evidence.some((e) => e.value === 913));
+  if (bad) {
+    return { report: report('rejected', ['numbers_match: 913 is not a computed value']), items: [] };
+  }
+  const items = ((f && f.items) || []).map((i) => acceptedItem(i.evidence[0].value, i.severity));
+  return { report: report('accepted'), items };
+};
+
+describe('agent/session-loop', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const run = (engine, overrides = {}) => runProjectSession({
+    engine, definition, project, candidates, changes, feedback: [], memory: '', activeWindow: null,
+    config: config(overrides.bounds), gate: overrides.gate || acceptingGate, runDir, logger,
+    tracer: overrides.tracer || null, now: () => new Date('2026-09-18T06:00:00Z'), deadline: overrides.deadline,
+    localTools: [],
+  });
+
+  it('runs two passes in one session, converges when nothing changes, and writes every artefact', async () => {
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem()]) },
+      { structuredOutput: findings([modelItem()], { pass: 2 }) },
+    ] });
+    const result = await run(engine);
+    expect(engine.sessions).to.have.length(1);
+    const session = engine.sessions[0];
+    expect(session.turns).to.have.length(2);
+    expect(session.closed).to.equal(true);
+    expect(session.options.systemPrompt[1]).to.equal('__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__');
+    expect(session.options.outputSchema.$id).to.match(/findings/);
+    expect(session.options.bounds).to.deep.equal({ maxTurns: 20, maxBudgetUsd: 2, timeoutMs: 900000 });
+    expect(session.options.model).to.equal('claude-fable-5-1');
+    expect(result.converged).to.equal(true);
+    expect(result.items).to.have.length(1);
+    expect(result.bounds_hit).to.deep.equal([]);
+    expect(result.cost_usd).to.be.closeTo(0.02, 1e-9);
+    expect(result.usage.input_tokens).to.equal(201);
+    const slug = project.slug;
+    const files = [
+      'prompt.pass1.md', 'findings.pass1.json', 'verification.pass1.json', 'prompt.pass2.md', 'findings.pass2.json',
+      'passes.json', 'session.json',
+    ];
+    for (const file of files) {
+      expect(fs.existsSync(path.join(runDir.root, slug, file)), file).to.equal(true);
+    }
+    const pass1 = JSON.parse(fs.readFileSync(path.join(runDir.root, slug, 'findings.pass1.json'), 'utf8'));
+    expect(() => schemas.Pass.parse(pass1)).to.not.throw();
+    expect(pass1.items[0].item_id).to.equal('abcdefabcdef');
+    const passes = JSON.parse(fs.readFileSync(path.join(runDir.root, slug, 'passes.json'), 'utf8'));
+    expect(passes.converged).to.equal(true);
+    expect(passes.diffs[0]).to.include({ from: 1, to: 2 });
+    expect(passes.diffs[0].added).to.deep.equal([]);
+    const sessionRecord = JSON.parse(fs.readFileSync(path.join(runDir.root, slug, 'session.json'), 'utf8'));
+    expect(sessionRecord.session_id).to.equal('fake-session');
+    expect(sessionRecord.calls).to.have.length(2);
+    expect(sessionRecord.reference_sources_unavailable).to.equal(false);
+  });
+
+  it('sends a revision turn with the gate reasons and stops revising after the retry cap', async () => {
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem(913)]) },
+      { structuredOutput: findings([modelItem(913)]) },
+      { structuredOutput: findings([modelItem(913)]) },
+    ] });
+    const result = await run(engine, { bounds: { passes: 1 } });
+    const session = engine.sessions[0];
+    expect(session.turns).to.have.length(3);
+    expect(session.turns[1]).to.include('913 is not a computed value');
+    expect(session.turns[1]).to.match(/revise/i);
+    expect(result.items).to.deep.equal([]);
+    const verificationFile = path.join(runDir.root, project.slug, 'verification.pass1.json');
+    const verification = JSON.parse(fs.readFileSync(verificationFile, 'utf8'));
+    expect(verification.outcome).to.equal('rejected');
+    expect(verification.attempt).to.equal(3);
+  });
+
+  it('keeps the earlier accepted items when a later pass is rejected', async () => {
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem(912)]) },
+      { structuredOutput: findings([modelItem(913)], { pass: 2 }) },
+      { structuredOutput: findings([modelItem(913)], { pass: 2 }) },
+      { structuredOutput: findings([modelItem(913)], { pass: 2 }) },
+    ] });
+    const result = await run(engine);
+    expect(result.items).to.have.length(1);
+    expect(result.items[0].evidence[0].value).to.equal(912);
+    expect(result.converged).to.equal(false);
+  });
+
+  it('continues to a further pass when items changed and records the diff with reasons', async () => {
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem(912, 'medium')]) },
+      {
+        structuredOutput: findings([modelItem(912, 'high')], {
+          pass: 2,
+          changes: [{
+            item_key: { metric: 'cht_sentinel_backlog_count', pattern_card: null },
+            change: 'changed',
+            reason: 'exceeds three times baseline',
+          }],
+        }),
+      },
+      { structuredOutput: findings([modelItem(912, 'high')], { pass: 3 }) },
+    ] });
+    const result = await run(engine, { bounds: { passes: 3 } });
+    expect(engine.sessions[0].turns).to.have.length(3);
+    const passes = JSON.parse(fs.readFileSync(path.join(runDir.root, project.slug, 'passes.json'), 'utf8'));
+    expect(passes.diffs[0].changed).to.deep.equal(['abcdefabcdef']);
+    expect(passes.passes[1].changes[0].reason).to.equal('exceeds three times baseline');
+    expect(result.converged).to.equal(true);
+  });
+
+  it('stops on a budget or turn bound and records which bound was hit', async () => {
+    const budget = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem()]), result: { subtype: 'error_max_budget_usd' } },
+    ] });
+    const r1 = await run(budget);
+    expect(r1.bounds_hit).to.deep.equal(['budget']);
+    expect(budget.sessions[0].turns).to.have.length(1);
+    expect(r1.items).to.have.length(1);
+    const turns = createFakeEngine({ responses: [{ structuredOutput: null, result: { subtype: 'error_max_turns' } }] });
+    const r2 = await run(turns);
+    expect(r2.bounds_hit).to.deep.equal(['turns']);
+    expect(r2.items).to.deep.equal([]);
+  });
+
+  it('treats an exhausted structured-output retry as a rejected draft', async () => {
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: null, result: { subtype: 'error_max_structured_output_retries' } },
+      { structuredOutput: findings([modelItem()]) },
+    ] });
+    const result = await run(engine, { bounds: { passes: 1 } });
+    expect(engine.sessions[0].turns).to.have.length(2);
+    expect(result.items).to.have.length(1);
+  });
+
+  it('honours the run deadline before opening a new turn', async () => {
+    const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
+    const result = await run(engine, { deadline: Date.now() - 1 });
+    expect(result.bounds_hit).to.deep.equal(['timeout']);
+    expect(engine.sessions).to.have.length(0);
+  });
+
+  it('records a generation per turn on the tracer and every tool call to tool-calls.jsonl', async () => {
+    const tracer = { generation: sinon.stub() };
+    const engine = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem()]), toolCalls: [{ tool_name: 'mcp__cht-docs__search_docs', tool_input: { query: 'sentinel' }, tool_response: 'Source: https://docs.communityhealthtoolkit.org/x' }] },
+      { structuredOutput: findings([modelItem()], { pass: 2 }) },
+    ] });
+    const gateSpy = sinon.spy(acceptingGate);
+    await run(engine, { tracer, gate: gateSpy });
+    expect(tracer.generation).to.have.callCount(2);
+    expect(tracer.generation.firstCall.args[0]).to.include({ model: 'claude-fable-5-1', costUsd: 0.01 });
+    const lines = fs.readFileSync(path.join(runDir.root, project.slug, 'tool-calls.jsonl'), 'utf8').trim().split('\n');
+    expect(lines).to.have.length(1);
+    expect(JSON.parse(lines[0])).to.include({ pass: 1, tool_name: 'mcp__cht-docs__search_docs' });
+    expect(gateSpy.firstCall.args[0].toolResultUrls).to.deep.equal(['https://docs.communityhealthtoolkit.org/x']);
+  });
+});
