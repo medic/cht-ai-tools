@@ -10,9 +10,9 @@ its bot display name is set in the app configuration, so no per-message identity
 | Item | Value |
 |---|---|
 | Bot display name | `agent-watchdog` |
-| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `channels:history`; add `groups:history` only if `#agents` becomes private |
+| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if `#agents` becomes private |
 | Channel membership | the bot is invited to `#agents`; posting and reading both require membership (`not_in_channel` otherwise) |
-| Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.item` with `run_id`, `item_id`, `project_url`, `metric`. Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
+| Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.item` with `run_id`, `item_id`, `project_url`, `metric`; `agent_watchdog.feedback_digest` with `run_id`, `date`, `acknowledged` (count). Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
 | Rate-limit class | internal customer-built app: `conversations.history` and `conversations.replies` keep Tier 3 and the normal `limit` values; the 2025 one-request-per-minute limit applies only to non-Marketplace apps distributed commercially |
 
 ## Publishing sequence (`src/publish/slack.js`)
@@ -36,9 +36,20 @@ its bot display name is set in the app configuration, so no per-message identity
    `publication.json`; permalinks of thread replies carry `thread_ts` and `cid`.
 5. A forced re-run posts a new parent whose first context block links the superseded post's
    permalink; it does not edit or delete the earlier post.
+6. **Post the feedback digest** (User Story 7), only when the run acknowledged new feedback, as one
+   threaded reply under the parent it published that day, brief or heartbeat, with
+   `metadata: { event_type: 'agent_watchdog.feedback_digest', event_payload: { run_id, date, acknowledged } }`.
+   Its text is built by code from `rollup/feedback.digest.json` through
+   `templates/slack/feedback-digest.hbs`: per item the effect applied today, the proposals written
+   with destination and path, and one retention sentence naming where the records live permanently
+   and how many days they adjust ranking. It names no person. Then `reactions.add({ channel,
+   timestamp: <note ts>, name: 'eyes' })` for each acknowledged note; `already_reacted` is not an
+   error, any other failure is logged and never fails the run. Nothing is posted or reacted to in
+   preview mode.
 
 Heartbeat and failure notices are single `chat.postMessage` calls with `text` only and the
-`agent_watchdog.brief` metadata (`kind: heartbeat | failure`). Posting is paced to one message per
+`agent_watchdog.brief` metadata (`kind: heartbeat | failure`); a heartbeat still receives the
+feedback digest in its thread when there is feedback to acknowledge. Posting is paced to one message per
 second per channel; the client's built-in retry handles `429` with `Retry-After`.
 
 ## Payload object (`payload.json`, also the preview output)
@@ -51,12 +62,15 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
   "image": { "filename": "brief-2026-09-19.png", "alt_text": "…", "path": "rollup/brief.png", "slack_file_id": null },
   "replies": [
     { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } }
-  ]
+  ],
+  "digest": { "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.feedback_digest", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "acknowledged": 3 } }, "acknowledged": [ "<feedback_id>" ], "reactions": [ { "source_ts": "1700000000.000100", "name": "eyes" } ] }
 }
 ```
 
 In preview mode `slack_file_id` stays null and nothing is sent; after publishing,
-`publication.json` adds `ts`, `permalink` and `slack_file_id`.
+`publication.json` adds `ts`, `permalink` and `slack_file_id`. `digest` is null when the run
+acknowledged nothing new; in preview it is filled but nothing is posted or reacted to, and no
+record is marked acknowledged.
 
 ## Text rules enforced by the gate before publishing
 

@@ -150,3 +150,17 @@ Only against the configured `#agents` channel with `AGENT_WATCHDOG_DRY_RUN=false
 parent message from `agent-watchdog` with at most three bullets, the image, and the footer; one
 threaded reply per item; `publication.json` holds `ts` and permalinks; exit 0. A second run for the
 same date exits 75 unless `--force` is given, and a forced run links the superseded post.
+
+## 12. Feedback acknowledged (User Story 7)
+
+Continue from step 7: after adding the thumbs-down and the note, run
+`agent-watchdog run --dry-run --date <next date> > payload.json`.
+
+Expected: `payload.digest` names the item, its effect today (confidence lowered, or suppressed
+until the noted horizon), the proposal written from the note with its destination and path, and a
+sentence stating that the records are kept permanently in `feedback.jsonl` and adjust ranking for
+the configured number of days; no person is named; nothing was posted and no record is marked
+acknowledged. A real run then posts the digest in the brief's or heartbeat's thread, adds an
+`eyes` reaction to the note, and sets `acknowledged_run_id` on the records; a second run
+acknowledges nothing again. `agent-watchdog purge --dry-run` with a clock a year later lists no
+feedback records, because they are never purged.

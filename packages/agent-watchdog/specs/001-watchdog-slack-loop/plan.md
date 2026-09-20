@@ -78,7 +78,7 @@ knowledge corpus of hundreds of files.
 | **I. CHT Conventions Are Not Optional** | PASS | CommonJS JavaScript, no TypeScript in this package (the SDK is consumed from JavaScript). Node 22 pinned in `.nvmrc` and the image. `@medic/eslint-config` extended through `@eslint/eslintrc` FlatCompat in `eslint.config.js`, as cht-core does; `npm run lint` with zero warnings is a CI gate. mocha, chai with chai-as-promised, sinon, nyc; `test/` mirrors `src/`. Conventional Commits `type(#issue): subject` enforced by commitlint; PRs target `main`. semantic-release publishes the container image on release. AGPL-3.0 `LICENSE`. The exact eslint and chai majors follow cht-core (research.md R-9). |
 | **II. Test-First and Replayable** | PASS | Red-green-refactor per module. External systems sit behind small modules (`src/collect/grafana.js`, `src/publish/slack.js`, `src/agent/engine-sdk.js`, `src/agent/engine-cli.js`, `src/trace/langfuse.js`, `src/render/browser.js`) stubbed with sinon and driven by recorded fixtures. Every run persists inputs, changes, candidates, prompts and tool results (run-directory contract); `agent-watchdog replay` regenerates findings offline. Prompt, skill and model-parameter changes must pass `npm run replay:eval` and attach the replay diff to the PR (quality gate 3). |
 | **III. Deterministic Before Generative** | PASS | `src/analyze/` computes percentage change, deviation, monotonic rise, baselines and expected-load adjustments with unit tests; `src/analyze/candidates.js` applies thresholds. The model runs at most `AGENT_WATCHDOG_PASSES` passes (hard cap 4) of at most `AGENT_WATCHDOG_MAX_TURNS` turns (hard cap 50) under `maxBudgetUsd`, returning schema-validated structured output; later passes review earlier ones and stop on an empty diff. Every model stage has a degraded path (`src/rollup/deterministic-brief.js`) that labels itself. The gate (`src/verify/`) checks schema, known projects and metrics, number matching, dates, link construction and allow-list, structure limits, secrets; failures return to the model at most twice, then degrade. The model composes no URLs: links are built by `src/links/build.js` from `dashboard_ref`, and `reference_urls` must have appeared in tool results. |
-| **IV. Least Privilege and Explicit Trust Boundaries** | PASS | Credentials: Grafana service-account token with Viewer role; Slack bot token with post, upload and read scopes on one channel; Langfuse write keys. Nothing grants write access to a CHT deployment or to this package. The model's tools are `tools: []` plus an enumerated MCP allow-list (agent-definition contract). Fetched text is wrapped in labelled `<untrusted>` delimiters in prompts and rendered only through Handlebars escaping. The agent writes only its memory (capped, stored as diffs) and proposal files; prompts, tools and skill are read-only paths. Secrets are redacted by key in logs and the effective configuration; Slack user ids never leave `feedback.jsonl`. Partner-facing output is out of scope here; the hostname scan already runs on proposals (FR-033). |
+| **IV. Least Privilege and Explicit Trust Boundaries** | PASS | Credentials: Grafana service-account token with Viewer role; Slack bot token with post, upload, read and reaction scopes on one channel (`reactions:write` added by User Story 7 for the "seen" reaction; still the single configured channel, still no write to any deployment); Langfuse write keys. Nothing grants write access to a CHT deployment or to this package. The model's tools are `tools: []` plus an enumerated MCP allow-list (agent-definition contract). Fetched text is wrapped in labelled `<untrusted>` delimiters in prompts and rendered only through Handlebars escaping. The agent writes only its memory (capped, stored as diffs) and proposal files; prompts, tools and skill are read-only paths. Secrets are redacted by key in logs and the effective configuration; Slack user ids never leave `feedback.jsonl`. Partner-facing output is out of scope here; the hostname scan already runs on proposals (FR-033). |
 | **V. Simple, Observable, Boring** | PASS | One process and one entrypoint, `bin/agent-watchdog.js`; the daily CronJob runs `run`, and the weekly `calibrate` and on-demand `distill` are subcommands of the same image, not services. One agent definition consumed by both engines. JSON logs on stderr bound to `run_id` with monotonic timestamps at every stage boundary; one Langfuse trace per run with a span per stage; token usage and cost per run in the footer. Idempotent per date with an explicit `--force`. Loud failure: failure notice plus non-zero exit codes (exit-codes contract). Node built-ins first: `fetch`, `node:util` `parseArgs`, `node:crypto`, `node:fs/promises`, `node:zlib`. Each new dependency is justified in Complexity Tracking and CommonJS-compatible (verified). Twelve-factor configuration validated by zod at startup; the redacted effective configuration is written to the run. |
 | **VI. Flag, Don't Act** | PASS | No credential can change a deployment; the code has no remediation, restart, reconfigure or ticketing path; the post says where to look. Paging stays with the existing monitoring stack (Out of Scope). |
 | **VII. Learn Only Through Review** | PASS | Memory changes automatically within `AGENT_WATCHDOG_MEMORY_MAX_TOKENS`, every change a diff. Prompts, tools, skill, priorities, calendar and thresholds change only by PR in `cht-ai-tools` or `medic-infrastructure`. Proposals (skill, prompt, threshold, pattern card) are files for review, never merges. Raw corpus stays under `AGENT_WATCHDOG_CORPUS_RAW_DIR` outside the repository; only scrubbed cards and the content-hash index are public. |
@@ -144,7 +144,7 @@ packages/agent-watchdog/
 │   ├── store/                     # run directory, atomic writes, gzip, retention purge
 │   ├── collect/                   # grafana.js (proxy + API), discovery.js, windows.js, targets.js
 │   ├── analyze/                   # changes.js, baselines.js, calendar.js, candidates.js, thresholds.js
-│   ├── feedback/                  # ingest.js (Slack reads), match.js, parse-notes.js, store.js
+│   ├── feedback/                  # ingest.js (Slack reads), match.js, parse-notes.js, store.js, review.js (US7)
 │   ├── agent/                     # definition.js, prompt-assembly.js, engine-sdk.js, engine-cli.js,
 │   │                              # session-loop.js, hooks.js, tools/ (watchdog MCP tools, replay shim,
 │   │                              # stdio server)
@@ -152,7 +152,7 @@ packages/agent-watchdog/
 │   ├── rollup/                    # rank.js, brief.js, deterministic-brief.js, memory.js, proposals.js
 │   ├── links/                     # build.js (dashboard deep links), allowlist.js, resolve.js
 │   ├── render/                    # report.js (Handlebars), browser.js (playwright-core screenshot)
-│   ├── publish/                   # slack.js (post, thread, upload, permalink), payload.js, audience.js
+│   ├── publish/                   # slack.js (post, thread, upload, permalink, reactions), payload.js, digest.js, audience.js
 │   ├── corpus/                    # index.js, distill.js, scrub.js
 │   ├── calibration/               # report.js, suggest.js
 │   ├── trace/                     # langfuse.js, cost.js (reconciliation)
@@ -198,3 +198,25 @@ Re-evaluated after the Phase 1 artefacts were written: the data model introduces
 model can write without validation; every contract keeps credentials read-only and every tool
 enumerated; no always-on component was added; the run stays idempotent per date. Result: PASS,
 unchanged.
+
+### Revision 8 delta: User Story 7, feedback acknowledged and made permanent
+
+Re-checked on 2026-09-19 for the spec amendment (FR-028, FR-029, FR-040 amended; FR-059 to
+FR-063 added).
+
+- **II, III**: the digest is built by code from structured fields (per-item effect, proposals,
+  retention statement) and rendered through the escaping templates; note classification is one
+  bounded, schema-validated call per note, reactions never reach the model, and a failed call
+  degrades to "not yet classified" without failing the run. The roll-up prompt now receives the
+  day's matched feedback with author ids removed, and `prompts/rollup.md` is filled rather than
+  sent with literal placeholders.
+- **IV**: one new scope, `reactions:write`, on the same single channel; the digest names no
+  person; author ids stay raw Slack ids on the private volume, never rendered.
+- **V**: no new process; review runs inside the feedback stage and the digest inside publish. The
+  influence window is configuration with a hard cap in code; permanence of `feedback.jsonl` is a
+  retention-class change, not a code path the environment can alter.
+- **VII**: every lesson from a note becomes a proposal file for one of five destinations, now
+  including a `project_annotation` proposal that carries a ready-to-paste `projects.yaml`
+  fragment; nothing is applied automatically; open proposals are listed weekly with their age.
+- **Complexity**: no new dependency; `reactions.add` is in the Slack client already used.
+  Result: PASS.

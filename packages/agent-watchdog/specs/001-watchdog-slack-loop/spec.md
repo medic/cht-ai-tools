@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 7)
+**Status**: Draft (revision 8)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -420,14 +420,22 @@ Feedback review and acknowledgement
   project annotation, skill, prompt, threshold, pattern card, or no reusable lesson. Every
   classification other than the first and the last MUST produce a proposal (FR-032, FR-033) that
   names its destination and states the lesson in pattern-level terms; the system MUST NOT apply
-  it.
+  it. A project-annotation proposal MUST carry a ready-to-paste `projects.yaml` fragment (notes,
+  a threshold override or an expected-load window) with a short rationale; the host it concerns
+  is flagged for the reviewer as any identifier is.
 - **FR-062**: The system MUST acknowledge feedback with at most one digest reply per run, posted
   in the thread of the brief or heartbeat published that day and built by code from structured
   fields: per item the effect applied today, the proposals written with destination and path,
   and one statement that the records are kept permanently at their path and influence ranking
   for the configured window. The digest MUST name no person, MUST acknowledge each record once
   (the acknowledgement is stored on the record with the run that posted it), MUST be part of
-  the preview payload, and MUST be omitted when there is nothing new to acknowledge.
+  the preview payload, and MUST be omitted when there is nothing new to acknowledge. Notes that
+  could not be matched to an item are listed in the digest for a human to clarify, which replaces
+  the separate unmatched-notes reply (User Story 2, scenario 4). On a quiet day the digest goes in
+  the heartbeat's thread. After posting the digest, the system MUST add
+  one `eyes` reaction to each note it acknowledged as a "seen" signal (Slack scope
+  `reactions:write`); a failed reaction is logged and never fails the run, and no reaction is
+  added in preview mode.
 - **FR-063**: The weekly calibration report MUST list every proposal still awaiting review, with
   its age in days and its destination.
 
@@ -682,6 +690,16 @@ Configuration
 - Q: Where do lessons from notes become permanent? → A: as proposal files for the skill, a
   prompt, a project annotation, a threshold or a pattern card, never applied automatically
   (FR-061); the weekly report lists proposals still awaiting review (FR-063).
+- Q: Is the digest posted on a quiet day? → A: Yes, in the heartbeat's thread; feedback is
+  acknowledged by the next run whatever it posted (FR-062).
+- Q: Does the run mark each acknowledged note as seen? → A: Yes, one `eyes` reaction per
+  acknowledged note after the digest is posted, which adds the `reactions:write` scope; never in
+  preview, and a failed reaction is logged, not fatal (FR-062).
+- Q: How is the author stored now that records are permanent? → A: as the raw Slack user id, on
+  the private volume only, never rendered; it is needed as-is for de-duplication and retraction
+  matching (FR-028).
+- Q: What does a project-annotation proposal contain? → A: a ready-to-paste `projects.yaml`
+  fragment plus a short rationale, with the host flagged for the reviewer (FR-061).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

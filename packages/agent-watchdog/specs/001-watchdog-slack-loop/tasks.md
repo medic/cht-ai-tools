@@ -248,7 +248,35 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ---
 
-## Phase 9: Polish & Cross-Cutting Concerns
+## Phase 9: User Story 7 - Feedback acknowledged and made permanent (Priority: P3)
+
+**Goal**: Feedback records are permanent while their ranking influence is bounded; the run reviews the day's feedback, turns notes into proposals for the right destination, and acknowledges everything once with a code-built digest reply and a "seen" reaction; the roll-up finally sees the day's matched feedback so memory can reflect it.
+
+**Independent Test**: `test/e2e/us7.spec.js` plus quickstart step 12.
+
+### Tests for User Story 7
+
+- [ ] T116 [P] [US7] Write failing tests extending `test/rollup/brief.spec.js`: the roll-up user prompt carries the day's matched feedback (verdicts, notes, horizons) per item inside `<untrusted source="feedback">` with author identifiers removed, and the system prompt built from `prompts/rollup.md` contains no literal `{{…}}` placeholder (FR-029 correction, US2 scenario 1)
+- [ ] T117 [P] [US7] Write failing tests `test/feedback/influence.spec.js`, extending `test/store/retention.spec.js` and `test/config/load.spec.js`: `classify('feedback.jsonl')` is `durable` and `purge` dated 365 days later leaves every record byte-identical; `by_item` tallies count only records dated within `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` (default 30, hard cap 365, validated at startup) while a horizon holds until its date; `get_item_history` and the outcomes are unaffected (FR-059, FR-060)
+- [ ] T118 [P] [US7] Write failing tests `test/feedback/review.spec.js`: reactions never reach the model; each unreviewed note gets one schema-validated call whose output is one of `expectation | project_annotation | skill | prompt | threshold | pattern_card | none`; every classification except `expectation` and `none` writes a proposal through `writeProposals` naming its destination, a `project_annotation` proposal carrying a fenced `projects.yaml` fragment plus rationale and the host flagged; a failed call leaves `classification` null for the next run; records gain `classification` and `proposal_id` (FR-061)
+- [ ] T119 [P] [US7] Write failing tests `test/publish/digest.spec.js` and extend `test/publish/slack.spec.js` and `test/feedback/store.spec.js`: the digest is built by code from `rollup/feedback.digest.json` fields (per item effect `confidence_up | confidence_down | suppressed (until) | none`, proposals with destination and path, the retention sentence with the records path and influence days), names no person, is `payload.digest` in preview and null when nothing is new, lists unmatched notes in place of the separate unmatched-notes reply; it is posted once as a thread reply under the brief or heartbeat with metadata `agent_watchdog.feedback_digest`; `reactions.add({ channel, timestamp, name: 'eyes' })` runs per acknowledged note with `already_reacted` tolerated and other failures logged; `acknowledged_run_id` is set once and never in preview (FR-062)
+- [ ] T120 [P] [US7] Write failing tests extending `test/calibration/report.spec.js` and `test/cli/calibrate.spec.js`: `open_proposals` lists every proposal still `proposed` with `proposal_id`, `type` and `age_days`, and the weekly markdown shows them (FR-063)
+
+### Implementation for User Story 7
+
+- [ ] T121 [US7] Fill `prompts/rollup.md` properly and pass the day's matched feedback into the roll-up prompt in `src/rollup/brief.js` and `src/cli/stages/rollup.js` (FR-029)
+- [ ] T122 [US7] Make feedback permanent and bound its influence: `src/store/retention.js` (`feedback.jsonl` durable, compaction removed), `src/config/schema.js` (`AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS`, hard cap), `src/feedback/ingest.js` (windowed tallies), `.env.example` and `contracts/environment.md`
+- [ ] T123 [US7] Implement `src/feedback/review.js` with `prompts/feedback-review.md` (`AGENT_WATCHDOG_MODEL_FEEDBACK`), add `project_annotation` to the Proposal type in `src/model/schemas.js` and `src/rollup/proposals.js`, add the nullable `classification`, `proposal_id` and `acknowledged_run_id` fields to `schemas.Feedback` in `src/model/schemas.js` and store them through `src/feedback/store.js`, and wire review into `src/cli/stages/feedback.js` after ingestion
+- [ ] T124 [US7] Implement `src/publish/digest.js` and `templates/slack/feedback-digest.hbs`, the digest field in `src/publish/payload.js` (retiring the separate unmatched-notes reply and `templates/slack/unmatched.hbs`), posting and `reactions.add` in `src/publish/slack.js`, acknowledgement in `src/feedback/store.js`, `rollup/feedback.digest.json`, and the wiring in `src/cli/stages/publish.js` and `src/cli/commands/run.js`; register the metadata event in `contracts/slack-payload.md` app checklist
+- [ ] T125 [US7] Add `open_proposals` to `schemas.CalibrationReport` in `src/model/schemas.js`, to `src/calibration/report.js` and to the weekly markdown in `src/cli/commands/calibrate.js`
+- [ ] T126 [US7] Write `test/e2e/us7.spec.js` covering the seven US7 acceptance scenarios on the Slack fixtures (a two-day loop: post, react and note, next run's digest, second run acknowledges nothing, purge a year later)
+- [ ] T127 [US7] Update `README.md` and `AGENTS.md` (digest, `reactions:write` scope, permanent feedback, influence window) and add smoke test S-13 to `smoke/slack.js`
+
+**Checkpoint**: Feedback left on day N is acknowledged once on day N+1 with its effect and proposals (SC-012), and the records are still on disk a year later (SC-013).
+
+---
+
+## Phase 10: Polish & Cross-Cutting Concerns
 
 **Purpose**: Operations commands, performance, security, container proof, release tooling and documentation.
 
@@ -270,8 +298,8 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 - **Setup (Phase 1)**: No dependencies; T001 first, then T002 to T010 in parallel.
 - **Foundational (Phase 2)**: Depends on Setup. Blocks every user story. T011 and T012 first (configuration is used by everything); the T013 to T024 pairs are parallel across modules, each test before its implementation.
-- **User Stories (Phases 3 to 8)**: All depend on Phase 2. US1 is the MVP and should complete first because US2, US3, US4 and US5 extend its stages; US6 depends only on Phase 2 and the pattern-card hooks in US1's prompt assembly.
-- **Polish (Phase 9)**: Depends on the stories being delivered; T103 to T109 are parallel, T110 and T111 last.
+- **User Stories (Phases 3 to 9)**: All depend on Phase 2. US1 is the MVP and should complete first because US2, US3, US4 and US5 extend its stages; US6 depends only on Phase 2 and the pattern-card hooks in US1's prompt assembly; US7 depends on US2 (feedback records) and US4 (proposals, calibration report).
+- **Polish (Phase 10)**: Depends on the stories being delivered; T103 to T109 are parallel, T110 and T111 last.
 
 ### User Story Dependencies
 
@@ -281,6 +309,7 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - **US4 (P3)**: Uses US1's roll-up and US2's feedback records for calibration. Independently testable on recorded days.
 - **US5 (P3)**: Uses US1's discovery and brief; the readiness command is standalone.
 - **US6 (P3)**: Corpus and distillation are standalone; card matching touches US1's ranking.
+- **US7 (P3)**: Extends US2's feedback stage and store, US1's roll-up prompt and publish stage, and US4's proposals and calibration report. Independently testable on the Slack fixtures with a scripted classification model.
 
 ### Within Each User Story
 
@@ -294,6 +323,7 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - Phase 2: the module pairs T013/T014, T015/T016, T017/T018, T021/T022, T023, T024 in parallel after T012.
 - US1: all test tasks T025 to T037 in parallel; then T038 to T040 (collect), T041 to T043 (analyze), T044 to T047 (agent definition and tools), T051 (verify), T052 (links), T054 (report template), T056 (Slack templates) can proceed on separate files while T048 to T050 wait for T046 and T047.
 - US2 to US6: every story's test tasks in parallel, then implementations; US6 can run alongside US4 and US5.
+- US7: T116 to T120 in parallel; then T121 and T122 (independent files), T123, T124, T125, T126, T127.
 
 ---
 
@@ -333,7 +363,8 @@ Task: "templates/report.hbs and src/render/report.js"
    SC-007, SC-011).
 4. US4 and US5 → proposals, calibration, readiness, new projects (SC-008).
 5. US6 → corpus distillation and pattern cards (SC-009).
-6. Phase 9 → container proof, release tooling, security scan (SC-010).
+6. US7 → feedback acknowledged once, permanent records, lessons as proposals (SC-012, SC-013).
+7. Phase 10 → container proof, release tooling, security scan (SC-010).
 
 ### Parallel Team Strategy
 
@@ -355,3 +386,5 @@ US3 can proceed in parallel, then US4, US5 and US6.
 - T112 to T115 were added by `/speckit-analyze` remediation on 2026-09-19; their ids are allocation
   order and they execute within the phase where they sit (T112 and T113 in Phase 3, T114 and T115
   in Phase 5).
+- T116 to T127 (Phase 9, User Story 7) were added with spec revision 8 on 2026-09-19; the former
+  Phase 9 (Polish) is now Phase 10.

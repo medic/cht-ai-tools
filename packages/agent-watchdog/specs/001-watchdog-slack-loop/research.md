@@ -553,6 +553,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-10 | `smoke/agent-parity.js`: one recorded project through both engines produces identical `findings.pass<n>.json` after gate normalisation | The whole point of FR-050 |
 | S-11 | `smoke/render.js` inside the image with a read-only root filesystem and writable `/tmp` and `/data` only | Playwright's writable-directory needs beyond `TMPDIR` are undocumented |
 | S-12 | `semantic-release --dry-run` from the package directory analyses only commits under `packages/agent-watchdog` | Third-party plugin behaviour |
+| S-13 | `reactions.add` with `name: eyes` under the `reactions:write` scope: the reaction appears, a repeat reports `already_reacted` without failing, and a token lacking the scope logs `missing_scope` while the digest still posts (R-13) | Scope and error names not re-fetched from the Slack reference in this session |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -562,3 +563,29 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
   `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN` given their documented defaults (2.00 and 25.00).
 - Spec "Notes for `/speckit.plan`": the verification note's CLI wording (checks loaded through
   `--settings`) is superseded by R-3; the note is otherwise adopted.
+
+## R-13. Slack reactions as the "seen" signal (User Story 7)
+
+**Evidence**: the installed `@slack/web-api` 8.x type definitions
+(`dist/types/request/reactions.d.ts`: `ReactionsAddArguments extends MessageArgument,
+TokenOverridable, ReactionName`, so the call is `reactions.add({ channel, timestamp, name })`);
+the Slack method reference for `reactions.add` as previously consulted for R-11 (docs). The scope
+name `reactions:write` and the `already_reacted` error name are from that reference and were
+not re-fetched in this session; they are confirmed by smoke test S-13 below before the scope is
+requested in production.
+
+**Decision**: after the digest is posted, one `reactions.add` per acknowledged note with
+`name: 'eyes'`; `already_reacted` is treated as success, any other error is logged and never
+fails the run; nothing is reacted to in preview mode. The bot token gains `reactions:write`.
+
+**Rationale**: the digest is the record; the reaction is a cheap per-note signal the author sees
+without opening the thread, chosen over a reply per note, which would flood the channel and cost
+one message per reaction.
+
+**Alternatives considered**: a reply per note (rejected: noise and rate limits); no per-note
+signal (the default recommendation, overridden by the operator's decision recorded in the spec's
+clarifications).
+
+- **S-13**: in the test channel, acknowledge a note and confirm the `eyes` reaction appears, a
+  repeated run reports `already_reacted` without failing, and a token without `reactions:write`
+  yields a logged `missing_scope` while the digest still posts.

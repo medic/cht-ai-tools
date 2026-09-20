@@ -74,6 +74,7 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_FEEDBACK_LOOKBACK_RUNS` | integer | 7 | N in FR-026. |
 | `AGENT_WATCHDOG_MEMORY_MAX_TOKENS` | integer | 4000 | Memory cap (FR-031). |
 | `AGENT_WATCHDOG_DRY_RUN` | boolean | `false` | Same as `--dry-run` (FR-025). |
+| `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` | integer | 30 | Days a feedback record adjusts ranking; hard cap 365 in code (FR-060). Records themselves are kept permanently (FR-059). |
 
 ## Logging, tracing, runtime
 

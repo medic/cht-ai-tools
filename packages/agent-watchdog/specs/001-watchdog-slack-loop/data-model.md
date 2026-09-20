@@ -224,6 +224,25 @@ The per-item message that carries reactions (FR-020).
 | `text` | string | Item rendered for Slack; escaped. |
 | `publication` | Publication | `{ channel_id, ts, permalink }`. |
 
+### Feedback Digest
+
+The once-per-run thread reply that acknowledges new feedback (FR-062, US7). Stored as
+`rollup/feedback.digest.json` and carried in the payload as `digest`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | |
+| `acknowledged` | string[] | `feedback_id` values acknowledged by this digest; each appears in exactly one digest ever. |
+| `items` | object[] | Per item with new feedback: `{ item_id, host, metric, up, down, notes, effect }` where `effect` is `confidence_up` \| `confidence_down` \| `suppressed` \| `none` and, when suppressed, `until` the horizon date. |
+| `brief` | object | `{ up, down, notes }` for reactions on the parent post. |
+| `proposals` | object[] | `{ proposal_id, type, path }` written from this feedback. |
+| `unclassified` | integer | Notes whose classification call failed; retried next run. |
+| `retention` | object | `{ records_path, influence_days }`: where the records live permanently and how long they adjust ranking. |
+| `reactions` | object[] | `{ source_ts, name: 'eyes', ok }` per acknowledged note after posting; empty in preview. |
+| `publication` | Publication or null | The digest's own message in the brief's or heartbeat's thread. |
+
+The digest names no person: authors are counted, never shown.
+
 ### Feedback
 
 A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback.jsonl`.
@@ -242,6 +261,14 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `author` | string | Slack user id. Never rendered into partner-facing output. |
 | `matched` | boolean | False when a note names no item; surfaced next run (US2 scenario 4). |
 | `source_ts` | string | Slack message timestamp the feedback was read from. |
+| `acknowledged_run_id` | string or null | Run whose digest acknowledged this record; set once, by the run that posted it, never in preview (FR-062). |
+| `classification` | enum or null | For notes: `expectation` \| `project_annotation` \| `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `none`; null until reviewed, and still null after a failed classification call so the next run retries (FR-061). Reactions are never classified. |
+| `proposal_id` | string or null | Proposal written from this note, when its classification produced one (FR-061). |
+
+Records are kept permanently (FR-059); `purge` never removes or compacts `feedback.jsonl`. Only
+the ranking tallies apply the influence window (FR-060): a record older than
+`AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` counts for nothing, while its horizon, if any, holds until
+its date.
 
 ### Memory
 
@@ -263,7 +290,7 @@ A suggested change awaiting human review (FR-032, FR-033).
 | Field | Type | Rules |
 |---|---|---|
 | `proposal_id` | string | `<date>-<type>-<slug>`. |
-| `type` | enum | `skill` \| `prompt` \| `threshold` \| `pattern_card`. |
+| `type` | enum | `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `project_annotation`. A `project_annotation` body carries a ready-to-paste `projects.yaml` fragment in a fenced block plus a short rationale (FR-061). |
 | `run_id` | string | Run that produced it. |
 | `title`, `body` | string | Pattern-level Markdown. |
 | `evidence` | object[] | Replayed evidence: for thresholds, current value, proposed value, observed distribution, effect on the last 30 days of items including confirmed items kept (US4 scenario 4). |
@@ -316,6 +343,7 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 | `entries` | Entry[] | Per `project_url` and `metric`: `distribution` (percentiles of daily percentage change and deviation), `outcomes` `{ confirmed, dismissed, unreviewed }`, `current_threshold`, `suggested_threshold`, `effect_last_30d` `{ items_kept, items_dropped, confirmed_kept }`. |
 | `pass_change_rate` | number | Share of projects where a later pass changed the outcome (FR-058). |
 | `proposals` | string[] | Threshold proposal ids written from this report. |
+| `open_proposals` | object[] | Every proposal still `proposed`, as `{ proposal_id, type, age_days }`, so the weekly report is the one reminder of what awaits review (FR-063). |
 | `feedback_rate` | object | `{ window_days: 60, overall, by_month: [{ month, rate, items }] }`, computed from `corpus/outcomes/`, which outlive run-record retention (SC-002). |
 
 ### Expected-Load Window

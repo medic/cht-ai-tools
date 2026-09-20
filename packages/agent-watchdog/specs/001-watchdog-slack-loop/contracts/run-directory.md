@@ -32,6 +32,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
 │       │   ├── brief.png                  # image rendered from report.html (FR-023)           [raw]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
+│       │   ├── feedback.digest.json       # the feedback digest as built (FR-062)             [kept]
 │       │   └── publication.json           # channel, ts, permalinks, file id                   [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]
@@ -39,7 +40,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 ├── memory/
 │   ├── memory.md                          # current curated memory                             [durable]
 │   └── history/<run_id>.patch             # one diff per change (FR-031)                       [durable]
-├── feedback.jsonl                         # append-only Feedback records (FR-028)              [kept]*
+├── feedback.jsonl                         # append-only Feedback records (FR-028), never purged   [durable]
 ├── proposals/<date>-<type>-<slug>.md      # canonical proposal files (FR-032)                  [durable]
 ├── corpus/
 │   ├── index.json                         # Corpus Item records, no content (FR-037)           [durable]
@@ -49,9 +50,9 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 └── knowledge-corpus/raw/                  # AGENT_WATCHDOG_CORPUS_RAW_DIR; maintainer-managed  [durable]
 ```
 
-`*` `feedback.jsonl` is compacted, not truncated: records older than the kept period are dropped
-only after their items' outcomes have been appended under `corpus/outcomes/`, which is what SC-002
-is measured from.
+`feedback.jsonl` is permanent (FR-059): `purge` never removes or compacts it. The ranking
+influence window (FR-060) is applied when the tallies are built, not by deleting records. SC-002 is
+still measured from `corpus/outcomes/`.
 
 ## Stage inputs and outputs
 
@@ -64,7 +65,7 @@ is measured from.
 | `agent` | `candidates.json`, `changes.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
 | `rollup` | all `findings.pass<last>.json`, feedback, memory | `items.ranked.json`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/` |
 | `render` | `brief.json`, `changes.json` | `report.html`, `brief.png` |
-| `publish` | `brief.json`, `brief.png`, `items.ranked.json` | `payload.json`, `publication.json`, `run.json` (final) |
+| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `feedback.ingested.json` | `payload.json`, `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 
 Rules:
 
