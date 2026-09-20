@@ -3,8 +3,12 @@ coverage/
 .nyc_output/
 # Local data volume and run directories at the package root only; test/fixtures/runs/ is committed.
 /.data/
+/data/
 /runs/
 /runs-replay/
 /knowledge-corpus/raw/
+# Output of a local preview run and design scratch files.
+/payload.json
+/.design-scratch/
 .env
 *.log
