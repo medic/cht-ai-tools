@@ -11,6 +11,7 @@ const { writeResult } = require('../streams');
 const { createTracer } = require('../../trace/langfuse');
 const { createFindingsGate } = require('../gate');
 const { createQueryWindow } = require('../../collect/query-window');
+const { metricSpecFor } = require('../../collect/windows');
 const { appendOutcomes } = require('../../corpus/outcomes');
 const { readMemory } = require('../../rollup/memory');
 const { previousItemCounts } = require('../../rollup/history');
@@ -291,7 +292,11 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   const grafana = deps.grafana || createGrafanaSafely(config, deps.fetch, log);
   const patternCards = deps.patternCards || loadPatternCardsSafely(config, log);
   const findingsGate = resolveFindingsGate({ deps, gateModule, runDir, config, knownCards: patternCards.index });
-  const queryWindow = deps.queryWindow || (grafana ? createQueryWindow({ grafana, runStart }) : null);
+  // The model's live metric tool scopes and resolves expressions from the discovery this run wrote (FR-071).
+  const specFor = async (metric) => (runDir.exists('discovery.json')
+    ? metricSpecFor(await runDir.readJson('discovery.json'))(metric)
+    : null);
+  const queryWindow = deps.queryWindow || (grafana ? createQueryWindow({ grafana, runStart, specFor }) : null);
   const ctx = createContext({
     config, effective, policy, logger: log, runDir, runId, date, mode, tracer, engine, flags,
   });

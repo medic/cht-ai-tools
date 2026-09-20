@@ -5,6 +5,7 @@ const { projectSlug, projectUrlFor } = require('../model/identity');
 const { schemas } = require('../model/schemas');
 const { scrapeTargetsFor, targetsSummary } = require('./targets');
 const { withInstance, trailingQuery, windowBounds } = require('./windows');
+const { dashboardVariables, variablesIn, isBuiltin } = require('./variables');
 
 const noop = { debug() {}, info() {}, warn() {}, error() {} };
 const UNGROUPED = 'Other';
@@ -50,18 +51,29 @@ const unitOf = (panel) => {
   return !unit || unit === 'short' || unit === 'none' ? 'count' : unit;
 };
 
-/** One record per panel target, restricted to the priority list's panel ids when the list is non-empty. */
-const panelRecords = (doc, allowedIds = []) => flattenPanels(doc.dashboard)
-  .filter((panel) => !allowedIds.length || allowedIds.includes(panel.id))
-  .flatMap((panel) => panel.targets.filter((t) => t && t.expr).map((target) => ({
-    panel_id: panel.id,
-    title: panel.title || '',
-    ref_id: target.refId || 'A',
-    expr: target.expr,
-    unit: unitOf(panel),
-    metric: metricKey(target.expr),
-    per_project: target.expr.includes('$cht_instance'),
-  })));
+/**
+ * One record per panel target, restricted to the priority list's panel ids when the list is non-empty. `variables`
+ * names the dashboard variables the expression uses; `unresolved` those the dashboard gives no single value (FR-071).
+ */
+const panelRecords = (doc, allowedIds = []) => {
+  const variables = dashboardVariables(doc);
+  return flattenPanels(doc.dashboard)
+    .filter((panel) => !allowedIds.length || allowedIds.includes(panel.id))
+    .flatMap((panel) => panel.targets.filter((t) => t && t.expr).map((target) => {
+      const used = variablesIn(target.expr);
+      return {
+        panel_id: panel.id,
+        title: panel.title || '',
+        ref_id: target.refId || 'A',
+        expr: target.expr,
+        unit: unitOf(panel),
+        metric: metricKey(target.expr),
+        per_project: target.expr.includes('$cht_instance'),
+        variables: used,
+        unresolved: used.filter((name) => !isBuiltin(name) && (variables[name] ?? null) === null),
+      };
+    }));
+};
 
 const duplicatePanelIds = (doc, allowedIds = []) => {
   const counts = new Map();
@@ -98,15 +110,23 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
     const entry = priority[i];
     const doc = docs && docs[i] ? docs[i] : await grafana.dashboard(entry.uid);
     const panels = panelRecords(doc, entry.panels || []);
+    const variables = dashboardVariables(doc);
     dashboards.push({
       uid: entry.uid,
       title: doc.dashboard.title,
       slug: doc.meta.slug,
       url: doc.meta.url,
       panels,
+      variables,
       duplicate_panel_ids: duplicatePanelIds(doc, entry.panels || []),
     });
-    logger.debug('discovery.dashboard', { uid: entry.uid, panels: panels.length });
+    const unresolved = panels.filter((p) => p.unresolved.length);
+    if (unresolved.length) {
+      logger.warn('discovery.unresolved_variables', {
+        uid: entry.uid, panels: unresolved.map((p) => ({ panel_id: p.panel_id, variables: p.unresolved })),
+      });
+    }
+    logger.debug('discovery.dashboard', { uid: entry.uid, panels: panels.length, variables });
   }
 
   const scrapeTargetMetric = policy.thresholds.metric_roles.scrape_target;
@@ -189,4 +209,6 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
   };
 };
 
-module.exports = { discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf, groupFor, ignoredBy };
+module.exports = {
+  discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf, groupFor, ignoredBy, dashboardVariables,
+};

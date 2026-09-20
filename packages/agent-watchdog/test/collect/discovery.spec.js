@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { discover, metricKey, flattenPanels, panelRecords } = require('../../src/collect/discovery');
+const { discover, metricKey, flattenPanels, panelRecords, dashboardVariables } = require('../../src/collect/discovery');
 const { createGrafanaClient } = require('../../src/collect/grafana');
 const { loadPolicy } = require('../../src/config/policy');
 const { schemas } = require('../../src/model/schemas');
@@ -90,6 +90,41 @@ describe('collect/discovery', () => {
     });
   });
 
+  describe('dashboard variables (FR-071)', () => {
+    const templated = {
+      meta: { slug: 't', url: '/d/t/t' },
+      dashboard: {
+        uid: 't',
+        title: 'T',
+        templating: { list: [
+          { name: 'cht_instance', type: 'query', current: { value: 'a.org' } },
+          { name: 'interval', type: 'interval', current: { value: '10m' }, auto: false },
+          { name: 'db_name', type: 'query', current: { value: ['medic', 'sentinel'] } },
+        ] },
+        panels: [
+          { id: 1, title: 'Rate', targets: [{ refId: 'A', expr: 'rate(a{instance=~"$cht_instance"}[$interval])' }] },
+          { id: 2, title: 'Docs', targets: [{ refId: 'A', expr: 'b{instance=~"$cht_instance", db="$db_name"}' }] },
+          {
+            id: 3,
+            title: 'CPU',
+            targets: [{ refId: 'A', expr: 'rate(c{instance=~"$cht_instance"}[$__rate_interval])' }],
+          },
+        ],
+      },
+    };
+
+    it('records what each dashboard variable resolves to and which panels still depend on an unresolved one', () => {
+      expect(dashboardVariables(templated)).to.deep.equal({ interval: '10m', db_name: null });
+      const records = panelRecords(templated, []);
+      expect(records.map((r) => [r.panel_id, r.variables, r.unresolved])).to.deep.equal([
+        [1, ['interval'], []],
+        [2, ['db_name'], ['db_name']],
+        [3, ['__rate_interval'], []],
+      ]);
+      expect(records.every((r) => r.per_project)).to.equal(true);
+    });
+  });
+
   describe('discover', () => {
     const discoverDefault = () => discover({
       grafana, policy: policyWith({}), config: {}, runStart: RUN_START, logger: quiet,
@@ -140,6 +175,8 @@ describe('collect/discovery', () => {
 
     it('walks the priority list in order, restricts panels to the listed ids and flags duplicate ids', async () => {
       const discovery = await discoverDefault();
+      expect(discovery.dashboards.every((d) => d.variables && typeof d.variables === 'object')).to.equal(true);
+      expect(discovery.dashboards.every((d) => d.panels.every((p) => Array.isArray(p.unresolved)))).to.equal(true);
       expect(discovery.dashboards.map((d) => d.uid)).to.deep.equal([
         'oa2OfL-Vk', 'hkQUbyfVk', '3J_78b6Zz', 'd4f05050-804e-4ea4-9642-4d088cc39a1b',
       ]);

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 9)
+**Status**: Draft (revision 10)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -368,6 +368,10 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 - Hundreds of alerts fire at once: grouping keeps the body within its limits and the thread reply
   lists at most fifty instances per group, with the count of the rest.
 - Every host is ignored or no host matches a group: the brief still names the counts.
+- A panel expression uses a dashboard variable with no single value (a selection such as a
+  database name): the metric is recorded as unavailable with the variable named, no query is sent,
+  and the panel still counts as checked; a panel using an interval variable or a Grafana built-in
+  time variable is collected with the value resolved by code (FR-071).
 
 ## Requirements *(mandatory)*
 
@@ -555,6 +559,12 @@ Alerts and groups
 - **FR-070**: Links to alerts MUST be built by code from the collected rule definitions and labels
   to the watchdog's alert list, and MUST pass the same allow-list and resolution checks as
   dashboard links.
+- **FR-071**: Panel expressions MUST reach the metrics source as valid queries: the instance
+  variable resolves to the project host, a dashboard's own variables to their single configured
+  value, and Grafana's built-in time variables to the window being collected. A metric whose
+  expression depends on a variable with no single value MUST be recorded as unavailable, naming
+  the variable, without a query being sent. Baseline queries over a window MUST be valid for any
+  panel expression, not only for bare series selectors. Added in revision 10.
 
 Memory, proposals and the knowledge corpus
 

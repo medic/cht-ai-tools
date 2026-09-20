@@ -27,6 +27,7 @@ const grafanaConfigured = (config) => Boolean(config && config.endpoints && conf
 const liveQueryWindow = ({ config, discovery, deps, logger }) => {
   const { createGrafanaClient } = require('../../collect/grafana');
   const { createQueryWindow } = require('../../collect/query-window');
+  const { metricSpecFor } = require('../../collect/windows');
   const grafana = createGrafanaClient({
     baseUrl: config.endpoints.grafanaUrl,
     token: config.secrets.grafanaToken,
@@ -35,7 +36,7 @@ const liveQueryWindow = ({ config, discovery, deps, logger }) => {
     fetch: deps.fetch || globalThis.fetch,
     logger,
   });
-  return createQueryWindow({ grafana, runStart: new Date(discovery.run_start) });
+  return createQueryWindow({ grafana, runStart: new Date(discovery.run_start), specFor: metricSpecFor(discovery) });
 };
 
 /**

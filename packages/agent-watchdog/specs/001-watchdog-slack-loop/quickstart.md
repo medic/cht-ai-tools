@@ -54,7 +54,11 @@ agent-watchdog run --dry-run --date "$(date -u -d yesterday +%F)" > payload.json
 Expected: exit 0; `payload.json` is the exact Slack payload (parent, replies, image reference)
 with `slack_file_id: null`; under `.data/runs/<date>/` every artefact of a real run exists,
 including `rollup/report.html`, `rollup/brief.png` and `run.json` with `status: previewed`; the
-footer contains the trace link and the cost in USD; nothing was posted.
+footer contains the trace link and the cost in USD; nothing was posted. The log carries no
+`collect.query_failed` warning: derived expressions use the trailing subquery form and the
+dashboards' `$interval` is resolved (FR-071); a `collect.unresolved_variable` warning names any
+panel left unavailable for a variable with no single value, and `discovery.json` shows what each
+dashboard variable resolved to.
 
 ## 4. One stage at a time (User Story 3, scenario 6)
 

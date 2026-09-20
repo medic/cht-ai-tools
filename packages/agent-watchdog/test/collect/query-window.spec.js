@@ -33,6 +33,22 @@ describe('collect/query-window', () => {
     expect(decodeURIComponent(fake.calls[fake.calls.length - 1].url)).to.include('max_over_time(');
   });
 
+  it('resolves dashboard variables through specFor and refuses a metric with an unresolved one (FR-071)', async () => {
+    const specFor = (metric) => (metric.includes('$db_name')
+      ? { variables: { db_name: null }, unresolved: ['db_name'] }
+      : { variables: { interval: '10m' }, unresolved: [] });
+    const query = createQueryWindow({ grafana, runStart, specFor });
+    const before = fake.calls.length;
+    const w = await query(alpha, 'rate(cht_sentinel_backlog_count[$interval])', 'current');
+    expect(w.available).to.equal(true);
+    const sent = decodeURIComponent(fake.calls[fake.calls.length - 1].url);
+    expect(sent).to.include('rate(cht_sentinel_backlog_count{instance="alpha.example.org"}[10m])');
+    expect(sent).to.not.include('$');
+    const blocked = await query(alpha, 'cht_couchdb_doc_total{db="$db_name"}', 'current');
+    expect(blocked).to.include({ available: false, unavailable_reason: 'unresolved variable $db_name' });
+    expect(fake.calls.length).to.equal(before + 1);
+  });
+
   it('reports unavailable for an unknown window or a metric with no series', async () => {
     const query = createQueryWindow({ grafana, runStart });
     expect(await query(alpha, 'cht_sentinel_backlog_count', 'last_month')).to.include({ available: false });

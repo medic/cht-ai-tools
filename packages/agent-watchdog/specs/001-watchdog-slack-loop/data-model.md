@@ -116,9 +116,14 @@ A metric's values over one named period for one project (FR-004).
 | `unit` | string | From the panel's field config, else `count`. |
 | `values` | [number, number][] | `[epoch_seconds, value]` pairs; empty when unavailable. |
 | `available` | boolean | False when history is shorter than the window needs or the query failed. |
-| `unavailable_reason` | string or null | Required when `available` is false. |
+| `unavailable_reason` | string or null | Required when `available` is false: `no data`, `insufficient history: N days`, `query failed: <detail>`, or `unresolved variable $name` when the panel expression depends on a dashboard variable with no single value (FR-071); the last is decided before any query is sent. |
 
 Raw windows are the only artefact under the short retention period (FR-040).
+
+Each dashboard in `discovery.json` carries `variables`, what its templating variables resolve to
+(a literal or null), and each panel record `variables` (the names its expression uses) and
+`unresolved` (those with no single value), so a window's `unresolved variable` reason is traceable
+to the dashboard document (FR-071).
 
 ### Computed Change
 

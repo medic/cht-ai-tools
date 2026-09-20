@@ -353,6 +353,20 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ---
 
+## Phase 13: Live preview fixes (2026-09-20)
+
+**Purpose**: The first preview run against the hosted watchdog (quickstart step 3) answered 400 for every
+derived metric's trailing baseline and for every expression using the dashboards' `$interval` variable
+(FR-071, research.md R-15). Tests first: the fake Grafana learns to reject what Prometheus rejects.
+
+- [X] T157 [P] Add `test/collect/variables.spec.js`, extend `test/collect/windows.spec.js`, `test/collect/discovery.spec.js`, `test/collect/grafana.spec.js`, `test/collect/query-window.spec.js` and add `test/helpers/fake-grafana.spec.js` for the subquery form, variable resolution, the error detail and the fake's 400s
+- [X] T158 Build the trailing baseline as `max_over_time((<expr>)[1d:5m])` for anything but a bare selector and scope the first selector of an unscoped expression in `src/collect/windows.js`
+- [X] T159 Resolve dashboard variables and Grafana's built-in time variables in `src/collect/variables.js`; record `variables` per dashboard and `unresolved` per panel in `src/collect/discovery.js`; skip and name unresolved metrics in `src/collect/windows.js`; resolve through the run's `discovery.json` in `src/collect/query-window.js`, `src/cli/commands/run.js` and `src/cli/commands/tools-server.js`
+- [X] T160 Put the response detail in the Grafana client's error message in `src/collect/grafana.js`; make `test/helpers/fake-grafana.js` answer 400 with the Prometheus envelope for an unsubstituted variable or a range on a non-selector
+- [X] T161 Add smoke check S-17 to `smoke/grafana.js`; amend spec.md (FR-071, edge case, revision 10), plan.md (revision 10 delta), research.md (R-15, S-17), data-model.md, contracts/run-directory.md and quickstart.md step 3
+
+**Checkpoint**: `npm test` and `npm run replay:eval` pass with the validating fake; S-17 against the hosted watchdog.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -494,3 +508,12 @@ US3 can proceed in parallel, then US4, US5 and US6.
   (image builds at 1.38 GB, `--version`, `check` exit 69, S-11 render with a read-only root); steps 3 to 9 and the
   preview run of step 10 need the hosted watchdog, Slack, model and Langfuse credentials, and `main` carries no
   agent-watchdog coverage yet to compare against (CI will).
+- Live preview fixes (2026-09-20, Phase 13): `$interval` resolves to the dashboard's current value (`10m` on the API
+  dashboard) rather than the query step, because the dashboard author chose it and the value is in the document
+  already read; `$__rate_interval` uses the watchdog's real 5-minute scrape interval (`20m`), not the data source's
+  `timeInterval: 1m`, which would give a window too short for `rate()`; `$__range` is `1d` in every window because
+  each window compares a day against a day; a variable with no single value (a query variable's selection, a
+  multi-value list) makes the metric unavailable rather than guessed, and the panel still counts as checked; the
+  fake Grafana validates only the two shapes that failed live, not full PromQL; the metric key keeps the variable
+  text (`sum(rate(x[$interval]))`) as its identity, so stored runs and feedback stay comparable.
+

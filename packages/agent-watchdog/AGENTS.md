@@ -89,6 +89,12 @@ collapsed, computed in `src/rollup/layout.js` before the roll-up call and writte
 model writes item lines only; group lines are code; `bullet_count`, `bullet_length` and `thread_order` check the
 draft against the layout. Ignored hosts never enter `discovery.projects`.
 
+Collection: a panel expression is scoped to the project and its dashboard variables are resolved by code before
+it is sent (`src/collect/variables.js`; `$interval` to the dashboard's value, Grafana's built-in time variables to
+the window); a variable with no single value makes the metric unavailable and is named in
+`collect.unresolved_variable`. The trailing baseline uses the subquery form for anything but a bare selector.
+The fake Grafana answers 400 like Prometheus for an unsubstituted variable or a range on a non-selector.
+
 Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
 failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert
 groups as code-built `alerts` bullets, the model never writes them; `publish` posts one reply per alert group

@@ -4,6 +4,7 @@
 const codes = require('../cli/exit-codes');
 const { normaliseHost } = require('../config/policy');
 const { schemas } = require('../model/schemas');
+const { resolveExpression, durationText, RESOLUTION_S } = require('./variables');
 
 const DAY = 86400;
 const TRAILING_DAYS = 20;
@@ -30,6 +31,24 @@ const windowBounds = (runStart, { activeWindow = null } = {}) => {
   return bounds;
 };
 
+// PromQL words that look like metric names but are not selectors.
+const KEYWORDS = new Set([
+  'by', 'without', 'on', 'ignoring', 'group_left', 'group_right', 'offset', 'bool', 'and', 'or', 'unless', 'atan2',
+]);
+
+/** Add an instance matcher to the first series selector of an expression that has none. */
+const scopeFirstSelector = (expr, host) => {
+  const identifier = /([a-zA-Z_:][a-zA-Z0-9_:]*)(?=\s*(?:[[)+\-*/%^]|[<>=!]=?|$|\s))/g;
+  for (const match of expr.matchAll(identifier)) {
+    const after = expr.slice(match.index + match[0].length).trimStart();
+    if (!KEYWORDS.has(match[1]) && !after.startsWith('(') && !/^\d/.test(match[1])) {
+      const end = match.index + match[0].length;
+      return `${expr.slice(0, end)}{instance="${host}"}${expr.slice(end)}`;
+    }
+  }
+  return `${expr}{instance="${host}"}`;
+};
+
 /** Substitute the dashboard's instance variable with a literal host, or add an instance matcher. */
 const withInstance = (expr, host) => {
   if (expr.includes('$cht_instance')) {
@@ -43,10 +62,33 @@ const withInstance = (expr, host) => {
       return `{${trimmed ? `${trimmed}, ` : ''}instance="${host}"}`;
     });
   }
-  return `${expr}{instance="${host}"}`;
+  return scopeFirstSelector(expr, host);
 };
 
-const trailingQuery = (expr) => `max_over_time(${expr}[1d])`;
+// A bare series selector: a metric name with optional label matchers and nothing else.
+const SELECTOR = /^\s*[a-zA-Z_:][a-zA-Z0-9_:]*\s*(\{[^{}]*\})?\s*$/;
+const TRAILING_RESOLUTION = durationText(RESOLUTION_S);
+
+/**
+ * Daily maxima for the trailing baseline (R-6). A range selector applies to series selectors only; any other
+ * expression needs the subquery form, evaluated at the comparison windows' resolution (R-15).
+ */
+const trailingQuery = (expr) => (SELECTOR.test(expr)
+  ? `max_over_time(${expr}[1d])`
+  : `max_over_time((${expr})[1d:${TRAILING_RESOLUTION}])`);
+
+const unresolvedReason = (names) => {
+  const list = names.map((name) => `$${name}`).join(', ');
+  return `unresolved variable${names.length > 1 ? 's' : ''} ${list}`;
+};
+
+class UnresolvedVariableError extends Error {
+  constructor(names) {
+    super(unresolvedReason(names));
+    this.name = 'UnresolvedVariableError';
+    this.variables = names;
+  }
+}
 
 const SCRAPE_PANEL_REF = { dashboard_uid: 'targets', panel_id: 0, panel_title: 'Scrape target health', ref_id: 'up' };
 
@@ -60,6 +102,8 @@ const metricSpecs = (discovery) => {
           metric: panel.metric,
           expr: panel.expr,
           unit: panel.unit,
+          variables: dashboard.variables || {},
+          unresolved: panel.unresolved || [],
           panel_ref: {
             dashboard_uid: dashboard.uid, panel_id: panel.panel_id, panel_title: panel.title, ref_id: panel.ref_id,
           },
@@ -69,9 +113,23 @@ const metricSpecs = (discovery) => {
   }
   const scrape = discovery.scrape_target_metric;
   if (scrape && !specs.has(scrape)) {
-    specs.set(scrape, { metric: scrape, expr: scrape, unit: 'state', panel_ref: SCRAPE_PANEL_REF });
+    specs.set(scrape, {
+      metric: scrape, expr: scrape, unit: 'state', variables: {}, unresolved: [], panel_ref: SCRAPE_PANEL_REF,
+    });
   }
   return [...specs.values()];
+};
+
+/** The query spec for a metric key of a discovery document, or null when no panel produced it. */
+const metricSpecFor = (discovery) => {
+  const specs = new Map(metricSpecs(discovery).map((spec) => [spec.metric, spec]));
+  return (metric) => specs.get(metric) || null;
+};
+
+/** The expression to send for one project: instance scoped, variables resolved; `unresolved` names what blocks it. */
+const queryFor = (spec, host) => {
+  const { query, unresolved } = resolveExpression(withInstance(spec.expr, host), { variables: spec.variables || {} });
+  return { query, unresolved: [...new Set([...(spec.unresolved || []), ...unresolved])] };
 };
 
 const pickSeries = (result, host) => result.find((series) => {
@@ -87,12 +145,23 @@ const collectWindows = async ({ grafana, project, discovery, runStart, activeWin
   const bounds = windowBounds(runStart, { activeWindow });
   const windows = [];
   for (const spec of metricSpecs(discovery)) {
-    const query = withInstance(spec.expr, project.host);
+    const { query, unresolved } = queryFor(spec, project.host);
+    if (unresolved.length) {
+      // A variable with no single value cannot be sent (Prometheus would answer 400): the windows are recorded as
+      // unavailable, named once, and no query is made (FR-071).
+      logger.warn('collect.unresolved_variable', {
+        project: project.host, metric: spec.metric, dashboard_uid: spec.panel_ref.dashboard_uid,
+        panel_id: spec.panel_ref.panel_id, variables: unresolved,
+      });
+    }
     for (const bound of bounds) {
       let values = [];
       let available = true;
       let reason = null;
       try {
+        if (unresolved.length) {
+          throw new UnresolvedVariableError(unresolved);
+        }
         const result = await grafana.queryRange({
           query: bound.daily ? trailingQuery(query) : query,
           start: seconds(bound.start),
@@ -113,10 +182,15 @@ const collectWindows = async ({ grafana, project, discovery, runStart, activeWin
           throw error;
         }
         available = false;
-        reason = `query failed: ${error.message}`;
-        logger.warn('collect.query_failed', {
-          project: project.host, metric: spec.metric, window: bound.window, message: error.message,
-        });
+        if (error instanceof UnresolvedVariableError) {
+          reason = error.message;
+        } else {
+          reason = `query failed: ${error.message}`;
+          logger.warn('collect.query_failed', {
+            project: project.host, metric: spec.metric, window: bound.window, status: error.status || null,
+            message: error.message,
+          });
+        }
       }
       windows.push(schemas.MetricWindow.parse({
         project_url: project.url,
@@ -136,4 +210,7 @@ const collectWindows = async ({ grafana, project, discovery, runStart, activeWin
   return { project_url: project.url, windows };
 };
 
-module.exports = { windowBounds, withInstance, trailingQuery, metricSpecs, collectWindows, DAY, MIN_HISTORY_DAYS };
+module.exports = {
+  windowBounds, withInstance, trailingQuery, metricSpecs, metricSpecFor, queryFor, unresolvedReason, collectWindows,
+  DAY, MIN_HISTORY_DAYS,
+};

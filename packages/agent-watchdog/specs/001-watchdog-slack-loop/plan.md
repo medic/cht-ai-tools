@@ -260,3 +260,22 @@ added; the body limit is five bullets of two lines with eight one-line sub-bulle
   `mrkdwn` has no nested lists; the layout rule replaces the fixed three slots with five slots that
   can hold sub-bullets, which is the smallest change that gives "Nepal: 5 projects with issues"
   its own line. Result: PASS.
+
+### Revision 10 delta: valid queries for every panel expression (FR-071)
+
+Re-checked on 2026-09-20 after the first preview run against the hosted watchdog answered 400 for
+every derived metric's trailing baseline and for every expression using the dashboards' `$interval`
+variable (research.md R-15).
+
+- **I**: no new dependency; variable resolution and the subquery form are a few lines of code in
+  `src/collect/`.
+- **II**: the fake Grafana now rejects what Prometheus rejects (an unsubstituted variable, a range on
+  anything but a selector) with the same 400 envelope, so the two failures replay offline and cannot
+  return; the hosted check is smoke test S-17 in `smoke/grafana.js`.
+- **III**: resolution is deterministic and recorded: each dashboard's variables and each panel's
+  unresolved ones are written to `discovery.json`; a metric that cannot be resolved is unavailable,
+  never guessed.
+- **IV**: the same Viewer token; the resolved values come from the dashboard documents already read.
+- **V**: no new stage; the Grafana client's error message now carries the response detail, so the
+  next such failure is legible from the log alone.
+- **VI to VIII**: unchanged. Result: PASS.

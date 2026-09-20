@@ -55,6 +55,99 @@ describe('collect/windows', () => {
       expect(withInstance('cht_plain', 'a.org')).to.equal('cht_plain{instance="a.org"}');
       expect(trailingQuery('cht_x{instance="a.org"}')).to.equal('max_over_time(cht_x{instance="a.org"}[1d])');
     });
+
+    it('wraps anything but a bare selector as a subquery, since ranges apply to selectors only (R-15)', () => {
+      expect(trailingQuery('cht_plain')).to.equal('max_over_time(cht_plain[1d])');
+      expect(trailingQuery('sum(rate(cht_x{instance="a.org"}[5m]))'))
+        .to.equal('max_over_time((sum(rate(cht_x{instance="a.org"}[5m])))[1d:5m])');
+      expect(trailingQuery('cht_conflict_count{instance="a.org"} >= 0'))
+        .to.equal('max_over_time((cht_conflict_count{instance="a.org"} >= 0)[1d:5m])');
+      expect(trailingQuery('rate(cht_couchdb_doc_total{instance="a.org"}[1h]) * 60 * 60'))
+        .to.equal('max_over_time((rate(cht_couchdb_doc_total{instance="a.org"}[1h]) * 60 * 60)[1d:5m])');
+      const multiline = '(\n\tsum(\n\t\tcht_a{instance="a.org", code=~"^[45]..$"} OR on() vector(0)\n\t)'
+        + ' / sum(cht_a{instance="a.org"})\n)*100';
+      expect(trailingQuery(multiline)).to.equal(`max_over_time((${multiline})[1d:5m])`);
+    });
+  });
+
+  describe('dashboard variables in panel expressions (FR-071)', () => {
+    const alpha = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
+    const panel = ({ id, expr, metric, variables, unresolved }) => ({
+      panel_id: id, title: `P${id}`, ref_id: 'A', expr, metric, unit: 'count', per_project: true, variables, unresolved,
+    });
+    const discoveryWith = (panels, variables) => ({
+      run_start: RUN_START.toISOString(),
+      dashboards: [{ uid: 'd1', title: 'D', slug: 'd', url: '/d/d1/d', panels, variables, duplicate_panel_ids: [] }],
+      scrape_target_metric: 'up{job="cht"}',
+      projects: [alpha],
+    });
+    const recording = () => {
+      const queries = [];
+      const grafana = {
+        queryRange: async ({ query }) => {
+          queries.push(query);
+          // Numeric samples as the client returns them: enough daily points for the trailing baseline too.
+          const values = Array.from({ length: 20 }, (_, i) => [seconds(RUN_START) - i * DAY, 1]);
+          return [{ metric: { instance: 'alpha.example.org' }, values }];
+        },
+      };
+      return { grafana, queries };
+    };
+    const spyLogger = () => ({ debug() {}, info() {}, warn: sinon.spy(), error() {} });
+
+    it('substitutes the dashboard interval and built-ins before querying, in every window', async () => {
+      const { grafana, queries } = recording();
+      const discovery = discoveryWith([
+        panel({
+          id: 1, metric: 'sum(rate(cht_api_http_request_duration_seconds_count[$interval]))',
+          expr: 'sum(rate(cht_api_http_request_duration_seconds_count{instance=~"$cht_instance"}[$interval]))',
+          variables: ['interval'], unresolved: [],
+        }),
+        panel({
+          id: 2, metric: 'rate(cht_api_process_cpu_seconds_total[$__rate_interval])',
+          expr: 'rate(cht_api_process_cpu_seconds_total{instance=~"$cht_instance"}[$__rate_interval])',
+          variables: ['__rate_interval'], unresolved: [],
+        }),
+      ], { interval: '10m' });
+      const logger = spyLogger();
+      const result = await collectWindows({ grafana, project: alpha, discovery, runStart: RUN_START, logger });
+      expect(queries.some((q) => q.includes('$'))).to.equal(false);
+      expect(queries.filter((q) => q.includes('[10m]'))).to.have.length(4);
+      const scoped = 'sum(rate(cht_api_http_request_duration_seconds_count{instance="alpha.example.org"}[10m]))';
+      expect(queries).to.include(`max_over_time((${scoped})[1d:5m])`);
+      expect(queries).to.include('rate(cht_api_process_cpu_seconds_total{instance="alpha.example.org"}[20m])');
+      expect(result.windows.filter((w) => w.metric.startsWith('sum(rate(')).every((w) => w.available)).to.equal(true);
+      expect(logger.warn.called).to.equal(false);
+    });
+
+    it('marks a metric with an unresolvable variable unavailable without querying, naming the variable', async () => {
+      const { grafana, queries } = recording();
+      const discovery = discoveryWith([
+        panel({
+          id: 1, metric: 'cht_couchdb_doc_total{db="$db_name"}',
+          expr: 'cht_couchdb_doc_total{instance=~"$cht_instance", db="$db_name"}',
+          variables: ['db_name'], unresolved: ['db_name'],
+        }),
+        panel({
+          id: 2, metric: 'cht_conflict_count',
+          expr: 'cht_conflict_count{instance=~"$cht_instance"}',
+          variables: [], unresolved: [],
+        }),
+      ], { db_name: null });
+      const logger = spyLogger();
+      const result = await collectWindows({ grafana, project: alpha, discovery, runStart: RUN_START, logger });
+      const blocked = result.windows.filter((w) => w.metric === 'cht_couchdb_doc_total{db="$db_name"}');
+      expect(blocked).to.have.length(4);
+      expect(blocked.every((w) => w.available === false && w.unavailable_reason === 'unresolved variable $db_name'))
+        .to.equal(true);
+      expect(queries.some((q) => q.includes('cht_couchdb_doc_total'))).to.equal(false);
+      expect(queries.filter((q) => q.includes('cht_conflict_count'))).to.have.length(4);
+      expect(logger.warn.calledOnce).to.equal(true);
+      expect(logger.warn.firstCall.args[0]).to.equal('collect.unresolved_variable');
+      expect(logger.warn.firstCall.args[1])
+        .to.include({ project: 'alpha.example.org', dashboard_uid: 'd1', panel_id: 1 });
+      expect(logger.warn.firstCall.args[1].variables).to.deep.equal(['db_name']);
+    });
   });
 
   describe('collectWindows against the fake watchdog', () => {
@@ -108,6 +201,15 @@ describe('collect/windows', () => {
       expect(queries).to.include('max_over_time(cht_sentinel_backlog_count{instance="alpha.example.org"}[1d])');
       expect(queries.filter((q) => q === 'cht_sentinel_backlog_count{instance="alpha.example.org"}')).to.have.length(3);
       expect(queries.some((q) => q.includes('$cht_instance'))).to.equal(false);
+    });
+
+    it('sends the fake, which rejects what Prometheus rejects, only queries it accepts (R-15)', async () => {
+      const result = await collectFor(discovery.projects[0]);
+      const failed = (w) => w.unavailable_reason && w.unavailable_reason.startsWith('query failed');
+      const rejected = result.windows.filter(failed);
+      expect(rejected.map((w) => `${w.metric} ${w.window}: ${w.unavailable_reason}`)).to.deep.equal([]);
+      expect(result.windows.filter((w) => w.window === 'trailing_14d' && w.metric.startsWith('sum(rate('))
+        .every((w) => w.available)).to.equal(true);
     });
 
     it('collects the scrape-target metric for the project', async () => {

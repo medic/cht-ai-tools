@@ -100,6 +100,18 @@ const main = async () => {
   const windows = await collectWindows({ grafana, project, discovery, runStart, activeWindow: null, logger });
   const available = windows.windows.filter((w) => w.available).length;
   record('metric windows for one project', available > 0, `${available}/${windows.windows.length} windows available`);
+  // S-17 (R-15): every panel expression, scoped and with its variables resolved, is accepted by Prometheus.
+  const queryRejected = (w) => w.unavailable_reason && w.unavailable_reason.startsWith('query failed');
+  const rejected = windows.windows.filter(queryRejected);
+  record('no panel query rejected by Prometheus (S-17)', rejected.length === 0, rejected.length
+    ? rejected.slice(0, 3).map((w) => `${w.metric} ${w.window}: ${w.unavailable_reason}`).join(' | ')
+    : `${windows.windows.length} queries accepted`);
+  const unresolved = discovery.dashboards.flatMap((d) => d.panels
+    .filter((p) => p.unresolved && p.unresolved.length)
+    .map((p) => `${d.uid}#${p.panel_id} $${p.unresolved.join(' $')}`));
+  record('dashboard variables resolved', true, unresolved.length
+    ? `left unavailable, no single value: ${unresolved.join(', ')}`
+    : 'every variable in the collected panels resolved');
 
   const annotations = await grafana.annotations({ from: runStart.getTime() - 86400000, to: runStart.getTime() });
   record('annotations', Array.isArray(annotations), `${annotations.length} annotations`);

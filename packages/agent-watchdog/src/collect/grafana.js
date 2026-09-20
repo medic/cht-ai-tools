@@ -20,6 +20,23 @@ const ALERT_INSTANCES_PATH = '/api/prometheus/grafana/api/v1/alerts';
 const MAX_ALERT_PAGES = 100;
 
 const toNumber = (value) => Number(value);
+const DETAIL_MAX = 300;
+
+/** What the response said, for the error message: Prometheus's `errorType: error`, Grafana's `message`, or text. */
+const detailOf = (body) => {
+  if (!body) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body);
+    const text = parsed && parsed.error
+      ? `${parsed.errorType ? `${parsed.errorType}: ` : ''}${parsed.error}`
+      : parsed && parsed.message;
+    return text ? String(text).slice(0, DETAIL_MAX) : null;
+  } catch {
+    return String(body).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, DETAIL_MAX) || null;
+  }
+};
 
 /**
  * @param {object} options
@@ -70,7 +87,10 @@ const createGrafanaClient = (options) => {
       } catch {
         body = null;
       }
-      throw new HttpError(response.status, `Grafana returned ${response.status} for ${url.pathname}`, body);
+      const detail = detailOf(body);
+      throw new HttpError(
+        response.status, `Grafana returned ${response.status} for ${url.pathname}${detail ? `: ${detail}` : ''}`, body,
+      );
     }
     return response.json();
   };

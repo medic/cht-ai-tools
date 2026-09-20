@@ -115,6 +115,23 @@ describe('collect/grafana', () => {
     await expect(broken.search()).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 500);
   });
 
+  it('puts the response detail in the error message, never just the status (R-15)', async () => {
+    const prometheus = clientWith(sinon.stub().resolves(jsonResponse({
+      status: 'error', errorType: 'bad_data',
+      error: 'invalid parameter "query": 1:14: parse error: ranges only allowed for vector selectors',
+    }, 400)));
+    await expect(prometheus.queryRange({ query: 'max_over_time(sum(x)[1d])', start: 0, end: 1, step: 1 }))
+      .to.be.rejectedWith(/400 .*bad_data: invalid parameter "query".*ranges only allowed for vector selectors/);
+    const grafana = clientWith(sinon.stub().resolves(jsonResponse({ message: 'Data source not found' }, 404)));
+    await expect(grafana.search()).to.be.rejectedWith(/404 .*Data source not found/);
+    const html = clientWith(sinon.stub().resolves(new Response('<html>Bad Gateway</html>', { status: 502 })));
+    await expect(html.search()).to.be.rejectedWith(/502 .*Bad Gateway/);
+    const long = clientWith(sinon.stub().resolves(jsonResponse({ message: 'x'.repeat(1000) }, 500)));
+    const error = await long.search().catch((e) => e);
+    expect(error.message.length).to.be.below(400);
+    expect(error.body).to.include('x'.repeat(1000));
+  });
+
   it('surfaces a Prometheus error envelope as an error', async () => {
     const fetch = sinon.stub().resolves(jsonResponse({ status: 'error', errorType: 'bad_data', error: 'parse error' }));
     const query = clientWith(fetch).queryRange({ query: 'x{', start: 0, end: 1, step: 1 });

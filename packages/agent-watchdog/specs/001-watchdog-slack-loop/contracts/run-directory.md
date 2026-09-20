@@ -13,7 +13,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── run.json                       # Run record: status, stages, versions, usage, cost   [kept]
 │       ├── config.effective.json          # redacted effective configuration (FR-055)          [kept]
 │       ├── feedback.ingested.json         # feedback read at start, matched and unmatched      [kept]
-│       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels [kept]
+│       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels, variables [kept]
 │       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
 │       ├── alerts.classified.json         # category, importance, staleness, groups (FR-065)   [kept]
 │       ├── <project_slug>/

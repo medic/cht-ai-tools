@@ -50,6 +50,26 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' },
 });
 
+/**
+ * The parse errors Prometheus raises for the two mistakes the collect stage can make: an unsubstituted Grafana
+ * variable, and a range applied to anything but a series selector (a subquery `[1d:5m]` is fine). Returns the
+ * Prometheus error text, or null when the query is acceptable.
+ */
+const promqlError = (query) => {
+  const text = String(query || '');
+  const variable = /\$\{?[A-Za-z_]|\[\[[A-Za-z_]/.exec(text);
+  if (variable) {
+    return `invalid parameter "query": 1:${variable.index + 1}: parse error: unexpected character: '$'`;
+  }
+  const range = /\)\s*\[\s*\d+(ms|[smhdwy])\s*\]/.exec(text);
+  if (range) {
+    return `invalid parameter "query": 1:${range.index + 2}: parse error: ranges only allowed for vector selectors`;
+  }
+  return null;
+};
+
+const badData = (error) => json({ status: 'error', errorType: 'bad_data', error }, 400);
+
 // hostAliases: { alias: sourceHost } adds hosts that mirror a fixture host's series, anomaly, health and version,
 // so a fixture day can be replayed across programme groups and development instances (User Story 9).
 const addAliases = (series, hostAliases) => {
@@ -345,6 +365,10 @@ const createFakeGrafana = ({
     }
     if (p === `${proxyPrefix}/api/v1/query_range`) {
       const q = url.searchParams;
+      const invalid = promqlError(q.get('query'));
+      if (invalid) {
+        return badData(invalid);
+      }
       const start = parseTime(q.get('start'));
       const end = parseTime(q.get('end'));
       const step = Number(q.get('step')) || 300;
@@ -353,6 +377,10 @@ const createFakeGrafana = ({
     }
     if (p === `${proxyPrefix}/api/v1/query`) {
       const q = url.searchParams;
+      const invalid = promqlError(q.get('query'));
+      if (invalid) {
+        return badData(invalid);
+      }
       const time = parseTime(q.get('time')) || runStart;
       return json({ status: 'success', data: { resultType: 'vector', result: vector(q.get('query'), time) } });
     }
@@ -365,4 +393,4 @@ const createFakeGrafana = ({
   return { fetch, calls, series, baseUrl, token, datasourceUid, runStart, alertsDoc };
 };
 
-module.exports = { createFakeGrafana, metricNameOf, labelOf, alertResponseFor, RULES_PATH, ALERTS_PATH };
+module.exports = { createFakeGrafana, metricNameOf, labelOf, alertResponseFor, promqlError, RULES_PATH, ALERTS_PATH };

@@ -557,6 +557,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-14 | A Viewer service-account token on the hosted watchdog reads `GET /api/prometheus/grafana/api/v1/rules` and `/alerts`; the instance `state` strings and the paging parameters behind `groupNextToken` match R-14 | Grant and response casing read from source, not exercised live |
 | S-15 | An alert-list link `<grafana>/alerting/list?search=…` built by code opens the rule list filtered by `rule:` and `label:instance=~` terms | Page path and parameter behaviour read from front-end source, not documented |
 | S-16 | Sub-bullets rendered as indented `◦` lines inside a bullet's `section` block display legibly in Slack desktop and mobile | Leading whitespace in `mrkdwn` is undocumented |
+| S-17 | `smoke/grafana.js --project <host>` collects every window of every per-project panel of the hosted dashboards without one `query failed` window: derived expressions in the trailing subquery form and `$interval` resolved to the dashboard's value | The first preview run showed the fake accepted queries Prometheus rejects; only the hosted proxy proves the resolved forms |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -675,3 +676,69 @@ every rule shares one dashboard, so it filters nothing).
   Grafana and the `search` value round-trips (rule titles with spaces, the instance regex matcher).
 - **S-16**: a parent post whose bullet carries sub-bullets renders the indented `◦` lines legibly
   in Slack desktop and mobile, since leading spaces in `mrkdwn` sections are not documented.
+- **S-17**: with the Viewer token, `node smoke/grafana.js --project <host>` reports "no panel query
+  rejected by Prometheus" for a host with API metrics, and names any panel left unavailable for a
+  variable with no single value.
+
+## R-15. Dashboard variables and the trailing baseline query (FR-071)
+
+**Evidence**: the first preview run against the hosted watchdog on 2026-09-20 (`collect.query_failed`,
+HTTP 400 from `/api/datasources/proxy/uid/<uid>/api/v1/query_range` for every derived metric's
+`trailing_14d` window and for every window of the `$interval` expressions); `medic/cht-watchdog`
+`main` `grafana/provisioning/dashboards/CHT/*.json` fetched 2026-09-20 (templating lists and panel
+targets); https://prometheus.io/docs/prometheus/latest/querying/basics/ (range vector selectors,
+subqueries); https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/
+(variable syntax, `$__interval`, `$__range`, "How `$__rate_interval` is calculated") (docs, repo).
+
+**Findings**:
+- A range `[1d]` may follow a series selector only. `max_over_time(sum(x)[1d])` is a parse error
+  ("ranges only allowed for vector selectors"); the subquery form
+  `max_over_time((sum(x))[1d:5m])` evaluates any instant expression at a resolution over the
+  range. Of the hosted dashboards' per-project panels, most are derived expressions: `rate(...) * 60`,
+  `sum(...)`, `floor(abs(...))`, ratios, and every `... >= 0` panel, which is a comparison, not a
+  selector.
+- The datasource proxy passes queries to Prometheus untouched: Grafana substitutes variables in the
+  browser only. The `CHT API Server` dashboard (`3J_78b6Zz`) defines `interval` (type `interval`,
+  options `2m,10m,30m,1h,6h,12h,1d,7d,14d,30d`, current `10m`) and uses `[$interval]` in seven of its
+  thirty-six expressions; `cht_partnerships_replication` defines `interval` (`12h`) and uses
+  `$__range`; `cht_admin_details` defines `db_name` (a query variable with a multi-value selection)
+  but uses it in titles only; `umt_server` scopes by `$umt_instance`, so none of its panels is
+  per-project. Grafana's variable syntaxes are `$name`, `${name}` (optionally `${name:format}`) and the
+  legacy `[[name]]`.
+- Grafana's built-ins: `$__interval` is the panel's calculated step, `$__interval_ms` the same in
+  milliseconds, `$__range` the dashboard time range (`$__range_s`, `$__range_ms`), and
+  `$__rate_interval = max($__interval + scrape_interval, 4 * scrape_interval)` where
+  `scrape_interval` is the data source's "Scrape interval" setting. cht-watchdog provisions that
+  setting as `timeInterval: 1m` while Prometheus scrapes every 5 minutes (R-6), so Grafana's own
+  `$__rate_interval` on the hosted dashboards is `4m` at narrow ranges, too short for a 5-minute scrape;
+  the watchdog resolves it from the real scrape interval.
+
+**Decision**:
+- `trailingQuery` keeps `max_over_time(<selector>[1d])` for a bare selector and wraps anything else
+  as `max_over_time((<expr>)[1d:5m])`, the resolution being the comparison windows' step.
+- Discovery records, per dashboard, what each templating variable resolves to (`variables`): an
+  `interval` variable to its current duration (or `5m` when set to auto); a `constant`, `custom` or
+  `textbox` variable to its single current value; a `query`, `datasource` or multi-value variable to
+  `null`. Per panel it records the variables used and the `unresolved` ones. `cht_instance` stays the
+  scoping variable handled by `withInstance`.
+- `collect` substitutes, after scoping, the dashboard variables and the built-ins for the watchdog's
+  windows: `$__interval` `5m`, `$__interval_ms` `300000`, `$__rate_interval`
+  `max(5m + scrape, 4 × scrape)` with the watchdog's 5-minute scrape (`20m`), `$__range` `1d`
+  (`$__range_s` `86400`, `$__range_ms` `86400000`), since every window compares a day against a day.
+  A metric whose expression still contains a variable is recorded as unavailable with the reason
+  `unresolved variable $name`, logged once per project as `collect.unresolved_variable`, and never
+  sent. The model's `query_metric` tool resolves through the same spec, from the run's
+  `discovery.json`.
+- The Grafana client puts the response detail (Prometheus's `errorType: error`, Grafana's `message`,
+  or the first 300 characters of text) in the error message, so `collect.query_failed` says why.
+- The fake Grafana answers 400 with the Prometheus envelope for an unsubstituted variable or a range
+  on a non-selector, and the collect specs assert that no fixture query is rejected; S-17 confirms
+  the hosted proxy accepts every resolved form.
+
+**Alternatives considered**: substituting `$interval` with the query step (rejected: the dashboard
+author chose `10m` for these rates, and the value is in the document already read); skipping
+panels with variables (rejected: the API request rate, CPU and GC panels are the ones that carry
+`$interval`); `[1d:]` with Prometheus's default resolution (rejected: the default evaluation
+interval is not the watchdog's to know, and `5m` matches the other windows); adding the datasource
+proxy's own variable substitution (none exists: the proxy forwards the query string as sent).
+
