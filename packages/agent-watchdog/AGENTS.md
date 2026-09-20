@@ -20,7 +20,9 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 - Everything the model produces is untrusted until `src/verify/` accepts it. The model composes no
   URLs; `src/links/` builds them. Numbers in text must match computed data.
 - The model's tools are the enumerated list in `agent/tools.json`. No shell, web or file tools.
-- Secrets never appear in prompts, logs, posts, run records or this repository.
+- Secrets never appear in prompts, logs, posts, run records or this repository. `scripts/scan-secrets.js`
+  checks the repository in CI and every run scans its own artefacts at the end (SC-010); a deliberate
+  sample value in a test carries `// scan-secrets:allow` on its line.
 - Commits: `type(#issue): subject` with `type` in `build feat fix perf refactor test chore docs`.
 
 ## Layout
@@ -34,9 +36,10 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 ## Commands and exit codes
 
 `run [--date --project --stage --engine --dry-run --force --since]`, `replay`, `distill`,
-`calibrate`, `check <cht-url>`, `purge`, `tools-server`. Exit codes: 0 ok, 1 failed, 64 usage,
+`calibrate`, `check <cht-url>`, `purge [--dry-run]`, `tools-server`. Exit codes: 0 ok, 1 failed, 64 usage,
 65 missing stage input, 69 metrics source unavailable, 74 Slack unavailable, 75 duplicate date,
-78 configuration invalid. Logs are JSON lines on stderr; results go to stdout.
+78 configuration invalid. Logs are JSON lines on stderr; results go to stdout. `purge` applies
+retention (raw 14 days, kept 30, durable never) and runs implicitly as the first stage of every `run`.
 
 ## Configuration
 
@@ -57,7 +60,15 @@ npm run replay:eval                                                             
 node --env-file=.env bin/agent-watchdog.js calibrate --week 2026-W38                # weekly threshold report
 node --env-file=.env bin/agent-watchdog.js distill                                  # corpus → proposed cards
 npm run cards:index                                                                 # after merging a card
+node bin/agent-watchdog.js purge --dry-run                                          # retention preview, no credentials
+node scripts/scan-secrets.js .                                                      # SC-010 repository scan, exit 1 on findings
+node smoke/render.js && node smoke/container.js                                     # browser and image contract (Docker)
 ```
+
+Before opening a PR, work through the repository template (`.github/pull_request_template.md`): lint
+and coverage, `AGENTS.md` and `README.md` updated, new dependencies justified in the README table,
+and for a prompt, skill, schema or analysis change the replay diff attached and `npm run replay:eval`
+passing.
 
 A prompt, skill or schema change attaches the `replay` comparison to its PR and must keep `npm run
 replay:eval` green. Replay never contacts Grafana or Slack: tool results come from the stored run's

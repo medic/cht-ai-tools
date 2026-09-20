@@ -18,7 +18,7 @@ describe('corpus/scrub (FR-033)', () => {
       { kind: 'address', excerpt: 'j***@example.org' },
       { kind: 'address', excerpt: '+*** *** *** *78' },
     ]);
-    expect(maskEmail('ops@medic.org')).to.equal('o***@medic.org');
+    expect(maskEmail('ops@medic.org')).to.equal('o***@medic.org'); // scan-secrets:allow
     expect(maskPhone('0712-345-678')).to.equal('****-***-*78');
   });
 

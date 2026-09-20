@@ -29,8 +29,12 @@ node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18 > pay
 
 ## Commands
 
-`run`, `replay`, `distill`, `calibrate`, `check <cht-url>`, `purge`, `tools-server`.
-Flags, streams and exit codes: [`contracts/cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md),
+`run`, `replay`, `distill`, `calibrate`, `check <cht-url>`, `purge [--dry-run]`, `tools-server`.
+A run is the stages `purge, feedback, collect, analyze, agent, rollup, render, publish`, in that
+order; `--stage <name>` runs one of them against the previous stage's files. Exit codes: 0 ok,
+1 failed, 64 usage, 65 missing stage input, 69 metrics source unavailable, 74 Slack unavailable,
+75 duplicate date, 78 configuration invalid. Logs are JSON lines on stderr; results go to stdout.
+Flags, streams and exit codes in full: [`contracts/cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md),
 [`contracts/exit-codes.md`](specs/001-watchdog-slack-loop/contracts/exit-codes.md).
 
 ### Running it yourself
@@ -49,6 +53,7 @@ AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date 2026-09-18 --proje
 agent-watchdog calibrate --week 2026-W38 > calibration.json                   # weekly threshold evidence
 agent-watchdog check https://cht.example.org                                  # readiness: 0 met, 1 unmet, 69 unreachable
 agent-watchdog distill [--all] [--item <relative-path>]                       # corpus items → proposed pattern cards
+agent-watchdog purge --dry-run                                                # what retention would remove; runs first in every run
 ```
 
 The `cli` engine drives the same agent definition through `claude -p --bare` (set
@@ -120,11 +125,19 @@ the card and uses its confirmation steps as the suggested check.
 
 ## Contracts for deployment
 
-Deployment manifests live in `medic-infrastructure`. This package exposes:
-[environment variables](specs/001-watchdog-slack-loop/contracts/environment.md) (`.env.example` is
-the source of truth), [mounted configuration files](specs/001-watchdog-slack-loop/contracts/config-files.md),
-the [container image](specs/001-watchdog-slack-loop/contracts/container.md) and
-[exit codes](specs/001-watchdog-slack-loop/contracts/exit-codes.md).
+Deployment manifests live in `medic-infrastructure`. Everything this package promises to the outside
+is written down under [`specs/001-watchdog-slack-loop/contracts/`](specs/001-watchdog-slack-loop/contracts):
+
+| Contract | Covers |
+|---|---|
+| [`environment.md`](specs/001-watchdog-slack-loop/contracts/environment.md) | environment variables; `.env.example` is the source of truth |
+| [`config-files.md`](specs/001-watchdog-slack-loop/contracts/config-files.md) | the mounted policy files `projects.yaml`, `dashboards.yaml`, `thresholds.yaml`, `alerts.yaml` |
+| [`container.md`](specs/001-watchdog-slack-loop/contracts/container.md) | the image: fixed non-root user, read-only root filesystem, writable `/tmp` and `/data`, entrypoint |
+| [`cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md), [`exit-codes.md`](specs/001-watchdog-slack-loop/contracts/exit-codes.md) | commands, flags, streams and exit codes |
+| [`run-directory.md`](specs/001-watchdog-slack-loop/contracts/run-directory.md) | every file a run writes, which stage reads it, and what retention removes |
+| [`slack-payload.md`](specs/001-watchdog-slack-loop/contracts/slack-payload.md) | the exact Slack payload: parent, thread replies, metadata events, image |
+| [`agent-definition.md`](specs/001-watchdog-slack-loop/contracts/agent-definition.md) | the agent definition both engines run, its tools and structured outputs |
+| [`brief.schema.json`](specs/001-watchdog-slack-loop/contracts/brief.schema.json), [`findings.schema.json`](specs/001-watchdog-slack-loop/contracts/findings.schema.json) | the JSON Schemas of the model's two outputs |
 
 ## Dependencies
 
@@ -143,14 +156,45 @@ Every runtime dependency carries a one-line justification (constitution V):
 
 ## Smoke tests
 
-Scripts under `smoke/` need real credentials and are not part of `npm test`; see the quickstart.
-`smoke/agent-parity.js --date <date> --project <host>` replays one stored project through both engines
-and fails on any difference in items or gate verdicts.
+Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour only a live system shows
+([`research.md`](specs/001-watchdog-slack-loop/research.md), S-1 to S-16). Run them with
+`node --env-file=.env smoke/<name>.js`.
+
+| Script | Needs | Confirms |
+|---|---|---|
+| `render.js [--out <png>]` | a browser: Playwright's, or `AGENT_WATCHDOG_CHROMIUM_PATH` | S-11: the report and its image render, writing under `TMPDIR` only |
+| `container.js [--no-build] [--image <tag>]` | Docker | `contracts/container.md`: the image builds, `--version` prints the package version, `check` of an unreachable host exits 69, the report renders with `--read-only --tmpfs /tmp` |
+| `langfuse.js` | Langfuse credentials | S-9: one trace with a stage span and a generation, `getTraceUrl`, `forceFlush` completing before exit |
+| `grafana.js [--project <host>] [--hosts] [--alerts]` | a Viewer token for the hosted watchdog | S-6, S-7: datasource proxy queries and dashboards; `--hosts` host discovery, `--alerts` the alert rules endpoint |
+| `slack.js [--yes]` | the Slack app | S-8: private image upload referenced by `slack_file.id`, metadata and read-back; `--yes` posts a brief with a group bullet and its sub-bullets (S-16) |
+| `agent-sdk.js` | model credentials | S-1, S-2, S-4, S-5: structured output on every turn, the Stop hook per turn, the committed schemas, hooks |
+| `agent-parity.js --date <date> --project <host>` | a stored run and model credentials | S-3, S-10: both engines agree on items and gate verdicts |
 
 ## Releasing
 
-semantic-release from this directory with tags `agent-watchdog-v<version>`; the release builds and
-publishes the container image. See `release.config.js`.
+[`.github/workflows/agent-watchdog-release.yml`](../../.github/workflows/agent-watchdog-release.yml)
+runs semantic-release from this directory on a push to `main` that touches the package.
+`release.config.js` extends `semantic-release-monorepo`, which scopes the commit analysis to this
+package; tags are `agent-watchdog-v<version>`, `@semantic-release/exec` builds and pushes the container
+image, and the changelog, git and github plugins do the rest. The repository's root `release.yml`
+releases the root package and is not involved.
+
+The dry run recorded on 2026-09-20 (research.md R-12) ran against a local bare clone carrying the
+feature branch, because semantic-release insists that the release branch exist on the remote:
+
+```sh
+git clone --bare <repo> /tmp/remote.git && git clone -b <branch> /tmp/remote.git /tmp/work
+cd /tmp/work/packages/agent-watchdog && ln -s <repo>/packages/agent-watchdog/node_modules node_modules
+npx semantic-release --dry-run --no-ci --repository-url file:///tmp/remote.git --branches <branch> \
+  --plugins @semantic-release/commit-analyzer,@semantic-release/release-notes-generator
+```
+
+Result: `Found 25 commits for package @medic/agent-watchdog since last release`, ten `feat` commits
+analysed as a minor release, next version 1.0.0, tag `agent-watchdog-v1.0.0`, release notes listing this
+package's commits only. The scoping works, so the R-12 fallback (plain semantic-release behind a
+`paths:` filter) is not needed; the workflow keeps a `paths:` filter only to avoid no-op runs. The
+changelog, exec, git and github plugins need `GITHUB_TOKEN`, Docker and a push to `main`, so they were
+not part of the dry run.
 
 ## License
 

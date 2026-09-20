@@ -341,14 +341,14 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 **Purpose**: Operations commands, performance, security, container proof, release tooling and documentation.
 
-- [ ] T103 [P] Implement the `purge` command in `src/cli/commands/purge.js` (`--dry-run` lists removals) on `src/store/retention.js`, and run it implicitly at the start of `run`
-- [ ] T104 [P] Write `test/perf/fifty-projects.spec.js`: a synthetic fifty-project run with recorded findings completes within `AGENT_WATCHDOG_RUN_TIMEOUT_MS` at concurrency 3 and projects without candidates make no engine call (Edge Cases, FR-013)
-- [ ] T105 [P] Write `scripts/scan-secrets.js` and `test/scripts/scan-secrets.spec.js` applying the gate's secret and personal-data patterns to the repository and to every run's artefacts, and add it to `.github/workflows/agent-watchdog.yml` and to the end of `src/cli/commands/run.js` (SC-010)
-- [ ] T106 [P] Write `smoke/render.js` (S-11) and `smoke/container.js`: `docker run --read-only --tmpfs /tmp` renders a fixture report, `--version` prints the version, `check https://example.invalid` exits 69
-- [ ] T107 [P] Write `smoke/langfuse.js` (S-9) confirming `getTraceUrl` opens the run's trace and `forceFlush` completes before exit
-- [ ] T108 [P] Run `semantic-release --dry-run` from the package directory and record the result in `README.md` "Releasing"; if path scoping fails, switch `release.config.js` to the workflow-filtered fallback from research.md R-12 (S-12)
-- [ ] T109 [P] Add `.github/pull_request_template.md` items for dependency justification, replay diff on prompt or skill changes, and `AGENTS.md` and `README.md` updates (constitution Quality Gates)
-- [ ] T110 Update `README.md` and `AGENTS.md` with the final commands, stage list, exit codes, contracts index and smoke-test instructions; confirm `AGENTS.md` agrees with `.specify/memory/constitution.md`
+- [X] T103 [P] Implement the `purge` command in `src/cli/commands/purge.js` (`--dry-run` lists removals) on `src/store/retention.js`, and run it implicitly at the start of `run`
+- [X] T104 [P] Write `test/perf/fifty-projects.spec.js`: a synthetic fifty-project run with recorded findings completes within `AGENT_WATCHDOG_RUN_TIMEOUT_MS` at concurrency 3 and projects without candidates make no engine call (Edge Cases, FR-013)
+- [X] T105 [P] Write `scripts/scan-secrets.js` and `test/scripts/scan-secrets.spec.js` applying the gate's secret and personal-data patterns to the repository and to every run's artefacts, and add it to `.github/workflows/agent-watchdog.yml` and to the end of `src/cli/commands/run.js` (SC-010)
+- [X] T106 [P] Write `smoke/render.js` (S-11) and `smoke/container.js`: `docker run --read-only --tmpfs /tmp` renders a fixture report, `--version` prints the version, `check https://example.invalid` exits 69
+- [X] T107 [P] Write `smoke/langfuse.js` (S-9) confirming `getTraceUrl` opens the run's trace and `forceFlush` completes before exit
+- [X] T108 [P] Run `semantic-release --dry-run` from the package directory and record the result in `README.md` "Releasing"; if path scoping fails, switch `release.config.js` to the workflow-filtered fallback from research.md R-12 (S-12)
+- [X] T109 [P] Add `.github/pull_request_template.md` items for dependency justification, replay diff on prompt or skill changes, and `AGENTS.md` and `README.md` updates (constitution Quality Gates)
+- [X] T110 Update `README.md` and `AGENTS.md` with the final commands, stage list, exit codes, contracts index and smoke-test instructions; confirm `AGENTS.md` agrees with `.specify/memory/constitution.md`
 - [ ] T111 Run quickstart.md steps 1 to 10 against a real watchdog in preview mode, fix what fails, and confirm `npm run lint` reports zero warnings and coverage is at or above `main`
 
 ---
@@ -474,3 +474,23 @@ US3 can proceed in parallel, then US4, US5 and US6.
   alert-group reply is tallied for the digest only; `readOutcomes` leaves `alert_episode` records out so the
   calibration report is unchanged; the fixture generator preserves the recorded gate and item expectations a
   committed `expected.json` already carries.
+- Polish decisions (2026-09-20): the secret scan (`src/verify/scan.js`, `scripts/scan-secrets.js`) reuses the gate's
+  patterns; a credential-shaped token shorter than 24 characters or ending in a placeholder word (`xoxb-test`) is a
+  test value, lock files are skipped, and a deliberate sample in a test carries `// scan-secrets:allow` on its line;
+  the repository scan looks for secrets and e-mail addresses, the run-artefact scan also for phone numbers; the
+  end of every `run` scans its own artefacts and logs `run.scan_findings` (file, line, pattern, masked excerpt,
+  never the value) without failing the run (constitution VI); no new run-directory file was added for it. The
+  fifty-project perf spec asserts the FR-013 property per project (a session exists exactly when candidates do)
+  rather than a fixed quiet count, because the fake Grafana seeds per-host noise and a few quiet mirrors cross the
+  deviation rule by chance. The PR template lives at the repository root (`.github/pull_request_template.md`, the
+  only place GitHub reads it) with a package-specific section. The semantic-release dry run (T108) succeeded
+  against a local bare clone (README "Releasing"); it also showed the root `release.yml` releases the root package
+  from the repository root, so `.github/workflows/agent-watchdog-release.yml` was added to run semantic-release
+  from this directory. The container smoke exposed a committed `package-lock.json` that
+  lacked the Agent SDK's peer dependencies (`@anthropic-ai/sdk` and its tree), so `npm ci` failed in the image and
+  on a clean checkout, which CI would have hit too; the lock was regenerated with `npm install --package-lock-only`
+  and a clean install from it verified. T111 remains open for its live part: quickstart steps 1 and 2 pass here (lint zero warnings,
+  780 tests, `replay:eval` ok) and so does the credential-free part of step 10 through `smoke/container.js`
+  (image builds at 1.38 GB, `--version`, `check` exit 69, S-11 render with a read-only root); steps 3 to 9 and the
+  preview run of step 10 need the hosted watchdog, Slack, model and Langfuse credentials, and `main` carries no
+  agent-watchdog coverage yet to compare against (CI will).

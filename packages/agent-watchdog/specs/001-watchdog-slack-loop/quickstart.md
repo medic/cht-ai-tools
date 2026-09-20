@@ -138,7 +138,9 @@ docker run --rm --read-only --tmpfs /tmp -v "$PWD/.data:/data" -v "$PWD/config/l
 
 Expected: the run behaves as in step 3 inside the image with a read-only root filesystem; the
 image runs as the fixed non-root user; `docker run --rm agent-watchdog:dev --version` prints the
-package version.
+package version. `node smoke/container.js` runs the credential-free part of this step in one go: the
+build, `--version`, `check https://example.invalid` exiting 69, and the report rendering with
+`--read-only --tmpfs /tmp`.
 
 ## 11. Publishing for real (operators only)
 

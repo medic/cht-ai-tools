@@ -15,6 +15,7 @@ const { appendOutcomes } = require('../../corpus/outcomes');
 const { readMemory } = require('../../rollup/memory');
 const { previousItemCounts } = require('../../rollup/history');
 const { loadPatternCards } = require('../../corpus/cards');
+const { scanRunArtefacts } = require('../../verify/scan');
 const pkg = require('../../../package.json');
 
 const todayUtc = (now) => now.toISOString().slice(0, 10);
@@ -431,8 +432,18 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
     }];
   }
   await runDir.updateRun(patch);
+  // SC-010: every artefact the run wrote is scanned for secret and personal-data shapes. A finding is flagged with
+  // its file, line and pattern (never the value) for the operator; the run itself is not failed for it
+  // (constitution VI: flag, do not act).
+  const scanFindings = scanRunArtefacts(runDir.root);
+  if (scanFindings.length) {
+    log.warn('run.scan_findings', { count: scanFindings.length, findings: scanFindings.slice(0, 20) });
+  }
   await tracer.finish({ output: { status: status || 'stage', cost_usd: ctx.costSoFar } });
-  log.info('run.finish', { status: status || 'stage', duration_ms: patch.duration_ms, cost_usd: ctx.costSoFar });
+  log.info('run.finish', {
+    status: status || 'stage', duration_ms: patch.duration_ms, cost_usd: ctx.costSoFar,
+    scan_findings: scanFindings.length,
+  });
 
   if (mode === 'preview' && publishResult && publishResult.payload) {
     writeResult(stdout, publishResult.payload);

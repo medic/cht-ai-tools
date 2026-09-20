@@ -9,7 +9,11 @@ describe('verify/checks/secrets_absent', () => {
   });
 
   it('fails on Slack, Anthropic and Grafana token shapes and bearer strings anywhere in the document', () => {
-    for (const secret of ['xoxb-123-abc', 'sk-ant-api03-xyz', 'glsa_abcDEF123', 'Bearer abcdefghijklmnop1234']) {
+    const secrets = [
+      'xoxb-123-abc', 'sk-ant-api03-xyz', 'glsa_abcDEF123',
+      'Bearer abcdefghijklmnop1234', // scan-secrets:allow
+    ];
+    for (const secret of secrets) {
       const ctx = baseContext();
       ctx.findings.items[0].suggested_check = `use ${secret} to check`;
       const result = check(ctx);

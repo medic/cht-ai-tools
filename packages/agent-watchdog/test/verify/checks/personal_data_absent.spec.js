@@ -11,7 +11,7 @@ describe('verify/checks/personal_data_absent', () => {
 
   it('fails on e-mail addresses and phone numbers', () => {
     const ctx = baseContext();
-    ctx.findings.items[0].why_now = 'ask ops@medic.org';
+    ctx.findings.items[0].why_now = 'ask ops@medic.org'; // scan-secrets:allow
     expect(check(ctx).reasons[0]).to.include('e-mail');
     const ctx2 = baseContext();
     ctx2.findings.items[0].suggested_check = 'call +254 712 345 678';
