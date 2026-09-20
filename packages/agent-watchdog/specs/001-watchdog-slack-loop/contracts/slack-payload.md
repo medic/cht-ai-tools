@@ -67,7 +67,7 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
   "image": { "filename": "brief-2026-09-19.png", "alt_text": "…", "path": "rollup/brief.png", "slack_file_id": null },
   "replies": [
     { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } },
-    { "alert_key": "MoH Nepal/backlog", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.alerts", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "group": "MoH Nepal", "category": "backlog", "firing": 12 } } }
+    { "alert_key": "North Programme/backlog", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.alerts", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "group": "North Programme", "category": "backlog", "firing": 12 } } }
   ],
   "digest": { "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.feedback_digest", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "acknowledged": 3 } }, "acknowledged": [ "<feedback_id>" ], "reactions": [ { "source_ts": "1700000000.000100", "name": "eyes" } ] }
 }

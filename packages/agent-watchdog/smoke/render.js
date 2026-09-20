@@ -18,18 +18,19 @@ const itemId = (n) => String(n).repeat(12);
 const brief = {
   run_id: RUN_ID,
   kind: 'brief',
-  headline: 'Sentinel backlog tripled on two Nepal projects; one alert stale',
+  headline: 'Sentinel backlog tripled on two North projects; one alert stale',
   bullets: [
     {
-      kind: 'alerts', item_id: null, group: 'MoH Nepal', alert_key: 'MoH Nepal',
-      text: 'MoH Nepal alerts: 3 firing, 1 stale for more than 14 days',
+      kind: 'alerts', item_id: null, group: 'North Programme', alert_key: 'North Programme',
+      text: 'North Programme alerts: 3 firing, 1 stale for more than 14 days',
       children: [{ item_id: null, text: 'backlog: 3 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale' }],
     },
     {
-      kind: 'group', item_id: null, group: 'MoH Nepal', alert_key: null, text: 'MoH Nepal: 2 projects with issues',
+      kind: 'group', item_id: null, group: 'North Programme', alert_key: null,
+      text: 'North Programme: 2 projects with issues',
       children: [
-        { item_id: itemId(1), text: 'nepal-a.example.org cht_sentinel_backlog_count: 912 now vs 300 yesterday' },
-        { item_id: itemId(2), text: 'nepal-b.example.org up{job="cht"}: 0 now vs 1 yesterday' },
+        { item_id: itemId(1), text: 'north-a.example.org cht_sentinel_backlog_count: 912 now vs 300 yesterday' },
+        { item_id: itemId(2), text: 'north-b.example.org up{job="cht"}: 0 now vs 1 yesterday' },
       ],
     },
     { kind: 'item', item_id: itemId(3), group: 'Other', alert_key: null, children: [],
@@ -55,8 +56,8 @@ const item = (id, host, metric, value, before) => ({
   reference_urls: [], pass_history: [],
 });
 const items = [
-  item(1, 'nepal-a.example.org', 'cht_sentinel_backlog_count', 912, 300),
-  item(2, 'nepal-b.example.org', 'up{job="cht"}', 0, 1),
+  item(1, 'north-a.example.org', 'cht_sentinel_backlog_count', 912, 300),
+  item(2, 'north-b.example.org', 'up{job="cht"}', 0, 1),
   item(3, 'alpha.example.org', 'cht_conflict_count', 61, 15),
 ];
 const windowsByMetric = new Map(items.map((i) => [`${i.project_url}|${i.metric}`, [300, 320, 500, 700, 912]]));

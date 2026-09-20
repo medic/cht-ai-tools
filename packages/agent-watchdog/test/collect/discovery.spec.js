@@ -265,17 +265,17 @@ describe('collect/discovery', () => {
 
 describe('collect/discovery: programme groups and ignored hosts (FR-068, User Story 9)', () => {
   const aliases = {
-    'nepal-a.example.org': 'alpha.example.org',
-    'nepal-b.example.org': 'gamma.example.org',
-    'echis-a.example.org': 'alpha.example.org',
+    'north-a.example.org': 'alpha.example.org',
+    'north-b.example.org': 'gamma.example.org',
+    'south-a.example.org': 'alpha.example.org',
     'cht-dev.example.org': 'alpha.example.org',
     'cht.dev.example.org': 'beta.example.org',
   };
   const groupedPolicy = () => {
     const policy = policyWith({});
     policy.projects.groups = [
-      { label: 'MoH Nepal', host_patterns: ['*nepal*'] },
-      { label: 'eCHIS Kenya', host_patterns: ['*echis*'] },
+      { label: 'North Programme', host_patterns: ['*north*'] },
+      { label: 'South Programme', host_patterns: ['*south*'] },
     ];
     policy.projects.ignore = ['*.dev.*', '*-dev.*'];
     return policy;
@@ -296,10 +296,10 @@ describe('collect/discovery: programme groups and ignored hosts (FR-068, User St
     expect(groups).to.deep.equal({
       'alpha.example.org': 'Other',
       'beta.example.org': 'Other',
-      'echis-a.example.org': 'eCHIS Kenya',
+      'south-a.example.org': 'South Programme',
       'gamma.example.org': 'Other',
-      'nepal-a.example.org': 'MoH Nepal',
-      'nepal-b.example.org': 'MoH Nepal',
+      'north-a.example.org': 'North Programme',
+      'north-b.example.org': 'North Programme',
     });
     for (const project of discovery.projects) {
       expect(() => schemas.Project.parse(project)).to.not.throw();
@@ -308,8 +308,8 @@ describe('collect/discovery: programme groups and ignored hosts (FR-068, User St
 
   it('lists the groups with their hosts, Other included, and the ignored hosts with the pattern that matched', () => {
     expect(discovery.groups).to.deep.equal([
-      { label: 'MoH Nepal', hosts: ['nepal-a.example.org', 'nepal-b.example.org'] },
-      { label: 'eCHIS Kenya', hosts: ['echis-a.example.org'] },
+      { label: 'North Programme', hosts: ['north-a.example.org', 'north-b.example.org'] },
+      { label: 'South Programme', hosts: ['south-a.example.org'] },
       { label: 'Other', hosts: ['alpha.example.org', 'beta.example.org', 'gamma.example.org'] },
     ]);
     expect(discovery.ignored).to.deep.equal([

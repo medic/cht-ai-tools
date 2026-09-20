@@ -119,7 +119,7 @@ describe('agent/prompt-assembly', () => {
 
 describe('agent/prompt-assembly: firing alerts in the pass prompt (FR-067, User Story 8)', () => {
   const definition = loadDefinition({ paths: PACKAGE_PATHS, env });
-  const project = { url: 'https://nepal-a.example.org', slug: 'nepal-a-example-org', host: 'nepal-a.example.org' };
+  const project = { url: 'https://north-a.example.org', slug: 'north-a-example-org', host: 'north-a.example.org' };
   const alerts = [{
     title: 'Sentinel Backlog', category: 'backlog', importance: 'high', started_at: '2026-09-17T20:00:00Z',
     days_firing: 0, stale: false, new: true, value: '<script>1200</script>',

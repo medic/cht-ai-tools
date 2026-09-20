@@ -279,7 +279,7 @@ adds nothing.
 
 1. **Given** alerts are firing when the run executes, **When** the brief is composed, **Then** it
    states per project group how many alerts fire, grouped by category, with the oldest start and a
-   link to the filtered alert list, for example "MoH-Nepal alerts: 15 firing, 12 about disk usage,
+   link to the filtered alert list, for example "North Programme alerts: 15 firing, 12 about disk usage,
    3 stale for more than 14 days".
 2. **Given** an alert has been firing longer than the configured staleness threshold, **When**
    the brief is composed, **Then** it is marked stale and counted separately from new and
@@ -300,9 +300,10 @@ adds nothing.
 
 ### User Story 9 - Grouped briefing for programmes (Priority: P2)
 
-Medic's hosted watchdog monitors projects that belong to programmes, today eCHIS Kenya and MoH
-Nepal, plus development instances nobody wants in the brief. A reader wants the body to say
-"Nepal: 5 projects with issues" with one line per project underneath, and never to see a `.dev`
+Medic's hosted watchdog monitors projects that belong to programmes, for example a national
+community health programme and a ministry deployment, plus development instances nobody wants in
+the brief. A reader wants the body to say
+"North: 5 projects with issues" with one line per project underneath, and never to see a `.dev`
 host.
 
 **Why this priority**: with dozens of projects a flat list of items hides the programme-level
@@ -316,7 +317,7 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 **Acceptance Scenarios**:
 
 1. **Given** `projects.yaml` declares groups by host pattern, **When** several projects of one
-   group have flagged items, **Then** the body shows one bullet for the group, "Nepal: 5 projects
+   group have flagged items, **Then** the body shows one bullet for the group, "North: 5 projects
    with issues", with one sub-bullet per project item in rank order, and each project item still
    has its own thread reply.
 2. **Given** a host matches the ignore list, **When** the run executes, **Then** it is discovered
@@ -781,7 +782,7 @@ Configuration
 - **Brief**: the published post for a run: headline, up to five bullets each with optional
   sub-bullets, image, footer.
 - **Thread Reply**: the per-item message that carries reactions; alert groups have one too.
-- **Project Group**: a programme such as MoH Nepal or eCHIS Kenya, declared by host patterns in
+- **Project Group**: a programme such as North Programme or South Programme, declared by host patterns in
   the project annotations, plus "Other" for unmatched hosts and "Watchdog" for alerts without a
   project.
 - **Alert Rule**: a Grafana-managed rule provisioned on the hosted watchdog, with the category and
@@ -982,7 +983,7 @@ Configuration
   and category, links to the filtered alert list, and keeps a durable episode per instance with
   its correlations (FR-064 to FR-067, FR-070).
 - Q: How are programmes and development instances handled? → A: `projects.yaml` declares groups
-  by host pattern (placeholders for MoH Nepal and eCHIS Kenya until the real patterns are set in
+  by host pattern (placeholders for North Programme and South Programme until the real patterns are set in
   medic-infrastructure) and an ignore list (`*.dev.*`, `*-dev.*`); unmatched hosts are "Other";
   ignored hosts are neither analysed nor posted (FR-068).
 - Q: How is the bot identified in Slack? → A: reaffirmed on 2026-09-19: an internal Slack app

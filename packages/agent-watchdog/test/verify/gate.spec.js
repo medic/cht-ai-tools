@@ -128,7 +128,7 @@ describe('verify/gate', () => {
     ctx.items = ids.map((id) => ({ ...ctx.items[0], item_id: id }));
     const layout = {
       slots: [
-        { slot: 1, kind: 'group', group: 'MoH Nepal', item_ids: ids.slice(0, 6), one_line: true },
+        { slot: 1, kind: 'group', group: 'North Programme', item_ids: ids.slice(0, 6), one_line: true },
         { slot: 2, kind: 'item', group: 'Other', item_ids: [ids[6]], one_line: false },
       ],
       body_items: ids, thread_items: [], one_line: ids.slice(0, 6),

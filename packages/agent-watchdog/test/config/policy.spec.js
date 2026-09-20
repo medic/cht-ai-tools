@@ -114,7 +114,7 @@ describe('config/policy: programme groups and the ignore list (FR-068, User Stor
 
   it('ships placeholder groups and the development-instance ignore patterns as the package default', () => {
     const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
-    expect(policy.projects.groups.map((g) => g.label)).to.deep.equal(['MoH Nepal', 'eCHIS Kenya']);
+    expect(policy.projects.groups.map((g) => g.label)).to.deep.equal(['North Programme', 'South Programme']);
     expect(policy.projects.groups.every((g) => g.host_patterns.length > 0)).to.equal(true);
     expect(policy.projects.ignore).to.deep.equal(['*.dev.*', '*-dev.*']);
   });
@@ -122,21 +122,21 @@ describe('config/policy: programme groups and the ignore list (FR-068, User Stor
   it('loads groups and ignore from a deployment file and keeps the defaults and projects beside them', () => {
     fs.writeFileSync(path.join(dir, 'projects.yaml'), [
       'groups:',
-      '  - label: MoH Nepal',
-      "    host_patterns: ['*.moh-nepal.org', 'nepal-?.example.org']",
-      '  - label: eCHIS Kenya',
-      "    host_patterns: ['*echis*']",
+      '  - label: North Programme',
+      "    host_patterns: ['*.moh-north.org', 'north-?.example.org']",
+      '  - label: South Programme',
+      "    host_patterns: ['*south*']",
       "ignore: ['*.dev.*', 'sandbox-*']",
       'projects:',
-      '  nepal-a.example.org: { owner: hosting }',
+      '  north-a.example.org: { owner: hosting }',
     ].join('\n'));
     const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
     expect(policy.projects.groups).to.deep.equal([
-      { label: 'MoH Nepal', host_patterns: ['*.moh-nepal.org', 'nepal-?.example.org'] },
-      { label: 'eCHIS Kenya', host_patterns: ['*echis*'] },
+      { label: 'North Programme', host_patterns: ['*.moh-north.org', 'north-?.example.org'] },
+      { label: 'South Programme', host_patterns: ['*south*'] },
     ]);
     expect(policy.projects.ignore).to.deep.equal(['*.dev.*', 'sandbox-*']);
-    expect(policy.projects.projects['nepal-a.example.org'].owner).to.equal('hosting');
+    expect(policy.projects.projects['north-a.example.org'].owner).to.equal('hosting');
     expect(policy.projects.defaults.expected_load_windows).to.deep.equal([]);
   });
 
@@ -176,11 +176,11 @@ describe('config/policy: programme groups and the ignore list (FR-068, User Stor
     expect(matchesGlob('cht.dev.example.org', '*.dev.*')).to.equal(true);
     expect(matchesGlob('cht-dev.example.org', '*.dev.*')).to.equal(false);
     expect(matchesGlob('cht-dev.example.org', '*-dev.*')).to.equal(true);
-    expect(matchesGlob('nepal-a.example.org', 'nepal-?.example.org')).to.equal(true);
-    expect(matchesGlob('nepal-ab.example.org', 'nepal-?.example.org')).to.equal(false);
-    expect(matchesGlob('nepal.example.org', '*nepal*')).to.equal(true);
-    expect(matchesGlob('xnepalx.example.org:8443', '*nepal*')).to.equal(true);
-    expect(matchesGlob('kenya.example.org', '*nepal*')).to.equal(false);
+    expect(matchesGlob('north-a.example.org', 'north-?.example.org')).to.equal(true);
+    expect(matchesGlob('north-ab.example.org', 'north-?.example.org')).to.equal(false);
+    expect(matchesGlob('north.example.org', '*north*')).to.equal(true);
+    expect(matchesGlob('xnorthx.example.org:8443', '*north*')).to.equal(true);
+    expect(matchesGlob('kenya.example.org', '*north*')).to.equal(false);
   });
 });
 

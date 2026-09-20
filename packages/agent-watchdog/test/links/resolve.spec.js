@@ -93,12 +93,12 @@ describe('links/resolve: alert-list links resolve against the collected rules an
   const { buildAlertGroupLinks } = require('../../src/links/build');
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
   const group = alertGroupOf([
-    classified('sentinel', 'nepal-a.example.org'), classified('outbound', 'nepal-b.example.org'),
+    classified('sentinel', 'north-a.example.org'), classified('outbound', 'north-b.example.org'),
   ]);
   const grafanaUrl = 'https://watchdog.example.org';
   const alerts = {
     rules: [{ title: 'Sentinel Backlog' }, { title: 'Outbound Push Backlog' }],
-    instances: [{ host: 'nepal-a.example.org' }, { host: 'nepal-b.example.org' }],
+    instances: [{ host: 'north-a.example.org' }, { host: 'north-b.example.org' }],
   };
 
   it('accepts links whose rule titles and hosts were collected and rejects the rest, without a request', async () => {

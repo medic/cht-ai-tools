@@ -49,23 +49,24 @@ describe('feedback/match', () => {
 describe('feedback/match: notes about an alert group (User Story 8)', () => {
   const { matchAlertNote } = require('../../src/feedback/match');
   const groups = [
-    { alert_key: 'MoH Nepal/backlog', group: 'MoH Nepal', category: 'backlog' },
-    { alert_key: 'MoH Nepal/database', group: 'MoH Nepal', category: 'database' },
-    { alert_key: 'eCHIS Kenya/messaging', group: 'eCHIS Kenya', category: 'messaging' },
+    { alert_key: 'North Programme/backlog', group: 'North Programme', category: 'backlog' },
+    { alert_key: 'North Programme/database', group: 'North Programme', category: 'database' },
+    { alert_key: 'South Programme/messaging', group: 'South Programme', category: 'messaging' },
   ];
 
   it('matches a note naming the programme and the category, or the programme alone when it has one group', () => {
-    expect(matchAlertNote({ text: 'the MoH Nepal backlog alerts are a known migration', alertGroups: groups }))
-      .to.deep.equal({ alertKey: 'MoH Nepal/backlog' });
-    expect(matchAlertNote({ text: 'eCHIS Kenya alerts: telco outage until Friday', alertGroups: groups }))
-      .to.deep.equal({ alertKey: 'eCHIS Kenya/messaging' });
+    expect(matchAlertNote({ text: 'the North Programme backlog alerts are a known migration', alertGroups: groups }))
+      .to.deep.equal({ alertKey: 'North Programme/backlog' });
+    expect(matchAlertNote({ text: 'South Programme alerts: telco outage until Friday', alertGroups: groups }))
+      .to.deep.equal({ alertKey: 'South Programme/messaging' });
   });
 
   it('returns null when the programme is ambiguous, the note names no alerts, or nothing matches', () => {
-    expect(matchAlertNote({ text: 'MoH Nepal alerts are fine', alertGroups: groups }))
+    expect(matchAlertNote({ text: 'North Programme alerts are fine', alertGroups: groups }))
       .to.deep.equal({ alertKey: null });
-    expect(matchAlertNote({ text: 'MoH Nepal is fine', alertGroups: groups })).to.deep.equal({ alertKey: null });
+    expect(matchAlertNote({ text: 'North Programme is fine', alertGroups: groups })).to.deep.equal({ alertKey: null });
     expect(matchAlertNote({ text: 'nothing to see', alertGroups: groups })).to.deep.equal({ alertKey: null });
-    expect(matchAlertNote({ text: 'MoH Nepal backlog alerts', alertGroups: [] })).to.deep.equal({ alertKey: null });
+    expect(matchAlertNote({ text: 'North Programme backlog alerts', alertGroups: [] }))
+      .to.deep.equal({ alertKey: null });
   });
 });

@@ -29,7 +29,7 @@ describe('verify/checks/thread_order', () => {
   it('with a layout, rejects bullets whose item ids differ from the body items (FR-069)', () => {
     const ctx = withItems();
     ctx.layout = {
-      slots: [{ slot: 1, kind: 'group', group: 'MoH Nepal', item_ids: ['a', 'b', 'c'].map(id), one_line: true }],
+      slots: [{ slot: 1, kind: 'group', group: 'North Programme', item_ids: ['a', 'b', 'c'].map(id), one_line: true }],
       body_items: ['a', 'b', 'c'].map(id), thread_items: [id('d')], one_line: ['a', 'b', 'c'].map(id),
     };
     expect(check(ctx).status).to.equal('pass');

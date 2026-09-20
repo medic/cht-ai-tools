@@ -48,10 +48,10 @@ projects:
         note: Quarterly supervisor sync.
         cycle_days: 90
 groups:                                 # programmes (FR-068); first matching pattern wins, in file order
-  - label: MoH Nepal                    # PLACEHOLDER patterns until the hosting team sets the real ones
-    host_patterns: ['*nepal*']
-  - label: eCHIS Kenya                  # PLACEHOLDER
-    host_patterns: ['*echis*']
+  - label: North Programme                    # PLACEHOLDER patterns until the hosting team sets the real ones
+    host_patterns: ['*north*']
+  - label: South Programme                  # PLACEHOLDER
+    host_patterns: ['*south*']
 ignore:                                 # development instances: discovered and counted, never analysed or posted
   - '*.dev.*'
   - '*-dev.*'

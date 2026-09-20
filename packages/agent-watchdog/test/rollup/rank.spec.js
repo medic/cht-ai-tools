@@ -24,13 +24,13 @@ describe('rollup/rank', () => {
   });
 
   it('places items of one programme in a shared slot when groupOf names their group (FR-069)', () => {
-    const groups = { 'https://nepal-a.example.org': 'MoH Nepal', 'https://nepal-b.example.org': 'MoH Nepal' };
+    const groups = { 'https://north-a.example.org': 'North Programme', 'https://north-b.example.org': 'North Programme' };
     const groupOf = (url) => groups[url] || 'Other';
     const ranked = rankItems({
       items: [
-        makeItem({ project_url: 'https://nepal-a.example.org', confidence: 0.9 }),
+        makeItem({ project_url: 'https://north-a.example.org', confidence: 0.9 }),
         makeItem({ project_url: 'https://alpha.example.org', confidence: 0.8 }),
-        makeItem({ project_url: 'https://nepal-b.example.org', confidence: 0.7 }),
+        makeItem({ project_url: 'https://north-b.example.org', confidence: 0.7 }),
       ],
       groupOf,
     });

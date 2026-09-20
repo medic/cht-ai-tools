@@ -241,27 +241,27 @@ const alertsDay = {
       interval: 600,
       rules: [
         alertRule('ot6lYCYVz', 'DB Fragmentation', '1h', 13, [
-          firing('nepal-a.example.org', '2026-09-16T00:00:00Z', { labels: { db: 'medic' }, value: '9.2' }),
-          firing('nepal-b.example.org', '2026-08-01T00:00:00Z', { labels: { db: 'medic' }, value: '11.4' }),
-          firing('nepal-c.example.org', '2026-09-17T00:00:00Z', { labels: { db: 'sentinel' }, value: '8.7' }),
+          firing('north-a.example.org', '2026-09-16T00:00:00Z', { labels: { db: 'medic' }, value: '9.2' }),
+          firing('north-b.example.org', '2026-08-01T00:00:00Z', { labels: { db: 'medic' }, value: '11.4' }),
+          firing('north-c.example.org', '2026-09-17T00:00:00Z', { labels: { db: 'sentinel' }, value: '8.7' }),
         ]),
         alertRule('KgP8PjY4k', 'Outbound Push Backlog', '1h', 2, [
-          firing('nepal-a.example.org', '2026-09-17T22:00:00Z', { value: '48' }),
-          firing('nepal-b.example.org', '2026-08-25T00:00:00Z', { value: '310' }),
+          firing('north-a.example.org', '2026-09-17T22:00:00Z', { value: '48' }),
+          firing('north-b.example.org', '2026-08-25T00:00:00Z', { value: '310' }),
         ]),
         alertRule('FzCrECYVk', 'Sentinel Backlog', '1h', 3, [
-          firing('nepal-a.example.org', '2026-09-17T20:00:00Z'),
-          firing('nepal-b.example.org', '2026-08-20T00:00:00Z', { value: '4400' }),
-          firing('nepal-c.example.org', '2026-09-18T03:00:00Z', { until: '2026-09-19T00:00:00Z', value: '900' }),
+          firing('north-a.example.org', '2026-09-17T20:00:00Z'),
+          firing('north-b.example.org', '2026-08-20T00:00:00Z', { value: '4400' }),
+          firing('north-c.example.org', '2026-09-18T03:00:00Z', { until: '2026-09-19T00:00:00Z', value: '900' }),
           firing('cht-dev.example.org', '2026-09-17T10:00:00Z', { value: '700' }),
         ]),
         alertRule('hURoyjYVk', 'Server Time Accurate', '1h', 19, []),
         alertRule('ttAeECYVz', 'Users Over Replication Limit', '1h', 21, [
-          firing('echis-b.example.org', '2026-09-17T09:00:00Z', { value: '12' }),
-          { host: 'echis-a.example.org', labels: {}, state: 'Pending', active_at: '2026-09-18T05:50:00Z', value: '3' },
+          firing('south-b.example.org', '2026-09-17T09:00:00Z', { value: '12' }),
+          { host: 'south-a.example.org', labels: {}, state: 'Pending', active_at: '2026-09-18T05:50:00Z', value: '3' },
         ]),
         alertRule('diskUsage1', 'Disk Usage High', '1h', null, [
-          firing('nepal-a.example.org', '2026-09-17T12:00:00Z', { value: '91' }),
+          firing('north-a.example.org', '2026-09-17T12:00:00Z', { value: '91' }),
         ], { query: 'node_filesystem_avail_bytes' }),
       ],
     },
@@ -270,18 +270,18 @@ const alertsDay = {
       interval: 60,
       rules: [
         alertRule('Q1A-BjL4k', 'API Server Down', '30m', 16, [
-          firing('nepal-b.example.org', '2026-09-18T05:00:00Z', { value: '0' }),
+          firing('north-b.example.org', '2026-09-18T05:00:00Z', { value: '0' }),
         ]),
         alertRule('nBTZsCY4k', 'Client Feedback/Error Rate', '1m', 14, [
-          firing('echis-a.example.org', '2026-09-18T01:00:00Z', { value: '140' }),
-          firing('echis-b.example.org', '2026-09-19T02:00:00Z', { since: '2026-09-19T02:00:00Z', value: '95' }),
+          firing('south-a.example.org', '2026-09-18T01:00:00Z', { value: '140' }),
+          firing('south-b.example.org', '2026-09-19T02:00:00Z', { since: '2026-09-19T02:00:00Z', value: '95' }),
         ]),
         alertRule('gli1YjL4k', 'DB Conflicts Rate', '1m', 7, [
-          firing('nepal-c.example.org', '2026-09-18T04:00:00Z', { value: '61' }),
+          firing('north-c.example.org', '2026-09-18T04:00:00Z', { value: '61' }),
         ]),
         alertRule('0R-OsCYVz', 'Message Delivery Rate', '1m', 27, [
-          firing('echis-a.example.org', '2026-09-17T18:00:00Z', { value: '0.71' }),
-          firing('echis-b.example.org', '2026-09-17T18:00:00Z', { value: '0.64' }),
+          firing('south-a.example.org', '2026-09-17T18:00:00Z', { value: '0.71' }),
+          firing('south-b.example.org', '2026-09-17T18:00:00Z', { value: '0.64' }),
         ]),
       ],
     },

@@ -53,7 +53,7 @@ describe('model/schemas', () => {
     expect(() => schemas.Brief.parse({ ...brief, kind: 'degraded', degradation_notice: null })).to.throw();
     const child = (i) => ({ item_id: `${i}`.padStart(12, 'b'), text: 'sub' });
     const group = {
-      kind: 'group', item_id: null, group: 'MoH Nepal', text: 'MoH Nepal: 8 projects with issues',
+      kind: 'group', item_id: null, group: 'North Programme', text: 'North Programme: 8 projects with issues',
       children: [1, 2, 3, 4, 5, 6, 7, 8].map(child), alert_key: null,
     };
     expect(schemas.Brief.parse({ ...brief, bullets: [group] }).bullets[0].children).to.have.length(8);
@@ -65,8 +65,8 @@ describe('model/schemas', () => {
   });
 
   it('gives a Project its group label and an Item its body slot (FR-068, FR-069)', () => {
-    const project = schemas.Project.parse({ host: 'nepal-a.example.org', url: 'https://nepal-a.example.org', slug: 'nepal-a-example-org', configured: false, owner: null, notes: null, thresholds: null, expected_load_windows: [], cht_version: null, history_days: 3, scrape_targets: [], group: 'MoH Nepal' });
-    expect(project.group).to.equal('MoH Nepal');
+    const project = schemas.Project.parse({ host: 'north-a.example.org', url: 'https://north-a.example.org', slug: 'north-a-example-org', configured: false, owner: null, notes: null, thresholds: null, expected_load_windows: [], cht_version: null, history_days: 3, scrape_targets: [], group: 'North Programme' });
+    expect(project.group).to.equal('North Programme');
     const withoutGroup = { ...project };
     delete withoutGroup.group;
     expect(schemas.Project.parse(withoutGroup).group).to.equal('Other');
@@ -120,16 +120,16 @@ describe('model/schemas: alert entities (User Story 8)', () => {
     const ruleRecord = { ...rule('sentinel'), category: 'backlog', importance: 'high', known: true };
     expect(schemas.AlertRule.parse(ruleRecord).rule_uid).to.equal('FzCrECYVk');
     expect(() => schemas.AlertRule.parse({ ...ruleRecord, importance: 'urgent' })).to.throw();
-    const instance = classified('sentinel', 'nepal-a.example.org');
+    const instance = classified('sentinel', 'north-a.example.org');
     expect(schemas.AlertInstance.parse(instance).state).to.equal('firing');
     expect(() => schemas.AlertInstance.parse({ ...instance, state: 'Alerting' })).to.throw();
     expect(schemas.AlertInstance.parse(classified('watchdog', null)).host).to.equal(null);
     const group = groupOf([instance]);
-    expect(schemas.AlertGroup.parse(group).alert_key).to.equal('MoH Nepal/backlog');
+    expect(schemas.AlertGroup.parse(group).alert_key).to.equal('North Programme/backlog');
     const event = {
       episode_id: 'e'.repeat(12), event: 'opened', run_id: '2026-09-18', at: '2026-09-18T06:00:00Z',
       instance_id: instance.instance_id, rule_uid: instance.rule_uid, title: instance.title, host: instance.host,
-      project_url: instance.project_url, group: 'MoH Nepal', category: 'backlog', importance: 'high',
+      project_url: instance.project_url, group: 'North Programme', category: 'backlog', importance: 'high',
       started_at: instance.started_at, cleared_at: null, duration_hours: null,
       correlations: { expected_load_window_id: null, version_change: null, related_candidates: [], related_items: [] },
       explanation: null,
@@ -143,14 +143,16 @@ describe('model/schemas: alert entities (User Story 8)', () => {
   it('lets Feedback and a Thread Reply target an alert group by key', () => {
     const fb = {
       feedback_id: 'abcdefabcdef', date: '2026-09-18', run_id: '2026-09-17', target: 'alert_group', item_id: null,
-      alert_key: 'MoH Nepal/backlog', kind: 'reaction', verdict: 'down', note: null, horizon: null, author: 'U1',
+      alert_key: 'North Programme/backlog', kind: 'reaction', verdict: 'down', note: null, horizon: null, author: 'U1',
       matched: true, source_ts: '1.2',
     };
-    expect(schemas.Feedback.parse(fb).alert_key).to.equal('MoH Nepal/backlog');
+    expect(schemas.Feedback.parse(fb).alert_key).to.equal('North Programme/backlog');
     expect(() => schemas.Feedback.parse({ ...fb, alert_key: null })).to.throw();
     expect(schemas.Feedback.parse({ ...fb, target: 'brief', alert_key: null }).alert_key).to.equal(null);
-    const reply = { item_id: null, alert_key: 'MoH Nepal/backlog', run_id: '2026-09-18', text: 't', publication: null };
-    expect(schemas.ThreadReply.parse(reply).alert_key).to.equal('MoH Nepal/backlog');
+    const reply = {
+      item_id: null, alert_key: 'North Programme/backlog', run_id: '2026-09-18', text: 't', publication: null,
+    };
+    expect(schemas.ThreadReply.parse(reply).alert_key).to.equal('North Programme/backlog');
     expect(() => schemas.ThreadReply.parse({ ...reply, alert_key: null })).to.throw();
   });
 });

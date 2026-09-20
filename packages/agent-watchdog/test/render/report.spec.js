@@ -71,19 +71,20 @@ describe('render/report: sub-bullets (User Story 9)', () => {
   it('renders a group bullet with its sub-bullets as a nested list, escaped', () => {
     const grouped = makeBrief({
       bullets: [{
-        kind: 'group', item_id: null, group: 'MoH Nepal', text: 'MoH Nepal: 2 projects with issues', alert_key: null,
+        kind: 'group', item_id: null, group: 'North Programme', text: 'North Programme: 2 projects with issues',
+        alert_key: null,
         children: [
-          { item_id: 'a'.repeat(12), text: 'nepal-a backlog 912 vs 300 <b>' },
-          { item_id: 'b'.repeat(12), text: 'nepal-b backlog 400 vs 100' },
+          { item_id: 'a'.repeat(12), text: 'north-a backlog 912 vs 300 <b>' },
+          { item_id: 'b'.repeat(12), text: 'north-b backlog 400 vs 100' },
         ],
       }],
     });
     const html = renderReport({
       brief: grouped, items: [], windowsByMetric: new Map(), discovery: makeDiscovery(), runId: 'r',
     });
-    expect(html).to.include('MoH Nepal: 2 projects with issues');
+    expect(html).to.include('North Programme: 2 projects with issues');
     const sub = html.slice(html.indexOf('<ul class="sub">'), html.indexOf('</ul>', html.indexOf('<ul class="sub">')));
-    expect(sub).to.include('nepal-a backlog 912 vs 300 &lt;b&gt;').and.include('nepal-b backlog 400 vs 100');
+    expect(sub).to.include('north-a backlog 912 vs 300 &lt;b&gt;').and.include('north-b backlog 400 vs 100');
     expect(html).to.not.include('<b>');
   });
 });

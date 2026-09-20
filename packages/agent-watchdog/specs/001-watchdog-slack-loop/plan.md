@@ -258,7 +258,7 @@ added; the body limit is five bullets of two lines with eight one-line sub-bulle
 - **VIII**: still one internal audience; group labels and alert counts add nothing partner-facing.
 - **Complexity**: sub-bullets render as indented lines inside a bullet's `section` because Slack
   `mrkdwn` has no nested lists; the layout rule replaces the fixed three slots with five slots that
-  can hold sub-bullets, which is the smallest change that gives "Nepal: 5 projects with issues"
+  can hold sub-bullets, which is the smallest change that gives "North Programme: 5 projects with issues"
   its own line. Result: PASS.
 
 ### Revision 10 delta: valid queries for every panel expression (FR-071)

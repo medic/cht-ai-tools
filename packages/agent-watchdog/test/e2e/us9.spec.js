@@ -8,10 +8,10 @@ const { runCase } = require('./helpers');
 
 const GROUPED_PROJECTS_YAML = [
   'groups:',
-  '  - label: MoH Nepal',
-  "    host_patterns: ['*nepal*']",
-  '  - label: eCHIS Kenya',
-  "    host_patterns: ['*echis*']",
+  '  - label: North Programme',
+  "    host_patterns: ['*north*']",
+  '  - label: South Programme',
+  "    host_patterns: ['*south*']",
   "ignore: ['*-dev.*', '*.dev.*']",
   'projects: {}',
   '',
@@ -19,10 +19,10 @@ const GROUPED_PROJECTS_YAML = [
 
 // alpha carries the sentinel climb, gamma the down scrape target, beta is quiet (test/fixtures/runs/seeded-anomaly).
 const ALIASES = {
-  'nepal-a.example.org': 'alpha.example.org',
-  'nepal-b.example.org': 'gamma.example.org',
-  'nepal-c.example.org': 'alpha.example.org',
-  'echis-a.example.org': 'alpha.example.org',
+  'north-a.example.org': 'alpha.example.org',
+  'north-b.example.org': 'gamma.example.org',
+  'north-c.example.org': 'alpha.example.org',
+  'south-a.example.org': 'alpha.example.org',
   'cht-dev.example.org': 'alpha.example.org',
 };
 
@@ -60,8 +60,8 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       expect(discovery.projects.map((p) => p.host)).to.not.include('cht-dev.example.org');
       expect(discovery.ignored).to.deep.equal([{ host: 'cht-dev.example.org', pattern: '*-dev.*' }]);
       expect(discovery.groups).to.deep.equal([
-        { label: 'MoH Nepal', hosts: ['nepal-a.example.org', 'nepal-b.example.org', 'nepal-c.example.org'] },
-        { label: 'eCHIS Kenya', hosts: ['echis-a.example.org'] },
+        { label: 'North Programme', hosts: ['north-a.example.org', 'north-b.example.org', 'north-c.example.org'] },
+        { label: 'South Programme', hosts: ['south-a.example.org'] },
         { label: 'Other', hosts: ['alpha.example.org', 'beta.example.org', 'gamma.example.org'] },
       ]);
       // Never analysed: no project directory, no session, no cost.
@@ -69,25 +69,27 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       const summary = r.read('agent.summary.json');
       expect([...summary.projects_analysed, ...summary.projects_skipped]).to.not.include('https://cht-dev.example.org');
 
-      // The brief: a group bullet for MoH Nepal with one sub-bullet per flagged project, single items elsewhere.
+      // The brief: a group bullet for North Programme with one sub-bullet per flagged project, single items elsewhere.
       const brief = r.read('rollup/brief.json');
       expect(brief.kind).to.equal('brief');
       expect(brief.bullets.length).to.be.at.most(5);
-      const nepal = brief.bullets.find((b) => b.kind === 'group');
-      expect(nepal).to.include({ group: 'MoH Nepal', text: 'MoH Nepal: 3 projects with issues', item_id: null });
-      expect(nepal.children).to.have.length(3);
+      const north = brief.bullets.find((b) => b.kind === 'group');
+      expect(north).to.include({
+        group: 'North Programme', text: 'North Programme: 3 projects with issues', item_id: null,
+      });
+      expect(north.children).to.have.length(3);
       const ranked = r.read('rollup/items.ranked.json');
-      const nepalItems = ranked.filter((i) => /nepal/.test(i.project_url));
-      expect(nepal.children.map((c) => c.item_id).sort()).to.deep.equal(nepalItems.map((i) => i.item_id).sort());
-      for (const child of nepal.children) {
+      const northItems = ranked.filter((i) => /north/.test(i.project_url));
+      expect(north.children.map((c) => c.item_id).sort()).to.deep.equal(northItems.map((i) => i.item_id).sort());
+      for (const child of north.children) {
         expect(child.text.split('\n')).to.have.length(1);
-        expect(child.text).to.match(/nepal-[abc]\.example\.org/);
+        expect(child.text).to.match(/north-[abc]\.example\.org/);
       }
-      expect(nepalItems.every((i) => i.placement === 'body' && i.slot !== null)).to.equal(true);
-      const echis = brief.bullets.find((b) => b.group === 'eCHIS Kenya');
-      expect(echis).to.include({ kind: 'item' });
-      expect(echis.children).to.deep.equal([]);
-      expect(echis.text).to.include('echis-a.example.org');
+      expect(northItems.every((i) => i.placement === 'body' && i.slot !== null)).to.equal(true);
+      const south = brief.bullets.find((b) => b.group === 'South Programme');
+      expect(south).to.include({ kind: 'item' });
+      expect(south.children).to.deep.equal([]);
+      expect(south.text).to.include('south-a.example.org');
       const others = brief.bullets.filter((b) => b.group === 'Other');
       expect(others.map((b) => b.kind)).to.deep.equal(['item', 'item']);
       expect(others.map((b) => b.text).join(' ')).to.include('alpha.example.org').and.include('gamma.example.org');
@@ -96,7 +98,7 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       const layout = r.read('rollup/layout.json');
       expect(layout.slots).to.have.length(brief.bullets.length);
       expect(layout.slots.find((s) => s.kind === 'group').item_ids.sort())
-        .to.deep.equal(nepal.children.map((c) => c.item_id).sort());
+        .to.deep.equal(north.children.map((c) => c.item_id).sort());
       expect(layout.thread_items).to.deep.equal([]);
       expect(r.read('rollup/verification.draft1.json').outcome).to.equal('accepted');
 
@@ -105,15 +107,15 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       const payload = r.read('rollup/payload.json');
       const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
       expect(sections).to.have.length(brief.bullets.length);
-      const nepalSection = sections.find((s) => s.startsWith('MoH Nepal: 3 projects with issues'));
-      expect(nepalSection.split('\n').slice(1)).to.have.length(3);
-      expect(nepalSection.split('\n').slice(1).every((line) => line.startsWith('   ◦ '))).to.equal(true);
-      expect(payload.parent.text).to.include('• MoH Nepal: 3 projects with issues\n   ◦ ');
+      const northSection = sections.find((s) => s.startsWith('North Programme: 3 projects with issues'));
+      expect(northSection.split('\n').slice(1)).to.have.length(3);
+      expect(northSection.split('\n').slice(1).every((line) => line.startsWith('   ◦ '))).to.equal(true);
+      expect(payload.parent.text).to.include('• North Programme: 3 projects with issues\n   ◦ ');
       expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(ranked.map((i) => i.item_id).sort());
       expect(JSON.stringify(payload)).to.not.include('cht-dev');
       expect(r.slack.chat.postMessage.callCount).to.equal(1 + ranked.length);
       const report = fs.readFileSync(path.join(r.root, 'rollup', 'report.html'), 'utf8');
-      expect(report).to.include('MoH Nepal: 3 projects with issues');
+      expect(report).to.include('North Programme: 3 projects with issues');
       expect(report).to.include('<ul class="sub">');
       expect(report).to.not.include('cht-dev');
     });

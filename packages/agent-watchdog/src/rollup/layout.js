@@ -133,12 +133,12 @@ const slotByKey = (layoutDocument) => {
 
 const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
-/** The group line, written by code (FR-069): "MoH Nepal: 3 projects with issues". */
+/** The group line, written by code (FR-069): "North Programme: 3 projects with issues". */
 const groupBulletText = ({ label, projects, issues }) => (issues === projects
   ? `${label}: ${plural(projects, 'project')} with issues`
   : `${label}: ${plural(projects, 'project')} with ${plural(issues, 'issue')}`);
 
-/** The alerts line, written by code (FR-066): "MoH Nepal alerts: 15 firing, 3 stale for more than 14 days". */
+/** The alerts line, written by code (FR-066): "North Programme alerts: 15 firing, 3 stale for more than 14 days". */
 const alertsBulletText = ({ label, firing, stale, staleAfterDays }) => (stale > 0
   ? `${label} alerts: ${firing} firing, ${stale} stale for more than ${staleAfterDays} days`
   : `${label} alerts: ${firing} firing, none stale`);

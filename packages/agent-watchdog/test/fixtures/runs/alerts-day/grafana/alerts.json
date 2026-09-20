@@ -16,7 +16,7 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "nepal-a.example.org",
+              "host": "north-a.example.org",
               "labels": {
                 "db": "medic"
               },
@@ -25,7 +25,7 @@
               "value": "9.2"
             },
             {
-              "host": "nepal-b.example.org",
+              "host": "north-b.example.org",
               "labels": {
                 "db": "medic"
               },
@@ -34,7 +34,7 @@
               "value": "11.4"
             },
             {
-              "host": "nepal-c.example.org",
+              "host": "north-c.example.org",
               "labels": {
                 "db": "sentinel"
               },
@@ -53,14 +53,14 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "nepal-a.example.org",
+              "host": "north-a.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T22:00:00Z",
               "value": "48"
             },
             {
-              "host": "nepal-b.example.org",
+              "host": "north-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-08-25T00:00:00Z",
@@ -77,21 +77,21 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "nepal-a.example.org",
+              "host": "north-a.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T20:00:00Z",
               "value": "1200"
             },
             {
-              "host": "nepal-b.example.org",
+              "host": "north-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-08-20T00:00:00Z",
               "value": "4400"
             },
             {
-              "host": "nepal-c.example.org",
+              "host": "north-c.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-18T03:00:00Z",
@@ -125,14 +125,14 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "echis-b.example.org",
+              "host": "south-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T09:00:00Z",
               "value": "12"
             },
             {
-              "host": "echis-a.example.org",
+              "host": "south-a.example.org",
               "labels": {},
               "state": "Pending",
               "active_at": "2026-09-18T05:50:00Z",
@@ -149,7 +149,7 @@
           "query": "node_filesystem_avail_bytes",
           "instances": [
             {
-              "host": "nepal-a.example.org",
+              "host": "north-a.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T12:00:00Z",
@@ -172,7 +172,7 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "nepal-b.example.org",
+              "host": "north-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-18T05:00:00Z",
@@ -189,14 +189,14 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "echis-a.example.org",
+              "host": "south-a.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-18T01:00:00Z",
               "value": "140"
             },
             {
-              "host": "echis-b.example.org",
+              "host": "south-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-19T02:00:00Z",
@@ -214,7 +214,7 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "nepal-c.example.org",
+              "host": "north-c.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-18T04:00:00Z",
@@ -231,14 +231,14 @@
           "query": "vector(1)",
           "instances": [
             {
-              "host": "echis-a.example.org",
+              "host": "south-a.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T18:00:00Z",
               "value": "0.71"
             },
             {
-              "host": "echis-b.example.org",
+              "host": "south-b.example.org",
               "labels": {},
               "state": "Alerting",
               "active_at": "2026-09-17T18:00:00Z",

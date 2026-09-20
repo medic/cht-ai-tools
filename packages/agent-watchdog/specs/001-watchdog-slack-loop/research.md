@@ -815,7 +815,7 @@ deviation rule would stay blind on them).
 
 **Evidence**: hosted run `2026-09-19-f3` on 2026-09-20: `collect.query_failed` for
 `histogram_quantile(0.90, sum(rate(cht_api_http_request_duration_seconds_bucket[$interval])) by (le,route))`
-in `trailing_14d` on the eCHIS Kenya hosts (timeout after two 30-second attempts) and on the Mali host
+in `trailing_14d` on the hosts of one programme (timeout after two 30-second attempts) and on a busy host
 (HTTP 422, "query processing would load too many samples into memory in query execution", Prometheus's
 `--query.max-samples` guard); the run's `discovery.json` (101 per-project panels, ten grouping by
 `route` or `code`: requests per second by code, p90 latency by route, code count, response size by

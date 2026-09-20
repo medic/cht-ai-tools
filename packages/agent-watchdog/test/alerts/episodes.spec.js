@@ -11,7 +11,7 @@ const { classified, alertsPolicy, RUN_START } = require('../helpers/alerts');
 const { makeItem, makeCandidate, makeProject } = require('../rollup/factories');
 
 const DAY2 = '2026-09-19T06:00:00Z';
-const NEPAL_A = 'https://nepal-a.example.org';
+const NEPAL_A = 'https://north-a.example.org';
 
 describe('alerts/episodes', () => {
   let dataDir;
@@ -21,8 +21,8 @@ describe('alerts/episodes', () => {
   });
   afterEach(() => removeDir(dataDir));
 
-  const project = makeProject('nepal-a.example.org', {
-    group: 'MoH Nepal', cht_version: '4.11.0',
+  const project = makeProject('north-a.example.org', {
+    group: 'North Programme', cht_version: '4.11.0',
     expected_load_windows: [{
       id: 'month-end', scope: 'all', kind: 'month_end', start: null, end: null, timezone: 'UTC', note: 'n',
       cycle_days: 30, days_before: 2, days_after: 2,
@@ -44,7 +44,7 @@ describe('alerts/episodes', () => {
   });
 
   it('computes correlations by code: the active window at the start, a version change and related records', () => {
-    const instance = classified('sentinel', 'nepal-a.example.org', { started_at: '2026-08-31T20:00:00Z' });
+    const instance = classified('sentinel', 'north-a.example.org', { started_at: '2026-08-31T20:00:00Z' });
     const correlations = correlationsFor({
       instance, project, previousProject: { ...project, cht_version: '4.10.0' }, candidates,
       items: [sentinelItem, conflictItem], categories: alertsPolicy().categories, observedAt: RUN_START,
@@ -62,8 +62,8 @@ describe('alerts/episodes', () => {
   });
 
   it('opens, observes and clears episodes across runs and appends cleared ones to the corpus outcomes', async () => {
-    const firing = classified('sentinel', 'nepal-a.example.org');
-    const soonCleared = classified('outbound', 'nepal-a.example.org', { started_at: '2026-09-17T06:00:00Z' });
+    const firing = classified('sentinel', 'north-a.example.org');
+    const soonCleared = classified('outbound', 'north-a.example.org', { started_at: '2026-09-17T06:00:00Z' });
     const day1 = await updateEpisodes({
       dataDir, runId: '2026-09-18', date: '2026-09-18', runStart: new Date(RUN_START),
       classified: { instances: [firing, soonCleared] }, items: [sentinelItem],
@@ -76,8 +76,9 @@ describe('alerts/episodes', () => {
     expect(day1.cleared).to.deep.equal([]);
     const opened = day1.opened.find((e) => e.instance_id === firing.instance_id);
     expect(opened).to.include({
-      event: 'opened', run_id: '2026-09-18', title: 'Sentinel Backlog', host: 'nepal-a.example.org',
-      project_url: NEPAL_A, group: 'MoH Nepal', category: 'backlog', importance: 'high', started_at: firing.started_at,
+      event: 'opened', run_id: '2026-09-18', title: 'Sentinel Backlog', host: 'north-a.example.org',
+      project_url: NEPAL_A, group: 'North Programme', category: 'backlog', importance: 'high',
+      started_at: firing.started_at,
       cleared_at: null, duration_hours: null,
     });
     expect(opened.episode_id).to.equal(episodeId(firing.instance_id, firing.started_at));

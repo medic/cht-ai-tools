@@ -38,12 +38,12 @@ describe('links/build: alert-list links (FR-070, research.md R-14)', () => {
   const { buildAlertListLink, alertTerms, buildAlertGroupLinks } = require('../../src/links/build');
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
   const group = alertGroupOf([
-    classified('sentinel', 'nepal-a.example.org'), classified('outbound', 'nepal-b.example.org'),
+    classified('sentinel', 'north-a.example.org'), classified('outbound', 'north-b.example.org'),
   ]);
 
   it('builds the search terms: namespace, firing state, the instance matcher and an optional rule title', () => {
-    expect(alertTerms({ hosts: ['nepal-a.example.org', 'nepal-b.example.org'] })).to.deep.equal([
-      'namespace:CHT', 'state:firing', 'label:instance=~"^(nepal-a\\.example\\.org|nepal-b\\.example\\.org)$"',
+    expect(alertTerms({ hosts: ['north-a.example.org', 'north-b.example.org'] })).to.deep.equal([
+      'namespace:CHT', 'state:firing', 'label:instance=~"^(north-a\\.example\\.org|north-b\\.example\\.org)$"',
     ]);
     expect(alertTerms({ hosts: ['a.example.org'], title: 'Sentinel Backlog' })).to.deep.equal([
       'namespace:CHT', 'state:firing', 'rule:"Sentinel Backlog"', 'label:instance=~"^(a\\.example\\.org)$"',
@@ -63,7 +63,7 @@ describe('links/build: alert-list links (FR-070, research.md R-14)', () => {
   it('builds one link for the group and one per rule title', () => {
     const links = buildAlertGroupLinks({ grafanaUrl: 'https://watchdog.example.org', group });
     expect(new URL(links.group).searchParams.get('search'))
-      .to.equal('namespace:CHT state:firing label:instance=~"^(nepal-a\\.example\\.org|nepal-b\\.example\\.org)$"');
+      .to.equal('namespace:CHT state:firing label:instance=~"^(north-a\\.example\\.org|north-b\\.example\\.org)$"');
     expect(links.rules.map((r) => r.title)).to.deep.equal(['Outbound Push Backlog', 'Sentinel Backlog']);
     expect(new URL(links.rules[1].url).searchParams.get('search')).to.include('rule:"Sentinel Backlog"');
     expect(links.all).to.have.length(3);

@@ -25,7 +25,7 @@ describe('verify/checks/bullet_count', () => {
     ctx.draft.bullets = [1, 2, 3, 4, 5, 6, 7].map(bullet);
     ctx.layout = {
       slots: [
-        { slot: 1, kind: 'group', group: 'MoH Nepal', item_ids: [1, 2, 3, 4, 5, 6].map(id), one_line: true },
+        { slot: 1, kind: 'group', group: 'North Programme', item_ids: [1, 2, 3, 4, 5, 6].map(id), one_line: true },
         { slot: 2, kind: 'item', group: 'Other', item_ids: [id(7)], one_line: false },
       ],
       body_items: [1, 2, 3, 4, 5, 6, 7].map(id),

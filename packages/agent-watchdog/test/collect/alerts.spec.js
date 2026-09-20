@@ -82,14 +82,14 @@ describe('collect/alerts', () => {
     it('normalises every instance: host from the instance label, state, activeAt, value, dashboard and panel', () => {
       const firing = doc.instances.filter((i) => i.state === 'firing');
       expect(firing).to.have.length(16);
-      const nepalA = firing.find((i) => i.title === 'Sentinel Backlog' && i.host === 'nepal-a.example.org');
-      expect(nepalA).to.include({
-        rule_uid: 'FzCrECYVk', project_url: 'https://nepal-a.example.org', active_at: '2026-09-17T20:00:00.000Z',
+      const northA = firing.find((i) => i.title === 'Sentinel Backlog' && i.host === 'north-a.example.org');
+      expect(northA).to.include({
+        rule_uid: 'FzCrECYVk', project_url: 'https://north-a.example.org', active_at: '2026-09-17T20:00:00.000Z',
         dashboard_uid: 'oa2OfL-Vk', panel_id: 3,
       });
-      expect(nepalA.instance_id).to.match(/^[0-9a-f]{12}$/);
-      expect(nepalA.labels.instance).to.equal('https://nepal-a.example.org');
-      expect(typeof nepalA.value).to.equal('string');
+      expect(northA.instance_id).to.match(/^[0-9a-f]{12}$/);
+      expect(northA.labels.instance).to.equal('https://north-a.example.org');
+      expect(typeof northA.value).to.equal('string');
       const watchdog = firing.find((i) => i.title === 'Watchdog Scrape Failures');
       expect(watchdog).to.include({ host: null, project_url: null });
       // A pending instance is stored, not counted as firing.

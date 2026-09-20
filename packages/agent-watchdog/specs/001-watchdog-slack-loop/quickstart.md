@@ -184,7 +184,7 @@ by host pattern, one `.dev` host ignored. For a preview against a real watchdog,
 `agent-watchdog run --dry-run --date <date> > payload.json`.
 
 Expected: `rollup/layout.json` holds at most five slots; a programme with several flagged projects is
-one `group` bullet ("MoH Nepal: 3 projects with issues") whose sub-bullets are the model's one-line
+one `group` bullet ("North Programme: 3 projects with issues") whose sub-bullets are the model's one-line
 item texts, rendered in the parent's section as indented `◦` lines and as a nested list in the report;
 every project item still has a thread reply; `discovery.json` lists ignored hosts under `ignored` and
 they appear nowhere else; the gate report shows `bullet_count`, `bullet_length` and `thread_order`
@@ -196,7 +196,7 @@ Alerts (User Story 8): `npx mocha test/e2e/us8.spec.js` replays the recorded ale
 (`test/fixtures/runs/alerts-day`: the seeded series plus eleven rules and sixteen firing instances) over two
 days. Expected: `alerts.json` holds the rules and instances as collected with the development host dropped;
 `alerts.classified.json` carries category, importance, three stale instances and the unknown rule as
-uncategorised; the brief's first bullet reads "MoH Nepal alerts: 11 firing, 3 stale for more than 14 days" with
+uncategorised; the brief's first bullet reads "North Programme alerts: 11 firing, 3 stale for more than 14 days" with
 one sub-bullet per category; every alert group has a thread reply carrying `agent_watchdog.alerts` metadata and
 links under the Grafana host; `alerts/episodes.jsonl` opens one episode per instance with its correlations and,
 on day two, observes fifteen, clears one (also written to `corpus/outcomes/`) and opens one. Against a real

@@ -241,17 +241,17 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
   const { makeProject } = require('./factories');
   const discovery = makeDiscovery({
     projects: [
-      makeProject('nepal-a.example.org', { group: 'MoH Nepal' }),
-      makeProject('nepal-b.example.org', { group: 'MoH Nepal' }),
+      makeProject('north-a.example.org', { group: 'North Programme' }),
+      makeProject('north-b.example.org', { group: 'North Programme' }),
       makeProject('alpha.example.org'),
     ],
   });
   const groupOf = groupOfProjects(discovery);
   const items = rankItems({
     items: [
-      makeItem({ project_url: 'https://nepal-a.example.org', confidence: 0.9 }),
+      makeItem({ project_url: 'https://north-a.example.org', confidence: 0.9 }),
       makeItem({ project_url: 'https://alpha.example.org', confidence: 0.8 }),
-      makeItem({ project_url: 'https://nepal-b.example.org', confidence: 0.7 }),
+      makeItem({ project_url: 'https://north-b.example.org', confidence: 0.7 }),
     ],
     groupOf,
   });
@@ -269,7 +269,7 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     const section = prompt.slice(prompt.indexOf('## Body layout'));
     const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(section)[1]);
     expect(json).to.deep.equal(layout.slots);
-    expect(json[0]).to.include({ kind: 'group', group: 'MoH Nepal', one_line: true });
+    expect(json[0]).to.include({ kind: 'group', group: 'North Programme', one_line: true });
     expect(json[0].item_ids).to.deep.equal([items[0].item_id, items[2].item_id]);
     expect(gate.verifyBrief.firstCall.args[0].layout).to.deep.equal(layout);
   });
@@ -282,8 +282,8 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
     expect(out.brief.bullets).to.have.length(2);
     const [group, single] = out.brief.bullets;
-    expect(group).to.deep.include({ kind: 'group', item_id: null, group: 'MoH Nepal', alert_key: null });
-    expect(group.text).to.equal('MoH Nepal: 2 projects with issues');
+    expect(group).to.deep.include({ kind: 'group', item_id: null, group: 'North Programme', alert_key: null });
+    expect(group.text).to.equal('North Programme: 2 projects with issues');
     expect(group.children).to.deep.equal([
       { item_id: items[0].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
       { item_id: items[2].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
@@ -302,12 +302,12 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
 
 describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
-  const nepalBacklog = alertGroupOf([
-    classified('sentinel', 'nepal-a.example.org', { new: true }),
-    classified('sentinel', 'nepal-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
+  const northBacklog = alertGroupOf([
+    classified('sentinel', 'north-a.example.org', { new: true }),
+    classified('sentinel', 'north-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
   ]);
-  const nepalAvailability = alertGroupOf([classified('apiDown', 'nepal-b.example.org')]);
-  const alertGroups = [nepalBacklog, nepalAvailability];
+  const northAvailability = alertGroupOf([classified('apiDown', 'north-b.example.org')]);
+  const alertGroups = [northBacklog, northAvailability];
   const items = rankItems({ items: [makeItem()] });
   const base = (engine, gate) => ({
     ctx: makeCtx({ engine, gate }), items, discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()],
@@ -322,7 +322,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     const out = await composeBrief({ ...base(engine, gate), alertLinks: links });
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
     expect(out.brief.bullets.map((b) => b.kind)).to.deep.equal(['alerts', 'item']);
-    expect(out.brief.bullets[0].text).to.equal('MoH Nepal alerts: 3 firing, 1 stale for more than 14 days');
+    expect(out.brief.bullets[0].text).to.equal('North Programme alerts: 3 firing, 1 stale for more than 14 days');
     expect(out.brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
       'availability: 1 firing (API Server Down), oldest since 2026-09-17',
       'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
@@ -330,7 +330,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
     expect(prompt).to.match(/kind.*alerts.*written by code/i);
     const layoutArg = gate.verifyBrief.firstCall.args[0].layout;
-    expect(layoutArg.slots[0]).to.include({ kind: 'alerts', group: 'MoH Nepal' });
+    expect(layoutArg.slots[0]).to.include({ kind: 'alerts', group: 'North Programme' });
     expect(layoutArg.body_items).to.deep.equal([items[0].item_id]);
     expect(gate.verifyBrief.firstCall.args[0].extraUrls).to.deep.equal(links);
   });

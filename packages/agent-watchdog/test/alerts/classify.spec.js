@@ -26,12 +26,12 @@ describe('alerts/classify importanceOf', () => {
 
 describe('alerts/classify classifyAlerts', () => {
   const instances = [
-    instance('sentinel', 'nepal-a.example.org'),
-    instance('sentinel', 'nepal-b.example.org', { active_at: '2026-08-20T00:00:00Z' }),
-    instance('outbound', 'nepal-b.example.org', { active_at: '2026-09-04T06:00:00Z' }),
-    instance('apiDown', 'nepal-b.example.org', { active_at: '2026-09-18T05:00:00Z' }),
-    instance('delivery', 'echis-a.example.org'),
-    instance('unknown', 'nepal-a.example.org'),
+    instance('sentinel', 'north-a.example.org'),
+    instance('sentinel', 'north-b.example.org', { active_at: '2026-08-20T00:00:00Z' }),
+    instance('outbound', 'north-b.example.org', { active_at: '2026-09-04T06:00:00Z' }),
+    instance('apiDown', 'north-b.example.org', { active_at: '2026-09-18T05:00:00Z' }),
+    instance('delivery', 'south-a.example.org'),
+    instance('unknown', 'north-a.example.org'),
     instance('watchdog', null),
     instance('fragmentation', 'other.example.org', { active_at: null }),
     instance('fragmentation', 'pending.example.org', { state: 'pending' }),
@@ -46,20 +46,21 @@ describe('alerts/classify classifyAlerts', () => {
     expect(out.available).to.equal(true);
     expect(out.stale_after_days).to.equal(14);
     const byHostTitle = (host, title) => out.instances.find((i) => i.host === host && i.title === title);
-    const nepalA = byHostTitle('nepal-a.example.org', 'Sentinel Backlog');
-    expect(nepalA).to.include({
-      category: 'backlog', importance: 'high', known: true, group: 'MoH Nepal', started_at: '2026-09-17T20:00:00Z',
+    const northA = byHostTitle('north-a.example.org', 'Sentinel Backlog');
+    expect(northA).to.include({
+      category: 'backlog', importance: 'high', known: true, group: 'North Programme',
+      started_at: '2026-09-17T20:00:00Z',
       days_firing: 0, stale: false, new: true, state: 'firing',
     });
-    const stale = byHostTitle('nepal-b.example.org', 'Sentinel Backlog');
+    const stale = byHostTitle('north-b.example.org', 'Sentinel Backlog');
     expect(stale).to.include({ days_firing: 29, stale: true });
     // Exactly the threshold counts as stale.
-    expect(byHostTitle('nepal-b.example.org', 'Outbound Push Backlog')).to.include({ days_firing: 14, stale: true });
-    expect(byHostTitle('nepal-b.example.org', 'API Server Down'))
+    expect(byHostTitle('north-b.example.org', 'Outbound Push Backlog')).to.include({ days_firing: 14, stale: true });
+    expect(byHostTitle('north-b.example.org', 'API Server Down'))
       .to.include({ importance: 'critical', category: 'availability' });
-    expect(byHostTitle('echis-a.example.org', 'Message Delivery Rate'))
-      .to.include({ group: 'eCHIS Kenya', category: 'messaging' });
-    const unknown = byHostTitle('nepal-a.example.org', 'Disk Usage High');
+    expect(byHostTitle('south-a.example.org', 'Message Delivery Rate'))
+      .to.include({ group: 'South Programme', category: 'messaging' });
+    const unknown = byHostTitle('north-a.example.org', 'Disk Usage High');
     expect(unknown).to.include({ category: 'uncategorised', importance: 'medium', known: false });
     const watchdog = out.instances.find((i) => i.title === 'Watchdog Scrape Failures');
     expect(watchdog).to.include({ group: 'Watchdog', host: null });

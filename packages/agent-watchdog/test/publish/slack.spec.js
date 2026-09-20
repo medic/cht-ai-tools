@@ -232,7 +232,7 @@ describe('publish/slack: alert-group replies (User Story 8)', () => {
       replies: [
         { item_id: 'a'.repeat(12), text: 'item', blocks: [], metadata: { event_type: 'agent_watchdog.item' } },
         {
-          alert_key: 'MoH Nepal/backlog', item_id: null, text: 'alerts', blocks: [],
+          alert_key: 'North Programme/backlog', item_id: null, text: 'alerts', blocks: [],
           metadata: { event_type: 'agent_watchdog.alerts' },
         },
       ],
@@ -240,7 +240,7 @@ describe('publish/slack: alert-group replies (User Story 8)', () => {
     const publication = await publisher.publish({ payload, imagePath: null });
     expect(publication.replies).to.have.length(2);
     expect(publication.replies[0]).to.include({ item_id: 'a'.repeat(12), alert_key: null });
-    expect(publication.replies[1]).to.include({ item_id: null, alert_key: 'MoH Nepal/backlog' });
+    expect(publication.replies[1]).to.include({ item_id: null, alert_key: 'North Programme/backlog' });
     expect(client.chat.postMessage.thirdCall.args[0].metadata.event_type).to.equal('agent_watchdog.alerts');
   });
 });

@@ -59,7 +59,7 @@ describe('corpus/outcomes: alert episodes (FR-067, User Story 8)', () => {
 
   const episode = (id) => ({
     episode_id: id, instance_id: 'i'.repeat(12), rule_uid: 'FzCrECYVk', title: 'Sentinel Backlog',
-    host: 'nepal-a.example.org', project_url: 'https://nepal-a.example.org', group: 'MoH Nepal', category: 'backlog',
+    host: 'north-a.example.org', project_url: 'https://north-a.example.org', group: 'North Programme', category: 'backlog',
     importance: 'high', started_at: '2026-09-17T06:00:00Z', cleared_at: '2026-09-19T06:00:00Z', duration_hours: 48,
     correlations: { expected_load_window_id: null, version_change: null, related_candidates: [], related_items: [] },
     explanation: null,

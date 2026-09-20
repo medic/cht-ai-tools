@@ -76,10 +76,10 @@ const groupLabelFor = (host) => {
   if (!host) {
     return 'Watchdog';
   }
-  if (/nepal/.test(host)) {
-    return 'MoH Nepal';
+  if (/north/.test(host)) {
+    return 'North Programme';
   }
-  return /echis/.test(host) ? 'eCHIS Kenya' : 'Other';
+  return /south/.test(host) ? 'South Programme' : 'Other';
 };
 
 /** A classified instance (src/alerts/classify.js output). */
@@ -156,8 +156,8 @@ const alertsPolicy = () => ({
 });
 
 const PROJECT_GROUPS = [
-  { label: 'MoH Nepal', host_patterns: ['*nepal*'] },
-  { label: 'eCHIS Kenya', host_patterns: ['*echis*'] },
+  { label: 'North Programme', host_patterns: ['*north*'] },
+  { label: 'South Programme', host_patterns: ['*south*'] },
 ];
 
 module.exports = {

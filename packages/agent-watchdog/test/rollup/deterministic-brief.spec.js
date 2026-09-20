@@ -59,14 +59,14 @@ describe('rollup/deterministic-brief', () => {
     const { makeProject } = require('./factories');
     const discovery = makeDiscovery({
       projects: [
-        makeProject('nepal-a.example.org', { group: 'MoH Nepal' }),
-        makeProject('nepal-b.example.org', { group: 'MoH Nepal' }),
+        makeProject('north-a.example.org', { group: 'North Programme' }),
+        makeProject('north-b.example.org', { group: 'North Programme' }),
         ...['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((h) => makeProject(`${h}.example.org`)),
       ],
     });
     const candidates = [
-      makeCandidate({ candidate_id: 'aaaaaaaaaaaa', severity_floor: 'high', project_url: 'https://nepal-a.example.org' }),
-      makeCandidate({ candidate_id: 'bbbbbbbbbbbb', severity_floor: 'high', project_url: 'https://nepal-b.example.org' }),
+      makeCandidate({ candidate_id: 'aaaaaaaaaaaa', severity_floor: 'high', project_url: 'https://north-a.example.org' }),
+      makeCandidate({ candidate_id: 'bbbbbbbbbbbb', severity_floor: 'high', project_url: 'https://north-b.example.org' }),
       ...['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((h, i) => makeCandidate({
         candidate_id: String(i).repeat(12), severity_floor: 'low', project_url: `https://${h}.example.org`, observed: 60 - i,
       })),
@@ -76,11 +76,11 @@ describe('rollup/deterministic-brief', () => {
     });
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
     expect(brief.bullets).to.have.length(5);
-    expect(brief.bullets[0]).to.include({ kind: 'group', group: 'MoH Nepal' });
-    expect(brief.bullets[0].text).to.equal('MoH Nepal: 2 projects with issues');
+    expect(brief.bullets[0]).to.include({ kind: 'group', group: 'North Programme' });
+    expect(brief.bullets[0].text).to.equal('North Programme: 2 projects with issues');
     expect(brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
-      'cht_sentinel_backlog_count on nepal-a.example.org: 912 vs 300 (pct_change)',
-      'cht_sentinel_backlog_count on nepal-b.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on north-a.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on north-b.example.org: 912 vs 300 (pct_change)',
     ]);
     expect(brief.bullets.slice(1).every((b) => b.kind === 'item' && b.children.length === 0)).to.equal(true);
     expect(brief.bullets.slice(1).map((b) => b.text)).to.deep.equal([
@@ -110,16 +110,16 @@ describe('rollup/deterministic-brief', () => {
 
 describe('rollup/deterministic-brief: alert bullets (User Story 8)', () => {
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
-  const echis = alertGroupOf([classified('delivery', 'echis-a.example.org')]);
+  const south = alertGroupOf([classified('delivery', 'south-a.example.org')]);
 
   it('keeps the alerts bullet in a degraded brief, laid out by importance among the candidates', () => {
     const brief = buildDeterministicBrief({
       runId: 'r', candidates: [makeCandidate()], discovery: makeDiscovery(), reason: 'model unavailable',
-      footer: footer(), expectedLoadNotice: null, alertGroups: [echis], staleAfterDays: 14,
+      footer: footer(), expectedLoadNotice: null, alertGroups: [south], staleAfterDays: 14,
     });
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
     expect(brief.bullets.map((b) => b.kind)).to.deep.equal(['item', 'alerts']);
-    expect(brief.bullets[1].text).to.equal('eCHIS Kenya alerts: 1 firing, none stale');
+    expect(brief.bullets[1].text).to.equal('South Programme alerts: 1 firing, none stale');
     expect(brief.bullets[1].children).to.have.length(1);
   });
 });

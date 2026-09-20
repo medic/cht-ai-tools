@@ -115,7 +115,7 @@ report lists proposals still awaiting review with their age.
 `projects.yaml` declares programme groups by host glob (`groups`, first match wins) and an ignore list
 (`ignore`, development instances). Hosts matching no group belong to `Other`; ignored hosts are listed in
 `discovery.json` and are never analysed, charged or named. The post body holds at most five bullets of two
-lines: a programme with several flagged projects becomes one code-written line ("MoH Nepal: 3 projects with
+lines: a programme with several flagged projects becomes one code-written line ("North Programme: 3 projects with
 issues") with one one-line sub-bullet per project, and every project item keeps its own thread reply. The
 layout is computed by code before the roll-up call (`rollup/layout.json`), the model writes only item text,
 and the gate rejects a draft whose bullets differ from the layout. `npm run smoke:grafana -- --hosts` prints
@@ -129,7 +129,7 @@ read-only token as the metrics (`GET /api/prometheus/grafana/api/v1/rules`, foll
 `/alerts` endpoint as a fallback) and stores them as collected in `alerts.json`. Code classifies them from the
 reviewed `alerts.yaml` (category and importance per rule title, unknown titles uncategorised and medium, stale after
 14 days by default), marks what is new since the previous run, and groups them per programme and category. The
-body gets one code-written bullet per programme ("MoH Nepal alerts: 15 firing, 3 stale for more than 14 days") with
+body gets one code-written bullet per programme ("North Programme alerts: 15 firing, 3 stale for more than 14 days") with
 a sub-bullet per category, ranked among the items by importance; each alert group gets its own thread reply with
 its instances and code-built links to the filtered alert list, which the gate resolves against the collected rules
 and instances. Every firing instance has a durable episode in `alerts/episodes.jsonl` (opened, observed, cleared)

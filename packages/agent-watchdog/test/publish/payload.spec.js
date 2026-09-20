@@ -175,16 +175,17 @@ describe('publish/payload: feedback digest (FR-062)', () => {
 });
 
 describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
-  const nepalA = makeItem({ project_url: 'https://nepal-a.example.org', rank: 1, placement: 'body', slot: 1 });
-  const nepalB = makeItem({ project_url: 'https://nepal-b.example.org', rank: 3, placement: 'body', slot: 1 });
+  const northA = makeItem({ project_url: 'https://north-a.example.org', rank: 1, placement: 'body', slot: 1 });
+  const northB = makeItem({ project_url: 'https://north-b.example.org', rank: 3, placement: 'body', slot: 1 });
   const alpha = makeItem({ rank: 2, placement: 'body', slot: 2 });
   const brief = makeBrief({
     bullets: [
       {
-        kind: 'group', item_id: null, group: 'MoH Nepal', text: 'MoH Nepal: 2 projects with issues', alert_key: null,
+        kind: 'group', item_id: null, group: 'North Programme', text: 'North Programme: 2 projects with issues',
+        alert_key: null,
         children: [
-          { item_id: nepalA.item_id, text: 'nepal-a sentinel backlog 912 vs 300 & climbing' },
-          { item_id: nepalB.item_id, text: 'nepal-b sentinel backlog 912 vs 300' },
+          { item_id: northA.item_id, text: 'north-a sentinel backlog 912 vs 300 & climbing' },
+          { item_id: northB.item_id, text: 'north-b sentinel backlog 912 vs 300' },
         ],
       },
       {
@@ -194,7 +195,7 @@ describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
     ],
   });
   const args = {
-    brief, items: [nepalA, alpha, nepalB], links: new Map(), runId: '2026-09-18', date: '2026-09-18',
+    brief, items: [northA, alpha, northB], links: new Map(), runId: '2026-09-18', date: '2026-09-18',
     audience: 'internal', channel: 'C123',
   };
 
@@ -203,32 +204,32 @@ describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
     const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
     expect(sections).to.have.length(2);
     expect(sections[0].split('\n')).to.deep.equal([
-      'MoH Nepal: 2 projects with issues',
-      '   ◦ nepal-a sentinel backlog 912 vs 300 &amp; climbing',
-      '   ◦ nepal-b sentinel backlog 912 vs 300',
+      'North Programme: 2 projects with issues',
+      '   ◦ north-a sentinel backlog 912 vs 300 &amp; climbing',
+      '   ◦ north-b sentinel backlog 912 vs 300',
     ]);
     expect(sections[1]).to.equal('alpha sentinel backlog 912 vs 300');
-    expect(payload.parent.text).to.include('• MoH Nepal: 2 projects with issues\n   ◦ nepal-a sentinel backlog');
+    expect(payload.parent.text).to.include('• North Programme: 2 projects with issues\n   ◦ north-a sentinel backlog');
     expect(payload.parent.text).to.include('&amp; climbing');
     // Every project item still has its own thread reply, in rank order.
-    expect(payload.replies.map((r) => r.item_id)).to.deep.equal([nepalA.item_id, alpha.item_id, nepalB.item_id]);
+    expect(payload.replies.map((r) => r.item_id)).to.deep.equal([northA.item_id, alpha.item_id, northB.item_id]);
   });
 });
 
 describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
   const { ALERTS_EVENT, MAX_ALERT_INSTANCES } = require('../../src/publish/payload');
-  const nepalBacklog = alertGroupOf([
-    classified('sentinel', 'nepal-a.example.org', { new: true }),
-    classified('sentinel', 'nepal-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
+  const northBacklog = alertGroupOf([
+    classified('sentinel', 'north-a.example.org', { new: true }),
+    classified('sentinel', 'north-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
   ]);
   const many = alertGroupOf(Array.from({ length: 60 }, (_, i) => classified('fragmentation', `h${i}.example.org`)));
   const item = makeItem({ rank: 1, placement: 'body', slot: 2 });
   const brief = makeBrief({
     bullets: [
       {
-        kind: 'alerts', item_id: null, group: 'MoH Nepal', alert_key: 'MoH Nepal',
-        text: 'MoH Nepal alerts: 2 firing, 1 stale for more than 14 days',
+        kind: 'alerts', item_id: null, group: 'North Programme', alert_key: 'North Programme',
+        text: 'North Programme alerts: 2 firing, 1 stale for more than 14 days',
         children: [
           { item_id: null, text: 'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new' },
         ],
@@ -240,7 +241,7 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
     ],
   });
   const alertLinks = new Map([
-    ['MoH Nepal/backlog', {
+    ['North Programme/backlog', {
       group: 'https://watchdog.example.org/alerting/list?search=group',
       rules: [{ title: 'Sentinel Backlog', url: 'https://watchdog.example.org/alerting/list?search=rule' }],
       all: ['https://watchdog.example.org/alerting/list?search=group', 'https://watchdog.example.org/alerting/list?search=rule'],
@@ -248,7 +249,7 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
   ]);
   const args = {
     brief, items: [item], links: new Map(), runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
-    channel: 'C123', alertGroups: [nepalBacklog], alertLinks, staleAfterDays: 14,
+    channel: 'C123', alertGroups: [northBacklog], alertLinks, staleAfterDays: 14,
   };
 
   it('adds one reply per alert group after the item replies, with the instances, links and registered metadata', () => {
@@ -256,15 +257,17 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
     expect(payload.replies).to.have.length(2);
     expect(payload.replies[0].item_id).to.equal(item.item_id);
     const reply = payload.replies[1];
-    expect(reply).to.include({ alert_key: 'MoH Nepal/backlog', item_id: null });
-    expect(reply.text).to.include('MoH Nepal');
+    expect(reply).to.include({ alert_key: 'North Programme/backlog', item_id: null });
+    expect(reply.text).to.include('North Programme');
     expect(reply.text).to.include('backlog');
-    expect(reply.text).to.match(/Sentinel Backlog on nepal-b\.example\.org .*stale/);
+    expect(reply.text).to.match(/Sentinel Backlog on north-b\.example\.org .*stale/);
     expect(reply.text).to.include('<https://watchdog.example.org/alerting/list?search=group|');
     expect(reply.text).to.include('<https://watchdog.example.org/alerting/list?search=rule|Sentinel Backlog>');
     expect(reply.metadata).to.deep.equal({
       event_type: ALERTS_EVENT,
-      event_payload: { run_id: '2026-09-18', date: '2026-09-18', group: 'MoH Nepal', category: 'backlog', firing: 2 },
+      event_payload: {
+        run_id: '2026-09-18', date: '2026-09-18', group: 'North Programme', category: 'backlog', firing: 2,
+      },
     });
     expect(ALERTS_EVENT).to.equal('agent_watchdog.alerts');
     expect(reply.blocks[0].type).to.equal('section');
@@ -282,6 +285,7 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
   it('keeps the alerts bullet in the parent text and blocks as an indented section', () => {
     const payload = buildPayload(args);
     const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
-    expect(sections[0]).to.include('MoH Nepal alerts: 2 firing, 1 stale for more than 14 days\n   ◦ backlog: 2 firing');
+    expect(sections[0])
+      .to.include('North Programme alerts: 2 firing, 1 stale for more than 14 days\n   ◦ backlog: 2 firing');
   });
 });
