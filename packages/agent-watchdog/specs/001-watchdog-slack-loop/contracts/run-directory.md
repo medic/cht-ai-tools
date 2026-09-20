@@ -13,7 +13,9 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── run.json                       # Run record: status, stages, versions, usage, cost   [kept]
 │       ├── config.effective.json          # redacted effective configuration (FR-055)          [kept]
 │       ├── feedback.ingested.json         # feedback read at start, matched and unmatched      [kept]
-│       ├── discovery.json                 # projects, dashboards, panels, targets, versions    [kept]
+│       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels [kept]
+│       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
+│       ├── alerts.classified.json         # category, importance, staleness, groups (FR-065)   [kept]
 │       ├── <project_slug>/
 │       │   ├── inputs/windows.json.gz     # Metric Windows, raw series                         [raw]
 │       │   ├── changes.json               # Computed Changes                                   [kept]
@@ -25,7 +27,8 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── passes.json                # per-pass diff and convergence (FR-058)             [kept]
 │       │   └── session.json               # runtime session id, model, usage per call          [kept]
 │       ├── rollup/
-│       │   ├── items.ranked.json          # merged items with rank and placement               [kept]
+│       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
+│       │   ├── layout.json                # body layout: slots, sub-bullets, alert bullets      [kept]
 │       │   ├── brief.draft<n>.json        # drafts submitted to the publish gate               [kept]
 │       │   ├── verification.draft<n>.json # publish gate reports                               [kept]
 │       │   ├── brief.json                 # final Brief (brief, heartbeat, degraded, failure)  [kept]
@@ -41,6 +44,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │   ├── memory.md                          # current curated memory                             [durable]
 │   └── history/<run_id>.patch             # one diff per change (FR-031)                       [durable]
 ├── feedback.jsonl                         # append-only Feedback records (FR-028), never purged   [durable]
+├── alerts/episodes.jsonl                  # append-only Alert Episode events (FR-067)          [durable]
 ├── proposals/<date>-<type>-<slug>.md      # canonical proposal files (FR-032)                  [durable]
 ├── corpus/
 │   ├── index.json                         # Corpus Item records, no content (FR-037)           [durable]
@@ -52,7 +56,9 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 
 `feedback.jsonl` is permanent (FR-059): `purge` never removes or compacts it. The ranking
 influence window (FR-060) is applied when the tallies are built, not by deleting records. SC-002 is
-still measured from `corpus/outcomes/`.
+still measured from `corpus/outcomes/`. `alerts/episodes.jsonl` is durable for the same reason: it
+is the record of when each alert fired, what else was happening and why (FR-067); cleared episodes
+are also appended to `corpus/outcomes/<date>.jsonl`.
 
 ## Stage inputs and outputs
 
@@ -60,12 +66,12 @@ still measured from `corpus/outcomes/`.
 |---|---|---|
 | `purge` | retention settings, directory timestamps | deletions only, logged per file |
 | `feedback` | `publication.json` of the previous N runs, Slack | `feedback.ingested.json`, `feedback.jsonl` |
-| `collect` | configuration, Grafana | `discovery.json`, `<project>/inputs/windows.json.gz` |
-| `analyze` | `discovery.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml` | `changes.json`, `candidates.json` |
-| `agent` | `candidates.json`, `changes.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
-| `rollup` | all `findings.pass<last>.json`, feedback, memory | `items.ranked.json`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/` |
+| `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances) | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory) |
+| `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
+| `agent` | `candidates.json`, `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
+| `rollup` | all `findings.pass<last>.json`, `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
 | `render` | `brief.json`, `changes.json` | `report.html`, `brief.png` |
-| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `feedback.ingested.json` | `payload.json`, `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
+| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 
 Rules:
 

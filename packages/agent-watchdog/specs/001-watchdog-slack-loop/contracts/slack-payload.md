@@ -12,7 +12,7 @@ its bot display name is set in the app configuration, so no per-message identity
 | Bot display name | `agent-watchdog` |
 | Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if `#agents` becomes private |
 | Channel membership | the bot is invited to `#agents`; posting and reading both require membership (`not_in_channel` otherwise) |
-| Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.item` with `run_id`, `item_id`, `project_url`, `metric`; `agent_watchdog.feedback_digest` with `run_id`, `date`, `acknowledged` (count). Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
+| Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.item` with `run_id`, `item_id`, `project_url`, `metric`; `agent_watchdog.feedback_digest` with `run_id`, `date`, `acknowledged` (count); `agent_watchdog.alerts` with `run_id`, `date`, `group`, `category`, `firing` (count) for alert-group replies (FR-066). Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
 | Rate-limit class | internal customer-built app: `conversations.history` and `conversations.replies` keep Tier 3 and the normal `limit` values; the 2025 one-request-per-minute limit applies only to non-Marketplace apps distributed commercially |
 
 ## Publishing sequence (`src/publish/slack.js`)
@@ -23,15 +23,20 @@ its bot display name is set in the app configuration, so no per-message identity
    never called.
 2. **Post the parent message** with `chat.postMessage({ channel, text, blocks, unfurl_links: false,
    unfurl_media: false, metadata })`. `text` is the plain-text fallback (headline plus bullets).
-   Blocks, at most 50, in order: `header` (headline), one `section` per bullet with `mrkdwn`,
-   an `image` block `{ type: 'image', slack_file: { id }, alt_text }` (the bot that uploaded the
+   Blocks, at most 50, in order: `header` (headline), one `section` per top-level bullet with
+   `mrkdwn` (at most five; the bullet's lines, then each sub-bullet on its own line prefixed by
+   three spaces and `◦`, at most eight, since Slack has no nested lists; the indentation's rendering
+   is smoke test S-16), an `image` block `{ type: 'image', slack_file: { id }, alt_text }` (the bot that uploaded the
    file is the bot posting, which is the documented requirement), a `context` block with the
    expected-load or degradation notice when present, one `context` block per code-added notice
    (for example a project new since the previous run), and a `context` footer with the prompts,
    configuration and trace links and the cost in currency.
 3. **Post one threaded reply per item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
    text, blocks, metadata: { event_type: 'agent_watchdog.item', event_payload } })`, highest rank
-   first, body items first. Replies are never broadcast.
+   first, body items first, then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
+   the rule titles, at most fifty instances with host and days firing, the count of the rest, and
+   the code-built link to the filtered alert list) with `metadata.event_type: 'agent_watchdog.alerts'`,
+   in body order (FR-066). Replies are never broadcast.
 4. **Record** `chat.getPermalink({ channel, message_ts })` for the parent and each reply into
    `publication.json`; permalinks of thread replies carry `thread_ts` and `cid`.
 5. A forced re-run posts a new parent whose first context block links the superseded post's
@@ -61,7 +66,8 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
   "parent": { "channel": "C…", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.brief", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "kind": "brief" } } },
   "image": { "filename": "brief-2026-09-19.png", "alt_text": "…", "path": "rollup/brief.png", "slack_file_id": null },
   "replies": [
-    { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } }
+    { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } },
+    { "alert_key": "MoH Nepal/backlog", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.alerts", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "group": "MoH Nepal", "category": "backlog", "firing": 12 } } }
   ],
   "digest": { "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.feedback_digest", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "acknowledged": 3 } }, "acknowledged": [ "<feedback_id>" ], "reactions": [ { "source_ts": "1700000000.000100", "name": "eyes" } ] }
 }
@@ -74,9 +80,10 @@ record is marked acknowledged.
 
 ## Text rules enforced by the gate before publishing
 
-- Headline: one line. Bullets: at most three, each at most two lines of at most 120 characters,
-  numbers formatted by the shared formatter, no URLs in bullet text (links live in the footer and
-  the thread replies).
+- Headline: one line. Bullets: at most five top-level, each at most two lines of at most 120
+  characters with at most eight one-line sub-bullets (spec revision 9, FR-010, FR-015); numbers
+  formatted by the shared formatter; no URLs in bullet or sub-bullet text (links live in the footer
+  and the thread replies, including the alert-list links).
 - Every string is rendered through Handlebars templates under `templates/slack/` with escaping on;
   Slack `mrkdwn` special characters `&`, `<`, `>` in untrusted text are escaped as `&amp;`, `&lt;`,
   `&gt;`.
@@ -90,7 +97,8 @@ using the `ts` values recorded in that run's `publication.json`:
 1. `conversations.replies({ channel, ts: <parent ts>, limit: 1000, include_all_metadata: true })`,
    paging with `cursor`. The first message is the parent; replies carry `thread_ts` and
    `parent_user_id`. Messages authored by the bot (matching `bot_id` or the `agent_watchdog.item`
-   metadata) are items; other messages are notes.
+   metadata) are items, those with `agent_watchdog.alerts` metadata are alert groups (feedback on
+   them targets `alert_group` with the `alert_key`); other messages are notes.
 2. For every bot message, `reactions.get({ channel, timestamp, full: true })` to obtain the
    complete `reactions[] { name, users[], count }` list, because reaction arrays embedded in
    history payloads may omit users.

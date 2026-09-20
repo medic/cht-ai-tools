@@ -554,6 +554,9 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-11 | `smoke/render.js` inside the image with a read-only root filesystem and writable `/tmp` and `/data` only | Playwright's writable-directory needs beyond `TMPDIR` are undocumented |
 | S-12 | `semantic-release --dry-run` from the package directory analyses only commits under `packages/agent-watchdog` | Third-party plugin behaviour |
 | S-13 | `reactions.add` with `name: eyes` under the `reactions:write` scope: the reaction appears, a repeat reports `already_reacted` without failing, and a token lacking the scope logs `missing_scope` while the digest still posts (R-13) | Scope and error names not re-fetched from the Slack reference in this session |
+| S-14 | A Viewer service-account token on the hosted watchdog reads `GET /api/prometheus/grafana/api/v1/rules` and `/alerts`; the instance `state` strings and the paging parameters behind `groupNextToken` match R-14 | Grant and response casing read from source, not exercised live |
+| S-15 | An alert-list link `<grafana>/alerting/list?search=…` built by code opens the rule list filtered by `rule:` and `label:instance=~` terms | Page path and parameter behaviour read from front-end source, not documented |
+| S-16 | Sub-bullets rendered as indented `◦` lines inside a bullet's `section` block display legibly in Slack desktop and mobile | Leading whitespace in `mrkdwn` is undocumented |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -589,3 +592,86 @@ clarifications).
 - **S-13**: in the test channel, acknowledge a note and confirm the `eyes` reaction appears, a
   repeated run reports `already_reacted` without failing, and a token without `reactions:write`
   yields a logged `missing_scope` while the digest still posts.
+
+## R-14. Grafana-managed alerting on the hosted watchdog (User Stories 8 and 9)
+
+**Evidence**: cht-watchdog `grafana/provisioning/alerting/cht.yml` on `main` (fetched 2026-09-19);
+Grafana source at tag v12.3.3: `pkg/services/ngalert/api/authorization.go` (route evaluators),
+`pkg/services/ngalert/accesscontrol.go` (fixed roles and their grants),
+`pkg/services/ngalert/api/tooling/definitions/prom.go` (response types),
+`public/app/features/alerting/unified/hooks/useFilteredRules.ts` and
+`public/app/features/alerting/unified/search/rulesSearchParser.ts` (list-page URL state and filter
+grammar); Grafana documentation "View alert rules" and "Configure alert state history" (`latest`).
+Not exercised against the hosted Grafana; smoke tests S-14 and S-15 do that.
+
+**Findings**:
+- The provisioning file declares nine Grafana-managed rules in folder `CHT`, every one with
+  `__dashboardUid__: oa2OfL-Vk` and a `__panelId__` annotation, a `description` annotation that
+  interpolates `{{ $labels.instance }}`, no `labels` (so there is no severity label to read), and no
+  contact points or notification policies. Group `10m` (interval 10m, `for: 1h`): DB Fragmentation
+  (`ot6lYCYVz`, panel 13), Outbound Push Backlog (`KgP8PjY4k`, 2), Sentinel Backlog (`FzCrECYVk`,
+  3), Server Time Accurate (`hURoyjYVk`, 19), Users Over Replication Limit (`ttAeECYVz`, 21).
+  Group `1m` (interval 1m): API Server Down (`Q1A-BjL4k`, panel 16, `for: 30m`,
+  `noDataState: Alerting`), Client Feedback/Error Rate (`nBTZsCY4k`, 14), DB Conflicts Rate
+  (`gli1YjL4k`, 7), Message Delivery Rate (`0R-OsCYVz`, 27), each `for: 1m`. Every rule
+  evaluates per `instance` (the CHT host), so an instance maps to a project; DB Fragmentation also
+  carries a `db` label.
+- Routes and permissions (v12.3.3): `GET /api/prometheus/grafana/api/v1/rules` and
+  `GET /api/ruler/grafana/api/v1/rules` require `ActionAlertingRuleRead`;
+  `GET /api/prometheus/grafana/api/v1/alerts`, `GET /api/alertmanager/grafana/api/v2/alerts` and
+  `/alerts/groups` require `ActionAlertingInstanceRead`; `GET /api/v1/rules/history` requires
+  `ActionAlertingRuleRead`; `GET /api/v1/provisioning/alert-rules` accepts any of the provisioning
+  read actions or `ActionAlertingRuleRead` together with `ActionFoldersRead`. The fixed role
+  `alertingReaderRole` (rules reader with `ScopeFoldersAll`, instances reader and notifications
+  reader) is granted to `RoleViewer`, so a Viewer service-account token holds both read actions the
+  design needs; the provisioning roles are granted to `RoleAdmin` only, and the provisioning API is
+  not used.
+- Response shape of `/api/prometheus/grafana/api/v1/rules`: `{ status, errorType?, error?, data: {
+  groups: [{ name, file, folderUid, interval, lastEvaluation, evaluationTime, totals?, rules: [{
+  uid, name, folderUid, query, labels, health, lastError?, type, lastEvaluation, evaluationTime,
+  isPaused, state: 'firing' | 'pending' | 'inactive', duration?, keepFiringFor?, activeAt?,
+  alerts?: [{ labels, annotations, state, activeAt?, value }], totals?, totalsFiltered? }] }],
+  groupNextToken?, totals? } }`; `/alerts` answers `{ data: { alerts: [...] } }` with the same
+  instance objects. Instance `state` strings are Grafana's state names, listed in the source as
+  `alerting`, `pending`, `nodata`, `error` and `normal`; code compares case-insensitively in case
+  the API capitalises them, and maps `alerting` to `firing`. `groupNextToken` signals paging; the
+  request parameters that drive it are confirmed in S-14.
+- Alert state history: the documented backends are Loki, Prometheus and both; no backend is
+  configured by default and no HTTP API is documented. cht-watchdog configures none, so no history
+  is available to read; the `GET /api/v1/rules/history` route exists in source but is not relied on.
+- The alert rule list page reads its filter from the `search` query parameter (the legacy
+  `dataSource`, `alertState`, `ruleType` and `queryString` parameters are migrated into it). The
+  grammar is `key:value` terms with keys `datasource`, `namespace`, `label`, `group`, `rule`,
+  `state`, `type`, `health`, `dashboard`, `plugins`, `contactPoint` and `source`, plus free text
+  matched against rule names; `label` accepts Prometheus matchers (`=`, `!=`, `=~`, `!~`); values
+  with spaces are quoted (`rule:"High CPU usage"`). The page path (`/alerting/list`) and a
+  `view=list` parameter were not confirmed from source; S-15 checks the built link.
+
+**Decision**: `src/collect/alerts.js` reads `GET /api/prometheus/grafana/api/v1/rules` (rules with
+their instances in one call, following `groupNextToken` when present) through
+`createGrafanaClient` with the existing bearer token and timeout, and falls back to
+`GET /api/prometheus/grafana/api/v1/alerts` for instances alone when the rules call fails; the
+alertmanager and provisioning endpoints are not used. The raw response is stored in `alerts.json`
+as recorded data; classification, staleness, newness and grouping are code under `src/alerts/`
+against `alerts.yaml`. Episodes are built from the run's own daily observations plus `activeAt`,
+never from state history. The link builder emits
+`<AGENT_WATCHDOG_GRAFANA_URL>/alerting/list?search=<encoded terms>` with `namespace:CHT`,
+`state:firing`, `label:instance=~"^(<hosts>)$"` and, for a single-rule link, `rule:"<title>"`; the
+thread reply carries one link per rule title in the group and one for the whole group. The gate
+resolves an alert link by confirming every title and host it names exists in the collected rules
+and instances, as dashboard links are resolved against collected dashboards (R-5). The fake
+Grafana under `test/helpers/fake-grafana.js` serves both endpoints from recorded fixtures.
+
+**Alternatives considered**: the provisioning API (rejected: Admin-granted roles, and it returns
+definitions without instance state); the alertmanager API (rejected: instances without their rule
+uids and folders, redundant with the rules endpoint); Grafana's alert state history (rejected: not
+configured on cht-watchdog and undocumented as an API); a `dashboard:` term in the link (rejected:
+every rule shares one dashboard, so it filters nothing).
+
+- **S-14**: with the Viewer token, `node smoke/grafana.js --alerts` lists the nine rules from
+  `/api/prometheus/grafana/api/v1/rules` with their firing instances, the paging parameters that
+  accompany `groupNextToken`, and the instance `state` strings as returned.
+- **S-15**: an alert-list link built from a recorded group opens the filtered list in the hosted
+  Grafana and the `search` value round-trips (rule titles with spaces, the instance regex matcher).
+- **S-16**: a parent post whose bullet carries sub-bullets renders the indented `◦` lines legibly
+  in Slack desktop and mobile, since leading spaces in `mrkdwn` sections are not documented.

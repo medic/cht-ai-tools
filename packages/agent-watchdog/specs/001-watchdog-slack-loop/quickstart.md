@@ -147,7 +147,7 @@ agent-watchdog run --date <date>
 ```
 
 Only against the configured `#agents` channel with `AGENT_WATCHDOG_DRY_RUN=false`. Expected: one
-parent message from `agent-watchdog` with at most three bullets, the image, and the footer; one
+parent message from `agent-watchdog` with at most five bullets, the image, and the footer; one
 threaded reply per item; `publication.json` holds `ts` and permalinks; exit 0. A second run for the
 same date exits 75 unless `--force` is given, and a forced run links the superseded post.
 
@@ -164,3 +164,22 @@ acknowledged. A real run then posts the digest in the brief's or heartbeat's thr
 `eyes` reaction to the note, and sets `acknowledged_run_id` on the records; a second run
 acknowledges nothing again. `agent-watchdog purge --dry-run` with a clock a year later lists no
 feedback records, because they are never purged.
+
+## 13. Alerts and grouped bullets (User Stories 8 and 9)
+
+`npm run test:e2e -- --grep "US8|US9"`, then a preview against the recorded alert day:
+`agent-watchdog run --dry-run --date 2026-09-20 --fixtures test/fixtures/runs/alerts-day > payload.json`
+with `AGENT_WATCHDOG_CONFIG_DIR` pointing at `test/fixtures/runs/alerts-day/config/` (two groups
+by host pattern, one ignored `.dev` host).
+
+Expected: the parent has at most five `section` blocks after the header; one reads
+"MoH Nepal: 3 projects with issues" with three indented sub-bullets, and one reads
+"MoH Nepal alerts: 15 firing, 3 stale for more than 14 days" with one sub-bullet per category;
+`payload.replies` holds one reply per project item and one per alert group, the latter carrying
+`agent_watchdog.alerts` metadata, at most fifty instances and a link under the Grafana host; the
+ignored host appears in `discovery.json` under `ignored` and nowhere in the payload;
+`alerts.classified.json` marks the three long-firing instances `stale: true`; and
+`alerts/episodes.jsonl` holds an `opened` event per firing instance with its correlations. Live:
+`node smoke/grafana.js --alerts` lists the rules and firing instances the Viewer token can read
+(S-14) and `node smoke/grafana.js --hosts` prints every discovered host with its group, which is
+how the placeholder patterns in `projects.yaml` get replaced.

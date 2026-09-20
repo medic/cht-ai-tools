@@ -4,7 +4,7 @@ Structured, reviewed policy lives in versioned files (FR-053). Two locations:
 
 1. **Deployment policy**, edited by the hosting team by pull request in `medic-infrastructure` and
    mounted read-only at `AGENT_WATCHDOG_CONFIG_DIR` (default `/etc/agent-watchdog`) from a
-   ConfigMap: `projects.yaml`, `dashboards.yaml`, `thresholds.yaml`.
+   ConfigMap: `projects.yaml`, `dashboards.yaml`, `thresholds.yaml`, `alerts.yaml`.
 2. **Agent definition**, versioned with the code in this package and shipped in the image:
    `prompts/`, `skill/cht-watchdog/`, `schema/`, `templates/`. Prompts are code (constitution II);
    changing them is a pull request in `cht-ai-tools` with the replay diff attached. The footer
@@ -12,7 +12,7 @@ Structured, reviewed policy lives in versioned files (FR-053). Two locations:
 
 Every file is parsed with the `yaml` package (YAML 1.2, no custom tags), validated with zod at
 startup, and its SHA-256 recorded in `run.json` under `versions.config_hash` (a hash over the
-three policy files) so a run can always be tied to the policy that produced it. Missing optional
+four policy files) so a run can always be tied to the policy that produced it. Missing optional
 files fall back to the package defaults under `config/defaults/`; a present file that fails
 validation exits 78.
 
@@ -47,11 +47,25 @@ projects:
         timezone: Africa/Kampala
         note: Quarterly supervisor sync.
         cycle_days: 90
+groups:                                 # programmes (FR-068); first matching pattern wins, in file order
+  - label: MoH Nepal                    # PLACEHOLDER patterns until the hosting team sets the real ones
+    host_patterns: ['*nepal*']
+  - label: eCHIS Kenya                  # PLACEHOLDER
+    host_patterns: ['*echis*']
+ignore:                                 # development instances: discovered and counted, never analysed or posted
+  - '*.dev.*'
+  - '*-dev.*'
 ```
 
 Rules: keys are lowercased hosts; a scheme, `www.` prefix or trailing slash is stripped on load so a
 pasted URL still matches; the project URL is derived as `https://<host>`; `timezone` is a valid
-IANA zone; window `kind` is one of `month_end`, `dates`, `weekly`.
+IANA zone; window `kind` is one of `month_end`, `dates`, `weekly`. Group labels are unique, at
+most 40 characters, and may not be the reserved `Other` or `Watchdog`; `host_patterns` and
+`ignore` entries are lowercase globs (`*` any run of characters, `?` one character) matched
+against the bare host, `ignore` checked first; a host matching no group belongs to `Other`. The
+package default declares the two placeholder groups above and the two ignore patterns;
+`node smoke/grafana.js --hosts` prints every discovered host with its group and whether it is
+ignored, so the real patterns can be set from what the watchdog actually monitors.
 
 ## `dashboards.yaml`
 
@@ -115,6 +129,44 @@ logs a warning and the rule cannot fire; only the three FR-014 high rules are ac
 `high_when` (the list is validated against an enum, so a new high rule needs a code change and a
 spec amendment).
 
+## `alerts.yaml`
+
+The reviewed alert policy (FR-065): category and importance per Grafana-managed rule title, the
+staleness threshold, and the metric keys that count as related to each category when episodes are
+correlated (FR-067). Titles are matched exactly against the rules read from Grafana, which on the
+stock watchdog come from `grafana/provisioning/alerting/cht.yml` in cht-watchdog. A firing rule
+whose title is absent here is reported as uncategorised with medium importance; adding it is a
+pull request against this file, never a run-time write.
+
+```yaml
+stale_after_days: 14                    # firing this long or longer is "stale" (FR-065)
+rules:                                  # keyed by rule title exactly as provisioned
+  API Server Down:              { category: availability,  importance: critical }
+  Sentinel Backlog:             { category: backlog,       importance: high }
+  Outbound Push Backlog:        { category: backlog,       importance: high }
+  Message Delivery Rate:        { category: messaging,     importance: high }
+  DB Conflicts Rate:            { category: database,      importance: medium }
+  Client Feedback/Error Rate:   { category: client_errors, importance: medium }
+  Users Over Replication Limit: { category: replication,   importance: medium }
+  DB Fragmentation:             { category: database,      importance: low }
+  Server Time Accurate:         { category: host,          importance: low }
+categories:                             # metric keys related to a category, for episode correlations (FR-067)
+  availability: ['up{job="cht"}']
+  backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]
+  messaging: [cht_messaging_outgoing_total]
+  database: [cht_couchdb_doc_conflicts, cht_couchdb_fragmentation]
+  client_errors: [cht_feedback_total]
+  replication: [cht_replication_limit_users_over_count]
+  host: []
+```
+
+Rules: `stale_after_days` is an integer from 1 to 365; `importance` is one of `critical`, `high`,
+`medium`, `low`; `category` is a lowercase slug and every category used by a rule has an entry
+under `categories` (an empty list is allowed); metric keys are checked against the collected
+metrics at run time and unknown ones log a warning. The package default carries the mapping above;
+the exact metric keys per category are confirmed against the dashboards during implementation
+(research.md R-6).
+
 ## Package-shipped agent definition (read-only, versioned with code)
 
 | Path | Purpose |
@@ -125,6 +177,6 @@ spec amendment).
 | `skill/cht-watchdog/SKILL.md` and `references/` | The cht-watchdog skill. |
 | `skill/cht-watchdog/pattern-cards/index.md`, `*.md` | Merged pattern cards and their index (FR-038). |
 | `schema/findings.schema.json`, `schema/brief.schema.json` | Structured-output schemas ([findings.schema.json](./findings.schema.json), [brief.schema.json](./brief.schema.json)). |
-| `templates/report.hbs`, `templates/slack/*.hbs` | Handlebars templates; HTML-escaping on, triple-stash forbidden. |
+| `templates/report.hbs`, `templates/slack/*.hbs` | Handlebars templates; HTML-escaping on, triple-stash forbidden. `slack/alert-group.hbs` renders an alert group's thread reply (FR-066). |
 | `config/defaults/*.yaml` | Fallbacks when a policy file is absent. |
 | `agent/mcp.json`, `agent/hooks.json`, `agent/tools.json` | The one configuration source both engines read ([agent-definition.md](./agent-definition.md)). |

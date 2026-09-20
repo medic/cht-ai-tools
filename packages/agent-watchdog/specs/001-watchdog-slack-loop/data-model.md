@@ -38,6 +38,20 @@ A monitored CHT deployment, discovered from the metrics store on every run (FR-0
 | `cht_version` | string or null | Collected each run (FR-005). |
 | `history_days` | integer | Days of metric history available. Below 14, history comparisons are `available: false` (US5 scenario 3). |
 | `scrape_targets` | ScrapeTarget[] | `{ job, scrape_url, health: 'up' \| 'down' \| 'unknown', last_error }` (FR-005). |
+| `group` | string | Label of the first Project Group whose pattern matches `host`, else `Other` (FR-068). |
+| `ignored` | boolean | True when `host` matches a pattern under `projects.yaml` `ignore`. An ignored project is discovered and counted but has no Metric Windows, Computed Changes, Candidates or Passes, is charged no model usage, and is never named in a post (FR-068). |
+
+### Project Group
+
+A programme the hosted watchdog serves, declared in `projects.yaml` (FR-068). Two labels are
+reserved and always present: `Other` for hosts no pattern matches and `Watchdog` for alerts that
+carry no `instance` label.
+
+| Field | Type | Rules |
+|---|---|---|
+| `label` | string | Identity; unique, at most 40 characters, shown in the post exactly as written. |
+| `host_patterns` | string[] | Lowercase globs matched against the bare host: `*` matches any run of characters, `?` one character; converted to anchored regular expressions in code, no glob library. The first group whose pattern matches wins, in file order. Empty for the reserved labels. |
+| `hosts` | string[] | Hosts assigned this run, ignored hosts excluded. |
 
 ### Run
 
@@ -135,6 +149,66 @@ A deterministic flag on a Computed Change (Key Entities; FR-006, FR-014).
 | `evidence` | Evidence[] | See Item. |
 | `expected_load_window_id` | string or null | Copied from the Computed Change. |
 
+### Alert Rule
+
+A Grafana-managed alert rule provisioned on the hosted watchdog, read live each run (FR-064).
+
+| Field | Type | Rules |
+|---|---|---|
+| `rule_uid` | string | Identity; the rule UID as Grafana reports it. |
+| `title` | string | The provisioned title (`cht.yml` `title`); the key into `alerts.yaml`. Untrusted text, escaped on render. |
+| `folder`, `rule_group` | string | Grafana folder and evaluation group (`10m`, `1m` on the stock watchdog). |
+| `pending_for` | string | The rule's `for` duration as provisioned. |
+| `dashboard_uid`, `panel_id` | string or null, integer or null | From the rule annotations `__dashboardUid__` and `__panelId__`; used for the dashboard link when present. |
+| `category` | string | From `alerts.yaml`; `uncategorised` when the title is unknown (FR-065). |
+| `importance` | enum | `critical` \| `high` \| `medium` \| `low`; `medium` when the title is unknown (FR-065). |
+| `known` | boolean | False when the title has no `alerts.yaml` entry; the brief says so. |
+
+### Alert Instance
+
+One evaluation of a rule for one label set, as reported at run time (FR-064, FR-065).
+
+| Field | Type | Rules |
+|---|---|---|
+| `instance_id` | string | Hash of `rule_uid` and the sorted label pairs, `alertname` excluded. |
+| `rule_uid`, `title`, `category`, `importance` | | Copied from the Alert Rule. |
+| `host` | string or null | The `instance` label, normalised as for Projects (research.md R-6); null when the rule has no such label. |
+| `project_url` | string or null | Derived from `host`. |
+| `group` | string | The host's Project Group label; `Watchdog` when `host` is null. Instances on ignored hosts are dropped at collection and counted in `alerts.json`. |
+| `labels`, `annotations` | object | As collected; untrusted data. |
+| `state` | enum | `firing` \| `pending` \| `nodata` \| `error`, normalised by code from Grafana's state names (research.md R-14). Only `firing` instances are counted, grouped and posted; the others are stored for the record. |
+| `active_at` | timestamp or null | Grafana's `activeAt` when reported. |
+| `started_at` | timestamp | `active_at`, else the run start of the first run that observed the instance firing (Edge Cases: no state history). |
+| `days_firing` | integer | Whole days from `started_at` to the run start. |
+| `stale` | boolean | `days_firing >= stale_after_days` from `alerts.yaml` (default 14; FR-065). |
+| `new` | boolean | True when the previous run's `alerts.classified.json` did not hold this `instance_id` firing. |
+| `value` | string or null | The evaluated value as Grafana reports it; untrusted, never rendered into bullet text. |
+
+Instances are grouped for the post by `group` and `category` (FR-066): each Alert Group carries
+`{ group, category, importance (highest), firing, new, stale, oldest_started_at, rule_uids,
+instance_ids, link_ref }`, where `link_ref` is what the link builder turns into the filtered
+alert-list link (FR-070). A group's thread reply lists at most fifty instances and the count of the
+rest (Edge Cases).
+
+### Alert Episode
+
+The durable record of one Alert Instance from start to clear (FR-067), kept as append-only events
+in `alerts/episodes.jsonl`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `episode_id` | string | Hash of `instance_id` and the date of `started_at`. |
+| `event` | enum | `opened` (first run to see it firing) \| `observed` (each later run while firing) \| `cleared` (first run that no longer sees it firing). |
+| `run_id`, `at` | string, timestamp | The run that wrote the event and its start. |
+| `instance_id`, `rule_uid`, `title`, `host`, `project_url`, `group`, `category`, `importance` | | Copied from the instance. |
+| `started_at`, `cleared_at` | timestamp, timestamp or null | `cleared_at` only on `cleared`. |
+| `duration_hours` | number or null | On `cleared`. |
+| `correlations` | object | Built by code at `opened` and refreshed on every event: `{ expected_load_window_id, version_change: { from, to, observed } or null, related_candidates: candidate_id[], related_items: item_id[] }`; a version change counts when the project's `cht_version` differs between the runs on either side of `started_at`; candidates and items are related when they are on the same project and their metric is listed under the category in `alerts.yaml`, within one day of `started_at`. |
+| `explanation` | object or null | `{ item_id, why_now }` when an accepted Item of the same project and category exists; model prose, gate-accepted, copied by code. |
+
+An episode that clears is also appended to `corpus/outcomes/<date>.jsonl` as
+`{ kind: 'alert_episode', ... }` so distillation can learn from it (FR-067, FR-030).
+
 ### Item
 
 A finding the analysis chose to surface (FR-009). Written by the model, validated by schema, then
@@ -156,7 +230,8 @@ accepted or rejected by the gate.
 | `candidate_ids` | string[] | Non-empty; every id must exist in this run's candidates. |
 | `reference_urls` | string[] | URLs the model cites; each must have appeared in a tool result this run and be on the allow-list (FR-016). |
 | `rank` | integer | Assigned by the roll-up; 1 is highest. |
-| `placement` | enum | `body` (rank 1 to 3) \| `thread` (FR-010). |
+| `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a sub-bullet of their Project Group's bullet (FR-069). |
+| `slot` | integer or null | 1 to 5: the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
 | `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |
 
 Lifecycle: `drafted` (pass 1) → `revised` (later passes) → `ranked` → `placed` → `published` →
@@ -195,6 +270,9 @@ Check names, fixed in code: `schema`, `projects_known`, `metrics_known`, `candid
 `numbers_match`, `dates_match`, `links_built`, `links_allowlisted`, `links_resolve`,
 `severity_rules`, `bullet_count`, `bullet_length`, `secrets_absent`, `personal_data_absent`,
 `pattern_cards_known`. The same list runs inside the analysis and before publication (FR-018).
+`bullet_count` checks top-level bullets (at most five) and sub-bullets per bullet (at most eight);
+`bullet_length` checks two lines of 120 characters per bullet and one line per sub-bullet, and that
+every body item of the layout has exactly one bullet or sub-bullet (FR-015, FR-069).
 
 ### Brief
 
@@ -205,7 +283,7 @@ The published post for a run (FR-019 to FR-025).
 | `run_id` | string | |
 | `kind` | enum | `brief` \| `heartbeat` \| `degraded` \| `failure`. |
 | `headline` | string | One line. |
-| `bullets` | Bullet[] | At most 3 (FR-010). `{ item_id, text }`; `text` has at most 2 lines of at most 120 characters each (FR-015; constants in code). |
+| `bullets` | Bullet[] | At most 5 (FR-010, revised from 3 in spec revision 9). See Bullet; constants in code. |
 | `expected_load_notice` | string or null | Present when a window was active (FR-007). |
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
@@ -214,14 +292,40 @@ The published post for a run (FR-019 to FR-025).
 | `footer` | object | `{ prompts_url, config_url, trace_url, cost_usd }` (FR-019). |
 | `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
 
-### Thread Reply
+### Bullet
 
-The per-item message that carries reactions (FR-020).
+One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
 
 | Field | Type | Rules |
 |---|---|---|
-| `item_id`, `run_id` | string | |
-| `text` | string | Item rendered for Slack; escaped. |
+| `kind` | enum | `item` \| `group` \| `alerts`. |
+| `item_id` | string or null | Required when `kind` is `item`; null otherwise. |
+| `group` | string or null | Project Group label; required for `group` and `alerts`. |
+| `text` | string | At most 2 lines of at most 120 characters, no URLs. Written by the model for `item`; built by code for `group` ("<label>: <n> projects with issues") and `alerts` ("<label> alerts: <n> firing, <m> stale for more than <d> days"). |
+| `children` | Child[] | At most 8. `{ item_id or null, text }`, one line of at most 120 characters each. For `group`: one per member item in rank order, text written by the model as that item's one-line bullet. For `alerts`: one per category, built by code with the count, the oldest start and the stale count. Empty for `item`. |
+| `alert_key` | string or null | For `alerts`: `<group>/<category>` of the group when the bullet holds one category, else `<group>`; the thread reply and its link are built from the Alert Groups it covers (FR-070). |
+
+**Layout rule** (code, before the roll-up call; the result is `rollup/layout.json` and the prompt
+tells the model which items must be one-liners): walk the ranked Items and Alert Groups together,
+Alert Groups ordered among Items by importance (critical before every item, otherwise after the
+items of the same severity); an entry whose Project Group already holds a slot joins it as a
+sub-bullet while the slot has fewer than eight; otherwise it opens a new slot while fewer than five
+are open; otherwise it goes to the thread. A slot with one Item is an `item` bullet; with two or
+more Items a `group` bullet; Alert Groups of one Project Group share one `alerts` bullet with a
+sub-bullet per category and never mix with Items. The model's draft carries one `{ item_id, text }`
+per body Item; code assembles the Bullets from the draft and the layout, and the gate rejects a
+draft whose item ids differ from the layout's body items.
+
+### Thread Reply
+
+The per-item message that carries reactions (FR-020), and the per-alert-group message (FR-066).
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | |
+| `item_id` | string or null | The Item; null for an alert-group reply. |
+| `alert_key` | string or null | `<group>/<category>` for an alert-group reply; null for an item. Exactly one of `item_id` and `alert_key` is set. |
+| `text` | string | Item rendered for Slack, or the alert group's instances (at most fifty, with the count of the rest) and its code-built link; escaped. |
 | `publication` | Publication | `{ channel_id, ts, permalink }`. |
 
 ### Feedback Digest
@@ -252,8 +356,9 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `feedback_id` | string | Hash of `source_ts`, `author`, `kind`, `verdict`. Duplicate ids are ignored on re-ingestion. |
 | `date` | string | Date the feedback was observed. |
 | `run_id` | string | Run whose post carried the reaction or note. |
-| `target` | enum | `item` \| `brief`. A reaction on the parent post targets the brief (US2 scenario 3). |
+| `target` | enum | `item` \| `brief` \| `alert_group`. A reaction on the parent post targets the brief (US2 scenario 3); one on an alert-group reply targets that group (FR-066). |
 | `item_id` | string or null | Required when `target` is `item`. |
+| `alert_key` | string or null | Required when `target` is `alert_group`. Recorded and acknowledged like item feedback; it does not change alert ranking in this revision. |
 | `kind` | enum | `reaction` \| `note`. |
 | `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions; null for notes. A removed reaction is recorded as `retracted` (Edge Cases). |
 | `note` | string or null | Thread reply text, verbatim, untrusted. |
@@ -379,7 +484,12 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 - A Run analyses many Projects; each Project has many Metric Windows, one Computed Change per
   metric, zero or more Candidates, and one Pass per analysis pass.
 - An Item references one or more Candidates of the same project and at most one Pattern Card.
-- A Brief carries at most three Items in its body; every Item of the run has one Thread Reply.
+- A Brief carries at most five Bullets in its body; a Bullet holds one Item, one Project Group's
+  Items as sub-bullets, or one Project Group's Alert Groups by category. Every Item of the run has
+  one Thread Reply, and so does every Alert Group.
+- A Project belongs to one Project Group. An Alert Instance belongs to one Alert Rule and, through
+  its host, to one Project and one Project Group; an Alert Episode follows one Alert Instance from
+  start to clear and may name one Item as its explanation.
 - Feedback targets one Item or the Brief; Items accumulate Feedback across runs by `item_id`.
 - A Proposal belongs to the Run that wrote it; Pattern Cards cite Corpus Items by hash.
 - A Calibration Report reads Runs, Items and Feedback from the retention window.
@@ -397,6 +507,9 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
+  (alert-list links are built by code from an Alert Group's rule titles and hosts as a `search`
+  filter and resolve by confirming every title and host exists in the collected Alert Rules and
+  Instances, research.md R-14; FR-070),
   `forum.communityhealthtoolkit.org`, `github.com/medic/`, the tracing host, and the hosts of
   `AGENT_WATCHDOG_PROMPTS_URL` and `AGENT_WATCHDOG_CONFIG_URL`.
 - Secrets and personal data (FR-016, FR-045): reject on patterns for Slack tokens (`xox[abp]-`),
@@ -415,5 +528,7 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   about 5,500 samples per metric. At 200 metrics a project's raw file is roughly 10 MB uncompressed;
   50 projects for 14 days is under 10 GB only if raw files are gzip-compressed on write, so
   `inputs/windows.json.gz` is written compressed. Everything else is small.
+- Up to 500 firing Alert Instances per run; a group's thread reply lists at most fifty of them, and
+  `alerts/episodes.jsonl` grows by one line per firing instance per day, kilobytes a year.
 - Model usage is bounded per project and per run by configuration with hard caps in code
   (FR-012); projects with no candidates cost nothing (FR-013).

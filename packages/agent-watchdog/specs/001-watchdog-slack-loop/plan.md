@@ -11,7 +11,7 @@ Medic's hosted CHT Watchdog through its Grafana, collects metric windows through
 datasource proxy, computes changes and candidates deterministically, then opens one bounded
 Claude Agent SDK session per project with candidates: two passes in one session, read-only MCP
 tools only, schema-validated structured output, and a verification gate that runs in code between
-turns and again before publication. The roll-up posts one Slack message with at most three bullets
+turns and again before publication. The roll-up posts one Slack message with at most five bullets
 and a rendered image, one threaded reply per item, and a footer with prompts, configuration, trace
 and cost links. The next run reads reactions and notes, updates capped memory by diff, and writes
 proposals that humans adopt by pull request. Every stage writes files the next stage reads, so any
@@ -66,8 +66,9 @@ records; 10 Gi volume; retention 14 days raw and 30 days otherwise; one Slack ch
 CommonJS-compatible dependencies only.
 
 **Scale/Scope**: 10 to 50 projects, up to 10 dashboards and roughly 200 panel expressions per
-project, one post per day with at most three body items, seven runs of feedback look-back, a
-knowledge corpus of hundreds of files.
+project, one post per day with at most five body bullets of up to eight sub-bullets each, up to
+500 firing alert instances, seven runs of feedback look-back, a knowledge corpus of hundreds of
+files.
 
 ## Constitution Check
 
@@ -111,7 +112,7 @@ adjustment to the Notes are justified in Complexity Tracking.
 ```text
 specs/001-watchdog-slack-loop/
 ├── plan.md                  # This file
-├── research.md              # Phase 0: verified decisions R-1 to R-12 with sources
+├── research.md              # Phase 0: verified decisions R-1 to R-14 with sources
 ├── data-model.md            # Phase 1: entities, identity, validation, state machine
 ├── quickstart.md            # Phase 1: run and validate locally
 ├── contracts/
@@ -142,15 +143,19 @@ packages/agent-watchdog/
 │   ├── config/                    # zod schemas, env + files + flags precedence, redaction, hard caps
 │   ├── log/                       # JSON logger bound to run_id, monotonic stage timestamps
 │   ├── store/                     # run directory, atomic writes, gzip, retention purge
-│   ├── collect/                   # grafana.js (proxy + API), discovery.js, windows.js, targets.js
+│   ├── collect/                   # grafana.js (proxy + API + alerting), discovery.js (groups, ignore), windows.js,
+│   │                              # targets.js, alerts.js (Grafana-managed rules and firing instances, US8)
+│   ├── alerts/                    # classify.js (alerts.yaml policy, staleness, newness), group.js (per programme and
+│   │                              # category), episodes.js (durable episode events and correlations) (US8)
 │   ├── analyze/                   # changes.js, baselines.js, calendar.js, candidates.js, thresholds.js
 │   ├── feedback/                  # ingest.js (Slack reads), match.js, parse-notes.js, store.js, review.js (US7)
 │   ├── agent/                     # definition.js, prompt-assembly.js, engine-sdk.js, engine-cli.js,
 │   │                              # session-loop.js, hooks.js, tools/ (watchdog MCP tools, replay shim,
 │   │                              # stdio server)
 │   ├── verify/                    # gate.js, format.js, checks/ (one module per check)
-│   ├── rollup/                    # rank.js, brief.js, deterministic-brief.js, memory.js, proposals.js
-│   ├── links/                     # build.js (dashboard deep links), allowlist.js, resolve.js
+│   ├── rollup/                    # rank.js, layout.js (five slots, sub-bullets, alert bullets; US9),
+│   │                              # brief.js, deterministic-brief.js, memory.js, proposals.js
+│   ├── links/                     # build.js (dashboard deep links, alert-list links), allowlist.js, resolve.js
 │   ├── render/                    # report.js (Handlebars), browser.js (playwright-core screenshot)
 │   ├── publish/                   # slack.js (post, thread, upload, permalink, reactions), payload.js, digest.js, audience.js
 │   ├── corpus/                    # index.js, distill.js, scrub.js
@@ -163,7 +168,7 @@ packages/agent-watchdog/
 ├── skill/cht-watchdog/            # SKILL.md, references/, pattern-cards/index.md, pattern-cards/*.md
 ├── schema/                        # findings.schema.json, brief.schema.json (generated from zod, committed)
 ├── templates/                     # report.hbs, slack/*.hbs
-├── config/defaults/               # thresholds.yaml, dashboards.yaml, projects.yaml
+├── config/defaults/               # thresholds.yaml, dashboards.yaml, projects.yaml (groups, ignore), alerts.yaml
 ├── scripts/                       # build-schema.js, replay-eval.js, record-fixtures.js, build-card-index.js,
 │                                  # scan-secrets.js
 ├── test/                          # mirrors src/ for unit tests; fixtures/ (recorded, scrubbed runs, labels);
@@ -220,3 +225,38 @@ FR-063 added).
   fragment; nothing is applied automatically; open proposals are listed weekly with their age.
 - **Complexity**: no new dependency; `reactions.add` is in the Slack client already used.
   Result: PASS.
+
+### Revision 9 delta: User Stories 8 and 9, alerts and grouped briefing
+
+Re-checked on 2026-09-19 for the spec amendment (FR-010, FR-015, FR-019 amended; FR-064 to FR-070
+added; the body limit is five bullets of two lines with eight one-line sub-bullets).
+
+- **I**: no new dependency. Host patterns are two-wildcard globs converted to anchored regular
+  expressions in code; `alerts.yaml` follows the existing policy-file pattern (`yaml`, zod, hashed
+  into `config_hash`).
+- **II**: the fake Grafana gains the two alerting endpoints and a recorded alert day
+  (`test/fixtures/runs/alerts-day`), so every new path replays offline; the gate's new limits and
+  the layout rule have fixture-driven tests before the constants change; the alerting endpoints,
+  the link form and the sub-bullet rendering are smoke tests S-14 to S-16 (research.md R-14).
+- **III**: alert collection, classification, staleness, newness, grouping, counts, the alert-list
+  link, the body layout and every `group` and `alerts` bullet are code; the model writes only item
+  bullet text, and the gate rejects a draft whose item ids differ from the layout. Episode
+  correlations are computed; the model's only contribution to an episode is an explanation copied
+  from a gate-accepted item.
+- **IV**: the same Viewer token reads the alerting endpoints, whose read actions the Viewer role
+  holds (R-14); no new credential, no new Slack scope, one new registered metadata event type.
+  Rule titles, labels, annotations and values are untrusted data: stored verbatim, wrapped when a
+  project's firing alerts reach the analysis prompt, escaped on render, and placed in bullet text
+  only through code-built count lines. Ignored hosts are never analysed and never named.
+- **V**: no new process or stage; alerts flow collect, analyze, rollup, publish through files in
+  the run directory, and "alerts unavailable" is a notice while the run completes.
+- **VI**: the brief reports alerts and groups; it silences, acknowledges or changes nothing in
+  Grafana.
+- **VII**: `alerts.yaml` and the group patterns change only by pull request; an unknown rule is
+  reported as uncategorised rather than guessed; the run writes `alerts.classified.json` and
+  episode events, never policy.
+- **VIII**: still one internal audience; group labels and alert counts add nothing partner-facing.
+- **Complexity**: sub-bullets render as indented lines inside a bullet's `section` because Slack
+  `mrkdwn` has no nested lists; the layout rule replaces the fixed three slots with five slots that
+  can hold sub-bullets, which is the smallest change that gives "Nepal: 5 projects with issues"
+  its own line. Result: PASS.

@@ -276,7 +276,68 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ---
 
-## Phase 10: Polish & Cross-Cutting Concerns
+## Phase 10: User Story 9 - Grouped briefing for programmes (Priority: P2)
+
+**Goal**: `projects.yaml` declares programme groups by host pattern and an ignore list; ignored hosts are discovered and counted but never analysed, charged or named; the body holds five top-level bullets of at most two lines with up to eight one-line sub-bullets, a programme with several flagged projects collapsing into one group bullet; the layout is computed by code, the model writes only item text, the gate enforces the new limits, Slack renders sub-bullets, and a smoke listing shows every discovered host with its group so the placeholder patterns can be replaced. Implemented before User Story 8 because alert groups are laid out per programme.
+
+**Independent Test**: `test/e2e/us9.spec.js` plus quickstart step 13.
+
+### Tests for User Story 9
+
+- [ ] T128 [P] [US9] Write failing tests extending `test/config/policy.spec.js`: `projects.yaml` accepts `groups` (`label` unique, at most 40 characters, never `Other` or `Watchdog`; `host_patterns` lowercase globs using only `*` and `?`) and `ignore` (globs); a pattern with a scheme or `www.` is rejected; the package default carries the two placeholder groups (`MoH Nepal`, `eCHIS Kenya`) and the ignore patterns `*.dev.*` and `*-dev.*` (FR-068)
+- [ ] T129 [P] [US9] Write failing tests extending `test/collect/discovery.spec.js`, `test/model/schemas.spec.js` and `test/analyze/pipeline.spec.js`: every Project gets `group` (first matching group in file order, else `Other`) and `ignored`; `discovery.json` lists `groups` with their hosts and the `ignored` hosts; an ignored host gets no project directory, no windows, no candidates, no pass and no cost record, and `notices` never names it (FR-068)
+- [ ] T130 [P] [US9] Write failing tests `test/rollup/layout.spec.js` and extend `test/rollup/rank.spec.js`: the layout rule quoted from data-model.md Bullet (five slots; an entry joins its Project Group's slot while the slot holds fewer than eight; one Item is an `item` bullet, two or more a `group` bullet with children in rank order; the rest go to the thread); `slot` 1 to 5 or null on every Item; `BODY_SLOTS` is 5; `rollup/layout.json` shape (FR-010, FR-069)
+- [ ] T131 [P] [US9] Write failing tests extending `test/verify/checks/bullet_count.spec.js`, `test/verify/checks/bullet_length.spec.js`, `test/verify/checks/thread_order.spec.js` and `test/verify/gate.spec.js`: at most five bullets and eight children per bullet; children one line of at most 120 characters, bullets two lines; a draft whose item ids differ from the layout's body items is rejected with a reason; `thread_order` begins with the body items in layout order (FR-015, FR-069)
+- [ ] T132 [P] [US9] Write failing tests extending `test/rollup/brief.spec.js`, `test/rollup/deterministic-brief.spec.js`, `test/publish/payload.spec.js`, `test/render/report.spec.js` and `test/model/schemas.spec.js`: the roll-up user prompt names the items that are sub-bullets and must be one line; `briefFromDraft` assembles `Bullet { kind: 'item' | 'group' | 'alerts', item_id, group, text, children, alert_key }` from the draft and the layout with the code-built group text "<label>: <n> projects with issues"; `schemas.Brief.bullets` has at most 5 entries and `children` at most 8; the parent has one `section` per top-level bullet with sub-bullets as indented `◦` lines and the fallback text lists them; the report template renders sub-bullets; the degraded brief obeys the same limits (FR-010, FR-015, FR-069)
+- [ ] T133 [P] [US9] Extend `test/e2e/helpers.js` and `test/helpers/fake-grafana.js` so the fake watchdog serves hosts across two groups and one `.dev` host, and write failing `test/e2e/us9.spec.js` covering the four US9 acceptance scenarios
+
+### Implementation for User Story 9
+
+- [ ] T134 [US9] Add `groups` and `ignore` to the `projects.yaml` schema in `src/config/policy.js` (glob validation, reserved labels) and to `config/defaults/projects.yaml` (placeholder groups, ignore patterns); update `contracts/config-files.md` if the loaded shape differs
+- [ ] T135 [US9] Implement group and ignore matching in `src/collect/discovery.js` (glob to anchored regular expression, first match wins, `group` and `ignored` on each Project, `groups` and `ignored` in `discovery.json`), skip ignored projects in `src/cli/stages/collect.js`, `src/cli/stages/analyze.js`, `src/cli/stages/agent.js` and `src/rollup/new-projects.js`, and add `group` and `ignored` to `schemas.Project` in `src/model/schemas.js`
+- [ ] T136 [US9] Implement `src/rollup/layout.js` (layout rule, `rollup/layout.json`), `slot` and `BODY_SLOTS = 5` in `src/rollup/rank.js`, and in `src/model/schemas.js` the `Bullet` fields `kind`, `group`, `children`, `alert_key`, `bullets.max(5)` and `Item.slot`
+- [ ] T137 [US9] Raise the gate: `MAX_BULLETS = 5` and `MAX_CHILDREN = 8` in `src/verify/checks/bullet_count.js`, one-line children in `src/verify/checks/bullet_length.js`, layout agreement in `src/verify/checks/thread_order.js` with a `layout` argument to `verifyBrief` in `src/verify/gate.js` and `src/cli/gate.js`; update the limits in `src/agent/output-schema.js` descriptions and regenerate `schema/brief.schema.json` with `npm run schema:build`
+- [ ] T138 [US9] Assemble bullets from draft plus layout in `src/rollup/brief.js` (`briefFromDraft`, a prompt section naming the one-line items) and `src/rollup/deterministic-brief.js`, write `layout.json` from `src/cli/stages/rollup.js`, and change the rules in `prompts/rollup.md` to five bullets with one-line sub-bullets
+- [ ] T139 [US9] Render sub-bullets in `templates/slack/parent.hbs` and `src/publish/payload.js` (`parentBlocks`: one section per top-level bullet, children as indented `◦` lines; fallback text) and in `templates/report.hbs` with `src/render/report.js` for the image
+- [ ] T140 [US9] Add `--hosts` to `smoke/grafana.js` (every discovered host with its group and ignored flag) and a sub-bullet post to `smoke/slack.js` (S-16); make `test/e2e/us9.spec.js` pass; update `README.md` and `AGENTS.md` (groups, ignore list, five bullets with sub-bullets)
+
+**Checkpoint**: a programme with several flagged projects reads as one bullet with one sub-bullet per project, ignored hosts appear nowhere in the post, and no published body exceeds five bullets, two lines or eight sub-bullets (SC-015).
+
+---
+
+## Phase 11: User Story 8 - Alerts in the brief (Priority: P2)
+
+**Goal**: each run reads the Grafana-managed alert rules and firing instances with the Viewer token, classifies them from `alerts.yaml`, marks new and stale instances, groups them per programme and category into code-built bullets with links, posts one thread reply per alert group, gives the analysis the project's firing alerts as context, keeps durable episodes with correlations and the analysis's explanation, and says so when alerting is unavailable.
+
+**Independent Test**: `test/e2e/us8.spec.js` plus quickstart step 13.
+
+### Tests for User Story 8
+
+- [ ] T141 [P] [US8] Write failing tests extending `test/config/policy.spec.js` and `test/store/versions.spec.js`: `alerts.yaml` (`stale_after_days` an integer from 1 to 365; `rules` keyed by title with `category` a lowercase slug and `importance` one of `critical`, `high`, `medium`, `low`; `categories` listing metric keys with every used category present); the package default carries the FR-065 mapping; `config_hash` covers the four policy files (FR-065)
+- [ ] T142 [P] [US8] Write failing tests `test/collect/alerts.spec.js` and extend `test/collect/grafana.spec.js` and `test/helpers/fake-grafana.js`: `GET /api/prometheus/grafana/api/v1/rules` (following `groupNextToken`) and the `/alerts` fallback are read with the bearer token and timeout; rules and instances are normalised (`state` compared case-insensitively with `alerting` mapped to `firing`; `instance` label to host as in R-6; dashboard uid and panel id from the `__dashboardUid__` and `__panelId__` annotations; instances on ignored hosts dropped and counted); a 401, 403, 5xx or timeout yields `available: false` with a reason in `alerts.json` and the run continues (FR-064)
+- [ ] T143 [P] [US8] Write failing tests `test/alerts/classify.spec.js` and `test/alerts/group.spec.js`: category and importance by title, an unknown title is `uncategorised`, `medium`, `known: false`; `started_at` from `activeAt` else the first observing run; `days_firing`, `stale` at exactly `stale_after_days`, `new` against the previous run's `alerts.classified.json`; Alert Groups per `group` and `category` with `firing`, `new`, `stale`, `oldest_started_at`, highest `importance`, `rule_uids`, `instance_ids`; instances without a host fall under `Watchdog`; only `firing` instances are counted (FR-065, FR-066)
+- [ ] T144 [P] [US8] Write failing tests `test/alerts/episodes.spec.js` and extend `test/store/retention.spec.js` and `test/corpus/outcomes.spec.js`: `opened`, `observed` and `cleared` events appended to `alerts/episodes.jsonl` with `duration_hours` on clear; correlations (active expected-load window, a `cht_version` change across `started_at`, related candidates and items whose metric is listed under the category within one day); `explanation` copied from an accepted Item of the same project and category; a cleared episode appended to `corpus/outcomes/<date>.jsonl` as `kind: alert_episode`; `classify('alerts/episodes.jsonl')` is `durable` (FR-067)
+- [ ] T145 [P] [US8] Write failing tests extending `test/rollup/layout.spec.js`, `test/rollup/brief.spec.js`, `test/rollup/deterministic-brief.spec.js`, `test/links/build.spec.js`, `test/links/resolve.spec.js`, `test/verify/checks/links_resolve.spec.js`, `test/publish/payload.spec.js` and `test/publish/slack.spec.js`: Alert Groups rank among Items by importance (critical before every item, otherwise after items of the same severity) and share one `alerts` bullet per programme with one child per category, code-built text "<label> alerts: <n> firing, <m> stale for more than <d> days" and no URL; `buildAlertListLink` emits `<grafana>/alerting/list?search=<encoded terms>` from `namespace:CHT`, `state:firing`, `rule:"<title>"` and `label:instance=~"^(<hosts>)$"` and resolves by checking every title and host against the collected rules and instances; one reply per Alert Group with `agent_watchdog.alerts` metadata from `templates/slack/alert-group.hbs` (at most fifty instances, the count of the rest, one link per rule and one for the group) in body order; a day without items but with firing alerts posts the alert bullets rather than a heartbeat; an unavailable alerting API adds a notice (FR-066, FR-070)
+- [ ] T146 [P] [US8] Write failing tests extending `test/agent/prompt-assembly.spec.js`, `test/agent/stage-agent.spec.js`, `test/feedback/ingest.spec.js`, `test/feedback/match.spec.js` and `test/publish/digest.spec.js`: the project's firing alerts reach the pass prompt inside `<untrusted source="alerts">`; bot replies carrying `agent_watchdog.alerts` metadata are alert groups, and reactions or notes on them are recorded with `target: alert_group` and `alert_key`, acknowledged in the digest, and never change ranking (FR-066, FR-067)
+- [ ] T147 [P] [US8] Record the fixture day `test/fixtures/runs/alerts-day` with `test/fixtures/generate.js` (nine rules, fifteen firing instances across two programmes including three firing for more than 14 days and one unknown rule title, one instance on a `.dev` host, one rule without an `instance` label) and write failing `test/e2e/us8.spec.js` covering the six US8 acceptance scenarios over two consecutive days (an instance clears on day two)
+
+### Implementation for User Story 8
+
+- [ ] T148 [US8] Load `alerts.yaml` in `src/config/policy.js` (schema, defaults from `config/defaults/alerts.yaml`, inclusion in the policy hash used by `src/store/versions.js`) and add `AlertRule`, `AlertInstance`, `AlertGroup` and `AlertEpisode` to `src/model/schemas.js` with the enumerations from data-model.md
+- [ ] T149 [US8] Implement `src/collect/alerts.js` and the `alertRules()` and `alertInstances()` methods of `createGrafanaClient` in `src/collect/grafana.js`; write `alerts.json` from `src/cli/stages/collect.js` with `available` and `reason`; serve both endpoints from fixtures in `test/helpers/fake-grafana.js`
+- [ ] T150 [US8] Implement `src/alerts/classify.js` and `src/alerts/group.js` and write `alerts.classified.json` from `src/cli/stages/analyze.js`, reading the previous run's file for `new`
+- [ ] T151 [US8] Implement `src/alerts/episodes.js` (events, correlations, explanation), the `durable` class for `alerts/episodes.jsonl` in `src/store/retention.js`, the `alert_episode` outcome in `src/corpus/outcomes.js`, and the wiring in `src/cli/stages/rollup.js` after ranking
+- [ ] T152 [US8] Place Alert Groups in `src/rollup/layout.js`, build `alerts` bullets in `src/rollup/brief.js` and `src/rollup/deterministic-brief.js`, and add the alerts-unavailable notice to the Brief `notices`
+- [ ] T153 [US8] Implement `buildAlertListLink` in `src/links/build.js` and its resolution in `src/links/resolve.js` and `src/verify/checks/links_resolve.js`; write `templates/slack/alert-group.hbs`; add alert-group replies with `agent_watchdog.alerts` metadata to `src/publish/payload.js` and their posting to `src/publish/slack.js` and `src/cli/stages/publish.js`
+- [ ] T154 [US8] Pass the project's firing alerts into the analysis prompt in `src/agent/prompt-assembly.js` and `src/cli/stages/agent.js`, with a section in `prompts/pass-first.md` and `prompts/pass-review.md` explaining that an item may explain an alert
+- [ ] T155 [US8] Record feedback on alert-group replies in `src/feedback/ingest.js` and `src/feedback/match.js` (`target: alert_group`, `alert_key`), extend `schemas.Feedback` in `src/model/schemas.js`, and show it in `src/publish/digest.js` and `templates/slack/feedback-digest.hbs`
+- [ ] T156 [US8] Add `--alerts` to `smoke/grafana.js` (S-14, and printing the links for S-15); make `test/e2e/us8.spec.js` pass; update `README.md` and `AGENTS.md` (alerts in the brief, `alerts.yaml`, episodes)
+
+**Checkpoint**: every alert firing at run time appears grouped in the body or thread with a link that resolves (SC-014); an unavailable alerting API is a notice, not a failure; episodes accumulate on disk.
+
+---
+
+## Phase 12: Polish & Cross-Cutting Concerns
 
 **Purpose**: Operations commands, performance, security, container proof, release tooling and documentation.
 
@@ -298,8 +359,8 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 - **Setup (Phase 1)**: No dependencies; T001 first, then T002 to T010 in parallel.
 - **Foundational (Phase 2)**: Depends on Setup. Blocks every user story. T011 and T012 first (configuration is used by everything); the T013 to T024 pairs are parallel across modules, each test before its implementation.
-- **User Stories (Phases 3 to 9)**: All depend on Phase 2. US1 is the MVP and should complete first because US2, US3, US4 and US5 extend its stages; US6 depends only on Phase 2 and the pattern-card hooks in US1's prompt assembly; US7 depends on US2 (feedback records) and US4 (proposals, calibration report).
-- **Polish (Phase 10)**: Depends on the stories being delivered; T103 to T109 are parallel, T110 and T111 last.
+- **User Stories (Phases 3 to 11)**: All depend on Phase 2. US1 is the MVP and should complete first because US2, US3, US4 and US5 extend its stages; US6 depends only on Phase 2 and the pattern-card hooks in US1's prompt assembly; US7 depends on US2 (feedback records) and US4 (proposals, calibration report); US9 (Phase 10) changes US1's ranking, gate and payload; US8 (Phase 11) depends on US9's groups and layout.
+- **Polish (Phase 12)**: Depends on the stories being delivered; T103 to T109 are parallel, T110 and T111 last.
 
 ### User Story Dependencies
 
@@ -310,6 +371,8 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - **US5 (P3)**: Uses US1's discovery and brief; the readiness command is standalone.
 - **US6 (P3)**: Corpus and distillation are standalone; card matching touches US1's ranking.
 - **US7 (P3)**: Extends US2's feedback stage and store, US1's roll-up prompt and publish stage, and US4's proposals and calibration report. Independently testable on the Slack fixtures with a scripted classification model.
+- **US9 (P2, added in spec revision 9)**: Extends US1's discovery, ranking, gate, roll-up and payload with groups, the ignore list, five slots and sub-bullets. Independently testable on the fake Grafana with grouped hosts.
+- **US8 (P2, added in spec revision 9)**: Depends on US9 (groups and layout) and extends collect, analyze, roll-up, publish, the agent prompt and US2's feedback matching. Independently testable on the recorded alert day.
 
 ### Within Each User Story
 
@@ -324,6 +387,8 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - US1: all test tasks T025 to T037 in parallel; then T038 to T040 (collect), T041 to T043 (analyze), T044 to T047 (agent definition and tools), T051 (verify), T052 (links), T054 (report template), T056 (Slack templates) can proceed on separate files while T048 to T050 wait for T046 and T047.
 - US2 to US6: every story's test tasks in parallel, then implementations; US6 can run alongside US4 and US5.
 - US7: T116 to T120 in parallel; then T121 and T122 (independent files), T123, T124, T125, T126, T127.
+- US9: T128 to T133 in parallel; then T134 and T135 (policy, discovery), T136 and T137 (layout, gate), T138, T139, T140.
+- US8: T141 to T147 in parallel; then T148, T149 and T150 (policy, collect, classify), T151 and T152, T153, T154, T155, T156.
 
 ---
 
@@ -364,7 +429,9 @@ Task: "templates/report.hbs and src/render/report.js"
 4. US4 and US5 → proposals, calibration, readiness, new projects (SC-008).
 5. US6 → corpus distillation and pattern cards (SC-009).
 6. US7 → feedback acknowledged once, permanent records, lessons as proposals (SC-012, SC-013).
-7. Phase 10 → container proof, release tooling, security scan (SC-010).
+7. US9 → programme groups, ignored development hosts, five bullets with sub-bullets (SC-015).
+8. US8 → alerts grouped in the brief with links and durable episodes (SC-014).
+9. Phase 12 → container proof, release tooling, security scan (SC-010).
 
 ### Parallel Team Strategy
 
@@ -388,3 +455,7 @@ US3 can proceed in parallel, then US4, US5 and US6.
   in Phase 5).
 - T116 to T127 (Phase 9, User Story 7) were added with spec revision 8 on 2026-09-19; the former
   Phase 9 (Polish) is now Phase 10.
+- T128 to T156 (Phase 10, User Story 9; Phase 11, User Story 8) were added with spec revision 9 on
+  2026-09-19; Polish is now Phase 12. The body limits quoted in T032 and T034 (three bullets,
+  ranks 1 to 3) describe what User Story 1 built; T130, T131 and T137 raise them to five bullets
+  with eight sub-bullets, and the data-model.md Bullet section is normative from revision 9.
