@@ -203,13 +203,15 @@ describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
     const payload = buildPayload(args);
     const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
     expect(sections).to.have.length(2);
+    // The group line carries its worst child's severity marker (FR-082); sub-bullets stay plain.
     expect(sections[0].split('\n')).to.deep.equal([
-      'North Programme: 2 projects with issues',
+      '🔴 North Programme: 2 projects with issues',
       '   ◦ north-a sentinel backlog 912 vs 300 &amp; climbing',
       '   ◦ north-b sentinel backlog 912 vs 300',
     ]);
-    expect(sections[1]).to.equal('alpha sentinel backlog 912 vs 300');
-    expect(payload.parent.text).to.include('• North Programme: 2 projects with issues\n   ◦ north-a sentinel backlog');
+    expect(sections[1]).to.equal('🔴 alpha sentinel backlog 912 vs 300');
+    expect(payload.parent.text)
+      .to.include('• 🔴 North Programme: 2 projects with issues\n   ◦ north-a sentinel backlog');
     expect(payload.parent.text).to.include('&amp; climbing');
     // Every project item still has its own thread reply, in rank order.
     expect(payload.replies.map((r) => r.item_id)).to.deep.equal([northA.item_id, alpha.item_id, northB.item_id]);
@@ -251,6 +253,62 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
     brief, items: [item], links: new Map(), runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
     channel: 'C123', alertGroups: [northBacklog], alertLinks, staleAfterDays: 14,
   };
+
+  it('marks the headline, bullets and notices with code-placed emoji (FR-082)', () => {
+    const noticed = {
+      ...brief, notices: ['Resolved since the previous run: Sentinel Backlog on north-b.example.org (fired 3d)'],
+    };
+    const payload = buildPayload({ ...args, brief: noticed });
+    expect(payload.parent.blocks[0].text.text).to.match(/^🚨 |^📋 /);
+    const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
+    expect(sections[0].startsWith('🚨 North Programme alerts: 2 firing')).to.equal(true);
+    expect(sections[1].startsWith(`🔴 alpha sentinel backlog 912 vs 300`)).to.equal(true);
+    const contexts = payload.parent.blocks.filter((b) => b.type === 'context').map((b) => b.elements[0].text);
+    expect(contexts.some((t) => t.startsWith('_✅ Resolved since the previous run'))).to.equal(true);
+    expect(payload.parent.text).to.include('🚨 North Programme alerts');
+    expect(payload.parent.text).to.include('_✅ Resolved since the previous run');
+    expect(payload.image.alt_text, 'alt text carries no marker').to.equal(brief.headline);
+  });
+
+  it('collapses a pattern into one paragraph and shows the metric next to an alert (FR-078, FR-079)', () => {
+    const wideInstances = Array.from({ length: 4 }, (_, i) => classified('delivery', `south-${i}.example.org`, {
+      started_at: `2026-09-1${6 + (i % 3)}T00:00:00Z`,
+      evidence: i === 0 ? {
+        metric: 'cht_messaging_outgoing_total{status="delivered"}', aggregate: 'level', current_value: 12000,
+        previous_day_value: 12400, pct_change_vs_previous_day: -3.2,
+      } : null,
+    }));
+    const single = classified('outbound', 'south-9.example.org', {
+      evidence: { metric: 'cht_outbound_push_backlog_count', aggregate: 'level', current_value: 247909,
+        previous_day_value: 263364, pct_change_vs_previous_day: -5.9 },
+    });
+    const pattern = {
+      title: 'Message Delivery Rate', count: 4, of: 5, since_min: '2026-09-16', since_max: '2026-09-18',
+      hosts: wideInstances.map((i) => i.host).sort(), instance_ids: wideInstances.map((i) => i.instance_id),
+    };
+    const group = alertGroupOf([...wideInstances, single], { patterns: [pattern] });
+    const payload = buildPayload({ ...args, alertGroups: [group], alertLinks: new Map() });
+    const reply = payload.replies.find((r) => r.alert_key === group.alert_key);
+    expect(reply.text)
+      .to.include('🔁 Programme-wide: Message Delivery Rate on 4 of 5 projects, first 2026-09-16, last 2026-09-18');
+    expect(reply.text).to.include('south-0.example.org, south-1.example.org, south-2.example.org, south-3.example.org');
+    expect(reply.text.match(/• Message Delivery Rate on/g), 'pattern members are not listed one by one').to.equal(null);
+    expect(reply.text).to.include('• Outbound Push Backlog on south-9.example.org');
+    expect(reply.text).to.include('cht_outbound_push_backlog_count 247,909 now (yesterday 263,364)');
+  });
+
+  it('adds the firing alert to an item reply when the alert category covers the item metric (FR-079)', () => {
+    const backlogAlert = classified('sentinel', 'alpha.example.org', { started_at: '2026-09-16T06:00:00Z' });
+    const group = alertGroupOf([backlogAlert]);
+    const payload = buildPayload({
+      ...args, alertGroups: [group], alertLinks: new Map(),
+      alertCategories: { backlog: ['cht_sentinel_backlog_count', 'cht_outbound_push_backlog_count'] },
+    });
+    const reply = payload.replies.find((r) => r.item_id === item.item_id);
+    expect(reply.text).to.include('🚨 Alert firing: Sentinel Backlog since 2026-09-16 (2d)');
+    const without = buildPayload({ ...args, alertGroups: [group], alertLinks: new Map(), alertCategories: {} });
+    expect(without.replies.find((r) => r.item_id === item.item_id).text).to.not.include('Alert firing');
+  });
 
   it('adds one reply per alert group after the item replies, with the instances, links and registered metadata', () => {
     const payload = buildPayload(args);

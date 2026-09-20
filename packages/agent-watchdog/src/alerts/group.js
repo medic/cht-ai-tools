@@ -3,6 +3,8 @@
 // the highest importance and the members oldest first. Ordered by importance, then group and category in
 // code-point order, so the same day always groups the same way.
 
+const { detectPatterns } = require('./patterns');
+
 const IMPORTANCE_ORDER = Object.freeze({ critical: 0, high: 1, medium: 2, low: 3 });
 
 const alertKey = (group, category) => `${group}/${category}`;
@@ -24,17 +26,23 @@ const compactMember = (instance) => ({
   days_firing: instance.days_firing,
   stale: instance.stale,
   new: instance.new,
+  evidence: instance.evidence || null,
 });
 
 const topImportance = (instances) => instances
   .map((i) => i.importance)
   .sort((a, b) => IMPORTANCE_ORDER[a] - IMPORTANCE_ORDER[b])[0];
 
-/** @param {object[]} instances classified Alert Instances; only firing ones are grouped */
-const groupAlerts = (instances) => {
+/**
+ * @param {object[]} instances classified Alert Instances; only firing ones are grouped, and housekeeping ones
+ *   (stale on a host with no data, FR-080) are left to the housekeeping line
+ * @param {object} [options] `groupSizes`: hosts per programme label, for programme-wide patterns (FR-078)
+ */
+const groupAlerts = (instances, { groupSizes = {} } = {}) => {
+  const patterns = detectPatterns({ instances, groupSizes });
   const byKey = new Map();
   for (const instance of instances || []) {
-    if (instance.state !== 'firing') {
+    if (instance.state !== 'firing' || instance.housekeeping) {
       continue;
     }
     const key = alertKey(instance.group, instance.category);
@@ -60,6 +68,7 @@ const groupAlerts = (instances) => {
       instance_ids: sorted.map((i) => i.instance_id),
       hosts: unique(sorted.map((i) => i.host)),
       instances: sorted.map(compactMember),
+      patterns: patterns.filter((p) => p.group === sorted[0].group && p.category === sorted[0].category),
     };
   });
   return groups.sort((a, b) => IMPORTANCE_ORDER[a.importance] - IMPORTANCE_ORDER[b.importance]

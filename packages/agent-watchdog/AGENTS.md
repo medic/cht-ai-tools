@@ -108,6 +108,10 @@ connection failure make the source unreachable (exit 69). Projects are collected
 `AGENT_WATCHDOG_PROJECT_CONCURRENCY`. A per-project metric is one series per project: panels grouped by route,
 code or database, or ranked with `topk`, are listed in `discovery.json` (`breakdown`) and never queried, and a
 query that answers several series fails only its window, naming the labels that differ (FR-075).
+Alerts: `src/alerts/patterns.js` finds one rule firing across a programme, classification attaches the metric
+behind each alert and marks stale alerts on dead hosts as housekeeping, `src/rollup/notices.js` writes the
+housekeeping and resolved lines, and `src/rollup/markers.js` is the only source of emoji, added when the payload
+and the report render (FR-078 to FR-082).
 
 Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
 failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert

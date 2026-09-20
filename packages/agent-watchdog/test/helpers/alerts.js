@@ -124,8 +124,9 @@ const groupOf = (instances, overrides = {}) => {
     hosts: [...new Set(instances.map((i) => i.host).filter(Boolean))].sort(),
     instances: instances.map((i) => ({
       instance_id: i.instance_id, title: i.title, host: i.host, started_at: i.started_at, days_firing: i.days_firing,
-      stale: i.stale, new: i.new,
+      stale: i.stale, new: i.new, evidence: i.evidence || null,
     })),
+    patterns: [],
     ...overrides,
   };
 };

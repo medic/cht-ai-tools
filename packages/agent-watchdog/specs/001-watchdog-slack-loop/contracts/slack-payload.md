@@ -5,6 +5,18 @@ Facts about the Slack Web API below were verified against https://docs.slack.dev
 its bot display name is set in the app configuration, so no per-message identity override and no
 `chat:write.customize` scope is used (FR-047).
 
+## Markers, patterns and correlation (revision 14)
+
+The payload builder adds emoji markers when it renders (FR-082): the header by brief kind (📋 brief,
+🚨 alerts only, ✅ heartbeat, ⚠️ degraded, ❌ failure), each item or programme section by its worst
+severity (🔴 🟠 🟡), alert sections with 🚨, and context lines by kind (✅ resolved, 🧹 housekeeping,
+🆕 first run or new projects, ⚠️ analysis incomplete or alerts unavailable, 📅 expected load).
+`brief.json`, the image alt text and the model's output carry no markers. An alert group's thread
+reply opens with one paragraph per programme-wide pattern (`🔁 Programme-wide: <rule> on N of M
+projects, first <date>, last <date>` and the hosts) and lists the other instances with the metric
+behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply carries
+`🚨 Alert firing: <rule> since <date> (<n>d)` when a firing alert's category covers its metric.
+
 ## App configuration (managed outside this package, documented here)
 
 | Item | Value |

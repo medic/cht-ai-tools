@@ -16,6 +16,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 # Chromium headless shell installed through Playwright's own installer so browser and library versions move together.
 RUN npx playwright-core install --with-deps chromium-headless-shell \
+  && apt-get update && apt-get install -y --no-install-recommends fonts-noto-color-emoji \
   && rm -rf /var/lib/apt/lists/* /root/.npm \
   && chmod -R a+rX /ms-playwright
 COPY package.json ./

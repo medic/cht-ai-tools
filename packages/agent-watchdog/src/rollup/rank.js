@@ -106,10 +106,17 @@ const matchPatternCards = (items, cards) => {
   return { items: next, matched };
 };
 
-const compare = (a, b) => {
+/** Connected users as an order of magnitude, so a project with ten times the users ranks first within a severity. */
+const usersBucket = (usersOf, item) => (usersOf ? Math.floor(Math.log10((usersOf(item.project_url) || 0) + 1)) : 0);
+
+const compareWith = (usersOf) => (a, b) => {
   const severity = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
   if (severity !== 0) {
     return severity;
+  }
+  const users = usersBucket(usersOf, b) - usersBucket(usersOf, a);
+  if (users !== 0) {
+    return users;
   }
   if (b.confidence !== a.confidence) {
     return b.confidence - a.confidence;
@@ -130,16 +137,18 @@ const compare = (a, b) => {
  * @param {object|null} [options.cards] loaded pattern cards (src/corpus/cards.js); matched before persistence
  * @param {(projectUrl: string) => string} [options.groupOf] the project's group label; everything is "Other" without it
  * @param {object[]} [options.alertGroups] Alert Groups that take body slots of their own (FR-066)
+ * @param {(projectUrl: string) => number} [options.usersOf] connected users per project, a ranking input (FR-081)
  */
 const rankItems = ({
   items, feedbackByItem = new Map(), previousItemIds = new Map(), cards = null, groupOf = undefined, alertGroups = [],
+  usersOf = null,
 }) => {
   const withPersistence = matchPatternCards(items, cards).items.map((item) => ({
     ...item,
     persisting_days: 1 + (previousItemIds.get(item.item_id) || 0),
   }));
   const influenced = applyFeedbackInfluence(withPersistence, feedbackByItem);
-  const sorted = [...influenced].sort(compare);
+  const sorted = [...influenced].sort(compareWith(usersOf));
   const slots = slotByKey(buildLayout(sorted, { ...(groupOf ? { groupOf } : {}), alertGroups }));
   return sorted.map((item, index) => {
     const slot = slots.get(item.item_id) || null;

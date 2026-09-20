@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
 const { hostOf } = require('../rollup/deterministic-brief');
+const { headlineMarker, bulletMarker, noticeMarker, withMarker } = require('../rollup/markers');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', '..', 'templates', 'report.hbs');
 const KIND_LABELS = { brief: 'brief', heartbeat: 'all quiet', degraded: 'degraded', failure: 'failed' };
@@ -77,18 +78,20 @@ const buildView = ({ brief, items, windowsByMetric, runId }) => {
   if (typeof brief.headline !== 'string') {
     throw new Error('brief.headline is required to render the report');
   }
+  const severityById = new Map((items || []).map((item) => [item.item_id, item.severity]));
+  const severityOf = (id) => severityById.get(id) || null;
   const notices = [brief.expected_load_notice, brief.degradation_notice, ...(brief.notices || [])]
     .filter(Boolean)
-    .map((text) => ({ text }));
+    .map((text) => ({ text: withMarker(noticeMarker(text), text) }));
   return {
     run_id: runId,
     date: brief.run_id ? brief.run_id.slice(0, 10) : runId,
     kind: brief.kind,
     kind_label: KIND_LABELS[brief.kind] || brief.kind,
-    headline: brief.headline,
+    headline: withMarker(headlineMarker(brief), brief.headline),
     has_bullets: brief.bullets.length > 0,
     bullets: brief.bullets.map((b) => ({
-      text: b.text,
+      text: withMarker(bulletMarker(b, severityOf), b.text),
       has_children: Boolean(b.children && b.children.length),
       children: (b.children || []).map((child) => ({ text: child.text })),
     })),

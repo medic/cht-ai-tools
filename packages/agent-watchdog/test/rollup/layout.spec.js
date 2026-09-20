@@ -188,6 +188,26 @@ describe('rollup/layout: alert groups (FR-066, User Story 8)', () => {
     expect(alertCategoryLine(northBacklog).split('\n')).to.have.length(1);
   });
 
+  it('writes a programme-wide pattern as the category line when one rule covers the category (FR-078)', () => {
+    const pattern = {
+      title: 'Client Feedback/Error Rate', count: 45, of: 53, since_min: '2026-09-18', since_max: '2026-09-20',
+      instance_ids: Array.from({ length: 45 }, (_, i) => `i${i}`), hosts: [],
+    };
+    const wide = {
+      ...northBacklog, category: 'client_errors', firing: 45, stale: 0, new: 45, titles: ['Client Feedback/Error Rate'],
+      instance_ids: pattern.instance_ids, oldest_started_at: '2026-09-18T00:00:00Z', patterns: [pattern],
+    };
+    expect(alertCategoryLine(wide)).to.equal(
+      'client_errors: Client Feedback/Error Rate on 45 of 53 projects since 2026-09-18, programme-wide',
+    );
+    const partial = {
+      ...wide, firing: 47, instance_ids: [...pattern.instance_ids, 'x1', 'x2'],
+      titles: ['Client Feedback/Error Rate', 'Other Rule'],
+    };
+    expect(alertCategoryLine(partial)).to.include('programme-wide: Client Feedback/Error Rate on 45 of 53');
+    expect(alertCategoryLine(partial).split('\n')).to.have.length(1);
+  });
+
   it('assembles an alerts bullet from the layout with the group text and one child per category', () => {
     const alertGroups = [northBacklog, northAvailability, northDatabase];
     const layout = buildLayout([], { alertGroups });

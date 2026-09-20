@@ -107,10 +107,11 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       const payload = r.read('rollup/payload.json');
       const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
       expect(sections).to.have.length(brief.bullets.length);
-      const northSection = sections.find((s) => s.startsWith('North Programme: 3 projects with issues'));
+      // The rendered section carries the group's severity marker in front of the stored text (FR-082).
+      const northSection = sections.find((s) => /^\S+ North Programme: 3 projects with issues/.test(s));
       expect(northSection.split('\n').slice(1)).to.have.length(3);
       expect(northSection.split('\n').slice(1).every((line) => line.startsWith('   ◦ '))).to.equal(true);
-      expect(payload.parent.text).to.include('• North Programme: 3 projects with issues\n   ◦ ');
+      expect(payload.parent.text).to.match(/• \S+ North Programme: 3 projects with issues\n {3}◦ /);
       expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(ranked.map((i) => i.item_id).sort());
       expect(JSON.stringify(payload)).to.not.include('cht-dev');
       expect(r.slack.chat.postMessage.callCount).to.equal(1 + ranked.length);

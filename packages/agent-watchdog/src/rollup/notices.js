@@ -1,0 +1,55 @@
+'use strict';
+// Housekeeping and resolved lines (FR-080), written by code from the classified alerts and the episode record.
+const { openEpisodes } = require('../alerts/episodes');
+
+const DAY_MS = 86400000;
+const MAX_NAMED = 3;
+
+const byCodePoint = (a, b) => {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
+};
+const listOf = (values) => `${values.slice(0, MAX_NAMED).join(', ')}${values.length > MAX_NAMED
+  ? `, +${values.length - MAX_NAMED} more`
+  : ''}`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Stale alerts on hosts with no data: old news, named once, with what to do about them. */
+const housekeepingNotice = (housekeeping) => {
+  if (!housekeeping || !housekeeping.length) {
+    return null;
+  }
+  const hosts = [...new Set(housekeeping.map((h) => h.host).filter(Boolean))].sort(byCodePoint);
+  const minDays = Math.min(...housekeeping.map((h) => h.days_firing || 0));
+  const one = housekeeping.length === 1;
+  return `Housekeeping: ${plural(housekeeping.length, 'alert')} stale for ${minDays}+ days on `
+    + `${plural(hosts.length, 'host')} with no data (${listOf(hosts)}): remove ${one ? 'it' : 'them'} from the `
+    + `watchdog or silence the rule${one ? '' : 's'}`;
+};
+
+/** Open episodes whose instance no longer fires, with how long they fired, oldest first. */
+const clearedEpisodes = ({ events, firingIds, runStart }) => {
+  const start = runStart instanceof Date ? runStart.getTime() : Date.parse(runStart);
+  return [...openEpisodes(events).values()]
+    .filter((episode) => !firingIds.has(episode.instance_id))
+    .map((episode) => ({
+      instance_id: episode.instance_id,
+      title: episode.title,
+      host: episode.host || null,
+      days: Math.max(0, Math.floor((start - Date.parse(episode.started_at)) / DAY_MS)),
+    }))
+    .sort((a, b) => b.days - a.days || byCodePoint(a.instance_id, b.instance_id));
+};
+
+const resolvedNotice = (cleared) => {
+  if (!cleared || !cleared.length) {
+    return null;
+  }
+  const named = cleared.slice(0, MAX_NAMED).map((c) => `${c.title} on ${c.host || 'watchdog'} (fired ${c.days}d)`);
+  const rest = cleared.length > MAX_NAMED ? `, +${cleared.length - MAX_NAMED} more` : '';
+  return `Resolved since the previous run: ${named.join('; ')}${rest}`;
+};
+
+module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice };

@@ -18,7 +18,8 @@ const importanceOf = (title, alertsPolicy) => {
   return { category: UNCATEGORISED, importance: 'medium', known: false };
 };
 
-const emptyCounts = () => ({ firing: 0, new: 0, stale: 0, pending: 0, unknown_rules: 0 });
+const emptyCounts = () => ({
+  housekeeping: 0, firing: 0, new: 0, stale: 0, pending: 0, unknown_rules: 0 });
 
 /**
  * @param {object} options
@@ -27,8 +28,52 @@ const emptyCounts = () => ({ firing: 0, new: 0, stale: 0, pending: 0, unknown_ru
  * @param {object[]} [options.projectGroups] projects.yaml groups (label, host_patterns)
  * @param {object|null} [options.previous] the previous run's alerts.classified.json, for newness and start dates
  * @param {Date|string} options.runStart
+ * @param {Map|object|null} [options.changesByProject] Computed Changes per project url, for the metric shown next to
+ *   an alert (FR-079)
+ * @param {object} [options.categories] alerts.yaml categories: metric names per category
+ * @param {Set<string>|null} [options.deadHosts] hosts whose scrape target was down all day: a stale alert there is
+ *   housekeeping, not news (FR-080)
+ * @param {object} [options.groupSizes] hosts per programme label, for programme-wide patterns (FR-078)
  */
-const classifyAlerts = ({ collected, alertsPolicy, projectGroups = [], previous = null, runStart }) => {
+const changesFor = (changesByProject, projectUrl) => {
+  if (!changesByProject) {
+    return [];
+  }
+  const found = changesByProject instanceof Map ? changesByProject.get(projectUrl) : changesByProject[projectUrl];
+  return Array.isArray(found) ? found : [];
+};
+
+/** The computed change of the metric that explains an alert category, preferring the bare metric over variants. */
+const evidenceFor = (instance, changesByProject, categories) => {
+  const names = (categories && categories[instance.category]) || [];
+  const related = changesFor(changesByProject, instance.project_url)
+    .filter((change) => names.some((name) => String(change.metric).includes(name)))
+    .sort((a, b) => a.metric.length - b.metric.length);
+  const exact = related.find((change) => names.includes(change.metric));
+  const change = exact || related[0];
+  return change
+    ? {
+      metric: change.metric,
+      aggregate: change.aggregate || 'level',
+      current_value: change.current_value ?? null,
+      previous_day_value: change.previous_day_value ?? null,
+      pct_change_vs_previous_day: change.pct_change_vs_previous_day ?? null,
+    }
+    : null;
+};
+
+const compactHousekeeping = (instance) => ({
+  instance_id: instance.instance_id,
+  title: instance.title,
+  host: instance.host,
+  started_at: instance.started_at,
+  days_firing: instance.days_firing,
+});
+
+const classifyAlerts = ({
+  collected, alertsPolicy, projectGroups = [], previous = null, runStart, changesByProject = null, categories = {},
+  deadHosts = null, groupSizes = {},
+}) => {
   const staleAfterDays = (alertsPolicy && alertsPolicy.stale_after_days) || DEFAULT_STALE_AFTER_DAYS;
   const start = runStart instanceof Date ? runStart : new Date(runStart);
   if (!collected || !collected.available) {
@@ -39,6 +84,7 @@ const classifyAlerts = ({ collected, alertsPolicy, projectGroups = [], previous 
       rules: [],
       instances: [],
       groups: [],
+      housekeeping: [],
       counts: emptyCounts(),
     };
   }
@@ -52,28 +98,34 @@ const classifyAlerts = ({ collected, alertsPolicy, projectGroups = [], previous 
     const startedAt = instance.active_at || (before && before.started_at) || start.toISOString();
     const daysFiring = Math.max(0, Math.floor((start.getTime() - Date.parse(startedAt)) / DAY_MS));
     const firing = instance.state === 'firing';
-    return {
+    const stale = firing && daysFiring >= staleAfterDays;
+    const classified = {
       ...instance,
       group: instance.host ? groupFor(instance.host, projectGroups) : WATCHDOG,
       ...classification,
       started_at: startedAt,
       days_firing: daysFiring,
-      stale: firing && daysFiring >= staleAfterDays,
+      stale,
       new: firing && !before,
+      housekeeping: Boolean(stale && deadHosts && instance.host && deadHosts.has(instance.host)),
     };
+    return { ...classified, evidence: firing ? evidenceFor(classified, changesByProject, categories) : null };
   });
-  const firing = instances.filter((i) => i.state === 'firing');
+  const firing = instances.filter((i) => i.state === 'firing' && !i.housekeeping);
+  const housekeeping = instances.filter((i) => i.housekeeping);
   return {
     available: true,
     reason: null,
     stale_after_days: staleAfterDays,
     rules,
     instances,
-    groups: groupAlerts(instances),
+    groups: groupAlerts(instances, { groupSizes }),
+    housekeeping: housekeeping.map(compactHousekeeping),
     counts: {
       firing: firing.length,
       new: firing.filter((i) => i.new).length,
       stale: firing.filter((i) => i.stale).length,
+      housekeeping: housekeeping.length,
       pending: instances.filter((i) => i.state === 'pending').length,
       unknown_rules: rules.filter((r) => !r.known).length,
     },

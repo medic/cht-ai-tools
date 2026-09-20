@@ -357,9 +357,9 @@ restart candidate, clocks produce none, and duplicate display panels collapse in
 4. **Given** two panels differ only by a display comparison such as `>= 0`, **When** metrics are
    discovered, **Then** they are one metric in the analysis and the brief.
 
-### User Story 11 - Correlation and consolidation (Priority: P2, proposed)
+### User Story 11 - Correlation and consolidation (Priority: P2)
 
-*Proposed in revision 13; not yet planned or tasked.* The on-call reader wants one message that
+*Proposed in revision 13, accepted and planned in revision 14.* The on-call reader wants one message that
 holds what a senior engineer would say after reading the alerts and the dashboards together: what
 changed, on which projects, since when, whether it is one event across a programme, and what is
 old news.
@@ -387,6 +387,10 @@ line that shows the alert and its metric together.
    resolved line names it.
 5. **Given** several projects are flagged, **When** they are ranked, **Then** the number of
    connected users of each project is a ranking input, so the most-used projects come first.
+6. **Given** a brief is rendered for Slack or as an image, **When** it is read, **Then** a small
+   fixed set of emoji placed by code marks status and severity: the headline by kind, each item or
+   programme line by its worst severity, alert lines with an alarm, and the resolved, housekeeping
+   and new-project notices with their own marker; the model writes none of them.
 
 ### Edge Cases
 
@@ -682,6 +686,27 @@ Alerts and groups
   drawn from a counter MUST say it is an increase. Added in revision 14.
 - **FR-077**: Two panels whose expressions differ only by a display comparison that keeps zero
   visible (`>= 0`) MUST be one metric in discovery, analysis and the brief. Added in revision 14.
+- **FR-078**: When one alert rule fires on at least three projects of a programme, on at least half
+  of them, with first occurrences within two days, the brief MUST present it as one programme-wide
+  event: the category line names the rule, the count out of the programme's size and the first day,
+  and the thread lists the projects once, in one paragraph. Added in revision 14.
+- **FR-079**: Every alert instance MUST carry, when one exists, the computed change of the metric
+  that its category names for its project (the metric, its current and previous-day values, the
+  change), shown next to the alert in the thread; and an item's thread reply MUST name a firing
+  alert of its project whose category covers the item's metric, with its start date. Added in
+  revision 14.
+- **FR-080**: A stale alert on a host whose scrape target was down for the whole current window is
+  housekeeping: left out of the alert groups and counts and named once in a housekeeping notice
+  that suggests removing the host from the watchdog or silencing the rule. An episode open in the
+  durable record whose instance no longer fires MUST be named in a resolved notice with how long it
+  fired. Added in revision 14.
+- **FR-081**: The number of connected users of a project MUST be a ranking input for its items:
+  within a severity, an item on a project with ten times the users ranks first; confidence and
+  persistence order items within the same order of magnitude. Added in revision 14.
+- **FR-082**: Emoji MUST be placed by code alone, from a fixed vocabulary, when the brief is rendered
+  for Slack or as an image: the headline by kind, item and programme lines by worst severity, alert
+  lines with an alarm, the notices by what they say. Stored texts and the model's output carry none.
+  Added in revision 14.
 
 Memory, proposals and the knowledge corpus
 

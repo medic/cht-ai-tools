@@ -5,6 +5,9 @@ const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
+const { housekeepingNotice, clearedEpisodes, resolvedNotice } = require('../../rollup/notices');
+const { readEpisodeEvents } = require('../../alerts/episodes');
+const { bareKey } = require('../../analyze/kinds');
 const { updateEpisodes } = require('../../alerts/episodes');
 const { RunDir } = require('../../store/run-dir');
 const { previousRunIds } = require('./../../rollup/history');
@@ -144,9 +147,17 @@ const run = async (ctx) => {
   // Items of one programme share a body slot as sub-bullets (FR-069); the layout is written for the gate and the
   // publish stage to read, so the prompt, the accepted draft and the post agree.
   const groupOf = groupOfProjects(discovery);
+  // Connected users per project, from the computed changes, rank the most-used projects first (FR-081).
+  const usersByUrl = new Map();
+  for (const project of discovery.projects || []) {
+    const users = (changes[project.slug] || []).find((c) => bareKey(c.metric) === 'cht_connected_users_count');
+    if (users && users.current_value !== null && users.current_value !== undefined) {
+      usersByUrl.set(project.url, users.current_value);
+    }
+  }
   const ranked = rankItems({
     items: matching.items, previousItemIds: ctx.previousItemIds || new Map(), feedbackByItem: ctx.feedbackByItem,
-    groupOf, alertGroups,
+    groupOf, alertGroups, usersOf: (url) => usersByUrl.get(url) || 0,
   });
   await runDir.writeJson('rollup/items.ranked.json', ranked);
   const layout = buildLayout(ranked, { groupOf, alertGroups });
@@ -168,6 +179,24 @@ const run = async (ctx) => {
   }
   if (classified && !classified.available) {
     notices.push(`Alerts unavailable: ${classified.reason || 'the alerting endpoints did not answer'}`);
+  }
+  // Old news and good news (FR-080): stale alerts on dead hosts once, and episodes that cleared since the last run.
+  if (alertsAvailable) {
+    const housekeeping = housekeepingNotice(classified.housekeeping || []);
+    if (housekeeping) {
+      notices.push(housekeeping);
+    }
+    const firingIds = new Set((classified.instances || [])
+      .filter((i) => i.state === 'firing')
+      .map((i) => i.instance_id));
+    const cleared = clearedEpisodes({
+      events: await readEpisodeEvents(dataDirForHistory), firingIds,
+      runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
+    });
+    const resolved = resolvedNotice(cleared);
+    if (resolved) {
+      notices.push(resolved);
+    }
   }
   const composed = await composeBrief({
     ctx,

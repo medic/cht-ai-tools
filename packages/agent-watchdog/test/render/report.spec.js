@@ -30,6 +30,12 @@ describe('render/report', () => {
     expect(html).to.include('<polyline');
   });
 
+  it('renders the code-placed markers on the headline and bullets (FR-082)', () => {
+    const html = renderReport({ ...base, brief, items: [item], windowsByMetric: windows });
+    expect(html).to.include('📋 Sentinel backlog tripled on alpha');
+    expect(html).to.include('🔴 alpha sentinel backlog 912 vs 300');
+  });
+
   it('escapes untrusted text everywhere it appears', () => {
     const html = renderReport({ ...base, brief, items: [item], windowsByMetric: windows });
     expect(html).to.include('&lt;script&gt;alert(1)&lt;/script&gt;');

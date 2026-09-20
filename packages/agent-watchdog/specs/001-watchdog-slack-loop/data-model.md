@@ -122,6 +122,22 @@ A metric's values over one named period for one project (FR-004).
 A window is also unavailable with `N series, not one per project (labels: …)` when the query answered
 several series for the project (FR-075); no series is chosen over the others.
 
+### Alert Pattern (revision 14)
+
+One rule firing across a programme (FR-078), carried on the Alert Group as `patterns[]`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `group`, `category`, `title` | string | The programme, its category and the rule title. |
+| `count`, `of` | integer | Firing hosts and the programme's size from discovery (the hosts seen when unknown); `count >= 3` and `count / of >= 0.5`. |
+| `since_min`, `since_max` | date | First occurrences, at most two days apart. |
+| `hosts`, `instance_ids` | string[] | Sorted; the instances a thread reply lists as one paragraph. |
+
+An Alert Instance also carries `housekeeping` (stale on a host whose scrape target read zero all
+day, FR-080) and `evidence` (the computed change of a category metric for its project, FR-079:
+`metric`, `aggregate`, `current_value`, `previous_day_value`, `pct_change_vs_previous_day`).
+`alerts.classified.json` lists the housekeeping instances under `housekeeping[]` and counts them.
+
 Raw windows are the only artefact under the short retention period (FR-040).
 
 Each dashboard in `discovery.json` carries `variables`, what its templating variables resolve to

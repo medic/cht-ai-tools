@@ -895,3 +895,42 @@ would.
 mistaken, and the operator could not review the decision); dropping counters from the dashboards
 (rejected: docs per day and feedback per day are useful signals once read as increases).
 
+## R-19. Correlation and consolidation in the brief (FR-078 to FR-082)
+
+**Evidence**: the first complete hosted run's payload (`rollup/payload.json`, 2026-09-20): one alert
+category listing 45 near-identical lines, all started within three days, on most of one programme's
+projects; seven "API Server Down" alerts stale for 72 days on hosts with no metric in any window;
+every alert line without its metric; every item and alert on the first run marked "new"; the
+reader's question whether the result differed from a Grafana notification. The spec's FR-015 already
+permits emoji as status and severity markers. Slack `mrkdwn` renders Unicode emoji in section and
+context blocks; the header block is plain text with `emoji: true`. Debian bookworm ships
+`fonts-noto-color-emoji`, which the Chromium headless shell uses for emoji glyphs in the rendered
+image (docs, run record).
+
+**Decision**:
+- Patterns (`src/alerts/patterns.js`): per programme and rule, the firing hosts, the programme's size
+  from discovery (the hosts seen when unknown), and the span of first occurrences; a pattern needs
+  three hosts, half the programme and a two-day span. Groups carry their patterns; a pattern that
+  covers a whole category is the category line; the thread shows one paragraph per pattern and lists
+  the other instances as before.
+- Evidence: classification looks up, per firing instance, the computed change of a metric the
+  category names for that project (`alerts.yaml` categories), preferring the bare metric; the thread
+  line shows `metric value now (yesterday value)`, `/day` for counters. An item's reply names the
+  firing alert whose category covers its metric.
+- Housekeeping: an instance that is stale and whose host's scrape target read zero for the whole
+  current window is housekeeping: out of the groups and counts, into one notice naming the hosts and
+  the remedy. Resolved: episodes open in `alerts/episodes.jsonl` whose instance no longer fires make
+  one notice, oldest first, three named.
+- Ranking: connected users per project, from the computed changes, enter the order as an order of
+  magnitude after severity and before confidence, so a busy project's item comes first without
+  letting user counts override confidence among peers.
+- Markers (`src/rollup/markers.js`): a fixed vocabulary added at render time by the payload builder
+  and the report view, never stored and never written by the model; the image alt text stays plain.
+  The container image installs `fonts-noto-color-emoji`.
+
+**Alternatives considered**: markers written by the model (rejected: constitution III, and the gate
+would have to police them); markers stored in `brief.json` (rejected: feedback matching and the
+replay comparison work on plain text); a threshold per rule for patterns (rejected: the share and the
+window generalise; a rule-specific knob can come with feedback); ranking by absolute user counts
+(rejected: a project with 1,200 users would always beat one with 400 whatever the confidence).
+

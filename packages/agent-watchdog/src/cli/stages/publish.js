@@ -130,6 +130,7 @@ const run = async (ctx) => {
     alertGroups,
     alertLinks,
     staleAfterDays: (classified && classified.stale_after_days) || 14,
+    alertCategories: (ctx.policy && ctx.policy.alerts && ctx.policy.alerts.categories) || {},
   });
   await runDir.writeJson('rollup/payload.json', payload);
   if (built) {

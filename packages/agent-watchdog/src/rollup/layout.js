@@ -145,8 +145,18 @@ const alertsBulletText = ({ label, firing, stale, staleAfterDays }) => (stale > 
 
 const MAX_TITLES_IN_LINE = 2;
 
-/** One sub-bullet per category, written by code: count, rules, oldest start, stale and new counts. */
+const patternText = (p) => `${p.title} on ${p.count} of ${p.of} projects`;
+
+/**
+ * One sub-bullet per category, written by code: count, rules, oldest start, stale and new counts. A programme-wide
+ * pattern (FR-078) that covers the whole category is the line; a partial one is named at the end.
+ */
 const alertCategoryLine = (group) => {
+  const patterns = group.patterns || [];
+  const full = patterns.find((p) => (p.instance_ids || []).length === (group.instance_ids || []).length);
+  if (full) {
+    return `${group.category}: ${patternText(full)} since ${full.since_min}, programme-wide`;
+  }
   const titles = group.titles || [];
   const shown = titles.slice(0, MAX_TITLES_IN_LINE).join(', ');
   const more = titles.length > MAX_TITLES_IN_LINE ? `, +${titles.length - MAX_TITLES_IN_LINE} more` : '';
@@ -157,6 +167,9 @@ const alertCategoryLine = (group) => {
   }
   if (group.new > 0) {
     parts.push(`${group.new} new`);
+  }
+  if (patterns.length) {
+    parts.push(`programme-wide: ${patternText(patterns[0])}`);
   }
   return parts.join(', ');
 };

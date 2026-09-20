@@ -410,6 +410,21 @@ stops being two thirds counters and clocks rising as they always do.
 **Checkpoint**: `npm run replay:eval` unchanged on the three fixture days; the hosted run's candidate count falls with
 the counters and clocks gone.
 
+## Phase 17: User Story 11, correlation and consolidation (revision 14)
+
+**Purpose**: One message a senior engineer would write: programme-wide patterns as one event, the metric next to
+every alert, old news in a housekeeping line, good news in a resolved line, the most-used projects first, and status
+markers by code (FR-078 to FR-082).
+
+- [X] T181 [P] [US11] Tests first: `test/alerts/patterns.spec.js`, `test/rollup/markers.spec.js`, `test/rollup/notices.spec.js`; `test/alerts/group.spec.js` and `test/alerts/classify.spec.js` for patterns, evidence and housekeeping; `test/rollup/layout.spec.js` for the pattern line; `test/rollup/rank.spec.js` for users; `test/publish/payload.spec.js` and `test/render/report.spec.js` for markers, pattern paragraphs, evidence and item alert lines
+- [X] T182 [US11] `src/alerts/patterns.js`; patterns, housekeeping exclusion and member evidence in `src/alerts/group.js`; evidence, housekeeping and group sizes in `src/alerts/classify.js`; changes per project, dead hosts and group sizes from `src/cli/stages/analyze.js`; schema fields in `src/model/schemas.js`
+- [X] T183 [US11] Pattern category lines in `src/rollup/layout.js`; `src/rollup/notices.js` (housekeeping, cleared episodes, resolved) and connected users in `src/cli/stages/rollup.js` and `src/rollup/rank.js`
+- [X] T184 [US11] `src/rollup/markers.js`; markers, pattern paragraphs, evidence and item alert lines in `src/publish/payload.js`, `templates/slack/alert-group.hbs`, `templates/slack/reply.hbs`, `src/cli/stages/publish.js`; markers in `src/render/report.js`; `fonts-noto-color-emoji` in the `Dockerfile`
+- [X] T185 [US11] Spec FR-078 to FR-082 and scenario 6, research R-19, data model, slack-payload and run-directory contracts, quickstart, README, AGENTS
+
+**Checkpoint**: the second hosted run shows one line for a programme-wide alert, metrics next to alerts, housekeeping
+and resolved notices, and markers in Slack and in the image.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -593,4 +608,11 @@ US3 can proceed in parallel, then US4, US5 and US6.
   fall below half the previous sample so scrape jitter never counts; `restart` has a medium floor on its own;
   `cht_messaging_outgoing_total` stays a gauge by default because its statuses mix cumulative and current counts;
   the `>= 0` display comparison is stripped from the metric key while `> 0` stays, since that one filters.
+- User Story 11 decisions (2026-09-20): a pattern needs three hosts, half the programme and first occurrences within
+  two days, with the programme's size from discovery and the hosts seen standing in when it is unknown; the pattern
+  paragraph replaces the member lines only for the instances it covers; a dead host is one whose scrape target read
+  zero for the whole current window, and only a stale alert there is housekeeping; the resolved line reads the
+  durable episode record before the run appends its own events; connected users enter ranking as an order of
+  magnitude so confidence still decides among peers; markers are added at render time and never stored, so
+  feedback matching, replay and the gate see plain text; the image alt text stays plain for screen readers.
 

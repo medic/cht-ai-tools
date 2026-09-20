@@ -357,6 +357,12 @@ const AlertInstance = z.object({
   days_firing: z.number().int().min(0),
   stale: z.boolean(),
   new: z.boolean(),
+  // Revision 14: a stale alert on a host with no data is housekeeping (FR-080); the metric behind the alert (FR-079).
+  housekeeping: z.boolean().default(false),
+  evidence: z.object({
+    metric: z.string(), aggregate: z.string(), current_value: z.number().nullable(),
+    previous_day_value: z.number().nullable(), pct_change_vs_previous_day: z.number().nullable(),
+  }).strict().nullable().default(null),
 }).strict();
 
 const AlertGroupMember = z.object({
@@ -367,6 +373,7 @@ const AlertGroupMember = z.object({
   days_firing: z.number().int().min(0),
   stale: z.boolean(),
   new: z.boolean(),
+  evidence: z.any().nullable().default(null),
 }).strict();
 
 const AlertGroup = z.object({
@@ -383,6 +390,10 @@ const AlertGroup = z.object({
   instance_ids: z.array(hex12),
   hosts: z.array(z.string()),
   instances: z.array(AlertGroupMember),
+  patterns: z.array(z.object({
+    group: z.string(), category: z.string(), title: z.string(), count: z.number().int(), of: z.number().int(),
+    since_min: z.string(), since_max: z.string(), hosts: z.array(z.string()), instance_ids: z.array(z.string()),
+  }).strict()).default([]),
 }).strict();
 
 const AlertEpisode = z.object({

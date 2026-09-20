@@ -5,7 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
 const { assertAudience } = require('./audience');
-const { hostOf } = require('../rollup/deterministic-brief');
+const { hostOf, plain } = require('../rollup/deterministic-brief');
+const { headlineMarker, bulletMarker, noticeMarker, withMarker, MARKERS } = require('../rollup/markers');
 const { formatCost } = require('./footer');
 
 const TEMPLATES = path.join(__dirname, '..', '..', 'templates', 'slack');
@@ -60,28 +61,33 @@ const imageBlock = (fileId, altText) => ({ type: 'image', slack_file: { id: file
 // Slack mrkdwn has no nested lists: sub-bullets are indented lines inside their bullet's section (smoke S-16).
 const SUB_BULLET_PREFIX = '   ◦ ';
 
-const bulletText = (bullet) => [
-  mrkdwn(bullet.text),
+// Markers (FR-082) are added when the payload renders; the stored brief keeps plain text.
+const markedBullet = (bullet, severityOf) => withMarker(bulletMarker(bullet, severityOf), bullet.text);
+const markedNotice = (notice) => withMarker(noticeMarker(notice), notice);
+
+const bulletText = (bullet, severityOf) => [
+  mrkdwn(markedBullet(bullet, severityOf)),
   ...(bullet.children || []).map((child) => `${SUB_BULLET_PREFIX}${mrkdwn(child.text)}`),
 ].join('\n');
 
-const parentBlocks = (brief) => {
-  const headerText = { type: 'plain_text', text: truncate(brief.headline, HEADER_MAX), emoji: true };
+const parentBlocks = (brief, severityOf) => {
+  const headline = withMarker(headlineMarker(brief), brief.headline);
+  const headerText = { type: 'plain_text', text: truncate(headline, HEADER_MAX), emoji: true };
   const blocks = [{ type: 'header', text: headerText }];
   for (const bullet of brief.bullets) {
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: bulletText(bullet) } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: bulletText(bullet, severityOf) } });
   }
   if (brief.image && brief.image.slack_file_id) {
     blocks.push(imageBlock(brief.image.slack_file_id, brief.headline));
   }
   if (brief.expected_load_notice) {
-    blocks.push(context(`_${mrkdwn(brief.expected_load_notice)}_`));
+    blocks.push(context(`_${mrkdwn(withMarker(MARKERS.expectedLoad, brief.expected_load_notice))}_`));
   }
   if (brief.degradation_notice) {
-    blocks.push(context(`_${mrkdwn(brief.degradation_notice)}_`));
+    blocks.push(context(`_${mrkdwn(withMarker(MARKERS.warning, brief.degradation_notice))}_`));
   }
   for (const notice of brief.notices || []) {
-    blocks.push(context(`_${mrkdwn(notice)}_`));
+    blocks.push(context(`_${mrkdwn(markedNotice(notice))}_`));
   }
   blocks.push(context(footerText(brief.footer)));
   return blocks;
@@ -93,7 +99,22 @@ const rankOrder = (a, b) => {
   return ra - rb || a.item_id.localeCompare(b.item_id);
 };
 
-const replyFor = ({ item, links, runId }) => {
+/** The firing alert whose category covers an item's metric, as a line for the item's reply (FR-079). */
+const alertLineFor = ({ item, alertGroups, alertCategories }) => {
+  const host = hostOf(item.project_url);
+  const matching = alertGroups.flatMap((group) => (group.instances || [])
+    .filter((instance) => instance.host === host)
+    .filter(() => (alertCategories[group.category] || []).some((name) => String(item.metric).includes(name))));
+  if (!matching.length) {
+    return null;
+  }
+  const [first] = matching;
+  const rest = matching.length > 1 ? `, +${matching.length - 1} more` : '';
+  return withMarker(MARKERS.alerts,
+    `Alert firing: ${first.title} since ${String(first.started_at).slice(0, 10)} (${first.days_firing}d)${rest}`);
+};
+
+const replyFor = ({ item, links, runId, alertLine = null }) => {
   const url = links.get(item.item_id) || null;
   const text = template('reply')({
     severity_label: item.severity.toUpperCase(),
@@ -103,6 +124,8 @@ const replyFor = ({ item, links, runId }) => {
     suggested_check: item.suggested_check,
     has_link: Boolean(url),
     link_url: url,
+    has_alert: Boolean(alertLine),
+    alert_text: alertLine || '',
     persisting_text: item.persisting_days > 1 ? `persisting ${item.persisting_days} days` : 'new today',
     confidence_text: `${Math.round((item.confidence || 0) * 100)}%`,
   }).trim();
@@ -124,9 +147,29 @@ const linksFor = (alertLinks, key) => {
   return alertLinks instanceof Map ? alertLinks.get(key) || null : alertLinks[key] || null;
 };
 
-/** One thread reply per Alert Group (FR-066): its instances oldest first, the rest counted, code-built links. */
+// Thousands are grouped for the reader; the gate's number matching works on the stored data, not on this text.
+const grouped = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Number(plain(value)));
+
+/** The metric next to an alert instance (FR-079): its current value and yesterday's, code-formatted. */
+const evidenceText = (evidence) => {
+  if (!evidence || evidence.current_value === null || evidence.current_value === undefined) {
+    return '';
+  }
+  const perDay = evidence.aggregate === 'increase' ? '/day' : '';
+  const yesterday = evidence.previous_day_value === null || evidence.previous_day_value === undefined
+    ? ''
+    : ` (yesterday ${grouped(evidence.previous_day_value)}${perDay})`;
+  return ` · ${evidence.metric} ${grouped(evidence.current_value)}${perDay} now${yesterday}`;
+};
+
+/**
+ * One thread reply per Alert Group (FR-066): programme-wide patterns as one paragraph each (FR-078), the other
+ * instances oldest first with their metric (FR-079), the rest counted, code-built links.
+ */
 const alertReplyFor = ({ group, links, runId, date, staleAfterDays }) => {
-  const members = group.instances || [];
+  const patterns = group.patterns || [];
+  const inPattern = new Set(patterns.flatMap((p) => p.instance_ids || []));
+  const members = (group.instances || []).filter((instance) => !inPattern.has(instance.instance_id));
   const shown = members.slice(0, MAX_ALERT_INSTANCES);
   const rest = members.length - shown.length;
   const linkList = links
@@ -141,12 +184,18 @@ const alertReplyFor = ({ group, links, runId, date, staleAfterDays }) => {
     importance_label: String(group.importance || 'medium').toUpperCase(),
     summary_text: `${group.firing} firing, ${group.stale} stale for more than ${staleAfterDays} days, `
       + `${group.new} new since the previous run`,
+    patterns: patterns.map((p) => ({
+      text: withMarker(MARKERS.pattern,
+        `Programme-wide: ${p.title} on ${p.count} of ${p.of} projects, first ${p.since_min}, last ${p.since_max}`),
+      hosts: (p.hosts || []).join(', '),
+    })),
     instances: shown.map((instance) => ({
       title: instance.title,
       host: instance.host || 'watchdog',
       since_text: `${String(instance.started_at).slice(0, 10)} (${instance.days_firing}d)`,
       stale: Boolean(instance.stale),
       new: Boolean(instance.new),
+      evidence_text: evidenceText(instance.evidence),
     })),
     has_rest: rest > 0,
     rest_text: `${rest} more`,
@@ -186,10 +235,12 @@ const briefMetadata = ({ runId, date, kind }) => ({
  */
 const buildPayload = ({
   brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null, alertGroups = [],
-  alertLinks = new Map(), staleAfterDays = 14,
+  alertLinks = new Map(), staleAfterDays = 14, alertCategories = {},
 }) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
+  const severityById = new Map(items.map((item) => [item.item_id, item.severity]));
+  const severityOf = (id) => severityById.get(id) || null;
 
   if (brief.kind === 'heartbeat' || brief.kind === 'failure') {
     const view = {
@@ -210,19 +261,25 @@ const buildPayload = ({
   }
 
   const text = truncate(template('parent')({
-    headline: brief.headline,
-    bullets: brief.bullets.map((bullet) => ({ text: bullet.text, children: bullet.children || [] })),
+    headline: withMarker(headlineMarker(brief), brief.headline),
+    bullets: brief.bullets.map((bullet) => ({
+      text: markedBullet(bullet, severityOf), children: bullet.children || [],
+    })),
     has_expected_load_notice: Boolean(brief.expected_load_notice),
-    expected_load_notice: brief.expected_load_notice || '',
+    expected_load_notice: brief.expected_load_notice
+      ? withMarker(MARKERS.expectedLoad, brief.expected_load_notice)
+      : '',
     has_degradation_notice: Boolean(brief.degradation_notice),
-    degradation_notice: brief.degradation_notice || '',
-    notices: brief.notices || [],
+    degradation_notice: brief.degradation_notice ? withMarker(MARKERS.warning, brief.degradation_notice) : '',
+    notices: (brief.notices || []).map(markedNotice),
   }).trim(), TEXT_MAX);
 
   return {
     run_id: runId,
     kind: brief.kind,
-    parent: { channel, text, blocks: parentBlocks(brief), unfurl_links: false, unfurl_media: false, metadata },
+    parent: {
+      channel, text, blocks: parentBlocks(brief, severityOf), unfurl_links: false, unfurl_media: false, metadata,
+    },
     image: {
       filename: `brief-${runId}.png`,
       alt_text: truncate(brief.headline, HEADER_MAX),
@@ -230,7 +287,9 @@ const buildPayload = ({
       slack_file_id: brief.image ? brief.image.slack_file_id : null,
     },
     replies: [
-      ...[...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+      ...[...items].sort(rankOrder).map((item) => replyFor({
+        item, links, runId, alertLine: alertLineFor({ item, alertGroups, alertCategories }),
+      })),
       ...alertGroups.map((group) => alertReplyFor({
         group, links: linksFor(alertLinks, group.alert_key), runId, date, staleAfterDays,
       })),

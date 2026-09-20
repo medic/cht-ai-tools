@@ -36,7 +36,7 @@ describe('alerts/group', () => {
     expect(backlog.hosts).to.deep.equal(['north-a.example.org', 'north-b.example.org']);
     expect(backlog.instance_ids).to.have.length(3);
     expect(backlog.instances[0])
-      .to.have.all.keys('instance_id', 'title', 'host', 'started_at', 'days_firing', 'stale', 'new');
+      .to.have.all.keys('instance_id', 'title', 'host', 'started_at', 'days_firing', 'stale', 'new', 'evidence');
     // Members are listed oldest first.
     expect(backlog.instances.map((i) => i.started_at)).to.deep.equal([
       '2026-08-20T00:00:00Z', '2026-09-17T20:00:00Z', '2026-09-17T20:00:00Z',
@@ -45,6 +45,23 @@ describe('alerts/group', () => {
     expect(database).to.include({ firing: 2, importance: 'low' });
     expect(database.instance_ids).to.have.length(2);
     expect(groups.find((g) => g.group === 'Watchdog').hosts).to.deep.equal([]);
+  });
+
+  it('attaches programme-wide patterns to a group and leaves housekeeping instances out (FR-078, FR-080)', () => {
+    const wide = Array.from({ length: 4 }, (_, i) => classified('delivery', `south-${i}.example.org`, {
+      started_at: '2026-09-17T00:00:00Z',
+    }));
+    const dead = classified('apiDown', 'north-z.example.org', {
+      started_at: '2026-07-01T00:00:00Z', housekeeping: true,
+    });
+    const groups = groupAlerts([...wide, dead, classified('sentinel', 'north-a.example.org')], {
+      groupSizes: { 'South Programme': 5, 'North Programme': 3 },
+    });
+    const messaging = groups.find((g) => g.alert_key === 'South Programme/messaging');
+    expect(messaging.patterns).to.have.length(1);
+    expect(messaging.patterns[0]).to.include({ title: 'Message Delivery Rate', count: 4, of: 5 });
+    expect(groups.find((g) => g.alert_key === 'North Programme/backlog').patterns).to.deep.equal([]);
+    expect(groups.some((g) => g.category === 'availability'), 'housekeeping is not a group').to.equal(false);
   });
 
   it('never groups a pending instance and returns no groups when nothing fires', () => {

@@ -63,7 +63,11 @@ dashboard variable resolved to. Each `collect.project` line reports `fetched`, `
 previous-day and trailing windows are reused, so `queries` drops to two per metric, and to one from
 the eighth consecutive day (FR-072). A single slow query shows as one `collect.query_failed` line
 with the metric and window, and the run continues (FR-073). `discovery.breakdown_panels` names the
-panels grouped by route or code that are shown on the dashboard but not analysed (FR-075).
+panels grouped by route or code that are shown on the dashboard but not analysed (FR-075). In the
+payload, alert group replies open with a `Programme-wide:` paragraph when one rule fires across a
+programme, alert lines carry the metric behind them, a `Housekeeping:` notice lists stale alerts on
+dead hosts and a `Resolved` notice what cleared since the previous run; every rendered line starts
+with its code-placed marker (FR-078 to FR-082).
 
 ## 4. One stage at a time (User Story 3, scenario 6)
 

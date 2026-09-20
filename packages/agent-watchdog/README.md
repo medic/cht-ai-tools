@@ -73,6 +73,17 @@ present it publishes the degraded brief built from the computed candidates, with
 notice. A run never says "no metric changes to flag" because the analysis did not run. Tracing
 failures at the end of a run are logged and leave the exit code alone.
 
+### What the brief says beyond the alerts
+
+One alert rule firing on most of a programme's projects within two days is one event: the category
+line names the rule and the count, the thread lists the projects once. Every alert line in a thread
+shows the metric behind it with its current and previous-day values, and an item's reply names the
+firing alert its metric explains. Stale alerts on hosts with no data are old news, moved to one
+housekeeping notice that suggests removing the host or silencing the rule; alerts that cleared since
+the previous run get a resolved notice. Items of the most-used projects, by connected users, rank
+first within a severity. A small fixed set of emoji, placed by code and never by the model, marks
+status and severity in Slack and in the image.
+
 ### What a run fetches
 
 Collection is incremental. Every run fetches each metric's current window; the previous-day and

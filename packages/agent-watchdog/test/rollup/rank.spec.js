@@ -38,6 +38,21 @@ describe('rollup/rank', () => {
     expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body']);
   });
 
+  it('ranks the most-used projects first within a severity when usersOf is given (FR-081)', () => {
+    const small = makeItem({ project_url: 'https://small.example.org', metric: 'a', severity: 'medium', confidence: 0.9 });
+    const large = makeItem({ project_url: 'https://large.example.org', metric: 'b', severity: 'medium', confidence: 0.5 });
+    const high = makeItem({ project_url: 'https://small.example.org', metric: 'c', severity: 'high', confidence: 0.3 });
+    const users = { 'https://small.example.org': 40, 'https://large.example.org': 3800 };
+    const ranked = rankItems({ items: [small, large, high], usersOf: (url) => users[url] || 0 });
+    expect(ranked.map((i) => i.metric)).to.deep.equal(['c', 'b', 'a']);
+    // Within one order of magnitude of users, confidence still decides.
+    const peer = makeItem({ project_url: 'https://peer.example.org', metric: 'd', severity: 'medium', confidence: 0.95 });
+    const withPeer = rankItems({
+      items: [small, large, peer], usersOf: (url) => ({ ...users, 'https://peer.example.org': 1200 })[url] || 0,
+    });
+    expect(withPeer.map((i) => i.metric)).to.deep.equal(['d', 'b', 'a']);
+  });
+
   it('breaks ties on persisting days then item id, deterministically', () => {
     const a = makeItem({ metric: 'm1', confidence: 0.7 });
     const b = makeItem({ metric: 'm2', confidence: 0.7 });

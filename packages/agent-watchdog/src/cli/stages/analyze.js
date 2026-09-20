@@ -6,6 +6,7 @@ const { computeChanges } = require('../../analyze/changes');
 const { effectiveThresholds } = require('../../analyze/thresholds');
 const { computeCandidates, suppressByHorizon } = require('../../analyze/candidates');
 const { normaliseHost } = require('../../config/policy');
+const { roleMatches } = require('../../analyze/thresholds');
 const { runStartOf } = require('./collect');
 const { classifyAlerts } = require('../../alerts/classify');
 const { previousRunIds } = require('../../rollup/history');
@@ -45,6 +46,9 @@ const run = async (ctx) => {
     ? ((await runDir.readJson('feedback.ingested.json')).horizons || [])
     : [];
   let total = 0;
+  const changesByProject = new Map();
+  const deadHosts = new Set();
+  const scrapeTarget = policy.thresholds.metric_roles && policy.thresholds.metric_roles.scrape_target;
 
   for (const project of projects) {
     const started = process.hrtime.bigint();
@@ -59,6 +63,11 @@ const run = async (ctx) => {
     const raw = computeCandidates({ changes, project, thresholds, policy, date: ctx.date, windows: stored.windows });
     const { kept: candidates, suppressed } = suppressByHorizon(raw, horizons, { date: ctx.date });
     await runDir.writeJson(`${project.slug}/changes.json`, changes);
+    changesByProject.set(project.url, changes);
+    const target = changes.find((c) => scrapeTarget && roleMatches(scrapeTarget, c.metric));
+    if (target && target.current_value === 0) {
+      deadHosts.add(project.host);
+    }
     await runDir.writeJson(`${project.slug}/candidates.json`, candidates);
     await runDir.writeJson(`${project.slug}/suppressed.json`, suppressed);
     if (suppressed.length) {
@@ -86,6 +95,10 @@ const run = async (ctx) => {
     projectGroups: policy.projects.groups || [],
     previous: await previousClassified(dataDir, ctx.runId || runDir.runId),
     runStart,
+    changesByProject,
+    categories: (policy.alerts && policy.alerts.categories) || {},
+    deadHosts,
+    groupSizes: Object.fromEntries((discovery.groups || []).map((g) => [g.label, (g.hosts || []).length])),
   });
   await runDir.writeJson('alerts.classified.json', classified);
   logger.info('analyze.alerts', {
