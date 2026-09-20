@@ -42,6 +42,7 @@ const normaliseItems = (findings, project) => (findings.items || []).map((item) 
   reference_urls: item.reference_urls,
   rank: null,
   placement: null,
+  slot: null,
   pass_history: [],
 }));
 
@@ -91,19 +92,20 @@ const verifyFindings = async ({
 };
 
 /**
- * Verify a roll-up draft against the accepted items before publication.
+ * Verify a roll-up draft against the accepted items before publication. `layout` is the body layout computed by code
+ * (src/rollup/layout.js): with it the draft must carry one bullet per body item, sub-bullets on one line.
  * @returns {Promise<{ report: object }>}
  */
 const verifyBrief = async ({
   draft, items = [], discovery, changes = [], candidates = [], runId, attempt = 1, resolveLinks = null, allowlist = [],
-  grafanaUrl = null, toolResultUrls = new Set(),
+  grafanaUrl = null, toolResultUrls = new Set(), layout = null,
 }) => {
   validateAttempt(attempt);
   const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl });
   const ctx = {
     mode: 'brief', draft, items, discovery, changes, candidates, windows: [], toolResultUrls, knownCards: [], allowlist,
     linkResults, builtLinks: grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null, findings: null,
-    project: null, runId,
+    project: null, runId, layout,
   };
   const checks = runChecks(BRIEF_CHECK_NAMES, ctx);
   const report = {

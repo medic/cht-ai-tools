@@ -30,10 +30,12 @@ describe('rollup/deterministic-brief', () => {
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
     expect(brief.kind).to.equal('degraded');
     expect(brief.headline).to.equal('Watchdog brief (degraded): 4 candidates across 3 projects');
-    expect(brief.bullets).to.have.length(3);
+    expect(brief.bullets).to.have.length(4);
     expect(brief.bullets[0].text).to.equal('cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change)');
+    expect(brief.bullets[0]).to.include({ kind: 'item', group: 'Other' });
     expect(brief.bullets[1].text).to.include('cht_replication_limit_count on beta.example.org');
     expect(brief.bullets[2].text).to.match(/^cht_(conflict_count|feedback_total) on/);
+    expect(brief.bullets[3].text).to.match(/^cht_(conflict_count|feedback_total) on/);
     expect(brief.degradation_notice).to.include('gate rejected three drafts');
     expect(brief.checked).to.deep.equal({ projects: 3, panels: 3, candidates: 4 });
     expect(brief.image).to.equal(null);
@@ -51,6 +53,42 @@ describe('rollup/deterministic-brief', () => {
       })],
     });
     expect(brief.bullets[0].text).to.include('1234.57 vs 1000.13');
+  });
+
+  it('keeps five slots and collapses a programme into one bullet with sub-bullets (FR-010, FR-069)', () => {
+    const { makeProject } = require('./factories');
+    const discovery = makeDiscovery({
+      projects: [
+        makeProject('nepal-a.example.org', { group: 'MoH Nepal' }),
+        makeProject('nepal-b.example.org', { group: 'MoH Nepal' }),
+        ...['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((h) => makeProject(`${h}.example.org`)),
+      ],
+    });
+    const candidates = [
+      makeCandidate({ candidate_id: 'aaaaaaaaaaaa', severity_floor: 'high', project_url: 'https://nepal-a.example.org' }),
+      makeCandidate({ candidate_id: 'bbbbbbbbbbbb', severity_floor: 'high', project_url: 'https://nepal-b.example.org' }),
+      ...['alpha', 'beta', 'gamma', 'delta', 'epsilon'].map((h, i) => makeCandidate({
+        candidate_id: String(i).repeat(12), severity_floor: 'low', project_url: `https://${h}.example.org`, observed: 60 - i,
+      })),
+    ];
+    const brief = buildDeterministicBrief({
+      runId: 'r', candidates, discovery, reason: 'model unavailable', footer: footer(), expectedLoadNotice: null,
+    });
+    expect(() => schemas.Brief.parse(brief)).to.not.throw();
+    expect(brief.bullets).to.have.length(5);
+    expect(brief.bullets[0]).to.include({ kind: 'group', group: 'MoH Nepal' });
+    expect(brief.bullets[0].text).to.equal('MoH Nepal: 2 projects with issues');
+    expect(brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
+      'cht_sentinel_backlog_count on nepal-a.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on nepal-b.example.org: 912 vs 300 (pct_change)',
+    ]);
+    expect(brief.bullets.slice(1).every((b) => b.kind === 'item' && b.children.length === 0)).to.equal(true);
+    expect(brief.bullets.slice(1).map((b) => b.text)).to.deep.equal([
+      'cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on beta.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on gamma.example.org: 912 vs 300 (pct_change)',
+      'cht_sentinel_backlog_count on delta.example.org: 912 vs 300 (pct_change)',
+    ]);
   });
 
   it('builds a heartbeat that says what was checked', () => {

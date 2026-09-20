@@ -1,5 +1,6 @@
 'use strict';
-// Brief only: thread_order lists every accepted item once, bullets first in order.
+// Brief only: thread_order lists every accepted item once, bullets first in order; with a body layout (User Story 9)
+// the bullets must be exactly the layout's body items.
 const NAME = 'thread_order';
 
 const check = (ctx) => {
@@ -23,6 +24,15 @@ const check = (ctx) => {
   const bulletIds = (ctx.draft.bullets || []).map((b) => b.item_id);
   if (bulletIds.some((id, i) => order[i] !== id)) {
     reasons.push('the first entries of thread_order must equal the bullets in order');
+  }
+  if (ctx.layout) {
+    const body = ctx.layout.body_items || [];
+    const missingBody = body.filter((id) => !bulletIds.includes(id));
+    const extraBody = bulletIds.filter((id) => !body.includes(id));
+    if (missingBody.length || extraBody.length) {
+      reasons.push('bullets do not match the body layout: '
+        + `missing ${missingBody.join(', ') || 'none'}; unexpected ${extraBody.join(', ') || 'none'}`);
+    }
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };

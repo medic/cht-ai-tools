@@ -79,6 +79,18 @@ day's brief or heartbeat thread, names each item's effect, the proposals written
 live; each acknowledged note gets an `eyes` reaction (bot scope `reactions:write`). The weekly calibration
 report lists proposals still awaiting review with their age.
 
+### Programmes, ignored hosts and the body layout
+
+`projects.yaml` declares programme groups by host glob (`groups`, first match wins) and an ignore list
+(`ignore`, development instances). Hosts matching no group belong to `Other`; ignored hosts are listed in
+`discovery.json` and are never analysed, charged or named. The post body holds at most five bullets of two
+lines: a programme with several flagged projects becomes one code-written line ("MoH Nepal: 3 projects with
+issues") with one one-line sub-bullet per project, and every project item keeps its own thread reply. The
+layout is computed by code before the roll-up call (`rollup/layout.json`), the model writes only item text,
+and the gate rejects a draft whose bullets differ from the layout. `npm run smoke:grafana -- --hosts` prints
+every discovered host with its group, which is how the placeholder patterns in `config/defaults/projects.yaml`
+get replaced.
+
 ### Knowledge corpus
 
 Maintainers drop raw material (conversations, data exports, incident write-ups, component explainers)

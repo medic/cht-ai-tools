@@ -166,3 +166,78 @@ describe('collect/discovery', () => {
     });
   });
 });
+
+describe('collect/discovery: programme groups and ignored hosts (FR-068, User Story 9)', () => {
+  const aliases = {
+    'nepal-a.example.org': 'alpha.example.org',
+    'nepal-b.example.org': 'gamma.example.org',
+    'echis-a.example.org': 'alpha.example.org',
+    'cht-dev.example.org': 'alpha.example.org',
+    'cht.dev.example.org': 'beta.example.org',
+  };
+  const groupedPolicy = () => {
+    const policy = policyWith({});
+    policy.projects.groups = [
+      { label: 'MoH Nepal', host_patterns: ['*nepal*'] },
+      { label: 'eCHIS Kenya', host_patterns: ['*echis*'] },
+    ];
+    policy.projects.ignore = ['*.dev.*', '*-dev.*'];
+    return policy;
+  };
+  let fake;
+  let grafana;
+  let discovery;
+  before(async () => {
+    fake = createFakeGrafana({ fixtureDir: fixturePath('runs', 'seeded-anomaly'), hostAliases: aliases });
+    grafana = createGrafanaClient({
+      baseUrl: fake.baseUrl, token: fake.token, datasourceUid: fake.datasourceUid, timeoutMs: 1000, fetch: fake.fetch,
+    });
+    discovery = await discover({ grafana, policy: groupedPolicy(), config: {}, runStart: RUN_START, logger: quiet });
+  });
+
+  it('assigns every project the first matching group in file order, else Other', () => {
+    const groups = Object.fromEntries(discovery.projects.map((p) => [p.host, p.group]));
+    expect(groups).to.deep.equal({
+      'alpha.example.org': 'Other',
+      'beta.example.org': 'Other',
+      'echis-a.example.org': 'eCHIS Kenya',
+      'gamma.example.org': 'Other',
+      'nepal-a.example.org': 'MoH Nepal',
+      'nepal-b.example.org': 'MoH Nepal',
+    });
+    for (const project of discovery.projects) {
+      expect(() => schemas.Project.parse(project)).to.not.throw();
+    }
+  });
+
+  it('lists the groups with their hosts, Other included, and the ignored hosts with the pattern that matched', () => {
+    expect(discovery.groups).to.deep.equal([
+      { label: 'MoH Nepal', hosts: ['nepal-a.example.org', 'nepal-b.example.org'] },
+      { label: 'eCHIS Kenya', hosts: ['echis-a.example.org'] },
+      { label: 'Other', hosts: ['alpha.example.org', 'beta.example.org', 'gamma.example.org'] },
+    ]);
+    expect(discovery.ignored).to.deep.equal([
+      { host: 'cht-dev.example.org', pattern: '*-dev.*' },
+      { host: 'cht.dev.example.org', pattern: '*.dev.*' },
+    ]);
+  });
+
+  it('never queries an ignored host, so it costs nothing and cannot be named', () => {
+    expect(discovery.projects.map((p) => p.host))
+      .to.not.include.members(['cht-dev.example.org', 'cht.dev.example.org']);
+    const perHost = fake.calls.filter((c) => /cht_version|max_over_time/.test(decodeURIComponent(c.url)));
+    expect(perHost.length).to.be.greaterThan(0);
+    expect(perHost.some((c) => /cht-dev|cht\.dev/.test(decodeURIComponent(c.url)))).to.equal(false);
+  });
+
+  it('puts every host under Other when no groups are declared and ignores nothing without patterns', async () => {
+    const plainPolicy = policyWith({});
+    plainPolicy.projects.groups = [];
+    plainPolicy.projects.ignore = [];
+    const plain = await discover({ grafana, policy: plainPolicy, config: {}, runStart: RUN_START, logger: quiet });
+    expect(plain.projects).to.have.length(8);
+    expect(plain.projects.every((p) => p.group === 'Other')).to.equal(true);
+    expect(plain.groups).to.deep.equal([{ label: 'Other', hosts: plain.projects.map((p) => p.host) }]);
+    expect(plain.ignored).to.deep.equal([]);
+  });
+});

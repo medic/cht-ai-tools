@@ -11,7 +11,12 @@ const TEXT = {
   changes: 'Empty on pass 1. Later passes record every addition, removal or change with a reason (FR-056).',
   findings: 'Structured output of an analysis pass. Identity, links and persistence are derived by code; '
     + 'the model never emits URLs except reference_urls that appeared in tool results.',
-  threadOrder: 'Every accepted item id, highest rank first; the first three must equal the bullets.',
+  threadOrder: 'Every accepted item id: the body items first, in the order of the bullets, then the rest highest '
+    + 'rank first.',
+  bullets: 'One per body item named in the Body layout section of the prompt, in that order (checked by the gate). '
+    + 'A programme\'s own line is written by code; an item marked one_line is a sub-bullet and takes one line.',
+  bulletText: 'At most 2 lines of at most 120 characters, one line for a sub-bullet; numbers must match evidence; '
+    + 'no URLs.',
   replaceWith: 'Full new memory text within the cap, or null for no change; code stores the diff.',
   brief: 'Structured output of the roll-up call. Bullets reference items by id; the gate checks every number '
     + 'against computed data and every structural limit before publication.',
@@ -72,8 +77,8 @@ const briefSchema = z.object({
   headline: z.string().describe('One line; no URLs.'),
   bullets: z.array(z.object({
     item_id: z.string().describe('An accepted item id from this run.'),
-    text: z.string().describe('At most 2 lines of at most 120 characters; numbers must match evidence; no URLs.'),
-  }).strict()).describe('At most 3 (checked by the gate). Each is one item rendered for the post body.'),
+    text: z.string().describe(TEXT.bulletText),
+  }).strict()).describe(TEXT.bullets),
   thread_order: z.array(z.string()).describe(TEXT.threadOrder),
   expected_load_notice: z.string().nullable(),
   memory_update: z.object({

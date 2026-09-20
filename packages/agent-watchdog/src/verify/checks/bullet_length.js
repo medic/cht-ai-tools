@@ -1,4 +1,6 @@
 'use strict';
+// Brief only: a bullet is at most two lines of at most 120 characters and carries no URL; an item the body layout
+// marks as a sub-bullet of its programme takes a single line (FR-015, FR-069).
 const { URL_PATTERN } = require('../patterns');
 
 const NAME = 'bullet_length';
@@ -10,9 +12,12 @@ const check = (ctx) => {
     return { name: NAME, status: 'pass', reasons: ['not applicable to findings'] };
   }
   const reasons = [];
+  const oneLine = new Set((ctx.layout && ctx.layout.one_line) || []);
   (ctx.draft.bullets || []).forEach((bullet, i) => {
     const lines = String(bullet.text || '').split('\n');
-    if (lines.length > MAX_LINES) {
+    if (oneLine.has(bullet.item_id) && lines.length > 1) {
+      reasons.push(`bullets[${i}] is a sub-bullet of its programme and must be one line, it has ${lines.length}`);
+    } else if (lines.length > MAX_LINES) {
       reasons.push(`bullets[${i}] has ${lines.length} lines, at most ${MAX_LINES} allowed`);
     }
     lines.forEach((line, j) => {

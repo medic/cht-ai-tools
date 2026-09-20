@@ -27,6 +27,8 @@ const enums = {
   VerificationSubject: z.enum(['pass', 'brief']),
   VerificationOutcome: z.enum(['accepted', 'rejected']),
   BriefKind: z.enum(['brief', 'heartbeat', 'degraded', 'failure']),
+  // A top-level line of the post body: one item, a programme's items as sub-bullets, or a programme's alerts (US8).
+  BulletKind: z.enum(['item', 'group', 'alerts']),
   FeedbackTarget: z.enum(['item', 'brief']),
   FeedbackKind: z.enum(['reaction', 'note']),
   FeedbackVerdict: z.enum(['up', 'down', 'retracted']),
@@ -75,6 +77,8 @@ const Project = z.object({
   cht_version: z.string().nullable(),
   history_days: z.number().int().min(0),
   scrape_targets: z.array(ScrapeTarget),
+  // The Project Group label from projects.yaml; hosts matching no pattern belong to "Other" (FR-068).
+  group: z.string().min(1).default('Other'),
 }).strict();
 
 const Stage = z.object({
@@ -221,6 +225,8 @@ const Item = z.object({
   reference_urls: z.array(z.string()),
   rank: z.number().int().min(1).nullable(),
   placement: enums.Placement.nullable(),
+  // The top-level bullet the item appears in, alone or as a sub-bullet; null in the thread (FR-069).
+  slot: z.number().int().min(1).max(5).nullable().default(null),
   pass_history: z.array(PassChangeRecord),
 }).strict();
 
@@ -253,13 +259,27 @@ const Pass = z.object({
   tool_calls_path: z.string(),
 }).strict();
 
-const Bullet = z.object({ item_id: hex12, text: z.string() }).strict();
+// A sub-bullet: one item (or, for alerts, one category built by code) on a single line (FR-015).
+const BulletChild = z.object({ item_id: hex12.nullable(), text: z.string() }).strict();
+
+// A bare { item_id, text } is an item bullet with no sub-bullets, so earlier callers keep working.
+const Bullet = z.object({
+  kind: enums.BulletKind.default('item'),
+  item_id: hex12.nullable().default(null),
+  group: z.string().nullable().default(null),
+  text: z.string(),
+  children: z.array(BulletChild).max(8).default([]),
+  alert_key: z.string().nullable().default(null),
+}).strict().refine((b) => (b.kind === 'item' ? b.item_id !== null : b.group !== null), {
+  message: 'an item bullet needs item_id; group and alerts bullets need group',
+  path: ['item_id'],
+});
 
 const Brief = z.object({
   run_id: z.string(),
   kind: enums.BriefKind,
   headline: z.string(),
-  bullets: z.array(Bullet).max(3),
+  bullets: z.array(Bullet).max(5),
   expected_load_notice: z.string().nullable(),
   checked: z.object({ projects: z.number().int(), panels: z.number().int(), candidates: z.number().int() }).strict(),
   degradation_notice: z.string().nullable(),
@@ -409,8 +429,8 @@ const CostRecord = z.object({
 
 const schemas = {
   ScrapeTarget, ExpectedLoadWindow, Project, Stage, Usage, Publication, Run, PanelRef, MetricWindow, ComputedChange,
-  Evidence, Candidate, DashboardRef, PassChangeRecord, Item, Check, VerificationReport, Pass, Bullet, Brief,
-  ThreadReply,
+  Evidence, Candidate, DashboardRef, PassChangeRecord, Item, Check, VerificationReport, Pass, BulletChild, Bullet,
+  Brief, ThreadReply,
   Feedback, MemoryMeta, Flag, Proposal, CorpusItem, PatternCard, CalibrationReport, PriorityList, CostRecord,
 };
 

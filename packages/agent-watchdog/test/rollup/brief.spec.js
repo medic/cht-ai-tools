@@ -5,7 +5,8 @@ const { makeItem, makeCandidate, makeDiscovery, footer, makeConfig, quietLogger 
 
 const draftFor = (items, overrides = {}) => ({
   headline: 'Sentinel backlog tripled on alpha',
-  bullets: items.slice(0, 3).map((i) => ({ item_id: i.item_id, text: `${i.metric} 912 vs 300 yesterday` })),
+  bullets: items.filter((i) => i.placement !== 'thread')
+    .map((i) => ({ item_id: i.item_id, text: `${i.metric} 912 vs 300 yesterday` })),
   thread_order: items.map((i) => i.item_id),
   expected_load_notice: null,
   memory_update: { replace_with: 'remember: alpha sentinel spikes at month end' },
@@ -70,7 +71,9 @@ describe('rollup/brief composeBrief', () => {
     expect(out.degraded).to.equal(false);
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
     expect(out.brief.kind).to.equal('brief');
-    expect(out.brief.bullets.map((b) => b.item_id)).to.deep.equal(items.slice(0, 3).map((i) => i.item_id));
+    expect(out.brief.bullets.map((b) => b.item_id)).to.deep.equal(items.map((i) => i.item_id));
+    expect(out.brief.bullets[0]).to.include({ kind: 'item', group: 'Other' });
+    expect(gate.verifyBrief.firstCall.args[0].layout.body_items).to.deep.equal(items.map((i) => i.item_id));
     expect(out.brief.footer).to.deep.equal(footer());
     expect(out.brief.checked).to.deep.equal({ projects: 3, panels: 3, candidates: 1 });
     expect(out.drafts).to.have.length(1);
@@ -80,7 +83,8 @@ describe('rollup/brief composeBrief', () => {
     expect(out.calls[0]).to.include({ cost_usd: 0.02, model: 'claude-fable-5-1' });
     const call = engine.singleTurn.firstCall.args[0];
     expect(call.outputSchema.$id).to.include('brief.schema.json');
-    expect(call.systemPrompt[0]).to.match(/at most three bullets/i);
+    expect(call.systemPrompt[0]).to.match(/one bullet per body item/i);
+    expect(call.userPrompt).to.include('## Body layout');
     expect(call.userPrompt.startsWith('ROLLUP TEMPLATE 2026-09-18')).to.equal(true);
     expect(call.userPrompt).to.include(items[0].item_id);
     expect(call.userPrompt).to.include('<untrusted');
@@ -194,7 +198,9 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
     await composeBrief({ ctx: ctxWith(engine), items, ...inputs() });
     const call = engine.singleTurn.firstCall.args[0];
     expect(call.systemPrompt).to.have.length(1);
-    expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/at most three bullets/);
+    expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/one bullet per body item/i);
+    expect(call.userPrompt).to.include('## Body layout');
+    expect(call.userPrompt).to.include('"one_line"');
     expect(call.systemPrompt[0]).to.not.include('{{');
     expect(call.systemPrompt[0]).to.not.include('## Memory condensation');
     expect(call.userPrompt).to.not.include('{{');
@@ -227,5 +233,69 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
     expect(prompt).to.include('No memory has been recorded yet.');
     expect(prompt).to.include('No expected-load window is active.');
     expect(prompt).to.not.include('{{');
+  });
+});
+
+describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, User Story 9)', () => {
+  const { buildLayout, groupOfProjects } = require('../../src/rollup/layout');
+  const { makeProject } = require('./factories');
+  const discovery = makeDiscovery({
+    projects: [
+      makeProject('nepal-a.example.org', { group: 'MoH Nepal' }),
+      makeProject('nepal-b.example.org', { group: 'MoH Nepal' }),
+      makeProject('alpha.example.org'),
+    ],
+  });
+  const groupOf = groupOfProjects(discovery);
+  const items = rankItems({
+    items: [
+      makeItem({ project_url: 'https://nepal-a.example.org', confidence: 0.9 }),
+      makeItem({ project_url: 'https://alpha.example.org', confidence: 0.8 }),
+      makeItem({ project_url: 'https://nepal-b.example.org', confidence: 0.7 }),
+    ],
+    groupOf,
+  });
+  const layout = buildLayout(items, { groupOf });
+  const inputs = (engine, gate) => ({
+    ctx: makeCtx({ engine, gate }), items, layout, discovery, changes: {}, candidates: [makeCandidate()], memory: null,
+    feedbackUnmatched: [], expectedLoadNotice: null, referenceSourcesUnavailable: false, footer: footer(),
+  });
+
+  it('tells the model which items are one-line sub-bullets and passes the layout to the gate', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    await composeBrief(inputs(engine, gate));
+    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    const section = prompt.slice(prompt.indexOf('## Body layout'));
+    const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(section)[1]);
+    expect(json).to.deep.equal(layout.slots);
+    expect(json[0]).to.include({ kind: 'group', group: 'MoH Nepal', one_line: true });
+    expect(json[0].item_ids).to.deep.equal([items[0].item_id, items[2].item_id]);
+    expect(gate.verifyBrief.firstCall.args[0].layout).to.deep.equal(layout);
+  });
+
+  it('assembles a group bullet from the layout with code-built text and the model\'s one-line children', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const out = await composeBrief(inputs(engine, gate));
+    expect(out.degraded).to.equal(false);
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+    expect(out.brief.bullets).to.have.length(2);
+    const [group, single] = out.brief.bullets;
+    expect(group).to.deep.include({ kind: 'group', item_id: null, group: 'MoH Nepal', alert_key: null });
+    expect(group.text).to.equal('MoH Nepal: 2 projects with issues');
+    expect(group.children).to.deep.equal([
+      { item_id: items[0].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
+      { item_id: items[2].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
+    ]);
+    expect(single).to.deep.include({ kind: 'item', item_id: items[1].item_id, group: 'Other', children: [] });
+  });
+
+  it('builds the layout itself from the discovery when the caller passes none', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const out = await composeBrief({ ...inputs(engine, gate), layout: undefined });
+    expect(out.brief.bullets).to.have.length(2);
+    expect(gate.verifyBrief.firstCall.args[0].layout.slots).to.have.length(2);
   });
 });

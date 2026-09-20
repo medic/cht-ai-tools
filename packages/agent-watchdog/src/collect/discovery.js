@@ -1,12 +1,22 @@
 'use strict';
 // Discover projects, dashboards and metrics from the hosted watchdog on every run (FR-001, FR-003, FR-005).
-const { normaliseHost } = require('../config/policy');
+const { normaliseHost, matchesGlob } = require('../config/policy');
 const { projectSlug, projectUrlFor } = require('../model/identity');
 const { schemas } = require('../model/schemas');
 const { scrapeTargetsFor, targetsSummary } = require('./targets');
 const { withInstance, trailingQuery, windowBounds } = require('./windows');
 
 const noop = { debug() {}, info() {}, warn() {}, error() {} };
+const UNGROUPED = 'Other';
+
+/** The ignore pattern a host matches, or null (FR-068). */
+const ignoredBy = (host, patterns = []) => patterns.find((pattern) => matchesGlob(host, pattern)) || null;
+
+/** The first Project Group whose pattern matches the host, in file order; "Other" when none does (FR-068). */
+const groupFor = (host, groups = []) => {
+  const group = groups.find((g) => (g.host_patterns || []).some((pattern) => matchesGlob(host, pattern)));
+  return group ? group.label : UNGROUPED;
+};
 
 /** The metric key: the panel expression without its instance matcher (data-model.md, Metric Window). */
 const metricKey = (expr) => String(expr)
@@ -108,10 +118,27 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
     hosts = hostsFromTargets(activeTargets);
   }
 
+  // Ignored hosts (development instances) are recorded with the pattern that matched and never queried, analysed
+  // or named; the rest are assigned their programme group (FR-068).
+  const groupPolicy = policy.projects.groups || [];
+  const ignored = [];
+  const analysable = [];
+  for (const host of hosts) {
+    const pattern = ignoredBy(host, policy.projects.ignore || []);
+    if (pattern) {
+      ignored.push({ host, pattern });
+    } else {
+      analysable.push(host);
+    }
+  }
+  if (ignored.length) {
+    logger.info('discovery.ignored', { ignored });
+  }
+
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
   const trailing = windowBounds(runStart).find((b) => b.window === 'trailing_14d');
   const projects = [];
-  for (const host of hosts) {
+  for (const host of analysable) {
     const annotation = policy.projects.projects[host] || null;
     const versionVector = await grafana.queryInstant({ query: withInstance('cht_version', host), time });
     const versionLabels = versionVector.length ? versionVector[0].metric : {};
@@ -135,12 +162,16 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
       cht_version: versionLabels.app || null,
       history_days: historyDays,
       scrape_targets: scrapeTargetsFor(activeTargets, host),
+      group: groupFor(host, groupPolicy),
     });
     projects.push(project);
     logger.info('discovery.project', {
       project: host, configured: project.configured, cht_version: project.cht_version, history_days: historyDays,
+      group: project.group,
     });
   }
+  const groups = [...groupPolicy.map((g) => g.label), UNGROUPED]
+    .map((label) => ({ label, hosts: projects.filter((p) => p.group === label).map((p) => p.host) }));
 
   const perProject = dashboards.flatMap((d) => d.panels.filter((p) => p.per_project).map((p) => p.metric));
   const metrics = [...new Set([...perProject, scrapeTargetMetric])].sort();
@@ -149,6 +180,8 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
     run_start: runStart.toISOString(),
     datasource_uid: grafana.datasourceUid,
     projects,
+    groups,
+    ignored,
     dashboards,
     metrics,
     targets_summary: targetsSummary(activeTargets),
@@ -156,4 +189,4 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
   };
 };
 
-module.exports = { discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf };
+module.exports = { discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf, groupFor, ignoredBy };

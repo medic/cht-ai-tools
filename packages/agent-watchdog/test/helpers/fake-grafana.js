@@ -50,13 +50,40 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' },
 });
 
+// hostAliases: { alias: sourceHost } adds hosts that mirror a fixture host's series, anomaly, health and version,
+// so a fixture day can be replayed across programme groups and development instances (User Story 9).
+const addAliases = (series, hostAliases) => {
+  for (const [alias, source] of Object.entries(hostAliases)) {
+    if (!series.hosts.includes(source)) {
+      throw new Error(`fake grafana: alias source ${source} is not a fixture host`);
+    }
+    series.hosts.push(alias);
+    if ((series.down || []).includes(source)) {
+      series.down.push(alias);
+    }
+    if (series.versions && series.versions[source]) {
+      series.versions[alias] = series.versions[source];
+    }
+    for (const def of Object.values(series.metrics)) {
+      if (def.levels[source]) {
+        def.levels[alias] = def.levels[source];
+      }
+      if (def.anomaly && (def.anomaly.host === source || (def.anomaly.hosts || []).includes(source))) {
+        def.anomaly.hosts = [...(def.anomaly.hosts || []), alias];
+      }
+    }
+  }
+  series.hosts.sort();
+  return series;
+};
+
 const createFakeGrafana = ({
   fixtureDir, baseUrl = 'https://watchdog.example.org', token = 'glsa_test', datasourceUid = 'PBFA97CFB590B2093',
-  runStart: runStartOverride = null, historyDays = {},
+  runStart: runStartOverride = null, historyDays = {}, hostAliases = {},
 }) => {
   const grafanaDir = path.join(fixtureDir, 'grafana');
   const read = (name) => JSON.parse(fs.readFileSync(path.join(grafanaDir, name), 'utf8'));
-  const series = read('series.json');
+  const series = addAliases(read('series.json'), hostAliases);
   // The fixture describes one day; an override replays the same day's shapes at another run start.
   const runStart = Date.parse(runStartOverride || series.run_start) / 1000;
   const calls = [];
@@ -73,7 +100,10 @@ const createFakeGrafana = ({
 
   const anomalyFor = (host, metric) => {
     const def = series.metrics[metric];
-    return def && def.anomaly && def.anomaly.host === host ? def.anomaly : null;
+    if (!def || !def.anomaly) {
+      return null;
+    }
+    return def.anomaly.host === host || (def.anomaly.hosts || []).includes(host) ? def.anomaly : null;
   };
 
   const sampleAt = (host, metric, ts) => {

@@ -13,10 +13,13 @@ const DEFAULTS_DIR = path.join(__dirname, '..', '..', 'config', 'defaults');
 const RUN_START = new Date('2026-09-18T06:00:00Z');
 const quiet = createLogger({ level: 'error', stream: { write() {} } });
 
-const contextFor = async (caseName, flags = {}) => {
+const contextFor = async (caseName, flags = {}, { projectsYaml = null } = {}) => {
   const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName) });
   const dataDir = tempDir();
   const configDir = tempDir();
+  if (projectsYaml) {
+    fs.writeFileSync(path.join(configDir, 'projects.yaml'), projectsYaml);
+  }
   const policy = loadPolicy({ configDir, defaultsDir: DEFAULTS_DIR });
   const runDir = await RunDir.create(dataDir, '2026-09-18');
   const config = {
@@ -113,6 +116,22 @@ describe('collect and analyze pipeline over the recorded fixtures', () => {
       env.ctx.config.endpoints.prometheusDatasourceUid = 'PXXXXXXXXXXXXXXXX';
       await expect(collect.run(env.ctx)).to.be.rejectedWith(codes.ExitError)
         .and.eventually.have.property('code', codes.CONFIG);
+    } finally {
+      env.cleanup();
+    }
+  });
+  it('discovers an ignored host but gives it no project directory, windows or candidates (FR-068)', async () => {
+    const env = await contextFor('seeded-anomaly', {}, { projectsYaml: "projects: {}\nignore: ['gamma*']\n" });
+    try {
+      const collected = await collect.run(env.ctx);
+      expect(collected.projects).to.equal(2);
+      const discovery = await env.runDir.readJson('discovery.json');
+      expect(discovery.projects.map((p) => p.host)).to.deep.equal(['alpha.example.org', 'beta.example.org']);
+      expect(discovery.ignored).to.deep.equal([{ host: 'gamma.example.org', pattern: 'gamma*' }]);
+      expect(fs.existsSync(path.join(env.runDir.root, 'gamma-example-org'))).to.equal(false);
+      const analysed = await analyze.run(env.ctx);
+      expect(analysed.projects).to.equal(2);
+      expect(env.runDir.exists('gamma-example-org/candidates.json')).to.equal(false);
     } finally {
       env.cleanup();
     }

@@ -1,6 +1,6 @@
 'use strict';
-// Structured, reviewed policy files: projects.yaml, dashboards.yaml, thresholds.yaml
-// (FR-053, contracts/config-files.md).
+// Structured, reviewed policy files: projects.yaml (annotations, programme groups, ignore list), dashboards.yaml,
+// thresholds.yaml (FR-053, FR-068, contracts/config-files.md).
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -36,6 +36,33 @@ const isValidTimezone = (tz) => {
 };
 
 const timezone = z.string().refine(isValidTimezone, { message: 'invalid IANA timezone' });
+
+// Host globs (FR-068): lowercase host characters plus `*` (any run of characters) and `?` (one character).
+const GLOB_PATTERN = /^[a-z0-9*?.:-]+$/;
+const RESERVED_GROUPS = Object.freeze(['Other', 'Watchdog']);
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Anchored regular expression for a host glob; no glob library for two wildcards. */
+const globToRegExp = (pattern) => new RegExp(`^${String(pattern).split(/([*?])/).map((part) => {
+  if (part === '*') {
+    return '.*';
+  }
+  return part === '?' ? '.' : escapeRegExp(part);
+}).join('')}$`);
+
+const matchesGlob = (host, pattern) => globToRegExp(pattern).test(host);
+
+const hostGlob = z.string().min(1)
+  .regex(GLOB_PATTERN, 'expected a lowercase host glob (letters, digits, ".", "-", ":", "*" and "?")')
+  .refine((pattern) => !pattern.startsWith('www.'), { message: 'drop the www. prefix; hosts are matched without it' });
+
+const ProjectGroup = z.object({
+  label: z.string().min(1, 'label is required').max(40, 'label is at most 40 characters'),
+  host_patterns: z.array(hostGlob).min(1, 'host_patterns needs at least one glob'),
+}).strict().refine((group) => !RESERVED_GROUPS.includes(group.label), {
+  message: `label is reserved (${RESERVED_GROUPS.join(', ')})`,
+  path: ['label'],
+});
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 
 const ExpectedLoadWindow = z.object({
@@ -68,7 +95,12 @@ const ProjectAnnotation = z.object({
 const ProjectsFile = z.object({
   defaults: z.object({ expected_load_windows: z.array(ExpectedLoadWindow).optional() }).strict().optional(),
   projects: z.record(z.string(), ProjectAnnotation).default({}),
-}).strict();
+  groups: z.array(ProjectGroup).default([]),
+  ignore: z.array(hostGlob).default([]),
+}).strict().refine((file) => new Set(file.groups.map((g) => g.label)).size === file.groups.length, {
+  message: 'group labels must be unique',
+  path: ['groups'],
+});
 
 const DashboardsFile = z.object({
   datasource_uid_env: z.string().optional(),
@@ -145,7 +177,12 @@ const parseYaml = (file, content) => {
 };
 
 const normaliseProjects = (projects) => {
-  const out = { defaults: projects.defaults || { expected_load_windows: [] }, projects: {} };
+  const out = {
+    defaults: projects.defaults || { expected_load_windows: [] },
+    projects: {},
+    groups: projects.groups || [],
+    ignore: projects.ignore || [],
+  };
   if (!out.defaults.expected_load_windows) {
     out.defaults.expected_load_windows = [];
   }
@@ -178,4 +215,5 @@ const loadPolicy = ({ configDir, defaultsDir }) => {
 
 module.exports = {
   loadPolicy, normaliseHost, PolicyError, ExpectedLoadWindow, ThresholdsFile, DashboardsFile, ProjectsFile, HIGH_RULES,
+  globToRegExp, matchesGlob, RESERVED_GROUPS,
 };

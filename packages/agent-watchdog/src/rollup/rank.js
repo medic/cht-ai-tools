@@ -2,9 +2,9 @@
 // Ranking and placement of accepted items (FR-010, data-model.md Item), after matching merged pattern cards
 // (FR-038, US6 scenario 4).
 const { itemId } = require('../model/identity');
+const { buildLayout, slotByKey, BODY_SLOTS } = require('./layout');
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
-const BODY_SLOTS = 3;
 
 const CONFIDENCE_MAX = 1;
 const CONFIDENCE_FLOOR = 0.05;
@@ -121,24 +121,29 @@ const compare = (a, b) => {
 };
 
 /**
- * Rank items by severity, confidence, persistence and id; the first three go in the post body.
+ * Rank items by severity, confidence, persistence and id, then place them with the body layout rule
+ * (src/rollup/layout.js): five slots, a programme's items sharing one slot as sub-bullets (FR-010, FR-069).
  * @param {object} options
  * @param {object[]} options.items accepted items
  * @param {Map<string, object[]>} [options.feedbackByItem] feedback records by item id (US2)
  * @param {Map<string, number>} [options.previousItemIds] consecutive prior runs that contained each id
  * @param {object|null} [options.cards] loaded pattern cards (src/corpus/cards.js); matched before persistence
+ * @param {(projectUrl: string) => string} [options.groupOf] the project's group label; everything is "Other" without it
  */
-const rankItems = ({ items, feedbackByItem = new Map(), previousItemIds = new Map(), cards = null }) => {
+const rankItems = ({
+  items, feedbackByItem = new Map(), previousItemIds = new Map(), cards = null, groupOf = undefined,
+}) => {
   const withPersistence = matchPatternCards(items, cards).items.map((item) => ({
     ...item,
     persisting_days: 1 + (previousItemIds.get(item.item_id) || 0),
   }));
   const influenced = applyFeedbackInfluence(withPersistence, feedbackByItem);
-  return [...influenced].sort(compare).map((item, index) => ({
-    ...item,
-    rank: index + 1,
-    placement: index < BODY_SLOTS ? 'body' : 'thread',
-  }));
+  const sorted = [...influenced].sort(compare);
+  const slots = slotByKey(buildLayout(sorted, groupOf ? { groupOf } : {}));
+  return sorted.map((item, index) => {
+    const slot = slots.get(item.item_id) || null;
+    return { ...item, rank: index + 1, placement: slot ? 'body' : 'thread', slot };
+  });
 };
 
 module.exports = {

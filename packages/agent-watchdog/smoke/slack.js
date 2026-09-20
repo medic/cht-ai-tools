@@ -4,6 +4,8 @@
 // and read-back through conversations.replies with include_all_metadata. Posts to the configured channel
 // only when --yes is given; otherwise it stops after the upload.
 // Usage: node --env-file=.env smoke/slack.js [--yes] [--react <message ts>]
+// S-16 (research.md R-14): the posted brief carries a group bullet whose sub-bullets are indented `◦` lines inside
+// the section; check that they render legibly on Slack desktop and mobile.
 // S-13 (research.md R-13): with --react <ts>, add the `eyes` reaction to that message twice; the second call must
 // report already_reacted, and a token without reactions:write must report missing_scope. Nothing else runs.
 const fs = require('node:fs');
@@ -84,7 +86,17 @@ const main = async () => {
     run_id: runId,
     kind: 'brief',
     headline: 'agent-watchdog smoke test',
-    bullets: [{ item_id: 'a1b2c3d4e5f6', text: 'Smoke item: sentinel backlog 912 vs 300 yesterday' }],
+    bullets: [
+      { item_id: 'a1b2c3d4e5f6', text: 'Smoke item: sentinel backlog 912 vs 300 yesterday' },
+      {
+        kind: 'group', item_id: null, group: 'Smoke programme', text: 'Smoke programme: 2 projects with issues',
+        alert_key: null,
+        children: [
+          { item_id: 'b2c3d4e5f6a1', text: 'smoke-a.example.org sentinel backlog 400 vs 100 yesterday' },
+          { item_id: 'c3d4e5f6a1b2', text: 'smoke-b.example.org outbound push backlog 3 vs 0 yesterday' },
+        ],
+      },
+    ],
     expected_load_notice: null,
     checked: { projects: 1, panels: 1, candidates: 1 },
     degradation_notice: null,
@@ -97,10 +109,10 @@ const main = async () => {
     },
     publication: null,
   };
-  const items = [{
-    item_id: 'a1b2c3d4e5f6',
-    project_url: 'https://smoke.example.org',
-    metric: 'cht_sentinel_backlog_count',
+  const smokeItem = (itemId, host, metric, rank) => ({
+    item_id: itemId,
+    project_url: `https://${host}`,
+    metric,
     severity: 'low',
     evidence: [],
     why_now: 'smoke',
@@ -111,14 +123,21 @@ const main = async () => {
     pattern_card: null,
     candidate_ids: ['x'],
     reference_urls: [],
-    rank: 1,
+    rank,
     placement: 'body',
+    slot: rank === 1 ? 1 : 2,
     pass_history: [],
-  }];
+  });
+  const items = [
+    smokeItem('a1b2c3d4e5f6', 'smoke.example.org', 'cht_sentinel_backlog_count', 1),
+    smokeItem('b2c3d4e5f6a1', 'smoke-a.example.org', 'cht_sentinel_backlog_count', 2),
+    smokeItem('c3d4e5f6a1b2', 'smoke-b.example.org', 'cht_outbound_push_backlog_count', 3),
+  ];
   const payload = buildPayload({ brief, items, links: new Map(), runId, date: runId, audience: 'internal' });
   const publisher = createSlackPublisher({ client, channel, logger });
   const publication = await publisher.publish({ payload, imagePath });
   console.log(`ok   posted ${publication.permalink} with ${publication.replies.length} replies`);
+  console.log('S-16: open the post and confirm the two indented sub-bullets under "Smoke programme" read well');
 
   const replies = await client.conversations.replies({ channel, ts: publication.ts, include_all_metadata: true });
   const withMetadata = replies.messages.filter((m) => m.metadata && m.metadata.event_type);

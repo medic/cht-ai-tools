@@ -165,21 +165,22 @@ acknowledged. A real run then posts the digest in the brief's or heartbeat's thr
 acknowledges nothing again. `agent-watchdog purge --dry-run` with a clock a year later lists no
 feedback records, because they are never purged.
 
-## 13. Alerts and grouped bullets (User Stories 8 and 9)
+## 13. Grouped bullets (User Story 9) and alerts (User Story 8)
 
-`npm run test:e2e -- --grep "US8|US9"`, then a preview against the recorded alert day:
-`agent-watchdog run --dry-run --date 2026-09-20 --fixtures test/fixtures/runs/alerts-day > payload.json`
-with `AGENT_WATCHDOG_CONFIG_DIR` pointing at `test/fixtures/runs/alerts-day/config/` (two groups
-by host pattern, one ignored `.dev` host).
+`npx mocha test/e2e/us9.spec.js` replays the seeded day across aliased hosts: two programmes declared
+by host pattern, one `.dev` host ignored. For a preview against a real watchdog, put `groups` and
+`ignore` in the `projects.yaml` under `AGENT_WATCHDOG_CONFIG_DIR` (contracts/config-files.md) and run
+`agent-watchdog run --dry-run --date <date> > payload.json`.
 
-Expected: the parent has at most five `section` blocks after the header; one reads
-"MoH Nepal: 3 projects with issues" with three indented sub-bullets, and one reads
-"MoH Nepal alerts: 15 firing, 3 stale for more than 14 days" with one sub-bullet per category;
-`payload.replies` holds one reply per project item and one per alert group, the latter carrying
-`agent_watchdog.alerts` metadata, at most fifty instances and a link under the Grafana host; the
-ignored host appears in `discovery.json` under `ignored` and nowhere in the payload;
-`alerts.classified.json` marks the three long-firing instances `stale: true`; and
-`alerts/episodes.jsonl` holds an `opened` event per firing instance with its correlations. Live:
-`node smoke/grafana.js --alerts` lists the rules and firing instances the Viewer token can read
-(S-14) and `node smoke/grafana.js --hosts` prints every discovered host with its group, which is
-how the placeholder patterns in `projects.yaml` get replaced.
+Expected: `rollup/layout.json` holds at most five slots; a programme with several flagged projects is
+one `group` bullet ("MoH Nepal: 3 projects with issues") whose sub-bullets are the model's one-line
+item texts, rendered in the parent's section as indented `◦` lines and as a nested list in the report;
+every project item still has a thread reply; `discovery.json` lists ignored hosts under `ignored` and
+they appear nowhere else; the gate report shows `bullet_count`, `bullet_length` and `thread_order`
+passing against the layout. `node smoke/grafana.js --hosts` prints every discovered host with its
+group, which is how the placeholder patterns in `projects.yaml` get replaced; `node smoke/slack.js --yes`
+posts a brief with a group bullet for S-16.
+
+Alerts (User Story 8, pending): the recorded alert day `test/fixtures/runs/alerts-day`,
+`alerts.classified.json`, `alerts/episodes.jsonl`, the alert-group replies and
+`node smoke/grafana.js --alerts` (S-14, S-15) arrive with that story.

@@ -21,6 +21,8 @@
   .notice { margin: 8px 0; padding: 8px 12px; border-left: 4px solid #6b7280; background: #f3f4f6; }
   ul.bullets { padding-left: 20px; margin: 0 0 8px; }
   ul.bullets li { margin: 6px 0; font-size: 16px; }
+  ul.sub { padding-left: 18px; margin: 4px 0 0; list-style: circle; }
+  ul.sub li { margin: 2px 0; font-size: 14px; }
   .checked { font-size: 13px; color: #4b5563; margin-top: 8px; }
   section.item { width: 840px; background: #fff; border: 1px solid #d9dee5; border-radius: 12px; padding: 18px 28px; margin-top: 16px; }
   .sev { font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-right: 8px; }
@@ -42,7 +44,13 @@
 {{#if has_bullets}}
   <ul class="bullets">
 {{#each bullets}}
-    <li>{{text}}</li>
+    <li>{{text}}{{#if has_children}}
+      <ul class="sub">
+{{#each children}}
+        <li>{{text}}</li>
+{{/each}}
+      </ul>
+    {{/if}}</li>
 {{/each}}
   </ul>
 {{/if}}

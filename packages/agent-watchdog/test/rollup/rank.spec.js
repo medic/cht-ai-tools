@@ -10,7 +10,32 @@ describe('rollup/rank', () => {
     const ranked = rankItems({ items: [low, mediumLowConfidence, mediumHighConfidence, high] });
     expect(ranked.map((i) => i.metric)).to.deep.equal(['d_metric', 'b_metric', 'c_metric', 'a_metric']);
     expect(ranked.map((i) => i.rank)).to.deep.equal([1, 2, 3, 4]);
-    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body', 'thread']);
+    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body', 'body']);
+    expect(ranked.map((i) => i.slot)).to.deep.equal([1, 2, 3, 4]);
+  });
+
+  it('fills five body slots and sends the sixth item to the thread (FR-010, revision 9)', () => {
+    const { BODY_SLOTS } = require('../../src/rollup/rank');
+    expect(BODY_SLOTS).to.equal(5);
+    const items = ['a', 'b', 'c', 'd', 'e', 'f'].map((m) => makeItem({ metric: `${m}_metric`, severity: 'low' }));
+    const ranked = rankItems({ items });
+    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body', 'body', 'body', 'thread']);
+    expect(ranked[5].slot).to.equal(null);
+  });
+
+  it('places items of one programme in a shared slot when groupOf names their group (FR-069)', () => {
+    const groups = { 'https://nepal-a.example.org': 'MoH Nepal', 'https://nepal-b.example.org': 'MoH Nepal' };
+    const groupOf = (url) => groups[url] || 'Other';
+    const ranked = rankItems({
+      items: [
+        makeItem({ project_url: 'https://nepal-a.example.org', confidence: 0.9 }),
+        makeItem({ project_url: 'https://alpha.example.org', confidence: 0.8 }),
+        makeItem({ project_url: 'https://nepal-b.example.org', confidence: 0.7 }),
+      ],
+      groupOf,
+    });
+    expect(ranked.map((i) => i.slot)).to.deep.equal([1, 2, 1]);
+    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body']);
   });
 
   it('breaks ties on persisting days then item id, deterministically', () => {

@@ -99,11 +99,11 @@ describe('verify/gate', () => {
     expect(report.checks.find((c) => c.name === 'links_resolve').status).to.equal('fail');
   });
 
-  it('verifies a brief with three bullets and rejects a fourth', async () => {
+  it('verifies a brief with five bullets and rejects a sixth (FR-010, revision 9)', async () => {
     const ctx = briefContext();
-    const ids = ['a', 'b', 'c', 'd'].map((c) => c.repeat(12));
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'].map((c) => c.repeat(12));
     ctx.items = ids.map((id) => ({ ...ctx.items[0], item_id: id }));
-    ctx.draft.bullets = ids.slice(0, 3).map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
+    ctx.draft.bullets = ids.slice(0, 5).map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
     ctx.draft.thread_order = ids;
     const good = await verifyBrief({
       draft: ctx.draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18',
@@ -113,12 +113,43 @@ describe('verify/gate', () => {
     expect(good.report.subject).to.equal('brief');
     expect(good.report.subject_ref).to.equal('rollup/draft2');
     expect(schemas.VerificationReport.parse(good.report)).to.be.an('object');
-    ctx.draft.bullets.push({ item_id: ids[3], text: 'four' });
+    ctx.draft.bullets.push({ item_id: ids[5], text: 'six' });
     const bad = await verifyBrief({
       draft: ctx.draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18',
       attempt: 3, allowlist: ctx.allowlist,
     });
     expect(bad.report.outcome).to.equal('rejected');
     expect(bad.report.checks.find((c) => c.name === 'bullet_count').status).to.equal('fail');
+  });
+
+  it('verifies a brief against its body layout: one bullet per body item, sub-bullets one line', async () => {
+    const ctx = briefContext();
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((c) => c.repeat(12));
+    ctx.items = ids.map((id) => ({ ...ctx.items[0], item_id: id }));
+    const layout = {
+      slots: [
+        { slot: 1, kind: 'group', group: 'MoH Nepal', item_ids: ids.slice(0, 6), one_line: true },
+        { slot: 2, kind: 'item', group: 'Other', item_ids: [ids[6]], one_line: false },
+      ],
+      body_items: ids, thread_items: [], one_line: ids.slice(0, 6),
+    };
+    ctx.draft.bullets = ids.map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
+    ctx.draft.thread_order = ids;
+    const verify = (draft) => verifyBrief({
+      draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18', attempt: 1,
+      allowlist: ctx.allowlist, layout,
+    });
+    const good = await verify(ctx.draft);
+    const failures = JSON.stringify(good.report.checks.filter((c) => c.status === 'fail'));
+    expect(good.report.outcome, failures).to.equal('accepted');
+    const bullets = ctx.draft.bullets.map((b, i) => (i === 0 ? { ...b, text: 'one\ntwo' } : b));
+    const twoLines = { ...ctx.draft, bullets };
+    const long = await verify(twoLines);
+    expect(long.report.checks.find((c) => c.name === 'bullet_length').status).to.equal('fail');
+    const wrongIds = { ...ctx.draft, bullets: ctx.draft.bullets.slice(1), thread_order: [...ids.slice(1), ids[0]] };
+    const mismatch = await verify(wrongIds);
+    expect(mismatch.report.outcome).to.equal('rejected');
+    const failed = mismatch.report.checks.filter((c) => c.status === 'fail').map((c) => c.name);
+    expect(failed).to.include.members(['bullet_count', 'thread_order']);
   });
 });

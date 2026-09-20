@@ -34,8 +34,9 @@ const run = async (ctx) => {
   const discovery = await discover({ grafana, policy, config, runStart, logger, docs });
   await runDir.writeJson('discovery.json', discovery);
   logger.info('collect.discovery', {
-    projects: discovery.projects.length, dashboards: discovery.dashboards.length, metrics: discovery.metrics.length,
-    targets: discovery.targets_summary,
+    projects: discovery.projects.length, ignored: (discovery.ignored || []).length,
+    groups: (discovery.groups || []).map((g) => `${g.label}: ${g.hosts.length}`),
+    dashboards: discovery.dashboards.length, metrics: discovery.metrics.length, targets: discovery.targets_summary,
   });
 
   const wanted = (flags.project || []).map(normaliseHost);

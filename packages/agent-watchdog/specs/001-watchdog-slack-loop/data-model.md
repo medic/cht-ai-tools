@@ -39,7 +39,10 @@ A monitored CHT deployment, discovered from the metrics store on every run (FR-0
 | `history_days` | integer | Days of metric history available. Below 14, history comparisons are `available: false` (US5 scenario 3). |
 | `scrape_targets` | ScrapeTarget[] | `{ job, scrape_url, health: 'up' \| 'down' \| 'unknown', last_error }` (FR-005). |
 | `group` | string | Label of the first Project Group whose pattern matches `host`, else `Other` (FR-068). |
-| `ignored` | boolean | True when `host` matches a pattern under `projects.yaml` `ignore`. An ignored project is discovered and counted but has no Metric Windows, Computed Changes, Candidates or Passes, is charged no model usage, and is never named in a post (FR-068). |
+
+A host matching a pattern under `projects.yaml` `ignore` never becomes a Project: `discovery.json` lists
+it under `ignored` as `{ host, pattern }` and it is neither queried, analysed, charged nor named in a post
+(FR-068). `discovery.json` also lists `groups` as `{ label, hosts }` in file order with `Other` last.
 
 ### Project Group
 
@@ -309,10 +312,12 @@ One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
 tells the model which items must be one-liners): walk the ranked Items and Alert Groups together,
 Alert Groups ordered among Items by importance (critical before every item, otherwise after the
 items of the same severity); an entry whose Project Group already holds a slot joins it as a
-sub-bullet while the slot has fewer than eight; otherwise it opens a new slot while fewer than five
-are open; otherwise it goes to the thread. A slot with one Item is an `item` bullet; with two or
-more Items a `group` bullet; Alert Groups of one Project Group share one `alerts` bullet with a
-sub-bullet per category and never mix with Items. The model's draft carries one `{ item_id, text }`
+sub-bullet while the slot has fewer than eight and goes to the thread once it is full; otherwise it
+opens a new slot while fewer than five are open; otherwise it goes to the thread. The reserved
+`Other` group never collapses: its entries take slots of their own, since a fallback bucket is not
+a programme. A slot with one Item is an `item` bullet; with two or more Items a `group` bullet;
+Alert Groups of one Project Group share one `alerts` bullet with a sub-bullet per category and
+never mix with Items. The model's draft carries one `{ item_id, text }`
 per body Item; code assembles the Bullets from the draft and the layout, and the gate rejects a
 draft whose item ids differ from the layout's body items.
 

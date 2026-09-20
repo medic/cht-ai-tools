@@ -228,18 +228,27 @@ const createScriptedEngine = ({
     const rankedMatch = /<untrusted source="ranked-items">\n([\s\S]*?)\n<\/untrusted>/.exec(options.userPrompt);
     const ranked = rankedMatch ? JSON.parse(rankedMatch[1]) : [];
     const ordered = [...ranked].sort((a, b) => (a.rank || 0) - (b.rank || 0));
-    const bullets = ordered.slice(0, 3).map((item) => {
+    // The body layout is computed by code (User Story 9): one bullet per body item, in the layout's order; items
+    // of a programme are one-line sub-bullets. Without a layout section, the first five items are the bullets.
+    const layoutSection = options.userPrompt.slice(options.userPrompt.indexOf('## Body layout'));
+    const layoutMatch = /```json\n([\s\S]*?)\n```/.exec(layoutSection);
+    const bodyIds = layoutMatch
+      ? JSON.parse(layoutMatch[1]).flatMap((slot) => slot.item_ids)
+      : ordered.slice(0, 5).map((item) => item.item_id);
+    const bullets = bodyIds.map((itemId) => {
+      const item = ordered.find((i) => i.item_id === itemId);
       const cur = item.evidence.find((e) => e.window === 'current') || item.evidence[0];
       const prev = item.evidence.find((e) => e.window === 'previous_day');
       const now = briefMode === 'bad' ? '999999' : formatValue(cur.value, cur.unit);
       const before = prev ? ` vs ${formatValue(prev.value, prev.unit)} yesterday` : '';
       return { item_id: item.item_id, text: `${item.host} \`${item.metric}\`: ${now} now${before}` };
     });
+    const threadOrder = [...bodyIds, ...ordered.map((i) => i.item_id).filter((id) => !bodyIds.includes(id))];
     return {
       structuredOutput: {
         headline: `Watchdog brief: ${ordered.length} item${ordered.length === 1 ? '' : 's'} to look at`,
         bullets,
-        thread_order: ordered.map((i) => i.item_id),
+        thread_order: threadOrder,
         expected_load_notice: null,
         memory_update: { replace_with: memoryText === undefined ? memoryFromFeedback() : memoryText },
         proposals,
@@ -256,9 +265,9 @@ const createScriptedEngine = ({
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
   useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null, historyDays = {},
-  patternCards = undefined, definition = undefined,
+  patternCards = undefined, definition = undefined, hostAliases = {},
 }) => {
-  const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart, historyDays });
+  const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart, historyDays, hostAliases });
   const out = capture();
   const err = capture();
   const browserLauncher = fakeBrowserLauncher();

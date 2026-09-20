@@ -173,3 +173,44 @@ describe('publish/payload: feedback digest (FR-062)', () => {
     expect(buildPayload({ ...base(), unmatchedNotes: [{ note: 'x' }] }).replies).to.have.length(1);
   });
 });
+
+describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
+  const nepalA = makeItem({ project_url: 'https://nepal-a.example.org', rank: 1, placement: 'body', slot: 1 });
+  const nepalB = makeItem({ project_url: 'https://nepal-b.example.org', rank: 3, placement: 'body', slot: 1 });
+  const alpha = makeItem({ rank: 2, placement: 'body', slot: 2 });
+  const brief = makeBrief({
+    bullets: [
+      {
+        kind: 'group', item_id: null, group: 'MoH Nepal', text: 'MoH Nepal: 2 projects with issues', alert_key: null,
+        children: [
+          { item_id: nepalA.item_id, text: 'nepal-a sentinel backlog 912 vs 300 & climbing' },
+          { item_id: nepalB.item_id, text: 'nepal-b sentinel backlog 912 vs 300' },
+        ],
+      },
+      {
+        kind: 'item', item_id: alpha.item_id, group: 'Other', text: 'alpha sentinel backlog 912 vs 300', children: [],
+        alert_key: null,
+      },
+    ],
+  });
+  const args = {
+    brief, items: [nepalA, alpha, nepalB], links: new Map(), runId: '2026-09-18', date: '2026-09-18',
+    audience: 'internal', channel: 'C123',
+  };
+
+  it('renders one section per top-level bullet with each sub-bullet on its own indented line', () => {
+    const payload = buildPayload(args);
+    const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
+    expect(sections).to.have.length(2);
+    expect(sections[0].split('\n')).to.deep.equal([
+      'MoH Nepal: 2 projects with issues',
+      '   ◦ nepal-a sentinel backlog 912 vs 300 &amp; climbing',
+      '   ◦ nepal-b sentinel backlog 912 vs 300',
+    ]);
+    expect(sections[1]).to.equal('alpha sentinel backlog 912 vs 300');
+    expect(payload.parent.text).to.include('• MoH Nepal: 2 projects with issues\n   ◦ nepal-a sentinel backlog');
+    expect(payload.parent.text).to.include('&amp; climbing');
+    // Every project item still has its own thread reply, in rank order.
+    expect(payload.replies.map((r) => r.item_id)).to.deep.equal([nepalA.item_id, alpha.item_id, nepalB.item_id]);
+  });
+});

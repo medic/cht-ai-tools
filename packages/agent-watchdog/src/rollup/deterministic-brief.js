@@ -1,7 +1,9 @@
 'use strict';
 // Briefs that need no model: the heartbeat (FR-021) and the degraded brief built from candidates (FR-017).
 const { itemId } = require('../model/identity');
-const { SEVERITY_ORDER, BODY_SLOTS } = require('./rank');
+const { layoutEntries, toLayoutDocument, assembleBullets, groupOfProjects } = require('./layout');
+
+const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 
 const BASELINE_WINDOWS = ['previous_day', 'previous_cycle', 'previous_week', 'trailing_14d'];
 
@@ -69,34 +71,36 @@ const orderCandidates = (candidates) => [...candidates].sort((a, b) => {
   return a.candidate_id.localeCompare(b.candidate_id);
 });
 
-const candidateBullet = (candidate) => {
+const candidateText = (candidate) => {
   const current = evidenceValue(candidate, ['current']);
   const baseline = evidenceValue(candidate, BASELINE_WINDOWS);
   const currentText = plain(current === null ? candidate.observed : current);
   const host = hostOf(candidate.project_url);
-  return {
-    item_id: itemId(candidate.project_url, candidate.metric, null),
-    text: `${candidate.metric} on ${host}: ${currentText} vs ${plain(baseline)} (${candidate.rule})`,
-  };
+  return `${candidate.metric} on ${host}: ${currentText} vs ${plain(baseline)} (${candidate.rule})`;
 };
 
-/** The deterministic brief: computed candidates only, clearly labelled, never silent (constitution III). */
+/**
+ * The deterministic brief: computed candidates only, clearly labelled, never silent (constitution III). One line per
+ * project and metric, keyed by the item id the analysis would give it, laid out with the same five-slot rule as the
+ * model's brief so a programme's candidates share one bullet (FR-069).
+ */
 const buildDeterministicBrief = ({
   runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [],
 }) => {
-  const seen = new Set();
-  const bullets = [];
+  const groupOf = groupOfProjects(discovery);
+  const byKey = new Map();
   for (const candidate of orderCandidates(candidates)) {
-    const key = `${candidate.project_url}|${candidate.metric}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    bullets.push(candidateBullet(candidate));
-    if (bullets.length === BODY_SLOTS) {
-      break;
+    const key = itemId(candidate.project_url, candidate.metric, null);
+    if (!byKey.has(key)) {
+      byKey.set(key, candidate);
     }
   }
+  const entries = [...byKey.entries()].map(([key, candidate]) => ({ key, group: groupOf(candidate.project_url) }));
+  const bullets = assembleBullets({
+    layout: toLayoutDocument(layoutEntries(entries)),
+    textFor: (key) => candidateText(byKey.get(key)),
+    hostFor: (key) => hostOf(byKey.get(key).project_url),
+  });
   const projects = new Set(candidates.map((c) => c.project_url)).size;
   return {
     ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
@@ -109,4 +113,4 @@ const buildDeterministicBrief = ({
   };
 };
 
-module.exports = { buildDeterministicBrief, buildHeartbeat, checkedCounts, hostOf, plain };
+module.exports = { buildDeterministicBrief, buildHeartbeat, checkedCounts, hostOf, plain, candidateText };

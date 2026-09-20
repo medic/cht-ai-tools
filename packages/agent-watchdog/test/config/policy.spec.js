@@ -103,3 +103,83 @@ describe('config/policy', () => {
     expect(error.code).to.equal(78);
   });
 });
+
+describe('config/policy: programme groups and the ignore list (FR-068, User Story 9)', () => {
+  const { globToRegExp, matchesGlob } = require('../../src/config/policy');
+  let dir;
+  beforeEach(() => {
+    dir = tempDir();
+  });
+  afterEach(() => removeDir(dir));
+
+  it('ships placeholder groups and the development-instance ignore patterns as the package default', () => {
+    const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+    expect(policy.projects.groups.map((g) => g.label)).to.deep.equal(['MoH Nepal', 'eCHIS Kenya']);
+    expect(policy.projects.groups.every((g) => g.host_patterns.length > 0)).to.equal(true);
+    expect(policy.projects.ignore).to.deep.equal(['*.dev.*', '*-dev.*']);
+  });
+
+  it('loads groups and ignore from a deployment file and keeps the defaults and projects beside them', () => {
+    fs.writeFileSync(path.join(dir, 'projects.yaml'), [
+      'groups:',
+      '  - label: MoH Nepal',
+      "    host_patterns: ['*.moh-nepal.org', 'nepal-?.example.org']",
+      '  - label: eCHIS Kenya',
+      "    host_patterns: ['*echis*']",
+      "ignore: ['*.dev.*', 'sandbox-*']",
+      'projects:',
+      '  nepal-a.example.org: { owner: hosting }',
+    ].join('\n'));
+    const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+    expect(policy.projects.groups).to.deep.equal([
+      { label: 'MoH Nepal', host_patterns: ['*.moh-nepal.org', 'nepal-?.example.org'] },
+      { label: 'eCHIS Kenya', host_patterns: ['*echis*'] },
+    ]);
+    expect(policy.projects.ignore).to.deep.equal(['*.dev.*', 'sandbox-*']);
+    expect(policy.projects.projects['nepal-a.example.org'].owner).to.equal('hosting');
+    expect(policy.projects.defaults.expected_load_windows).to.deep.equal([]);
+  });
+
+  it('defaults groups and ignore to empty lists when a deployment file omits them', () => {
+    fs.writeFileSync(path.join(dir, 'projects.yaml'), 'projects: {}\n');
+    const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+    expect(policy.projects.groups).to.deep.equal([]);
+    expect(policy.projects.ignore).to.deep.equal([]);
+  });
+
+  const withGroups = (lines) => {
+    fs.writeFileSync(path.join(dir, 'projects.yaml'), ['projects: {}', ...lines, ''].join('\n'));
+    return () => loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+  };
+
+  it('rejects duplicate, reserved, empty and over-long labels', () => {
+    const twice = ['groups:', "  - { label: A, host_patterns: ['a*'] }", "  - { label: A, host_patterns: ['b*'] }"];
+    expect(withGroups(twice)).to.throw(PolicyError, /unique/);
+    expect(withGroups(['groups:', "  - { label: Other, host_patterns: ['a*'] }"])).to.throw(PolicyError, /reserved/);
+    expect(withGroups(['groups:', "  - { label: Watchdog, host_patterns: ['a*'] }"])).to.throw(PolicyError, /reserved/);
+    expect(withGroups(['groups:', "  - { label: '', host_patterns: ['a*'] }"])).to.throw(PolicyError, /label/);
+    const long = ['groups:', `  - { label: '${'x'.repeat(41)}', host_patterns: ['a*'] }`];
+    expect(withGroups(long)).to.throw(PolicyError, /40/);
+  });
+
+  it('rejects a pattern with a scheme, a www. prefix, upper case or no pattern at all', () => {
+    expect(withGroups(['groups:', "  - { label: A, host_patterns: ['https://a.example.org'] }"])).to.throw(PolicyError, /glob/);
+    const www = ['groups:', "  - { label: A, host_patterns: ['www.*.example.org'] }"];
+    expect(withGroups(www)).to.throw(PolicyError, /www/);
+    expect(withGroups(['groups:', "  - { label: A, host_patterns: ['*.Example.org'] }"])).to.throw(PolicyError, /glob/);
+    expect(withGroups(['groups:', '  - { label: A, host_patterns: [] }'])).to.throw(PolicyError, /host_patterns/);
+    expect(withGroups(["ignore: ['http://dev.example.org']"])).to.throw(PolicyError, /glob/);
+  });
+
+  it('matches hosts against anchored globs where * is any run of characters and ? one character', () => {
+    expect(globToRegExp('*.dev.*').source).to.equal('^.*\\.dev\\..*$');
+    expect(matchesGlob('cht.dev.example.org', '*.dev.*')).to.equal(true);
+    expect(matchesGlob('cht-dev.example.org', '*.dev.*')).to.equal(false);
+    expect(matchesGlob('cht-dev.example.org', '*-dev.*')).to.equal(true);
+    expect(matchesGlob('nepal-a.example.org', 'nepal-?.example.org')).to.equal(true);
+    expect(matchesGlob('nepal-ab.example.org', 'nepal-?.example.org')).to.equal(false);
+    expect(matchesGlob('nepal.example.org', '*nepal*')).to.equal(true);
+    expect(matchesGlob('xnepalx.example.org:8443', '*nepal*')).to.equal(true);
+    expect(matchesGlob('kenya.example.org', '*nepal*')).to.equal(false);
+  });
+});

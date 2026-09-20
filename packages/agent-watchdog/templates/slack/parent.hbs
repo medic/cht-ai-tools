@@ -1,6 +1,9 @@
 *{{mrkdwn headline}}*
 {{#each bullets}}
 • {{mrkdwn text}}
+{{#each children}}
+   ◦ {{mrkdwn text}}
+{{/each}}
 {{/each}}
 {{#if has_expected_load_notice}}
 _{{mrkdwn expected_load_notice}}_

@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
+const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { composeBrief } = require('../../rollup/brief');
 const { applyMemoryUpdate, createModelCondenser } = require('../../rollup/memory');
 const { writeProposals } = require('../../rollup/proposals');
@@ -97,10 +98,22 @@ const run = async (ctx) => {
   if (matching.matched.length) {
     logger.info('rollup.pattern_cards', { matched: matching.matched });
   }
+  // Items of one programme share a body slot as sub-bullets (FR-069); the layout is written for the gate and the
+  // publish stage to read, so the prompt, the accepted draft and the post agree.
+  const groupOf = groupOfProjects(discovery);
   const ranked = rankItems({
     items: matching.items, previousItemIds: ctx.previousItemIds || new Map(), feedbackByItem: ctx.feedbackByItem,
+    groupOf,
   });
   await runDir.writeJson('rollup/items.ranked.json', ranked);
+  const layout = buildLayout(ranked, { groupOf });
+  await runDir.writeJson('rollup/layout.json', layout);
+  logger.info('rollup.layout', {
+    slots: layout.slots.map((slot) => ({
+      slot: slot.slot, kind: slot.kind, group: slot.group, items: slot.item_ids.length,
+    })),
+    thread: layout.thread_items.length,
+  });
 
   const footer = buildFooter({ config: ctx.config, traceUrl: ctx.traceUrl || null, costUsd: ctx.costSoFar || 0 });
   // Projects that were not in the previous run are named in the brief (SC-008); unconfigured ones are marked.
@@ -125,6 +138,7 @@ const run = async (ctx) => {
     // The day's matched feedback, keyed by item, so the memory update can reflect the notes (FR-029).
     feedback: feedbackEntries(ctx.feedbackByItem),
     feedbackBrief: ctx.feedbackBrief || null,
+    layout,
   });
 
   const dataDir = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;

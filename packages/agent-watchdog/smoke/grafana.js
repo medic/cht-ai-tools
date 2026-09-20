@@ -2,7 +2,9 @@
 'use strict';
 // Smoke test S-6 and S-7 (research.md): a Viewer service-account token against the hosted watchdog.
 // Needs AGENT_WATCHDOG_GRAFANA_URL, AGENT_WATCHDOG_GRAFANA_TOKEN and AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID.
-// Usage: node --env-file=.env smoke/grafana.js [--project <host>]
+// Usage: node --env-file=.env smoke/grafana.js [--project <host>] [--hosts]
+// --hosts prints every discovered host with its programme group and the ignored hosts with the pattern that matched
+// (FR-068), then stops; this is how the placeholder groups in projects.yaml get their real patterns.
 const { loadConfig } = require('../src/config/load');
 const { createLogger } = require('../src/log/logger');
 const { createGrafanaClient, verifyDatasourceUid } = require('../src/collect/grafana');
@@ -48,6 +50,21 @@ const main = async () => {
 
   const discovery = await discover({ grafana, policy, config, runStart, logger });
   record('discover projects', discovery.projects.length > 0, discovery.projects.map((p) => p.host).join(', '));
+
+  if (process.argv.includes('--hosts')) {
+    console.log('\nhost\tgroup');
+    for (const project of discovery.projects) {
+      console.log(`${project.host}\t${project.group}`);
+    }
+    for (const entry of discovery.ignored || []) {
+      console.log(`${entry.host}\tignored (${entry.pattern})`);
+    }
+    const groups = (discovery.groups || []).map((g) => `${g.label} (${g.hosts.length})`).join(', ');
+    const ignoredCount = (discovery.ignored || []).length;
+    console.log(`\n${discovery.projects.length} analysed, ${ignoredCount} ignored; groups: ${groups}`);
+    process.exitCode = checks.some((c) => !c.ok) ? 1 : 0;
+    return;
+  }
 
   const project = discovery.projects.find((p) => p.host === process.argv[process.argv.indexOf('--project') + 1])
     || discovery.projects[0];

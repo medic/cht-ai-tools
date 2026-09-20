@@ -53,11 +53,19 @@ const context = (text) => ({ type: 'context', elements: [{ type: 'mrkdwn', text 
 
 const imageBlock = (fileId, altText) => ({ type: 'image', slack_file: { id: fileId }, alt_text: altText });
 
+// Slack mrkdwn has no nested lists: sub-bullets are indented lines inside their bullet's section (smoke S-16).
+const SUB_BULLET_PREFIX = '   ◦ ';
+
+const bulletText = (bullet) => [
+  mrkdwn(bullet.text),
+  ...(bullet.children || []).map((child) => `${SUB_BULLET_PREFIX}${mrkdwn(child.text)}`),
+].join('\n');
+
 const parentBlocks = (brief) => {
   const headerText = { type: 'plain_text', text: truncate(brief.headline, HEADER_MAX), emoji: true };
   const blocks = [{ type: 'header', text: headerText }];
   for (const bullet of brief.bullets) {
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: mrkdwn(bullet.text) } });
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: bulletText(bullet) } });
   }
   if (brief.image && brief.image.slack_file_id) {
     blocks.push(imageBlock(brief.image.slack_file_id, brief.headline));
@@ -150,7 +158,7 @@ const buildPayload = ({
 
   const text = truncate(template('parent')({
     headline: brief.headline,
-    bullets: brief.bullets,
+    bullets: brief.bullets.map((bullet) => ({ text: bullet.text, children: bullet.children || [] })),
     has_expected_load_notice: Boolean(brief.expected_load_notice),
     expected_load_notice: brief.expected_load_notice || '',
     has_degradation_notice: Boolean(brief.degradation_notice),
@@ -188,4 +196,5 @@ const withImageBlock = (payload, fileId) => {
 
 module.exports = {
   buildPayload, withImageBlock, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT, HEADER_MAX, TEXT_MAX,
+  SUB_BULLET_PREFIX,
 };

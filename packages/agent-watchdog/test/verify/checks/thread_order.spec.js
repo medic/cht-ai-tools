@@ -26,6 +26,21 @@ describe('verify/checks/thread_order', () => {
     expect(check(ctx).status).to.equal('fail');
   });
 
+  it('with a layout, rejects bullets whose item ids differ from the body items (FR-069)', () => {
+    const ctx = withItems();
+    ctx.layout = {
+      slots: [{ slot: 1, kind: 'group', group: 'MoH Nepal', item_ids: ['a', 'b', 'c'].map(id), one_line: true }],
+      body_items: ['a', 'b', 'c'].map(id), thread_items: [id('d')], one_line: ['a', 'b', 'c'].map(id),
+    };
+    expect(check(ctx).status).to.equal('pass');
+    ctx.draft.bullets = ['a', 'b', 'd'].map((c) => ({ item_id: id(c), text: 't' }));
+    ctx.draft.thread_order = ['a', 'b', 'd', 'c'].map(id);
+    const result = check(ctx);
+    expect(result.status).to.equal('fail');
+    const mismatch = result.reasons.find((r) => r.includes('layout'));
+    expect(mismatch).to.include(id('c')).and.include(id('d'));
+  });
+
   it('is not applicable to findings', () => {
     expect(check(baseContext()).status).to.equal('pass');
   });

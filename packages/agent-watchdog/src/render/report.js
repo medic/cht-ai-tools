@@ -87,7 +87,11 @@ const buildView = ({ brief, items, windowsByMetric, runId }) => {
     kind_label: KIND_LABELS[brief.kind] || brief.kind,
     headline: brief.headline,
     has_bullets: brief.bullets.length > 0,
-    bullets: brief.bullets.map((b) => ({ text: b.text })),
+    bullets: brief.bullets.map((b) => ({
+      text: b.text,
+      has_children: Boolean(b.children && b.children.length),
+      children: (b.children || []).map((child) => ({ text: child.text })),
+    })),
     notices,
     checked: brief.checked,
     footer: {

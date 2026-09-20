@@ -38,12 +38,47 @@ describe('model/schemas', () => {
     expect(() => schemas.Item.parse({ ...item, item_id: 'short' })).to.throw();
   });
 
-  it('validates a Brief with at most three bullets', () => {
+  it('validates a Brief with at most five bullets of at most eight sub-bullets (FR-010, FR-015)', () => {
     const bullet = (i) => ({ item_id: `${i}`.padStart(12, 'a'), text: 'one line' });
-    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [bullet(1), bullet(2), bullet(3)], expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { prompts_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
-    expect(schemas.Brief.parse(brief).bullets).to.have.length(3);
-    expect(() => schemas.Brief.parse({ ...brief, bullets: [bullet(1), bullet(2), bullet(3), bullet(4)] })).to.throw();
+    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2, 3, 4, 5].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { prompts_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
+    const parsed = schemas.Brief.parse(brief);
+    expect(parsed.bullets).to.have.length(5);
+    // A bare { item_id, text } bullet is an item bullet with no sub-bullets.
+    expect(parsed.bullets[0]).to.deep.equal({
+      kind: 'item', item_id: bullet(1).item_id, group: null, text: 'one line', children: [], alert_key: null,
+    });
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [1, 2, 3, 4, 5, 6].map(bullet) })).to.throw();
     expect(() => schemas.Brief.parse({ ...brief, kind: 'degraded', degradation_notice: null })).to.throw();
+    const child = (i) => ({ item_id: `${i}`.padStart(12, 'b'), text: 'sub' });
+    const group = {
+      kind: 'group', item_id: null, group: 'MoH Nepal', text: 'MoH Nepal: 8 projects with issues',
+      children: [1, 2, 3, 4, 5, 6, 7, 8].map(child), alert_key: null,
+    };
+    expect(schemas.Brief.parse({ ...brief, bullets: [group] }).bullets[0].children).to.have.length(8);
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, children: [...group.children, child(9)] }] }))
+      .to.throw();
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, group: null }] })).to.throw();
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, kind: 'item', item_id: null }] })).to.throw();
+    expect(() => enums.BulletKind.parse('list')).to.throw();
+  });
+
+  it('gives a Project its group label and an Item its body slot (FR-068, FR-069)', () => {
+    const project = schemas.Project.parse({ host: 'nepal-a.example.org', url: 'https://nepal-a.example.org', slug: 'nepal-a-example-org', configured: false, owner: null, notes: null, thresholds: null, expected_load_windows: [], cht_version: null, history_days: 3, scrape_targets: [], group: 'MoH Nepal' });
+    expect(project.group).to.equal('MoH Nepal');
+    const withoutGroup = { ...project };
+    delete withoutGroup.group;
+    expect(schemas.Project.parse(withoutGroup).group).to.equal('Other');
+    expect(() => schemas.Project.parse({ ...project, group: '' })).to.throw();
+    const item = {
+      item_id: 'abcdefabcdef', project_url: 'https://cht.example.org', metric: 'cht_sentinel_backlog_count', severity: 'high',
+      evidence: [], why_now: 'w', suggested_check: 's', dashboard_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 3, project_url: 'https://cht.example.org', from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z' },
+      confidence: 0.8, persisting_days: 1, pattern_card: null, candidate_ids: ['c1'], reference_urls: [], rank: 1,
+      placement: 'body', pass_history: [],
+    };
+    expect(schemas.Item.parse(item).slot).to.equal(null);
+    expect(schemas.Item.parse({ ...item, slot: 5 }).slot).to.equal(5);
+    expect(() => schemas.Item.parse({ ...item, slot: 6 })).to.throw();
+    expect(() => schemas.Item.parse({ ...item, slot: 0 })).to.throw();
   });
 
   it('validates Feedback and requires an item id when the target is an item', () => {

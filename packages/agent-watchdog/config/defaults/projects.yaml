@@ -10,3 +10,11 @@ defaults:
       note: Month-end reporting; volumes rise across most projects.
       cycle_days: 30
 projects: {}
+groups:                                 # programmes (FR-068): first matching pattern wins, in file order
+  - label: MoH Nepal                    # PLACEHOLDER patterns until the hosting team sets the real ones
+    host_patterns: ['*nepal*']
+  - label: eCHIS Kenya                  # PLACEHOLDER
+    host_patterns: ['*echis*']
+ignore:                                 # development instances: discovered and counted, never analysed or posted
+  - '*.dev.*'
+  - '*-dev.*'
