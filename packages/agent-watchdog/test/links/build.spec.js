@@ -33,3 +33,39 @@ describe('links/build', () => {
     expect(buildItemLinks(ctx.items, ctx.discovery, 'https://watchdog.example.org').get('a1b2c3d4e5f6')).to.equal(null);
   });
 });
+
+describe('links/build: alert-list links (FR-070, research.md R-14)', () => {
+  const { buildAlertListLink, alertTerms, buildAlertGroupLinks } = require('../../src/links/build');
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const group = alertGroupOf([
+    classified('sentinel', 'nepal-a.example.org'), classified('outbound', 'nepal-b.example.org'),
+  ]);
+
+  it('builds the search terms: namespace, firing state, the instance matcher and an optional rule title', () => {
+    expect(alertTerms({ hosts: ['nepal-a.example.org', 'nepal-b.example.org'] })).to.deep.equal([
+      'namespace:CHT', 'state:firing', 'label:instance=~"^(nepal-a\\.example\\.org|nepal-b\\.example\\.org)$"',
+    ]);
+    expect(alertTerms({ hosts: ['a.example.org'], title: 'Sentinel Backlog' })).to.deep.equal([
+      'namespace:CHT', 'state:firing', 'rule:"Sentinel Backlog"', 'label:instance=~"^(a\\.example\\.org)$"',
+    ]);
+    expect(alertTerms({ hosts: [], title: 'Watchdog Scrape Failures' })).to.deep.equal([
+      'namespace:CHT', 'state:firing', 'rule:"Watchdog Scrape Failures"',
+    ]);
+  });
+
+  it('emits the list page with the terms encoded into the search parameter under the Grafana host', () => {
+    const url = buildAlertListLink({ grafanaUrl: 'https://watchdog.example.org/', terms: ['namespace:CHT', 'rule:"A B"'] });
+    const parsed = new URL(url);
+    expect(parsed.origin + parsed.pathname).to.equal('https://watchdog.example.org/alerting/list');
+    expect(parsed.searchParams.get('search')).to.equal('namespace:CHT rule:"A B"');
+  });
+
+  it('builds one link for the group and one per rule title', () => {
+    const links = buildAlertGroupLinks({ grafanaUrl: 'https://watchdog.example.org', group });
+    expect(new URL(links.group).searchParams.get('search'))
+      .to.equal('namespace:CHT state:firing label:instance=~"^(nepal-a\\.example\\.org|nepal-b\\.example\\.org)$"');
+    expect(links.rules.map((r) => r.title)).to.deep.equal(['Outbound Push Backlog', 'Sentinel Backlog']);
+    expect(new URL(links.rules[1].url).searchParams.get('search')).to.include('rule:"Sentinel Backlog"');
+    expect(links.all).to.have.length(3);
+  });
+});

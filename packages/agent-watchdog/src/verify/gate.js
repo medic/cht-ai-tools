@@ -46,11 +46,11 @@ const normaliseItems = (findings, project) => (findings.items || []).map((item) 
   pass_history: [],
 }));
 
-const resolveAll = async ({ resolveLinks, items, discovery, grafanaUrl }) => {
+const resolveAll = async ({ resolveLinks, items, discovery, grafanaUrl, extraUrls = [] }) => {
   if (!resolveLinks) {
     return null;
   }
-  const urls = new Set(items.flatMap((item) => item.reference_urls || []));
+  const urls = new Set([...items.flatMap((item) => item.reference_urls || []), ...extraUrls]);
   if (grafanaUrl) {
     for (const url of buildItemLinks(items, discovery, grafanaUrl).values()) {
       if (url) {
@@ -93,15 +93,16 @@ const verifyFindings = async ({
 
 /**
  * Verify a roll-up draft against the accepted items before publication. `layout` is the body layout computed by code
- * (src/rollup/layout.js): with it the draft must carry one bullet per body item, sub-bullets on one line.
+ * (src/rollup/layout.js): with it the draft must carry one bullet per body item, sub-bullets on one line. `extraUrls`
+ * are code-built links that must resolve too (the alert-list links, FR-070).
  * @returns {Promise<{ report: object }>}
  */
 const verifyBrief = async ({
   draft, items = [], discovery, changes = [], candidates = [], runId, attempt = 1, resolveLinks = null, allowlist = [],
-  grafanaUrl = null, toolResultUrls = new Set(), layout = null,
+  grafanaUrl = null, toolResultUrls = new Set(), layout = null, extraUrls = [],
 }) => {
   validateAttempt(attempt);
-  const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl });
+  const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl, extraUrls });
   const ctx = {
     mode: 'brief', draft, items, discovery, changes, candidates, windows: [], toolResultUrls, knownCards: [], allowlist,
     linkResults, builtLinks: grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null, findings: null,

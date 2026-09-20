@@ -48,7 +48,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 ├── proposals/<date>-<type>-<slug>.md      # canonical proposal files (FR-032)                  [durable]
 ├── corpus/
 │   ├── index.json                         # Corpus Item records, no content (FR-037)           [durable]
-│   ├── outcomes/<date>.jsonl              # run outcomes appended for distillation (FR-030)    [durable]
+│   ├── outcomes/<date>.jsonl              # run outcomes (FR-030) and cleared alert episodes     [durable]
 │   └── cards.proposed/<card_id>.md        # proposed pattern cards awaiting review (FR-036)    [durable]
 ├── calibration/<YYYY-Www>.json            # Calibration Reports                                [kept]
 └── knowledge-corpus/raw/                  # AGENT_WATCHDOG_CORPUS_RAW_DIR; maintainer-managed  [durable]

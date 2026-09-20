@@ -110,3 +110,45 @@ describe('model/schemas', () => {
     }
   });
 });
+
+describe('model/schemas: alert entities (User Story 8)', () => {
+  const { rule, classified, groupOf } = require('../helpers/alerts');
+
+  it('validates an Alert Rule, an Alert Instance, an Alert Group and an Alert Episode event', () => {
+    const ruleRecord = { ...rule('sentinel'), category: 'backlog', importance: 'high', known: true };
+    expect(schemas.AlertRule.parse(ruleRecord).rule_uid).to.equal('FzCrECYVk');
+    expect(() => schemas.AlertRule.parse({ ...ruleRecord, importance: 'urgent' })).to.throw();
+    const instance = classified('sentinel', 'nepal-a.example.org');
+    expect(schemas.AlertInstance.parse(instance).state).to.equal('firing');
+    expect(() => schemas.AlertInstance.parse({ ...instance, state: 'Alerting' })).to.throw();
+    expect(schemas.AlertInstance.parse(classified('watchdog', null)).host).to.equal(null);
+    const group = groupOf([instance]);
+    expect(schemas.AlertGroup.parse(group).alert_key).to.equal('MoH Nepal/backlog');
+    const event = {
+      episode_id: 'e'.repeat(12), event: 'opened', run_id: '2026-09-18', at: '2026-09-18T06:00:00Z',
+      instance_id: instance.instance_id, rule_uid: instance.rule_uid, title: instance.title, host: instance.host,
+      project_url: instance.project_url, group: 'MoH Nepal', category: 'backlog', importance: 'high',
+      started_at: instance.started_at, cleared_at: null, duration_hours: null,
+      correlations: { expected_load_window_id: null, version_change: null, related_candidates: [], related_items: [] },
+      explanation: null,
+    };
+    expect(schemas.AlertEpisode.parse(event).event).to.equal('opened');
+    expect(() => schemas.AlertEpisode.parse({ ...event, event: 'seen' })).to.throw();
+    expect(enums.AlertState.options).to.deep.equal(['firing', 'pending', 'nodata', 'error', 'normal']);
+    expect(enums.AlertImportance.options).to.deep.equal(['critical', 'high', 'medium', 'low']);
+  });
+
+  it('lets Feedback and a Thread Reply target an alert group by key', () => {
+    const fb = {
+      feedback_id: 'abcdefabcdef', date: '2026-09-18', run_id: '2026-09-17', target: 'alert_group', item_id: null,
+      alert_key: 'MoH Nepal/backlog', kind: 'reaction', verdict: 'down', note: null, horizon: null, author: 'U1',
+      matched: true, source_ts: '1.2',
+    };
+    expect(schemas.Feedback.parse(fb).alert_key).to.equal('MoH Nepal/backlog');
+    expect(() => schemas.Feedback.parse({ ...fb, alert_key: null })).to.throw();
+    expect(schemas.Feedback.parse({ ...fb, target: 'brief', alert_key: null }).alert_key).to.equal(null);
+    const reply = { item_id: null, alert_key: 'MoH Nepal/backlog', run_id: '2026-09-18', text: 't', publication: null };
+    expect(schemas.ThreadReply.parse(reply).alert_key).to.equal('MoH Nepal/backlog');
+    expect(() => schemas.ThreadReply.parse({ ...reply, alert_key: null })).to.throw();
+  });
+});

@@ -7,6 +7,9 @@ const { effectiveThresholds } = require('../../analyze/thresholds');
 const { computeCandidates, suppressByHorizon } = require('../../analyze/candidates');
 const { normaliseHost } = require('../../config/policy');
 const { runStartOf } = require('./collect');
+const { classifyAlerts } = require('../../alerts/classify');
+const { previousRunIds } = require('../../rollup/history');
+const { RunDir } = require('../../store/run-dir');
 
 const name = 'analyze';
 const inputs = ['discovery.json'];
@@ -15,6 +18,17 @@ const thresholdsAreDeployed = (policy, config) => {
   const source = policy.sources && policy.sources.thresholds;
   const configDir = config.storage && config.storage.configDir;
   return Boolean(source && configDir && source.startsWith(configDir));
+};
+
+/** The most recent earlier run's classified alerts, for newness and start dates (FR-065). */
+const previousClassified = async (dataDir, runId) => {
+  for (const id of await previousRunIds(dataDir, runId)) {
+    const run = RunDir.open(dataDir, id);
+    if (run.exists('alerts.classified.json')) {
+      return run.readJson('alerts.classified.json');
+    }
+  }
+  return null;
 };
 
 const run = async (ctx) => {
@@ -59,7 +73,25 @@ const run = async (ctx) => {
     });
   }
 
-  return { projects: projects.length, candidates: total };
+  // Alerts (FR-065): category, importance, staleness and newness by code, grouped per programme and category.
+  const collected = runDir.exists('alerts.json')
+    ? await runDir.readJson('alerts.json')
+    : { available: false, reason: 'alerts.json was not collected' };
+  const dataDir = (config.storage && config.storage.dataDir) || runDir.dataDir;
+  const classified = classifyAlerts({
+    collected,
+    alertsPolicy: policy.alerts || { stale_after_days: 14, rules: {}, categories: {} },
+    projectGroups: policy.projects.groups || [],
+    previous: await previousClassified(dataDir, ctx.runId || runDir.runId),
+    runStart,
+  });
+  await runDir.writeJson('alerts.classified.json', classified);
+  logger.info('analyze.alerts', {
+    available: classified.available, reason: classified.reason, counts: classified.counts,
+    groups: classified.groups.length,
+  });
+
+  return { projects: projects.length, candidates: total, alert_groups: classified.groups.length };
 };
 
 module.exports = { name, inputs, run };

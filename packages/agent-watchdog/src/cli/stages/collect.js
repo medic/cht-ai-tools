@@ -2,6 +2,7 @@
 // Stage `collect`: discovery, scrape-target health and metric windows (FR-001 to FR-005).
 const { createGrafanaClient, verifyDatasourceUid } = require('../../collect/grafana');
 const { discover } = require('../../collect/discovery');
+const { collectAlerts } = require('../../collect/alerts');
 const { collectWindows } = require('../../collect/windows');
 const { activeWindow } = require('../../analyze/calendar');
 const { normaliseHost } = require('../../config/policy');
@@ -39,6 +40,14 @@ const run = async (ctx) => {
     dashboards: discovery.dashboards.length, metrics: discovery.metrics.length, targets: discovery.targets_summary,
   });
 
+  // Grafana-managed alerts (FR-064): recorded as collected; unavailable is a fact in the file, not a failure.
+  const alerts = await collectAlerts({ grafana, policy, logger, now: runStart });
+  await runDir.writeJson('alerts.json', alerts);
+  logger.info('collect.alerts', {
+    available: alerts.available, source: alerts.source, reason: alerts.reason, rules: alerts.rules.length,
+    firing: alerts.instances.filter((i) => i.state === 'firing').length, ignored: alerts.ignored.length,
+  });
+
   const wanted = (flags.project || []).map(normaliseHost);
   const projects = wanted.length ? discovery.projects.filter((p) => wanted.includes(p.host)) : discovery.projects;
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
@@ -63,7 +72,10 @@ const run = async (ctx) => {
     });
   }
 
-  return { projects: projects.length, metrics: discovery.metrics.length };
+  return {
+    projects: projects.length, metrics: discovery.metrics.length,
+    alerts: alerts.available ? alerts.instances.filter((i) => i.state === 'firing').length : null,
+  };
 };
 
 module.exports = { name, inputs, run, runStartOf };

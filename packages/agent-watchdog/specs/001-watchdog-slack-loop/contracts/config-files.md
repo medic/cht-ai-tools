@@ -150,22 +150,21 @@ rules:                                  # keyed by rule title exactly as provisi
   Users Over Replication Limit: { category: replication,   importance: medium }
   DB Fragmentation:             { category: database,      importance: low }
   Server Time Accurate:         { category: host,          importance: low }
-categories:                             # metric keys related to a category, for episode correlations (FR-067)
+categories:                             # metric names related to a category, for episode correlations (FR-067)
   availability: ['up{job="cht"}']
   backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]
   messaging: [cht_messaging_outgoing_total]
-  database: [cht_couchdb_doc_conflicts, cht_couchdb_fragmentation]
+  database: [cht_conflict_count, cht_couchdb_fragmentation]
   client_errors: [cht_feedback_total]
-  replication: [cht_replication_limit_users_over_count]
-  host: []
+  replication: [cht_replication_limit_count]
+  host: [cht_date_current_millis]
 ```
 
 Rules: `stale_after_days` is an integer from 1 to 365; `importance` is one of `critical`, `high`,
 `medium`, `low`; `category` is a lowercase slug and every category used by a rule has an entry
-under `categories` (an empty list is allowed); metric keys are checked against the collected
-metrics at run time and unknown ones log a warning. The package default carries the mapping above;
-the exact metric keys per category are confirmed against the dashboards during implementation
-(research.md R-6).
+under `categories` (an empty list is allowed); a candidate or item is related to a category when its
+metric key contains one of the listed names, so `cht_feedback_total` matches the panel expression
+`increase(cht_feedback_total[1d])`. The package default carries the mapping above.
 
 ## Package-shipped agent definition (read-only, versioned with code)
 

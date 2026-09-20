@@ -89,6 +89,7 @@ const feedbackText = (feedback, feedbackBrief) => {
 const layoutText = (layout) => [
   'Computed by code. Write exactly one bullet per item listed here, in this order; the programme line of a group',
   'slot is written by code. An item with "one_line": true is a sub-bullet of its programme and must be a single line.',
+  'Slots of kind "alerts" are written by code alone: write no bullet for them.',
   '```json',
   JSON.stringify(layout.slots, null, 2),
   '```',
@@ -170,24 +171,26 @@ const reasonsOf = (report) => (report.checks || [])
  * Assemble the Bullet entities from the model's per-item lines and the code-built layout (FR-010, FR-069): a group
  * slot becomes one code-written programme line with the model's one-line items as sub-bullets.
  */
-const bulletsFromDraft = ({ draft, layout, items }) => {
+const bulletsFromDraft = ({ draft, layout, items, alertGroups = [], staleAfterDays = 14 }) => {
   const texts = new Map(draft.bullets.map((bullet) => [bullet.item_id, bullet.text]));
   const hosts = new Map(items.map((item) => [item.item_id, hostOf(item.project_url)]));
   return assembleBullets({
     layout,
     textFor: (id) => texts.get(id) || '',
     hostFor: (id) => hosts.get(id) || id,
+    alertGroups,
+    staleAfterDays,
   });
 };
 
 const briefFromDraft = ({
   ctx, draft, layout, items, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer,
-  notices = [],
+  notices = [], alertGroups = [], staleAfterDays = 14,
 }) => ({
   run_id: ctx.runId,
   kind: 'brief',
   headline: draft.headline,
-  bullets: bulletsFromDraft({ draft, layout, items }),
+  bullets: bulletsFromDraft({ draft, layout, items, alertGroups, staleAfterDays }),
   expected_load_notice: draft.expected_load_notice || expectedLoadNotice || null,
   checked: checkedCounts(discovery, candidates.length),
   degradation_notice: referenceSourcesUnavailable ? REFERENCE_UNAVAILABLE_NOTICE : null,
@@ -197,21 +200,50 @@ const briefFromDraft = ({
   publication: null,
 });
 
+/** A day with firing alerts and no flagged item: the alert bullets by code, no model call (FR-066). */
+const alertsOnlyBrief = ({
+  ctx, layout, alertGroups, staleAfterDays, discovery, candidates, footer, expectedLoadNotice, notices,
+}) => {
+  const firing = alertGroups.reduce((sum, g) => sum + g.firing, 0);
+  const projects = new Set(alertGroups.flatMap((g) => g.hosts || [])).size;
+  const across = `${projects} project${projects === 1 ? '' : 's'}`;
+  return {
+    run_id: ctx.runId,
+    kind: 'brief',
+    headline: `Alerts only: ${firing} firing across ${across}, no metric changes to flag`,
+    bullets: assembleBullets({ layout, textFor: () => '', hostFor: () => '', alertGroups, staleAfterDays }),
+    expected_load_notice: expectedLoadNotice || null,
+    checked: checkedCounts(discovery, candidates.length),
+    degradation_notice: null,
+    notices: [...notices],
+    image: null,
+    footer,
+    publication: null,
+  };
+};
+
 /**
  * Compose the brief. Returns { brief, drafts, degraded, memoryUpdate, proposals, calls }.
+ * `alertGroups` are placed and written by code (FR-066); `alertLinks` are resolved by the gate with the draft.
  */
 const composeBrief = async ({
   ctx, items, discovery, changes, candidates, memory = null, feedbackUnmatched = [], expectedLoadNotice = null,
   referenceSourcesUnavailable = false, footer, notices = [], feedback = [], feedbackBrief = null, layout = null,
+  alertGroups = [], alertLinks = [], staleAfterDays = 14,
 }) => {
   const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices };
+  // The stage computes the layout from the ranked items, the projects' groups and the alert groups; a caller
+  // without one gets the same rule applied here, so the prompt, the gate and the assembled bullets always agree.
+  const bodyLayout = layout || buildLayout(items, { groupOf: groupOfProjects(discovery), alertGroups });
   if (!items.length) {
-    const brief = buildHeartbeat({ ...base, candidatesCount: candidates.length });
+    const brief = alertGroups.length
+      ? alertsOnlyBrief({
+        ctx, layout: bodyLayout, alertGroups, staleAfterDays, discovery, candidates, footer, expectedLoadNotice,
+        notices,
+      })
+      : buildHeartbeat({ ...base, candidatesCount: candidates.length });
     return { brief, drafts: [], degraded: false, memoryUpdate: null, proposals: [], calls: [] };
   }
-  // The stage computes the layout from the ranked items and the projects' groups; a caller without one gets the
-  // same rule applied here, so the prompt, the gate and the assembled bullets always agree.
-  const bodyLayout = layout || buildLayout(items, { groupOf: groupOfProjects(discovery) });
 
   const split = ctx.definition && ctx.definition.rollup
     ? splitRollupTemplate(ctx.definition.rollup)
@@ -224,7 +256,7 @@ const composeBrief = async ({
   const rejections = [];
 
   const degrade = (reason) => ({
-    brief: buildDeterministicBrief({ ...base, candidates, reason }),
+    brief: buildDeterministicBrief({ ...base, candidates, reason, alertGroups, staleAfterDays }),
     drafts,
     degraded: true,
     memoryUpdate: null,
@@ -272,12 +304,13 @@ const composeBrief = async ({
       resolveLinks: ctx.resolveLinks,
       allowlist: ctx.allowlist,
       layout: bodyLayout,
+      extraUrls: alertLinks,
     });
     drafts.push({ attempt, draft, report });
     if (report.outcome === 'accepted') {
       const brief = briefFromDraft({
         ctx, draft, layout: bodyLayout, items, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable,
-        footer, notices,
+        footer, notices, alertGroups, staleAfterDays,
       });
       const validated = schemas.Brief.safeParse(brief);
       if (!validated.success) {
@@ -300,6 +333,6 @@ const composeBrief = async ({
 };
 
 module.exports = {
-  composeBrief, buildUserPrompt, bulletsFromDraft, splitRollupTemplate, BUILT_IN_TEMPLATE, DEFAULT_USER_TEMPLATE,
-  REFERENCE_UNAVAILABLE_NOTICE,
+  composeBrief, buildUserPrompt, bulletsFromDraft, alertsOnlyBrief, splitRollupTemplate, BUILT_IN_TEMPLATE,
+  DEFAULT_USER_TEMPLATE, REFERENCE_UNAVAILABLE_NOTICE,
 };

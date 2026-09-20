@@ -127,12 +127,14 @@ const supersededPermalinkFor = async (dataDir, supersedes) => {
 const createResolverSafely = ({ config, deps, runDir, allowlist }) => {
   try {
     const { createResolver } = require('../../links/resolve');
-    return runDir.readJson('discovery.json').then((discovery) => createResolver({
+    return runDir.readJson('discovery.json').then(async (discovery) => createResolver({
       fetch: deps.fetch || globalThis.fetch,
       timeoutMs: config.bounds.httpTimeoutMs,
       discovery,
       grafanaUrl: config.endpoints.grafanaUrl,
       allowlist,
+      // Alert-list links resolve against the collected rules and instances (FR-070).
+      alerts: runDir.exists('alerts.json') ? await runDir.readJson('alerts.json') : null,
     }));
   } catch {
     return Promise.resolve(null);

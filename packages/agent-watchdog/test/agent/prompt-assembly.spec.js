@@ -116,3 +116,33 @@ describe('agent/prompt-assembly', () => {
     });
   });
 });
+
+describe('agent/prompt-assembly: firing alerts in the pass prompt (FR-067, User Story 8)', () => {
+  const definition = loadDefinition({ paths: PACKAGE_PATHS, env });
+  const project = { url: 'https://nepal-a.example.org', slug: 'nepal-a-example-org', host: 'nepal-a.example.org' };
+  const alerts = [{
+    title: 'Sentinel Backlog', category: 'backlog', importance: 'high', started_at: '2026-09-17T20:00:00Z',
+    days_firing: 0, stale: false, new: true, value: '<script>1200</script>',
+  }];
+
+  it('wraps the alerts as untrusted data in the first pass and the review pass, and says so when none fire', () => {
+    const first = assembly.buildPassPrompt({
+      definition, pass: 1, project, candidates: [], changes: [], alerts, date: '2026-09-18',
+    });
+    expect(first).to.include('## Firing alerts for this project');
+    expect(first).to.include('<untrusted source="alerts">');
+    expect(first).to.include('"title": "Sentinel Backlog"');
+    expect(first).to.include('"days_firing": 0');
+    expect(first).to.not.include('{{alerts}}');
+    const review = assembly.buildPassPrompt({
+      definition, pass: 2, project, candidates: [], changes: [], alerts, previousItems: [], notSelected: [],
+    });
+    expect(review).to.include('<untrusted source="alerts">');
+    expect(review).to.not.include('{{alerts}}');
+    const none = assembly.buildPassPrompt({ definition, pass: 1, project, candidates: [], changes: [], alerts: [] });
+    expect(none).to.match(/no alert is firing/i);
+    expect(none).to.not.include('{{alerts}}');
+    // The prompts tell the model an item may explain an alert.
+    expect(definition.passFirst).to.match(/explain.*alert/i);
+  });
+});

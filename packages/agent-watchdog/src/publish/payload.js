@@ -13,6 +13,10 @@ const HEADER_MAX = 150;
 const TEXT_MAX = 4000;
 const BRIEF_EVENT = 'agent_watchdog.brief';
 const ITEM_EVENT = 'agent_watchdog.item';
+const ALERTS_EVENT = 'agent_watchdog.alerts';
+// An alert group's thread reply lists at most this many instances and the count of the rest (FR-066).
+const MAX_ALERT_INSTANCES = 50;
+const SECTION_MAX = 3000;
 
 /** Slack mrkdwn needs exactly these three escapes for untrusted text. */
 const mrkdwn = (value) => String(value === undefined || value === null ? '' : value)
@@ -113,6 +117,53 @@ const replyFor = ({ item, links, runId }) => {
   };
 };
 
+const linksFor = (alertLinks, key) => {
+  if (!alertLinks) {
+    return null;
+  }
+  return alertLinks instanceof Map ? alertLinks.get(key) || null : alertLinks[key] || null;
+};
+
+/** One thread reply per Alert Group (FR-066): its instances oldest first, the rest counted, code-built links. */
+const alertReplyFor = ({ group, links, runId, date, staleAfterDays }) => {
+  const members = group.instances || [];
+  const shown = members.slice(0, MAX_ALERT_INSTANCES);
+  const rest = members.length - shown.length;
+  const linkList = links
+    ? [
+      { url: links.group, label: `all firing ${group.category} alerts for ${group.group}` },
+      ...(links.rules || []).map((rule) => ({ url: rule.url, label: rule.title })),
+    ]
+    : [];
+  const text = truncate(template('alert-group')({
+    group: group.group,
+    category: group.category,
+    importance_label: String(group.importance || 'medium').toUpperCase(),
+    summary_text: `${group.firing} firing, ${group.stale} stale for more than ${staleAfterDays} days, `
+      + `${group.new} new since the previous run`,
+    instances: shown.map((instance) => ({
+      title: instance.title,
+      host: instance.host || 'watchdog',
+      since_text: `${String(instance.started_at).slice(0, 10)} (${instance.days_firing}d)`,
+      stale: Boolean(instance.stale),
+      new: Boolean(instance.new),
+    })),
+    has_rest: rest > 0,
+    rest_text: `${rest} more`,
+    links: linkList,
+  }).trim(), TEXT_MAX);
+  return {
+    alert_key: group.alert_key,
+    item_id: null,
+    text,
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: truncate(text, SECTION_MAX) } }],
+    metadata: {
+      event_type: ALERTS_EVENT,
+      event_payload: { run_id: runId, date, group: group.group, category: group.category, firing: group.firing },
+    },
+  };
+};
+
 // The feedback digest (FR-062) is built by src/publish/digest.js and carried on the payload as posted:
 // its text, blocks and metadata, the record ids it acknowledges, and the reactions added after posting.
 const digestField = (built) => (built
@@ -130,10 +181,12 @@ const briefMetadata = ({ runId, date, kind }) => ({
 /**
  * Build the payload for a brief.
  * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel,
- *   digest (from buildDigest, or null); unmatched notes travel inside the digest since User Story 7
+ *   digest (from buildDigest, or null); unmatched notes travel inside the digest since User Story 7;
+ *   alertGroups (in body order) with alertLinks (Map alert_key -> { group, rules, all }) and staleAfterDays (US8)
  */
 const buildPayload = ({
-  brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null,
+  brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null, alertGroups = [],
+  alertLinks = new Map(), staleAfterDays = 14,
 }) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
@@ -176,7 +229,12 @@ const buildPayload = ({
       path: brief.image ? brief.image.path : null,
       slack_file_id: brief.image ? brief.image.slack_file_id : null,
     },
-    replies: [...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+    replies: [
+      ...[...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+      ...alertGroups.map((group) => alertReplyFor({
+        group, links: linksFor(alertLinks, group.alert_key), runId, date, staleAfterDays,
+      })),
+    ],
     digest: digestField(digest),
   };
 };
@@ -195,6 +253,6 @@ const withImageBlock = (payload, fileId) => {
 };
 
 module.exports = {
-  buildPayload, withImageBlock, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT, HEADER_MAX, TEXT_MAX,
-  SUB_BULLET_PREFIX,
+  buildPayload, withImageBlock, alertReplyFor, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT, ALERTS_EVENT,
+  HEADER_MAX, TEXT_MAX, SUB_BULLET_PREFIX, MAX_ALERT_INSTANCES,
 };

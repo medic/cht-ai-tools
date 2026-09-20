@@ -6,12 +6,46 @@ const { flatPanels } = require('../verify/metric-key');
 
 const RETRY_WITH_GET = new Set([405, 501]);
 
-const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allowlist = null }) => {
+const RULE_TERM = /rule:"([^"]+)"/g;
+const INSTANCE_TERM = /label:instance=~"\^\(([^)]*)\)\$"/;
+
+/**
+ * An alert-list link resolves when every rule title and host it names was collected this run (FR-070), the same
+ * way a dashboard link resolves against the collected dashboards; the UI page itself redirects to login.
+ */
+const resolveAlertList = (parsed, alerts) => {
+  if (!alerts) {
+    return { ok: false, status: null, reason: 'no alert data to resolve against' };
+  }
+  const search = parsed.searchParams.get('search') || '';
+  const titles = new Set((alerts.rules || []).map((r) => r.title));
+  const hosts = new Set((alerts.instances || []).map((i) => i.host).filter(Boolean));
+  for (const match of search.matchAll(RULE_TERM)) {
+    if (!titles.has(match[1])) {
+      return { ok: false, status: null, reason: `unknown alert rule "${match[1]}"` };
+    }
+  }
+  const instances = INSTANCE_TERM.exec(search);
+  if (instances) {
+    for (const escaped of instances[1].split('|')) {
+      const host = escaped.replace(/\\(.)/g, '$1');
+      if (!hosts.has(host)) {
+        return { ok: false, status: null, reason: `unknown host ${host} in the alert link` };
+      }
+    }
+  }
+  return { ok: true, status: null, reason: 'alert rules and hosts found' };
+};
+
+const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allowlist = null, alerts = null }) => {
   const grafanaHost = hostOf(grafanaUrl);
   const dashboards = new Map(((discovery && discovery.dashboards) || []).map((d) => [d.uid, d]));
 
   const resolveGrafana = (url) => {
     const parsed = new URL(url);
+    if (parsed.pathname === '/alerting/list') {
+      return resolveAlertList(parsed, alerts);
+    }
     const match = /^\/d\/([^/]+)/.exec(parsed.pathname);
     if (!match) {
       return { ok: false, status: null, reason: 'not a dashboard link' };
@@ -67,4 +101,4 @@ const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allow
   };
 };
 
-module.exports = { createResolver };
+module.exports = { createResolver, resolveAlertList };

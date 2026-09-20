@@ -76,6 +76,14 @@ const materialize = async (runDir, parts) => {
   return runDir.path('agent', 'system-prompt.md');
 };
 
+/** The project's firing alerts (FR-067): untrusted data the analysis may explain, never a reason to raise an item. */
+const alertsBlock = (alerts) => {
+  if (!alerts || (Array.isArray(alerts) && alerts.length === 0)) {
+    return 'No alert is firing for this project.';
+  }
+  return wrapUntrusted('alerts', json(sanitiseData(alerts)));
+};
+
 const feedbackBlock = (feedback) => {
   if (!feedback || (Array.isArray(feedback) && feedback.length === 0)) {
     return 'No feedback recorded for this project.';
@@ -85,7 +93,7 @@ const feedbackBlock = (feedback) => {
 
 const buildPassPrompt = ({
   definition, pass, project, candidates = [], changes = [], feedback = null, previousItems = [], notSelected = [],
-  revisionReasons = [], date = null,
+  revisionReasons = [], date = null, alerts = [],
 }) => {
   if (revisionReasons && revisionReasons.length) {
     return fill(definition.revision, { pass, reasons: revisionReasons.map((r) => `- ${r}`).join('\n') });
@@ -96,6 +104,7 @@ const buildPassPrompt = ({
     date: date || new Date().toISOString().slice(0, 10),
     candidates: json(sanitiseData(candidates)),
     changes: json(sanitiseData(changes)),
+    alerts: alertsBlock(alerts),
   };
   if (pass === 1) {
     return fill(definition.passFirst, { ...common, feedback: feedbackBlock(feedback) });
@@ -109,5 +118,5 @@ const buildPassPrompt = ({
 };
 
 module.exports = {
-  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, assembleSystemPrompt, materialize, buildPassPrompt,
+  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, assembleSystemPrompt, materialize, buildPassPrompt, alertsBlock,
 };

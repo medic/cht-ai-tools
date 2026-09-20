@@ -39,8 +39,33 @@ const appendOutcomes = async ({ dataDir, date, runId, byItem }) => {
   return { appended };
 };
 
-/** Outcomes recorded for days in the inclusive range [from, to]. */
-const readOutcomes = async (dataDir, { from, to }) => {
+const ALERT_EPISODE_KIND = 'alert_episode';
+const isAlertEpisode = (record) => record && record.kind === ALERT_EPISODE_KIND;
+
+/**
+ * Append cleared alert episodes (FR-067) beside the day's item outcomes, once per episode id. They carry
+ * `kind: alert_episode` so item-outcome readers (calibration) never count them.
+ */
+const appendAlertEpisodes = async ({ dataDir, date, runId, episodes }) => {
+  const file = outcomesFile(dataDir, date);
+  const existing = new Set((await atomic.readJsonl(file)).filter(isAlertEpisode).map((record) => record.episode_id));
+  let appended = 0;
+  for (const episode of episodes || []) {
+    if (existing.has(episode.episode_id)) {
+      continue;
+    }
+    const { event, run_id: sourceRun, at, ...fields } = episode;
+    void event;
+    void sourceRun;
+    void at;
+    await atomic.appendJsonl(file, { kind: ALERT_EPISODE_KIND, date, run_id: runId, ...fields });
+    existing.add(episode.episode_id);
+    appended += 1;
+  }
+  return { appended };
+};
+
+const readOutcomeRecords = async (dataDir, { from, to }) => {
   const dir = dataPaths(dataDir).corpusOutcomes;
   if (!fsSync.existsSync(dir)) {
     return [];
@@ -56,4 +81,13 @@ const readOutcomes = async (dataDir, { from, to }) => {
   return records;
 };
 
-module.exports = { appendOutcomes, readOutcomes, OUTCOME_VERDICTS };
+/** Item outcomes recorded for days in the inclusive range [from, to]; alert episodes are left out. */
+const readOutcomes = async (dataDir, range) => (await readOutcomeRecords(dataDir, range))
+  .filter((record) => !isAlertEpisode(record));
+
+/** Cleared alert episodes recorded for days in the inclusive range [from, to]. */
+const readAlertEpisodes = async (dataDir, range) => (await readOutcomeRecords(dataDir, range)).filter(isAlertEpisode);
+
+module.exports = {
+  appendOutcomes, readOutcomes, appendAlertEpisodes, readAlertEpisodes, OUTCOME_VERDICTS, ALERT_EPISODE_KIND,
+};

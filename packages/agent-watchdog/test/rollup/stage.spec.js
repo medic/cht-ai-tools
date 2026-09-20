@@ -91,7 +91,11 @@ describe('cli/stages/rollup', () => {
     expect(brief.footer).to.include({ trace_url: 'https://langfuse.example.org/trace/t1', cost_usd: 0.06 });
     expect(brief.checked.candidates).to.equal(1);
     const output = await runDir.readJson('rollup/rollup-output.json');
-    expect(output).to.have.keys(['memory_update', 'proposals', 'proposal_ids', 'proposals_superseded', 'memory']);
+    expect(output).to.have.keys([
+      'memory_update', 'proposals', 'proposal_ids', 'proposals_superseded', 'memory', 'alerts',
+    ]);
+    expect(output.alerts)
+      .to.deep.equal({ available: false, groups: 0, episodes: { opened: 0, observed: 0, cleared: 0 } });
     expect(output.proposal_ids).to.deep.equal([]);
     expect(out.proposals).to.deep.equal([]);
     expect(output.memory).to.include({ applied: false, reason: 'no change' });

@@ -27,7 +27,10 @@ describe('scripts/replay-eval', function () {
   it('passes on the committed fixtures without touching the network', async () => {
     const report = await evaluate({ log: quietLogger() });
     expect(report.ok, JSON.stringify(report, null, 2)).to.equal(true);
-    expect(report.cases.map((c) => c.case).sort()).to.deep.equal(['quiet-day', 'seeded-anomaly']);
+    expect(report.cases.map((c) => c.case).sort()).to.deep.equal(['alerts-day', 'quiet-day', 'seeded-anomaly']);
+    const alertsDay = report.cases.find((c) => c.case === 'alerts-day');
+    expect(alertsDay.candidates.missing).to.deep.equal([]);
+    expect(alertsDay.candidates.unexpected).to.deep.equal([]);
     const seeded = report.cases.find((c) => c.case === 'seeded-anomaly');
     expect(seeded.candidates.missing).to.deep.equal([]);
     expect(seeded.candidates.unexpected).to.deep.equal([]);

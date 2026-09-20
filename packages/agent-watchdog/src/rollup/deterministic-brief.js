@@ -1,7 +1,7 @@
 'use strict';
 // Briefs that need no model: the heartbeat (FR-021) and the degraded brief built from candidates (FR-017).
 const { itemId } = require('../model/identity');
-const { layoutEntries, toLayoutDocument, assembleBullets, groupOfProjects } = require('./layout');
+const { layoutEntries, toLayoutDocument, assembleBullets, groupOfProjects, interleaveAlerts } = require('./layout');
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -85,7 +85,8 @@ const candidateText = (candidate) => {
  * model's brief so a programme's candidates share one bullet (FR-069).
  */
 const buildDeterministicBrief = ({
-  runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [],
+  runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [], alertGroups = [],
+  staleAfterDays = 14,
 }) => {
   const groupOf = groupOfProjects(discovery);
   const byKey = new Map();
@@ -95,11 +96,16 @@ const buildDeterministicBrief = ({
       byKey.set(key, candidate);
     }
   }
-  const entries = [...byKey.entries()].map(([key, candidate]) => ({ key, group: groupOf(candidate.project_url) }));
+  // Candidates stand in for items, keyed by the item id the analysis would give them, with their floor as severity.
+  const pseudoItems = [...byKey.entries()].map(([key, candidate]) => ({
+    item_id: key, project_url: candidate.project_url, severity: candidate.severity_floor,
+  }));
   const bullets = assembleBullets({
-    layout: toLayoutDocument(layoutEntries(entries)),
+    layout: toLayoutDocument(layoutEntries(interleaveAlerts(pseudoItems, alertGroups, groupOf))),
     textFor: (key) => candidateText(byKey.get(key)),
     hostFor: (key) => hostOf(byKey.get(key).project_url),
+    alertGroups,
+    staleAfterDays,
   });
   const projects = new Set(candidates.map((c) => c.project_url)).size;
   return {

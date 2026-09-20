@@ -58,4 +58,25 @@ const matchNote = ({ text, items = [] }) => {
   return { item: null, how: null };
 };
 
-module.exports = { matchNote, metricForms, hostOf };
+/**
+ * Map a thread note to an Alert Group (FR-066): the note must mention alerts and name the programme; the category
+ * settles it when the programme has several groups, otherwise the programme must have exactly one.
+ * @returns {{ alertKey: string|null }}
+ */
+const matchAlertNote = ({ text, alertGroups = [] }) => {
+  const lower = String(text || '').toLowerCase();
+  if (!/\balerts?\b/.test(lower)) {
+    return { alertKey: null };
+  }
+  const byGroup = alertGroups.filter((group) => lower.includes(String(group.group).toLowerCase()));
+  if (!byGroup.length) {
+    return { alertKey: null };
+  }
+  const withCategory = byGroup.filter((group) => wordMatch(lower, String(group.category).toLowerCase()));
+  if (withCategory.length === 1) {
+    return { alertKey: withCategory[0].alert_key };
+  }
+  return byGroup.length === 1 ? { alertKey: byGroup[0].alert_key } : { alertKey: null };
+};
+
+module.exports = { matchNote, matchAlertNote, metricForms, hostOf };

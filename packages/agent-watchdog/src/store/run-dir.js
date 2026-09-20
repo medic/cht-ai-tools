@@ -54,13 +54,15 @@ const dataPaths = (dataDir) => ({
   corpusCardsProposed: path.join(dataDir, 'corpus', 'cards.proposed'),
   calibration: path.join(dataDir, 'calibration'),
   corpusRaw: path.join(dataDir, 'knowledge-corpus', 'raw'),
+  alerts: path.join(dataDir, 'alerts'),
+  alertEpisodesFile: path.join(dataDir, 'alerts', 'episodes.jsonl'),
 });
 
 const ensureDataLayout = async (dataDir) => {
   const p = dataPaths(dataDir);
   const dirs = [
     p.runs, p.replay, p.memory, p.memoryHistory, p.proposals, p.corpus, p.corpusOutcomes, p.corpusCardsProposed,
-    p.calibration,
+    p.calibration, p.alerts,
   ];
   for (const dir of dirs) {
     await fs.mkdir(dir, { recursive: true });

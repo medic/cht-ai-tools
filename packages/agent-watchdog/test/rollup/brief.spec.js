@@ -299,3 +299,55 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     expect(gate.verifyBrief.firstCall.args[0].layout.slots).to.have.length(2);
   });
 });
+
+describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const nepalBacklog = alertGroupOf([
+    classified('sentinel', 'nepal-a.example.org', { new: true }),
+    classified('sentinel', 'nepal-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
+  ]);
+  const nepalAvailability = alertGroupOf([classified('apiDown', 'nepal-b.example.org')]);
+  const alertGroups = [nepalBacklog, nepalAvailability];
+  const items = rankItems({ items: [makeItem()] });
+  const base = (engine, gate) => ({
+    ctx: makeCtx({ engine, gate }), items, discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()],
+    memory: null, feedbackUnmatched: [], expectedLoadNotice: null, referenceSourcesUnavailable: false, footer: footer(),
+    alertGroups, staleAfterDays: 14,
+  });
+
+  it('puts the code-built alerts bullet first and hands the alert links to the gate', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const links = ['https://watchdog.example.org/alerting/list?search=x'];
+    const out = await composeBrief({ ...base(engine, gate), alertLinks: links });
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+    expect(out.brief.bullets.map((b) => b.kind)).to.deep.equal(['alerts', 'item']);
+    expect(out.brief.bullets[0].text).to.equal('MoH Nepal alerts: 3 firing, 1 stale for more than 14 days');
+    expect(out.brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
+      'availability: 1 firing (API Server Down), oldest since 2026-09-17',
+      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
+    ]);
+    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    expect(prompt).to.match(/kind.*alerts.*written by code/i);
+    const layoutArg = gate.verifyBrief.firstCall.args[0].layout;
+    expect(layoutArg.slots[0]).to.include({ kind: 'alerts', group: 'MoH Nepal' });
+    expect(layoutArg.body_items).to.deep.equal([items[0].item_id]);
+    expect(gate.verifyBrief.firstCall.args[0].extraUrls).to.deep.equal(links);
+  });
+
+  it('posts alert bullets without any model call when no item was flagged, instead of a heartbeat', async () => {
+    const engine = { singleTurn: sinon.stub() };
+    const gate = { verifyBrief: sinon.stub() };
+    const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [] });
+    expect(engine.singleTurn.called).to.equal(false);
+    expect(gate.verifyBrief.called).to.equal(false);
+    expect(out.brief.kind).to.equal('brief');
+    expect(out.degraded).to.equal(false);
+    expect(out.brief.headline).to.equal('Alerts only: 3 firing across 2 projects, no metric changes to flag');
+    expect(out.brief.bullets).to.have.length(1);
+    expect(out.brief.bullets[0].kind).to.equal('alerts');
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+    const quiet = await composeBrief({ ...base(engine, gate), items: [], candidates: [], alertGroups: [] });
+    expect(quiet.brief.kind).to.equal('heartbeat');
+  });
+});

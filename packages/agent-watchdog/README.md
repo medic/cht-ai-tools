@@ -91,6 +91,21 @@ and the gate rejects a draft whose bullets differ from the layout. `npm run smok
 every discovered host with its group, which is how the placeholder patterns in `config/defaults/projects.yaml`
 get replaced.
 
+### Alerts in the brief
+
+Each run reads the Grafana-managed alert rules and their firing instances from the hosted watchdog with the same
+read-only token as the metrics (`GET /api/prometheus/grafana/api/v1/rules`, following `groupNextToken`, with the
+`/alerts` endpoint as a fallback) and stores them as collected in `alerts.json`. Code classifies them from the
+reviewed `alerts.yaml` (category and importance per rule title, unknown titles uncategorised and medium, stale after
+14 days by default), marks what is new since the previous run, and groups them per programme and category. The
+body gets one code-written bullet per programme ("MoH Nepal alerts: 15 firing, 3 stale for more than 14 days") with
+a sub-bullet per category, ranked among the items by importance; each alert group gets its own thread reply with
+its instances and code-built links to the filtered alert list, which the gate resolves against the collected rules
+and instances. Every firing instance has a durable episode in `alerts/episodes.jsonl` (opened, observed, cleared)
+with correlations computed by code and the explanation an accepted item gives; cleared episodes reach the corpus
+outcomes. The analysis sees its project's firing alerts as untrusted context. An unavailable alerting API is a
+notice on the brief, never a failure. `npm run smoke:grafana -- --alerts` lists what the Viewer token can read.
+
 ### Knowledge corpus
 
 Maintainers drop raw material (conversations, data exports, incident write-ups, component explainers)

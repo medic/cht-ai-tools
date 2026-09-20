@@ -1,6 +1,6 @@
 'use strict';
 // Structured, reviewed policy files: projects.yaml (annotations, programme groups, ignore list), dashboards.yaml,
-// thresholds.yaml (FR-053, FR-068, contracts/config-files.md).
+// thresholds.yaml, alerts.yaml (FR-053, FR-065, FR-068, contracts/config-files.md).
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -150,10 +150,30 @@ const ThresholdsFile = z.object({
   display: z.object({ persisting_days_label: z.string() }).strict().optional(),
 }).strict();
 
+// The alert policy (FR-065): category and importance per Grafana-managed rule title, staleness, category metrics.
+const ALERT_IMPORTANCE = Object.freeze(['critical', 'high', 'medium', 'low']);
+const categorySlug = z.string().regex(/^[a-z][a-z0-9_]*$/, 'category must be a lowercase slug');
+
+const AlertRulePolicy = z.object({
+  category: categorySlug,
+  importance: z.enum(ALERT_IMPORTANCE),
+}).strict();
+
+const AlertsFile = z.object({
+  stale_after_days: z.number().int().min(1).max(365).default(14),
+  rules: z.record(z.string().min(1), AlertRulePolicy).default({}),
+  categories: z.record(categorySlug, z.array(z.string().min(1))).default({}),
+}).strict().refine((file) => Object.values(file.rules)
+  .every((rule) => Object.prototype.hasOwnProperty.call(file.categories, rule.category)), {
+  message: 'every category used by a rule needs an entry under categories (an empty list is allowed)',
+  path: ['categories'],
+});
+
 const FILES = [
   { name: 'projects.yaml', key: 'projects', schema: ProjectsFile },
   { name: 'dashboards.yaml', key: 'dashboards', schema: DashboardsFile },
   { name: 'thresholds.yaml', key: 'thresholds', schema: ThresholdsFile },
+  { name: 'alerts.yaml', key: 'alerts', schema: AlertsFile },
 ];
 
 const formatIssues = (error) => error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`);
@@ -193,8 +213,9 @@ const normaliseProjects = (projects) => {
 };
 
 /**
- * Load and validate the three policy files, falling back to the package defaults per file.
- * @returns {{ projects: object, dashboards: object, thresholds: object, hash: string, sources: object }}
+ * Load and validate the four policy files, falling back to the package defaults per file.
+ * @returns {{ projects: object, dashboards: object, thresholds: object, alerts: object, hash: string,
+ *   sources: object }}
  */
 const loadPolicy = ({ configDir, defaultsDir }) => {
   const result = { sources: {} };
@@ -215,5 +236,5 @@ const loadPolicy = ({ configDir, defaultsDir }) => {
 
 module.exports = {
   loadPolicy, normaliseHost, PolicyError, ExpectedLoadWindow, ThresholdsFile, DashboardsFile, ProjectsFile, HIGH_RULES,
-  globToRegExp, matchesGlob, RESERVED_GROUPS,
+  globToRegExp, matchesGlob, RESERVED_GROUPS, AlertsFile, ALERT_IMPORTANCE,
 };

@@ -133,6 +133,15 @@ const run = async (ctx) => {
   const memory = fs.existsSync(memoryFile) ? fs.readFileSync(memoryFile, 'utf8') : '';
   const feedbackFile = 'feedback.ingested.json';
   const feedbackAll = ctx.runDir.exists(feedbackFile) ? await ctx.runDir.readJson(feedbackFile) : null;
+  // The project's firing alerts (FR-067), classified by code, reach the prompt as untrusted context.
+  const alertsFile = 'alerts.classified.json';
+  const classifiedAlerts = ctx.runDir.exists(alertsFile) ? await ctx.runDir.readJson(alertsFile) : null;
+  const alertsFor = (project) => ((classifiedAlerts && classifiedAlerts.instances) || [])
+    .filter((i) => i.state === 'firing' && i.project_url === project.url)
+    .map((i) => ({
+      title: i.title, category: i.category, importance: i.importance, started_at: i.started_at,
+      days_firing: i.days_firing, stale: i.stale, new: i.new, value: i.value,
+    }));
   const deadline = ctx.deadline || Date.now() + ctx.config.bounds.runTimeoutMs;
   const skillDir = ctx.config.paths && ctx.config.paths.skillDir;
   const patternCards = deps.patternCards
@@ -190,6 +199,7 @@ const run = async (ctx) => {
       results[index] = await runProjectSession({
         engine, definition, project, candidates, changes,
         feedback: feedbackFor(feedbackAll, project),
+        alerts: alertsFor(project),
         memory,
         activeWindow: activeWindowFrom(changes, discovery),
         config: ctx.config,

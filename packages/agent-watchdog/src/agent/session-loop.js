@@ -57,7 +57,7 @@ const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budg
 const runProjectSession = async ({
   engine, definition, project, candidates, changes, feedback = [], memory = '', activeWindow = null, config, gate,
   runDir, logger, tracer = null, now = () => new Date(), deadline = null, localTools = [], localServers = {},
-  mcpConfig = null,
+  mcpConfig = null, alerts = [],
 }) => {
   const slug = project.slug;
   const date = now().toISOString().slice(0, 10);
@@ -122,7 +122,7 @@ const runProjectSession = async ({
   const runPass = async (pass) => {
     const previous = passRecords[passRecords.length - 1];
     let prompt = buildPassPrompt({
-      definition, pass, project, candidates, changes, feedback, date,
+      definition, pass, project, candidates, changes, feedback, date, alerts,
       previousItems: previous ? previous.items : [],
       notSelected: previous ? previous.not_selected : [],
     });

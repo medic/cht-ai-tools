@@ -5,11 +5,12 @@ const { RunDir, dataPaths } = require('../store/run-dir');
 const { schemas } = require('../model/schemas');
 const identity = require('../model/identity');
 const { appendRecords, readAll } = require('./store');
-const { matchNote } = require('./match');
+const { matchNote, matchAlertNote } = require('./match');
 const { parseNoteWithModel } = require('./parse-notes');
 
 const BRIEF_EVENT = 'agent_watchdog.brief';
 const ITEM_EVENT = 'agent_watchdog.item';
+const ALERTS_EVENT = 'agent_watchdog.alerts';
 const VERDICTS = { '+1': 'up', thumbsup: 'up', '-1': 'down', thumbsdown: 'down' };
 const DAY_SECONDS = 86400;
 const DAY_MS = 86400000;
@@ -191,7 +192,8 @@ const ingestFeedback = async ({
     if (run.exists('rollup/publication.json')) {
       const publication = await run.readJson('rollup/publication.json');
       parentTs = publication.ts;
-      replyIndex = new Map((publication.replies || []).map((r) => [r.ts, r.item_id]));
+      replyIndex = new Map((publication.replies || [])
+        .map((r) => [r.ts, { item_id: r.item_id || null, alert_key: r.alert_key || null }]));
     } else {
       fallback = true;
       parentTs = await findParentInHistory(client, channel, sourceRun, pace);
@@ -211,7 +213,12 @@ const ingestFeedback = async ({
 
     const messages = await pageReplies(client, channel, parentTs, pace);
     const itemReplies = [];
+    const alertReplies = [];
     const notes = [];
+    const alertReply = (ts, alertKey) => {
+      const [group, ...rest] = String(alertKey).split('/');
+      alertReplies.push({ ts, alert_key: alertKey, group, category: rest.join('/') });
+    };
     for (const message of messages) {
       if (message.ts === parentTs) {
         continue;
@@ -225,16 +232,25 @@ const ingestFeedback = async ({
             project_url: payload.project_url || null, metric: payload.metric || null, pattern_card: null,
           });
         }
+      } else if (meta && meta.event_type === ALERTS_EVENT && meta.event_payload && meta.event_payload.group) {
+        alertReply(message.ts, `${meta.event_payload.group}/${meta.event_payload.category}`);
       } else if (replyIndex.has(message.ts)) {
-        itemReplies.push({ ts: message.ts, item_id: replyIndex.get(message.ts) });
+        const entry = replyIndex.get(message.ts);
+        if (entry.item_id) {
+          itemReplies.push({ ts: message.ts, item_id: entry.item_id });
+        } else if (entry.alert_key) {
+          alertReply(message.ts, entry.alert_key);
+        }
       } else if (isNote(message)) {
         notes.push(message);
       }
     }
 
     const targets = [
-      { ts: parentTs, target: 'brief', item_id: null },
-      ...itemReplies.map((r) => ({ ts: r.ts, target: 'item', item_id: r.item_id })),
+      { ts: parentTs, target: 'brief', item_id: null, alert_key: null },
+      ...itemReplies.map((r) => ({ ts: r.ts, target: 'item', item_id: r.item_id, alert_key: null })),
+      // Reactions on an alert-group reply (FR-066): recorded and acknowledged, never a ranking input.
+      ...alertReplies.map((r) => ({ ts: r.ts, target: 'alert_group', item_id: null, alert_key: r.alert_key })),
     ];
     for (const target of targets) {
       const reactions = await reactionsOf(client, channel, target.ts, pace);
@@ -249,6 +265,7 @@ const ingestFeedback = async ({
           candidates.push({
             feedback_id: identity.feedbackId(target.ts, author, 'reaction', verdict),
             date: observedDate, run_id: sourceId, target: target.target, item_id: target.item_id,
+            alert_key: target.alert_key || null,
             kind: 'reaction', verdict, note: null, horizon: null, author, matched: true, source_ts: target.ts,
           });
         }
@@ -260,6 +277,7 @@ const ingestFeedback = async ({
           candidates.push({
             feedback_id: identity.feedbackId(target.ts, record.author, 'reaction', 'retracted'),
             date: observedDate, run_id: record.run_id, target: record.target, item_id: record.item_id,
+            alert_key: record.alert_key || null,
             kind: 'reaction', verdict: 'retracted', note: `retracted: ${record.verdict}`, horizon: null,
             author: record.author, matched: true, source_ts: target.ts,
           });
@@ -281,14 +299,24 @@ const ingestFeedback = async ({
         continue;
       }
       const { item } = matchNote({ text: message.text, items: knownItems });
+      // A note naming a programme's alerts belongs to that alert group when no item matched (FR-066).
+      const { alertKey } = item
+        ? { alertKey: null }
+        : matchAlertNote({ text: message.text, alertGroups: alertReplies });
       const parsed = await parseNoteWithModel({
         text: message.text, noteDate: observedDate, engine, model, definition,
       });
+      let target = 'brief';
+      if (item) {
+        target = 'item';
+      } else if (alertKey) {
+        target = 'alert_group';
+      }
       candidates.push({
         feedback_id: feedbackId,
-        date: observedDate, run_id: sourceId, target: item ? 'item' : 'brief', item_id: item ? item.item_id : null,
+        date: observedDate, run_id: sourceId, target, item_id: item ? item.item_id : null, alert_key: alertKey || null,
         kind: 'note', verdict: null, note: message.text, horizon: parsed.horizon, author: message.user,
-        matched: Boolean(item), source_ts: message.ts,
+        matched: Boolean(item || alertKey), source_ts: message.ts,
       });
       if (item && parsed.horizon) {
         const meta = itemMeta.get(item.item_id) || {};
@@ -315,12 +343,23 @@ const ingestFeedback = async ({
 
   const all = await readAll(dataDir);
   const byItem = {};
+  const alerts = {};
   const brief = { up: 0, down: 0, notes: [] };
   const projects = {};
   const metaFor = createMetaLookup(dataDir, itemMeta);
   const knownHorizons = new Set(horizons.map((h) => `${h.item_id}|${h.horizon}`));
   for (const record of all) {
     const inWindow = record.date >= windowStart;
+    if (record.target === 'alert_group' && record.alert_key) {
+      // Tallied for the digest only; alert feedback never changes ranking (FR-066).
+      if (!alerts[record.alert_key]) {
+        alerts[record.alert_key] = { up: 0, down: 0, retracted: 0, notes: [] };
+      }
+      if (inWindow) {
+        applyRecord(alerts[record.alert_key], record);
+      }
+      continue;
+    }
     if (record.target === 'item' && record.item_id) {
       if (!byItem[record.item_id]) {
         byItem[record.item_id] = emptyCounts(await metaFor(record));
@@ -356,6 +395,10 @@ const ingestFeedback = async ({
   }
   brief.up = Math.max(0, brief.up);
   brief.down = Math.max(0, brief.down);
+  for (const counts of Object.values(alerts)) {
+    counts.up = Math.max(0, counts.up);
+    counts.down = Math.max(0, counts.down);
+  }
 
   return {
     run_id: runId,
@@ -365,6 +408,7 @@ const ingestFeedback = async ({
     unmatched: fresh.filter((record) => record.kind === 'note' && !record.matched),
     horizons,
     by_item: byItem,
+    alerts,
     brief: { up: brief.up, down: brief.down, notes: brief.notes },
     projects,
     influence: { days: influenceDays, window_start: windowStart },

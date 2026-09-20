@@ -19,6 +19,10 @@ confirm meaning, inspect series, match pattern cards and check history when it h
 
 {{feedback}}
 
+## Firing alerts for this project
+
+{{alerts}}
+
 ## Instructions
 
 - Emit one item per finding, each citing the candidate ids that support it.
@@ -27,3 +31,5 @@ confirm meaning, inspect series, match pattern cards and check history when it h
   you want the reader to see.
 - List every examined candidate you did not surface in `not_selected` with a reason.
 - Leave `changes` empty on the first pass. Set `converged` to false.
+- An item that explains a firing alert should say so in `why_now` and name the rule; never raise an item
+  only because an alert fires, the computed changes must support it.

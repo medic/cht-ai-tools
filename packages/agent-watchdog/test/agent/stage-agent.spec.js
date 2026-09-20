@@ -371,3 +371,70 @@ describe('cli/stages/agent (pattern cards from the skill directory)', () => {
     expect(miss.error).to.include('unknown card');
   });
 });
+
+describe('cli/stages/agent: alerts as context (User Story 8)', () => {
+  const { RunDir: RunDirectory, ensureDataLayout: ensureLayout } = require('../../src/store/run-dir');
+  const logger = createLogger({ level: 'error', stream: new Writable({ write(c, e, cb) {
+    cb();
+  } }) });
+  const { createFakeEngine: fakeEngine } = require('../helpers/fake-engine');
+  const { tempDir: mkTemp, removeDir: rmDir } = require('../helpers/fixtures');
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = mkTemp();
+    await ensureLayout(dataDir);
+    runDir = await RunDirectory.create(dataDir, '2026-09-18');
+    await runDir.writeJson('discovery.json', { projects, metrics: [METRIC] });
+    for (const p of projects) {
+      await runDir.writeJson(`${p.slug}/changes.json`, {
+        changes: [{ metric: METRIC, current_value: 1, expected_load_window_id: null }],
+      });
+      const candidates = p.slug === 'beta-example-org'
+        ? []
+        : [{ candidate_id: 'c1', project_url: p.url, metric: METRIC, rule: 'monotonic' }];
+      await runDir.writeJson(`${p.slug}/candidates.json`, { candidates });
+      await runDir.writeGz(`${p.slug}/inputs/windows.json.gz`, { windows: [] });
+    }
+    await runDir.writeJson('alerts.classified.json', {
+      available: true,
+      instances: [
+        {
+          instance_id: 'a'.repeat(12), title: 'Sentinel Backlog', project_url: 'https://alpha.example.org', host: 'alpha.example.org',
+          category: 'backlog', importance: 'high', state: 'firing', started_at: '2026-09-17T20:00:00Z', days_firing: 0,
+          stale: false, new: true, value: '1200', labels: {}, annotations: {},
+        },
+        {
+          instance_id: 'b'.repeat(12), title: 'DB Fragmentation', project_url: 'https://alpha.example.org', host: 'alpha.example.org',
+          category: 'database', importance: 'low', state: 'pending', started_at: '2026-09-18T05:00:00Z', days_firing: 0,
+          stale: false, new: true, value: '9', labels: {}, annotations: {},
+        },
+      ],
+      groups: [],
+    });
+  });
+  afterEach(() => rmDir(dataDir));
+
+  it('gives each session its project\'s firing alerts and nothing else', async () => {
+    const engine = fakeEngine({
+      responses: (userText) => ({ structuredOutput: findingsFor(projectFor(userText), METRIC) }),
+    });
+    const stageCtx = {
+      config: {
+        model: { name: 'm', effort: 'max' }, storage: { dataDir }, paths: PACKAGE_PATHS, secrets: {}, endpoints: {},
+        bounds: {
+          maxTurns: 5, maxBudgetUsdProject: 1, modelTimeoutMs: 1000, verifyMaxRetries: 0, passes: 1,
+          passConvergence: true, projectConcurrency: 1, runTimeoutMs: 60000,
+        },
+      },
+      env, runDir, runId: '2026-09-18', date: '2026-09-18', logger, tracer: null, deps: { engine, gate, definition },
+    };
+    await stage.run(stageCtx);
+    const alphaSession = engine.sessions.find((s) => s.turns[0].includes('https://alpha.example.org'));
+    const gammaSession = engine.sessions.find((s) => s.turns[0].includes('https://gamma.example.org'));
+    expect(alphaSession.turns[0]).to.include('<untrusted source="alerts">');
+    expect(alphaSession.turns[0]).to.include('Sentinel Backlog');
+    expect(alphaSession.turns[0]).to.not.include('DB Fragmentation');
+    expect(gammaSession.turns[0]).to.match(/no alert is firing/i);
+  });
+});

@@ -88,3 +88,45 @@ describe('resolve: discovery panels keyed by panel_id', () => {
     expect(result.get(url).ok).to.equal(true);
   });
 });
+
+describe('links/resolve: alert-list links resolve against the collected rules and instances (FR-070)', () => {
+  const { buildAlertGroupLinks } = require('../../src/links/build');
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const group = alertGroupOf([
+    classified('sentinel', 'nepal-a.example.org'), classified('outbound', 'nepal-b.example.org'),
+  ]);
+  const grafanaUrl = 'https://watchdog.example.org';
+  const alerts = {
+    rules: [{ title: 'Sentinel Backlog' }, { title: 'Outbound Push Backlog' }],
+    instances: [{ host: 'nepal-a.example.org' }, { host: 'nepal-b.example.org' }],
+  };
+
+  it('accepts links whose rule titles and hosts were collected and rejects the rest, without a request', async () => {
+    const ctx = baseContext();
+    const fetch = sinon.stub();
+    const resolve = createResolver({
+      fetch, timeoutMs: 100, discovery: ctx.discovery, grafanaUrl, allowlist: ctx.allowlist, alerts,
+    });
+    const links = buildAlertGroupLinks({ grafanaUrl, group });
+    const unknownRule = `${grafanaUrl}/alerting/list?search=${encodeURIComponent('namespace:CHT rule:"Nope"')}`;
+    const evil = encodeURIComponent('label:instance=~"^(evil\\.example\\.org)$"');
+    const unknownHost = `${grafanaUrl}/alerting/list?search=${evil}`;
+    const results = await resolve([...links.all, unknownRule, unknownHost]);
+    expect(fetch).to.not.have.been.called;
+    for (const url of links.all) {
+      expect(results.get(url).ok, url).to.equal(true);
+    }
+    expect(results.get(unknownRule)).to.include({ ok: false });
+    expect(results.get(unknownRule).reason).to.include('Nope');
+    expect(results.get(unknownHost).reason).to.include('evil.example.org');
+  });
+
+  it('cannot resolve an alert link without alert data', async () => {
+    const ctx = baseContext();
+    const resolve = createResolver({
+      fetch: sinon.stub(), timeoutMs: 100, discovery: ctx.discovery, grafanaUrl, allowlist: ctx.allowlist,
+    });
+    const results = await resolve([`${grafanaUrl}/alerting/list?search=namespace%3ACHT`]);
+    expect([...results.values()][0]).to.include({ ok: false });
+  });
+});

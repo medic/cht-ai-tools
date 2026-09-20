@@ -45,4 +45,40 @@ const buildItemLinks = (items, discovery, grafanaUrl) => {
   return links;
 };
 
-module.exports = { buildDashboardLink, buildItemLinks };
+const ALERT_LIST_PATH = '/alerting/list';
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Search terms for the alert rule list (research.md R-14): the CHT folder, firing rules, an optional rule title and
+ * an instance matcher over the group's hosts.
+ */
+const alertTerms = ({ hosts = [], title = null }) => {
+  const terms = ['namespace:CHT', 'state:firing'];
+  if (title) {
+    terms.push(`rule:"${title}"`);
+  }
+  if (hosts.length) {
+    terms.push(`label:instance=~"^(${hosts.map(escapeRegExp).join('|')})$"`);
+  }
+  return terms;
+};
+
+/** `<grafana>/alerting/list?search=<terms>`; the gate resolves it against the collected rules and instances. */
+const buildAlertListLink = ({ grafanaUrl, terms }) => {
+  const base = String(grafanaUrl).replace(/\/+$/, '');
+  return `${base}${ALERT_LIST_PATH}?search=${encodeURIComponent(terms.join(' '))}`;
+};
+
+/** One link for the whole Alert Group and one per rule title in it (FR-066, FR-070). */
+const buildAlertGroupLinks = ({ grafanaUrl, group }) => {
+  const hosts = group.hosts || [];
+  const groupLink = buildAlertListLink({ grafanaUrl, terms: alertTerms({ hosts }) });
+  const rules = (group.titles || []).map((title) => ({
+    title, url: buildAlertListLink({ grafanaUrl, terms: alertTerms({ hosts, title }) }),
+  }));
+  return { group: groupLink, rules, all: [groupLink, ...rules.map((r) => r.url)] };
+};
+
+module.exports = {
+  buildDashboardLink, buildItemLinks, alertTerms, buildAlertListLink, buildAlertGroupLinks, ALERT_LIST_PATH,
+};

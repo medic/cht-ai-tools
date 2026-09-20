@@ -168,16 +168,27 @@ const versions = Object.fromEntries(HOSTS.map((h, i) => [
   { app: APP_VERSIONS[i], node: 'v20.11.1', couchdb: COUCH_VERSIONS[i] },
 ]));
 
-const write = (caseName, seriesDoc, expected) => {
+const write = (caseName, seriesDoc, expected, alertsDoc = null) => {
   const dir = path.join(OUT, caseName, 'grafana');
   fs.mkdirSync(path.join(dir, 'dashboards'), { recursive: true });
+  if (alertsDoc) {
+    fs.writeFileSync(path.join(dir, 'alerts.json'), `${JSON.stringify(alertsDoc, null, 2)}\n`);
+  }
   fs.writeFileSync(path.join(dir, 'search.json'), `${JSON.stringify(search, null, 2)}\n`);
   for (const d of [overview, details, api, replication]) {
     fs.writeFileSync(path.join(dir, 'dashboards', `${d.dashboard.uid}.json`), `${JSON.stringify(d, null, 2)}\n`);
   }
   fs.writeFileSync(path.join(dir, 'annotations.json'), '[]\n');
   fs.writeFileSync(path.join(dir, 'series.json'), `${JSON.stringify(seriesDoc, null, 2)}\n`);
-  fs.writeFileSync(path.join(OUT, caseName, 'expected.json'), `${JSON.stringify(expected, null, 2)}\n`);
+  // Recorded model findings (test/fixtures/record-findings.js) add gate and item expectations; keep them.
+  const expectedFile = path.join(OUT, caseName, 'expected.json');
+  const recorded = fs.existsSync(expectedFile) ? JSON.parse(fs.readFileSync(expectedFile, 'utf8')) : {};
+  const merged = {
+    ...expected,
+    ...(recorded.gate ? { gate: recorded.gate } : {}),
+    ...(recorded.items ? { items: recorded.items } : {}),
+  };
+  fs.writeFileSync(expectedFile, `${JSON.stringify(merged, null, 2)}\n`);
 };
 
 write('quiet-day', { run_start: RUN_START, hosts: HOSTS, down: [], versions, metrics: baseMetrics() }, {
@@ -204,8 +215,101 @@ write('seeded-anomaly', anomalySeries, {
       rules: ['pct_change', 'deviation', 'monotonic'],
       severity_floor: 'high',
     },
-    { host: 'gamma.example.org', metric_contains: 'up', rules: ['target_down'], severity_floor: 'high' },
+    { host: 'gamma.example.org', metric_contains: 'up', rules: ['deviation', 'target_down'], severity_floor: 'high' },
   ],
 });
+
+// alerts-day: the seeded-anomaly series plus Grafana-managed alerts as the hosted watchdog raises them (User Story 8):
+// the nine provisioned rules, one unknown rule, one rule without an instance label, fifteen firing instances across
+// two programmes (three firing for more than fourteen days), one on a development host, one pending, and one that
+// clears on the second day while another appears. Hosts other than the series' own are aliased in the tests.
+const alertRule = (uid, title, forDuration, panelId, instances, extra = {}) => ({
+  uid, title, for: forDuration, dashboard_uid: panelId === null ? null : 'oa2OfL-Vk', panel_id: panelId,
+  query: extra.query || 'vector(1)', instances,
+});
+const firing = (host, activeAt, extra = {}) => ({
+  host, labels: {}, state: 'Alerting', active_at: activeAt, value: '1200', ...extra,
+});
+const alertsDay = {
+  folder: 'CHT',
+  folder_uid: 'cht',
+  page_size: 2,
+  groups: [
+    {
+      name: '10m',
+      interval: 600,
+      rules: [
+        alertRule('ot6lYCYVz', 'DB Fragmentation', '1h', 13, [
+          firing('nepal-a.example.org', '2026-09-16T00:00:00Z', { labels: { db: 'medic' }, value: '9.2' }),
+          firing('nepal-b.example.org', '2026-08-01T00:00:00Z', { labels: { db: 'medic' }, value: '11.4' }),
+          firing('nepal-c.example.org', '2026-09-17T00:00:00Z', { labels: { db: 'sentinel' }, value: '8.7' }),
+        ]),
+        alertRule('KgP8PjY4k', 'Outbound Push Backlog', '1h', 2, [
+          firing('nepal-a.example.org', '2026-09-17T22:00:00Z', { value: '48' }),
+          firing('nepal-b.example.org', '2026-08-25T00:00:00Z', { value: '310' }),
+        ]),
+        alertRule('FzCrECYVk', 'Sentinel Backlog', '1h', 3, [
+          firing('nepal-a.example.org', '2026-09-17T20:00:00Z'),
+          firing('nepal-b.example.org', '2026-08-20T00:00:00Z', { value: '4400' }),
+          firing('nepal-c.example.org', '2026-09-18T03:00:00Z', { until: '2026-09-19T00:00:00Z', value: '900' }),
+          firing('cht-dev.example.org', '2026-09-17T10:00:00Z', { value: '700' }),
+        ]),
+        alertRule('hURoyjYVk', 'Server Time Accurate', '1h', 19, []),
+        alertRule('ttAeECYVz', 'Users Over Replication Limit', '1h', 21, [
+          firing('echis-b.example.org', '2026-09-17T09:00:00Z', { value: '12' }),
+          { host: 'echis-a.example.org', labels: {}, state: 'Pending', active_at: '2026-09-18T05:50:00Z', value: '3' },
+        ]),
+        alertRule('diskUsage1', 'Disk Usage High', '1h', null, [
+          firing('nepal-a.example.org', '2026-09-17T12:00:00Z', { value: '91' }),
+        ], { query: 'node_filesystem_avail_bytes' }),
+      ],
+    },
+    {
+      name: '1m',
+      interval: 60,
+      rules: [
+        alertRule('Q1A-BjL4k', 'API Server Down', '30m', 16, [
+          firing('nepal-b.example.org', '2026-09-18T05:00:00Z', { value: '0' }),
+        ]),
+        alertRule('nBTZsCY4k', 'Client Feedback/Error Rate', '1m', 14, [
+          firing('echis-a.example.org', '2026-09-18T01:00:00Z', { value: '140' }),
+          firing('echis-b.example.org', '2026-09-19T02:00:00Z', { since: '2026-09-19T02:00:00Z', value: '95' }),
+        ]),
+        alertRule('gli1YjL4k', 'DB Conflicts Rate', '1m', 7, [
+          firing('nepal-c.example.org', '2026-09-18T04:00:00Z', { value: '61' }),
+        ]),
+        alertRule('0R-OsCYVz', 'Message Delivery Rate', '1m', 27, [
+          firing('echis-a.example.org', '2026-09-17T18:00:00Z', { value: '0.71' }),
+          firing('echis-b.example.org', '2026-09-17T18:00:00Z', { value: '0.64' }),
+        ]),
+      ],
+    },
+    {
+      name: 'watchdog',
+      interval: 60,
+      rules: [
+        alertRule('wdScrape01', 'Watchdog Scrape Failures', '5m', null, [
+          {
+            host: null, labels: { job: 'prometheus' }, state: 'Alerting', active_at: '2026-09-17T23:00:00Z', value: '3',
+          },
+        ], { query: 'up{job="prometheus"}' }),
+      ],
+    },
+  ],
+};
+write('alerts-day', anomalySeries, {
+  description: "The seeded-anomaly day with Grafana-managed alerts firing across two programmes; alpha's sentinel "
+    + "backlog climbs and gamma's scrape target is down as before.",
+  quiet: false,
+  candidates: [
+    {
+      host: 'alpha.example.org',
+      metric_contains: 'cht_sentinel_backlog_count',
+      rules: ['pct_change', 'deviation', 'monotonic'],
+      severity_floor: 'high',
+    },
+    { host: 'gamma.example.org', metric_contains: 'up', rules: ['deviation', 'target_down'], severity_floor: 'high' },
+  ],
+}, alertsDay);
 
 console.log(`wrote fixtures under ${OUT}`);

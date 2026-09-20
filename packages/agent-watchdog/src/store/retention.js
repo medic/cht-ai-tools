@@ -2,6 +2,7 @@
 // Retention (FR-040): raw files go after AGENT_WATCHDOG_RETENTION_RAW_DAYS, kept files after
 // AGENT_WATCHDOG_RETENTION_DAYS, durable files never. feedback.jsonl is durable (FR-059): every reaction and
 // note is kept permanently; only its influence on ranking is bounded, by the window applied at ingestion.
+// alerts/episodes.jsonl is durable too (FR-067): the record of when each alert fired, what else was happening and why.
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');

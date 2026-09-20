@@ -2,15 +2,19 @@
 'use strict';
 // Smoke test S-6 and S-7 (research.md): a Viewer service-account token against the hosted watchdog.
 // Needs AGENT_WATCHDOG_GRAFANA_URL, AGENT_WATCHDOG_GRAFANA_TOKEN and AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID.
-// Usage: node --env-file=.env smoke/grafana.js [--project <host>] [--hosts]
+// Usage: node --env-file=.env smoke/grafana.js [--project <host>] [--hosts] [--alerts]
 // --hosts prints every discovered host with its programme group and the ignored hosts with the pattern that matched
 // (FR-068), then stops; this is how the placeholder groups in projects.yaml get their real patterns.
+// --alerts (S-14, S-15; research.md R-14) reads the Grafana-managed alert rules and instances with the Viewer token,
+// prints the states and paging as returned, and the alert-list links to open in a browser, then stops.
 const { loadConfig } = require('../src/config/load');
 const { createLogger } = require('../src/log/logger');
 const { createGrafanaClient, verifyDatasourceUid } = require('../src/collect/grafana');
 const { discover } = require('../src/collect/discovery');
 const { collectWindows } = require('../src/collect/windows');
-const { buildDashboardLink } = require('../src/links/build');
+const { buildDashboardLink, buildAlertGroupLinks } = require('../src/links/build');
+const { collectAlerts } = require('../src/collect/alerts');
+const { classifyAlerts } = require('../src/alerts/classify');
 
 const main = async () => {
   const { config, policy } = loadConfig({ command: 'run', flags: { 'dry-run': true } });
@@ -50,6 +54,31 @@ const main = async () => {
 
   const discovery = await discover({ grafana, policy, config, runStart, logger });
   record('discover projects', discovery.projects.length > 0, discovery.projects.map((p) => p.host).join(', '));
+
+  if (process.argv.includes('--alerts')) {
+    const alerts = await collectAlerts({ grafana, policy, logger, now: runStart });
+    const firing = alerts.instances.filter((i) => i.state === 'firing').length;
+    const rawStates = [...new Set(alerts.raw.flatMap((page) => ((page.data && page.data.groups) || [])
+      .flatMap((g) => (g.rules || []).flatMap((r) => (r.alerts || []).map((a) => a.state)))))];
+    const summary = `${alerts.source}, ${alerts.pages} page(s), ${alerts.rules.length} rules, ${firing} firing; `
+      + `raw states: ${rawStates.join(', ') || 'none'}`;
+    const detail = alerts.available ? summary : alerts.reason;
+    record('alerting endpoints readable with the Viewer token (S-14)', alerts.available, detail);
+    for (const rule of alerts.rules) {
+      const where = `group ${rule.rule_group} for ${rule.pending_for}`;
+      console.log(`${rule.state.padEnd(8)} ${rule.title} (${rule.rule_uid}) ${where}`);
+    }
+    const classified = classifyAlerts({
+      collected: alerts, alertsPolicy: policy.alerts, projectGroups: policy.projects.groups, previous: null, runStart,
+    });
+    for (const group of classified.groups) {
+      const links = buildAlertGroupLinks({ grafanaUrl: config.endpoints.grafanaUrl, group });
+      console.log(`${group.alert_key}: ${group.firing} firing (${group.importance}) ${links.group}`);
+    }
+    console.log('open the links above in a browser to confirm the filtered alert list (S-15)');
+    process.exitCode = checks.some((c) => !c.ok) ? 1 : 0;
+    return;
+  }
 
   if (process.argv.includes('--hosts')) {
     console.log('\nhost\tgroup');

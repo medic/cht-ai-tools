@@ -181,6 +181,14 @@ passing against the layout. `node smoke/grafana.js --hosts` prints every discove
 group, which is how the placeholder patterns in `projects.yaml` get replaced; `node smoke/slack.js --yes`
 posts a brief with a group bullet for S-16.
 
-Alerts (User Story 8, pending): the recorded alert day `test/fixtures/runs/alerts-day`,
-`alerts.classified.json`, `alerts/episodes.jsonl`, the alert-group replies and
-`node smoke/grafana.js --alerts` (S-14, S-15) arrive with that story.
+Alerts (User Story 8): `npx mocha test/e2e/us8.spec.js` replays the recorded alert day
+(`test/fixtures/runs/alerts-day`: the seeded series plus eleven rules and sixteen firing instances) over two
+days. Expected: `alerts.json` holds the rules and instances as collected with the development host dropped;
+`alerts.classified.json` carries category, importance, three stale instances and the unknown rule as
+uncategorised; the brief's first bullet reads "MoH Nepal alerts: 11 firing, 3 stale for more than 14 days" with
+one sub-bullet per category; every alert group has a thread reply carrying `agent_watchdog.alerts` metadata and
+links under the Grafana host; `alerts/episodes.jsonl` opens one episode per instance with its correlations and,
+on day two, observes fifteen, clears one (also written to `corpus/outcomes/`) and opens one. Against a real
+watchdog, `node smoke/grafana.js --alerts` lists the rules and instances the Viewer token can read with their
+states and paging (S-14) and prints the alert-list links to open (S-15); `agent-watchdog run --dry-run` with the
+alerting endpoints unreachable posts nothing but leaves an "Alerts unavailable" notice in the payload.

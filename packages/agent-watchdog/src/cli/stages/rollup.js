@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
+const { buildAlertGroupLinks } = require('../../links/build');
+const { updateEpisodes } = require('../../alerts/episodes');
+const { RunDir } = require('../../store/run-dir');
+const { previousRunIds } = require('./../../rollup/history');
 const { composeBrief } = require('../../rollup/brief');
 const { applyMemoryUpdate, createModelCondenser } = require('../../rollup/memory');
 const { writeProposals } = require('../../rollup/proposals');
@@ -60,6 +64,17 @@ const condenserFor = (ctx, logger, calls, runId) => {
   }
 };
 
+/** The most recent earlier run's discovery, for version changes in episode correlations (FR-067). */
+const previousDiscoveryFor = async (dataDir, runId) => {
+  for (const id of await previousRunIds(dataDir, runId)) {
+    const run = RunDir.open(dataDir, id);
+    if (run.exists('discovery.json')) {
+      return run.readJson('discovery.json');
+    }
+  }
+  return null;
+};
+
 const feedbackEntries = (byItem) => {
   if (!byItem) {
     return [];
@@ -98,15 +113,24 @@ const run = async (ctx) => {
   if (matching.matched.length) {
     logger.info('rollup.pattern_cards', { matched: matching.matched });
   }
+  // Alert Groups (FR-066) take body slots of their own, ranked among the items by importance; an unavailable
+  // alerting API is a notice on the brief, never a failure.
+  const classified = await readIfExists(runDir, 'alerts.classified.json', null);
+  const alertsAvailable = Boolean(classified && classified.available);
+  const alertGroups = alertsAvailable ? (classified.groups || []) : [];
+  const staleAfterDays = (classified && classified.stale_after_days) || 14;
+  const grafanaUrl = ctx.config.endpoints && ctx.config.endpoints.grafanaUrl;
+  const alertLinks = grafanaUrl ? alertGroups.flatMap((group) => buildAlertGroupLinks({ grafanaUrl, group }).all) : [];
+
   // Items of one programme share a body slot as sub-bullets (FR-069); the layout is written for the gate and the
   // publish stage to read, so the prompt, the accepted draft and the post agree.
   const groupOf = groupOfProjects(discovery);
   const ranked = rankItems({
     items: matching.items, previousItemIds: ctx.previousItemIds || new Map(), feedbackByItem: ctx.feedbackByItem,
-    groupOf,
+    groupOf, alertGroups,
   });
   await runDir.writeJson('rollup/items.ranked.json', ranked);
-  const layout = buildLayout(ranked, { groupOf });
+  const layout = buildLayout(ranked, { groupOf, alertGroups });
   await runDir.writeJson('rollup/layout.json', layout);
   logger.info('rollup.layout', {
     slots: layout.slots.map((slot) => ({
@@ -122,6 +146,9 @@ const run = async (ctx) => {
   const notices = newProjectNotices({ discovery, previousHosts });
   if (notices.length) {
     logger.info('rollup.new_projects', { notices, first_run: previousHosts === null });
+  }
+  if (classified && !classified.available) {
+    notices.push(`Alerts unavailable: ${classified.reason || 'the alerting endpoints did not answer'}`);
   }
   const composed = await composeBrief({
     ctx,
@@ -139,6 +166,9 @@ const run = async (ctx) => {
     feedback: feedbackEntries(ctx.feedbackByItem),
     feedbackBrief: ctx.feedbackBrief || null,
     layout,
+    alertGroups,
+    alertLinks,
+    staleAfterDays,
   });
 
   const dataDir = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;
@@ -180,12 +210,43 @@ const run = async (ctx) => {
     await runDir.writeJson(`rollup/verification.draft${attempt}.json`, report);
   }
   await runDir.writeJson('rollup/brief.json', composed.brief);
+
+  // Episodes (FR-067): opened, observed and cleared against the durable record, with the items known. Skipped when
+  // alerting was unavailable, since an absent instance then means nothing.
+  let episodes = { opened: [], observed: [], cleared: [] };
+  if (alertsAvailable) {
+    const candidatesByProject = {};
+    for (const candidate of candidates) {
+      (candidatesByProject[candidate.project_url] = candidatesByProject[candidate.project_url] || []).push(candidate);
+    }
+    episodes = await updateEpisodes({
+      dataDir,
+      runId,
+      date: ctx.date,
+      runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
+      classified,
+      items: ranked,
+      candidatesByProject,
+      discovery,
+      previousDiscovery: await previousDiscoveryFor(dataDir, runId),
+      categories: (ctx.policy && ctx.policy.alerts && ctx.policy.alerts.categories) || {},
+      logger,
+    });
+  }
+
   await runDir.writeJson('rollup/rollup-output.json', {
     memory_update: composed.memoryUpdate,
     proposals: composed.proposals,
     proposal_ids: proposals.written.map((w) => w.proposal_id),
     proposals_superseded: proposals.superseded,
     memory,
+    alerts: {
+      available: alertsAvailable,
+      groups: alertGroups.length,
+      episodes: {
+        opened: episodes.opened.length, observed: episodes.observed.length, cleared: episodes.cleared.length,
+      },
+    },
   });
   logger.info('rollup.done', {
     kind: composed.brief.kind,
@@ -201,6 +262,7 @@ const run = async (ctx) => {
     degraded: composed.degraded,
     calls,
     proposals: proposals.written.map((w) => w.proposal_id),
+    alert_groups: alertGroups.length,
   };
 };
 

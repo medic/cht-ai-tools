@@ -77,13 +77,80 @@ const addAliases = (series, hostAliases) => {
   return series;
 };
 
+// Grafana-managed alerting (User Story 8): grafana/alerts.json describes rules with their instances; an instance is
+// visible while since <= runStart < until. The response follows the Prometheus-compatible rules API (R-14).
+const RULES_PATH = '/api/prometheus/grafana/api/v1/rules';
+const ALERTS_PATH = '/api/prometheus/grafana/api/v1/alerts';
+
+const visibleAt = (instance, runStart) => (!instance.since || Date.parse(instance.since) / 1000 <= runStart)
+  && (!instance.until || runStart < Date.parse(instance.until) / 1000);
+
+const alertResponseFor = (alertsDoc, runStart) => {
+  const groups = (alertsDoc.groups || []).map((group) => ({
+    name: group.name,
+    file: alertsDoc.folder || 'CHT',
+    folderUid: alertsDoc.folder_uid || 'cht',
+    interval: group.interval || 60,
+    lastEvaluation: new Date(runStart * 1000).toISOString(),
+    evaluationTime: 0.05,
+    rules: group.rules.map((rule) => {
+      const annotations = {
+        ...(rule.dashboard_uid ? { __dashboardUid__: rule.dashboard_uid } : {}),
+        ...(rule.panel_id !== null && rule.panel_id !== undefined ? { __panelId__: String(rule.panel_id) } : {}),
+        description: `CHT Server [{{ $labels.instance }}] ${rule.title}`,
+      };
+      const alerts = (rule.instances || []).filter((i) => visibleAt(i, runStart)).map((instance) => ({
+        labels: {
+          alertname: rule.title,
+          grafana_folder: alertsDoc.folder || 'CHT',
+          ...(instance.host ? { instance: `https://${instance.host}` } : {}),
+          ...(instance.labels || {}),
+        },
+        annotations: {
+          ...annotations,
+          description: annotations.description.replace('{{ $labels.instance }}', instance.host || 'watchdog'),
+        },
+        state: instance.state || 'Alerting',
+        activeAt: instance.active_at || null,
+        value: instance.value === undefined ? '' : String(instance.value),
+      }));
+      const firing = alerts.some((a) => /^alerting$/i.test(a.state));
+      let state = 'inactive';
+      if (firing) {
+        state = 'firing';
+      } else if (alerts.length) {
+        state = 'pending';
+      }
+      return {
+        uid: rule.uid,
+        name: rule.title,
+        folderUid: alertsDoc.folder_uid || 'cht',
+        query: rule.query || 'vector(1)',
+        labels: {},
+        annotations,
+        health: 'ok',
+        type: 'alerting',
+        lastEvaluation: new Date(runStart * 1000).toISOString(),
+        evaluationTime: 0.01,
+        isPaused: false,
+        state,
+        duration: Number(String(rule.for).replace(/h$/, '') || 0) * (String(rule.for).endsWith('h') ? 3600 : 60),
+        alerts,
+      };
+    }),
+  }));
+  return { groups, alerts: groups.flatMap((g) => g.rules.flatMap((r) => r.alerts)) };
+};
+
 const createFakeGrafana = ({
   fixtureDir, baseUrl = 'https://watchdog.example.org', token = 'glsa_test', datasourceUid = 'PBFA97CFB590B2093',
-  runStart: runStartOverride = null, historyDays = {}, hostAliases = {},
+  runStart: runStartOverride = null, historyDays = {}, hostAliases = {}, alertsStatus = {},
 }) => {
   const grafanaDir = path.join(fixtureDir, 'grafana');
   const read = (name) => JSON.parse(fs.readFileSync(path.join(grafanaDir, name), 'utf8'));
   const series = addAliases(read('series.json'), hostAliases);
+  const alertsFile = path.join(grafanaDir, 'alerts.json');
+  const alertsDoc = fs.existsSync(alertsFile) ? read('alerts.json') : { groups: [], page_size: 1000 };
   // The fixture describes one day; an override replays the same day's shapes at another run start.
   const runStart = Date.parse(runStartOverride || series.run_start) / 1000;
   const calls = [];
@@ -249,6 +316,27 @@ const createFakeGrafana = ({
     if (p === '/api/annotations') {
       return json(read('annotations.json'));
     }
+    if (p === RULES_PATH) {
+      if (alertsStatus.rules) {
+        return json({ message: `alerting unavailable (${alertsStatus.rules})` }, alertsStatus.rules);
+      }
+      const { groups } = alertResponseFor(alertsDoc, runStart);
+      const limit = Number(url.searchParams.get('group_limit')) || alertsDoc.page_size || groups.length || 1;
+      const start = Number(url.searchParams.get('group_next_token') || 0);
+      const page = groups.slice(start, start + limit);
+      const firingRules = groups.flatMap((g) => g.rules).filter((r) => r.state === 'firing').length;
+      const data = { groups: page, totals: { firing: firingRules } };
+      if (start + limit < groups.length) {
+        data.groupNextToken = String(start + limit);
+      }
+      return json({ status: 'success', data });
+    }
+    if (p === ALERTS_PATH) {
+      if (alertsStatus.alerts) {
+        return json({ message: `alerting unavailable (${alertsStatus.alerts})` }, alertsStatus.alerts);
+      }
+      return json({ status: 'success', data: { alerts: alertResponseFor(alertsDoc, runStart).alerts } });
+    }
     if (p.startsWith('/api/datasources/proxy/uid/') && !p.startsWith(proxyPrefix)) {
       return json({ message: 'Data source not found' }, 404);
     }
@@ -274,7 +362,7 @@ const createFakeGrafana = ({
     return json({ message: `no fake route for ${p}` }, 404);
   };
 
-  return { fetch, calls, series, baseUrl, token, datasourceUid, runStart };
+  return { fetch, calls, series, baseUrl, token, datasourceUid, runStart, alertsDoc };
 };
 
-module.exports = { createFakeGrafana, metricNameOf, labelOf };
+module.exports = { createFakeGrafana, metricNameOf, labelOf, alertResponseFor, RULES_PATH, ALERTS_PATH };

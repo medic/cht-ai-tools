@@ -1,7 +1,7 @@
 // The body layout rule (data-model.md Bullet; FR-010, FR-069): five top-level slots, a programme's items collapse
 // into one slot with at most eight sub-bullets, "Other" never collapses, the rest go to the thread.
 const {
-  layoutEntries, buildLayout, groupOfProjects, groupBulletText, BODY_SLOTS, MAX_CHILDREN, UNGROUPED,
+  layoutEntries, buildLayout, groupOfProjects, groupBulletText, assembleBullets, BODY_SLOTS, MAX_CHILDREN, UNGROUPED,
 } = require('../../src/rollup/layout');
 const { rankItems } = require('../../src/rollup/rank');
 const { makeItem, makeDiscovery, makeProject } = require('./factories');
@@ -120,5 +120,90 @@ describe('rollup/layout buildLayout and groupOfProjects', () => {
     expect(text(3, 3)).to.equal('MoH Nepal: 3 projects with issues');
     expect(text(1, 2)).to.equal('MoH Nepal: 1 project with 2 issues');
     expect(text(2, 3)).to.equal('MoH Nepal: 2 projects with 3 issues');
+  });
+});
+
+describe('rollup/layout: alert groups (FR-066, User Story 8)', () => {
+  const { interleaveAlerts, alertsBulletText, alertCategoryLine } = require('../../src/rollup/layout');
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const nepalBacklog = alertGroupOf([
+    classified('sentinel', 'nepal-a.example.org', { new: true }),
+    classified('sentinel', 'nepal-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
+  ]);
+  const nepalAvailability = alertGroupOf([classified('apiDown', 'nepal-b.example.org')]);
+  const nepalDatabase = alertGroupOf([classified('fragmentation', 'nepal-c.example.org')]);
+  const echisMessaging = alertGroupOf([classified('delivery', 'echis-a.example.org')]);
+  const watchdog = alertGroupOf([classified('watchdog', null)]);
+  const items = [
+    makeItem({ project_url: 'https://alpha.example.org', severity: 'high', confidence: 0.9, rank: 1 }),
+    makeItem({ project_url: 'https://beta.example.org', severity: 'medium', confidence: 0.8, rank: 2 }),
+    makeItem({ project_url: 'https://gamma.example.org', severity: 'low', confidence: 0.7, rank: 3 }),
+  ];
+
+  it('ranks alert groups among items by importance: critical first, otherwise after items of the same severity', () => {
+    const entries = interleaveAlerts(items, [nepalBacklog, nepalDatabase, echisMessaging, watchdog, nepalAvailability]);
+    expect(entries.map((e) => (e.type === 'alerts' ? e.key : e.key.slice(0, 4)))).to.deep.equal([
+      'MoH Nepal/availability',
+      items[0].item_id.slice(0, 4), 'MoH Nepal/backlog', 'eCHIS Kenya/messaging',
+      items[1].item_id.slice(0, 4), 'Watchdog/uncategorised',
+      items[2].item_id.slice(0, 4), 'MoH Nepal/database',
+    ]);
+  });
+
+  it('gives one alerts slot per programme with a sub-bullet per category, never mixing alerts with items', () => {
+    const layout = buildLayout(items, {
+      groupOf: () => 'Other', alertGroups: [nepalBacklog, nepalDatabase, echisMessaging, watchdog, nepalAvailability],
+    });
+    expect(layout.slots.map((s) => [s.slot, s.kind, s.group])).to.deep.equal([
+      [1, 'alerts', 'MoH Nepal'], [2, 'item', 'Other'], [3, 'alerts', 'eCHIS Kenya'], [4, 'item', 'Other'],
+      [5, 'alerts', 'Watchdog'],
+    ]);
+    expect(layout.slots[0].alert_keys)
+      .to.deep.equal(['MoH Nepal/availability', 'MoH Nepal/backlog', 'MoH Nepal/database']);
+    expect(layout.slots[0].item_ids).to.deep.equal([]);
+    expect(layout.slots[1].alert_keys).to.deep.equal([]);
+    expect(layout.body_items).to.deep.equal([items[0].item_id, items[1].item_id]);
+    expect(layout.thread_items).to.deep.equal([items[2].item_id]);
+    expect(layout.body_alerts).to.deep.equal([
+      'MoH Nepal/availability', 'MoH Nepal/backlog', 'MoH Nepal/database', 'eCHIS Kenya/messaging',
+      'Watchdog/uncategorised',
+    ]);
+    expect(layout.thread_alerts).to.deep.equal([]);
+    expect(layout.one_line).to.deep.equal([]);
+  });
+
+  it('writes the alert bullet and category lines by code, with the staleness threshold spelled out', () => {
+    expect(alertsBulletText({ label: 'MoH Nepal', firing: 15, stale: 3, staleAfterDays: 14 }))
+      .to.equal('MoH Nepal alerts: 15 firing, 3 stale for more than 14 days');
+    expect(alertsBulletText({ label: 'eCHIS Kenya', firing: 4, stale: 0, staleAfterDays: 14 }))
+      .to.equal('eCHIS Kenya alerts: 4 firing, none stale');
+    expect(alertCategoryLine(nepalBacklog)).to.equal(
+      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
+    );
+    expect(alertCategoryLine(nepalAvailability))
+      .to.equal('availability: 1 firing (API Server Down), oldest since 2026-09-17');
+    expect(alertCategoryLine(nepalBacklog).split('\n')).to.have.length(1);
+  });
+
+  it('assembles an alerts bullet from the layout with the group text and one child per category', () => {
+    const alertGroups = [nepalBacklog, nepalAvailability, nepalDatabase];
+    const layout = buildLayout([], { alertGroups });
+    const bullets = assembleBullets({ layout, textFor: () => '', hostFor: () => '', alertGroups, staleAfterDays: 14 });
+    expect(bullets).to.have.length(1);
+    expect(bullets[0]).to.deep.include({
+      kind: 'alerts', item_id: null, group: 'MoH Nepal', alert_key: 'MoH Nepal',
+      text: 'MoH Nepal alerts: 4 firing, 1 stale for more than 14 days',
+    });
+    expect(bullets[0].children.map((c) => c.text)).to.deep.equal([
+      'availability: 1 firing (API Server Down), oldest since 2026-09-17',
+      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
+      'database: 1 firing (DB Fragmentation), oldest since 2026-09-17',
+    ]);
+    expect(bullets[0].children.every((c) => c.item_id === null)).to.equal(true);
+    const single = assembleBullets({
+      layout: buildLayout([], { alertGroups: [echisMessaging] }), textFor: () => '', hostFor: () => '',
+      alertGroups: [echisMessaging], staleAfterDays: 14,
+    });
+    expect(single[0].alert_key).to.equal('eCHIS Kenya/messaging');
   });
 });

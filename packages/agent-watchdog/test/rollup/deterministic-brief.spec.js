@@ -107,3 +107,19 @@ describe('rollup/deterministic-brief', () => {
     expect(brief.checked).to.deep.equal({ projects: 3, panels: 3, candidates: 0 });
   });
 });
+
+describe('rollup/deterministic-brief: alert bullets (User Story 8)', () => {
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const echis = alertGroupOf([classified('delivery', 'echis-a.example.org')]);
+
+  it('keeps the alerts bullet in a degraded brief, laid out by importance among the candidates', () => {
+    const brief = buildDeterministicBrief({
+      runId: 'r', candidates: [makeCandidate()], discovery: makeDiscovery(), reason: 'model unavailable',
+      footer: footer(), expectedLoadNotice: null, alertGroups: [echis], staleAfterDays: 14,
+    });
+    expect(() => schemas.Brief.parse(brief)).to.not.throw();
+    expect(brief.bullets.map((b) => b.kind)).to.deep.equal(['item', 'alerts']);
+    expect(brief.bullets[1].text).to.equal('eCHIS Kenya alerts: 1 firing, none stale');
+    expect(brief.bullets[1].children).to.have.length(1);
+  });
+});

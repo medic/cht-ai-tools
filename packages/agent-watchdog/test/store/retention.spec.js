@@ -24,6 +24,9 @@ describe('store/retention', () => {
     expect(classify('proposals/2026-09-01-threshold-x.md')).to.equal('durable');
     expect(classify('corpus/index.json')).to.equal('durable');
     expect(classify('knowledge-corpus/raw/x.txt')).to.equal('durable');
+    expect(classify('alerts/episodes.jsonl')).to.equal('durable');
+    expect(classify('runs/2026-09-01/alerts.json')).to.equal('kept');
+    expect(classify('runs/2026-09-01/alerts.classified.json')).to.equal('kept');
   });
 
   it('removes raw files after the raw period and whole runs after the kept period', async () => {

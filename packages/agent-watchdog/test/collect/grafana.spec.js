@@ -153,3 +153,43 @@ describe('collect/grafana', () => {
     expect(path.basename(FIXTURE)).to.equal('seeded-anomaly');
   });
 });
+
+describe('collect/grafana: alerting endpoints (FR-064, research.md R-14)', () => {
+  const alertsFake = (options = {}) => createFakeGrafana({
+    fixtureDir: fixturePath('runs', 'alerts-day'), baseUrl: BASE, token: 'glsa_test', datasourceUid: UID, ...options,
+  });
+
+  it('reads the Prometheus-compatible rules endpoint page by page, following groupNextToken', async () => {
+    const fake = alertsFake();
+    const client = clientWith(fake.fetch);
+    const data = await client.alertRules({ groupLimit: 1 });
+    const calls = fake.calls.filter((c) => c.url.includes('/api/prometheus/grafana/api/v1/rules'));
+    expect(calls.length).to.be.greaterThan(1);
+    expect(new URL(calls[0].url).searchParams.get('group_limit')).to.equal('1');
+    expect(new URL(calls[0].url).searchParams.get('group_next_token')).to.equal(null);
+    expect(new URL(calls[1].url).searchParams.get('group_next_token')).to.be.a('string').and.not.equal('');
+    expect(data.groups.map((g) => g.name)).to.include.members(['10m', '1m']);
+    expect(data.pages).to.equal(calls.length);
+    expect(data.raw).to.have.length(calls.length);
+    const rule = data.groups.flatMap((g) => g.rules).find((r) => r.name === 'Sentinel Backlog');
+    expect(rule).to.include({ uid: 'FzCrECYVk', type: 'alerting', state: 'firing' });
+    expect(rule.alerts[0]).to.have.all.keys('labels', 'annotations', 'state', 'activeAt', 'value');
+  });
+
+  it('reads the alerts endpoint and surfaces a non-success envelope as an error', async () => {
+    const fake = alertsFake();
+    const client = clientWith(fake.fetch);
+    const alerts = await client.alertInstances();
+    expect(alerts.length).to.be.greaterThan(10);
+    expect(alerts[0].labels).to.have.property('alertname');
+    const broken = sinon.stub().resolves(jsonResponse({ status: 'error', errorType: 'internal', error: 'boom' }));
+    await expect(clientWith(broken).alertInstances()).to.be.rejectedWith(/internal: boom/);
+  });
+
+  it('throws the usual errors on an unavailable alerting API, for the collector to catch', async () => {
+    const fake = alertsFake({ alertsStatus: { rules: 403 } });
+    await rejectsWithCode(clientWith(fake.fetch).alertRules(), codes.CONFIG);
+    const down = alertsFake({ alertsStatus: { rules: 503 } });
+    await expect(clientWith(down.fetch).alertRules()).to.be.rejectedWith(HttpError);
+  });
+});

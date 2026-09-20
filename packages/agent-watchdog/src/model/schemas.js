@@ -29,7 +29,7 @@ const enums = {
   BriefKind: z.enum(['brief', 'heartbeat', 'degraded', 'failure']),
   // A top-level line of the post body: one item, a programme's items as sub-bullets, or a programme's alerts (US8).
   BulletKind: z.enum(['item', 'group', 'alerts']),
-  FeedbackTarget: z.enum(['item', 'brief']),
+  FeedbackTarget: z.enum(['item', 'brief', 'alert_group']),
   FeedbackKind: z.enum(['reaction', 'note']),
   FeedbackVerdict: z.enum(['up', 'down', 'retracted']),
   // Where a note's lesson belongs (FR-061); `expectation` is handled by the horizon rule, `none` carries no lesson.
@@ -45,6 +45,10 @@ const enums = {
   WindowKind: z.enum(['month_end', 'dates', 'weekly']),
   TargetHealth: z.enum(['up', 'down', 'unknown']),
   Audience: z.enum(['internal', 'partner']),
+  // Grafana-managed alerts (User Story 8): states normalised by code, importance from alerts.yaml, episode events.
+  AlertState: z.enum(['firing', 'pending', 'nodata', 'error', 'normal']),
+  AlertImportance: z.enum(['critical', 'high', 'medium', 'low']),
+  EpisodeEvent: z.enum(['opened', 'observed', 'cleared']),
 };
 
 const ScrapeTarget = z.object({
@@ -297,11 +301,105 @@ const Brief = z.object({
   path: ['degradation_notice'],
 });
 
+// The per-item thread reply, or the per-alert-group one (FR-066): exactly one of item_id and alert_key is set.
 const ThreadReply = z.object({
-  item_id: hex12,
+  item_id: hex12.nullable(),
+  alert_key: z.string().nullable().default(null),
   run_id: z.string(),
   text: z.string(),
   publication: Publication.nullable(),
+}).strict().refine((r) => (r.item_id === null) !== (r.alert_key === null), {
+  message: 'a thread reply belongs to one item or one alert group',
+  path: ['item_id'],
+});
+
+const AlertRule = z.object({
+  rule_uid: z.string().nullable(),
+  title: z.string().min(1),
+  folder: z.string().nullable(),
+  rule_group: z.string().nullable(),
+  pending_for: z.string().nullable(),
+  dashboard_uid: z.string().nullable(),
+  panel_id: z.number().int().nullable(),
+  health: z.string().nullable(),
+  state: enums.AlertState,
+  category: z.string().min(1),
+  importance: enums.AlertImportance,
+  known: z.boolean(),
+}).strict();
+
+const AlertInstance = z.object({
+  instance_id: hex12,
+  rule_uid: z.string().nullable(),
+  title: z.string().min(1),
+  host: host.nullable(),
+  project_url: url.nullable(),
+  labels: z.record(z.string(), z.string()),
+  annotations: z.record(z.string(), z.any()),
+  state: enums.AlertState,
+  active_at: isoTimestamp.nullable(),
+  value: z.string().nullable(),
+  dashboard_uid: z.string().nullable(),
+  panel_id: z.number().int().nullable(),
+  group: z.string().min(1),
+  category: z.string().min(1),
+  importance: enums.AlertImportance,
+  known: z.boolean(),
+  started_at: isoTimestamp,
+  days_firing: z.number().int().min(0),
+  stale: z.boolean(),
+  new: z.boolean(),
+}).strict();
+
+const AlertGroupMember = z.object({
+  instance_id: hex12,
+  title: z.string(),
+  host: host.nullable(),
+  started_at: isoTimestamp,
+  days_firing: z.number().int().min(0),
+  stale: z.boolean(),
+  new: z.boolean(),
+}).strict();
+
+const AlertGroup = z.object({
+  alert_key: z.string().min(1),
+  group: z.string().min(1),
+  category: z.string().min(1),
+  importance: enums.AlertImportance,
+  firing: z.number().int().min(1),
+  new: z.number().int().min(0),
+  stale: z.number().int().min(0),
+  oldest_started_at: isoTimestamp,
+  rule_uids: z.array(z.string()),
+  titles: z.array(z.string()),
+  instance_ids: z.array(hex12),
+  hosts: z.array(z.string()),
+  instances: z.array(AlertGroupMember),
+}).strict();
+
+const AlertEpisode = z.object({
+  episode_id: hex12,
+  event: enums.EpisodeEvent,
+  run_id: z.string(),
+  at: isoTimestamp,
+  instance_id: hex12,
+  rule_uid: z.string().nullable(),
+  title: z.string(),
+  host: host.nullable(),
+  project_url: url.nullable(),
+  group: z.string(),
+  category: z.string(),
+  importance: enums.AlertImportance,
+  started_at: isoTimestamp,
+  cleared_at: isoTimestamp.nullable(),
+  duration_hours: z.number().min(0).nullable(),
+  correlations: z.object({
+    expected_load_window_id: z.string().nullable(),
+    version_change: z.object({ from: z.string(), to: z.string(), observed: isoTimestamp }).strict().nullable(),
+    related_candidates: z.array(z.string()),
+    related_items: z.array(z.string()),
+  }).strict(),
+  explanation: z.object({ item_id: hex12, why_now: z.string() }).strict().nullable(),
 }).strict();
 
 const Feedback = z.object({
@@ -310,6 +408,8 @@ const Feedback = z.object({
   run_id: z.string(),
   target: enums.FeedbackTarget,
   item_id: hex12.nullable(),
+  // Feedback on an alert-group reply (FR-066): recorded and acknowledged, never a ranking input.
+  alert_key: z.string().nullable().default(null),
   kind: enums.FeedbackKind,
   verdict: enums.FeedbackVerdict.nullable(),
   note: z.string().nullable(),
@@ -324,6 +424,9 @@ const Feedback = z.object({
 }).strict().refine((f) => f.target !== 'item' || f.item_id, {
   message: 'item_id is required when target is item',
   path: ['item_id'],
+}).refine((f) => f.target !== 'alert_group' || f.alert_key, {
+  message: 'alert_key is required when target is alert_group',
+  path: ['alert_key'],
 });
 
 const MemoryMeta = z.object({
@@ -430,7 +533,7 @@ const CostRecord = z.object({
 const schemas = {
   ScrapeTarget, ExpectedLoadWindow, Project, Stage, Usage, Publication, Run, PanelRef, MetricWindow, ComputedChange,
   Evidence, Candidate, DashboardRef, PassChangeRecord, Item, Check, VerificationReport, Pass, BulletChild, Bullet,
-  Brief, ThreadReply,
+  Brief, ThreadReply, AlertRule, AlertInstance, AlertGroup, AlertGroupMember, AlertEpisode,
   Feedback, MemoryMeta, Flag, Proposal, CorpusItem, PatternCard, CalibrationReport, PriorityList, CostRecord,
 };
 

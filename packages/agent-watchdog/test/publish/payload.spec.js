@@ -214,3 +214,74 @@ describe('publish/payload: sub-bullets (FR-010, FR-015, User Story 9)', () => {
     expect(payload.replies.map((r) => r.item_id)).to.deep.equal([nepalA.item_id, alpha.item_id, nepalB.item_id]);
   });
 });
+
+describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const { ALERTS_EVENT, MAX_ALERT_INSTANCES } = require('../../src/publish/payload');
+  const nepalBacklog = alertGroupOf([
+    classified('sentinel', 'nepal-a.example.org', { new: true }),
+    classified('sentinel', 'nepal-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
+  ]);
+  const many = alertGroupOf(Array.from({ length: 60 }, (_, i) => classified('fragmentation', `h${i}.example.org`)));
+  const item = makeItem({ rank: 1, placement: 'body', slot: 2 });
+  const brief = makeBrief({
+    bullets: [
+      {
+        kind: 'alerts', item_id: null, group: 'MoH Nepal', alert_key: 'MoH Nepal',
+        text: 'MoH Nepal alerts: 2 firing, 1 stale for more than 14 days',
+        children: [
+          { item_id: null, text: 'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new' },
+        ],
+      },
+      {
+        kind: 'item', item_id: item.item_id, group: 'Other', text: 'alpha sentinel backlog 912 vs 300', children: [],
+        alert_key: null,
+      },
+    ],
+  });
+  const alertLinks = new Map([
+    ['MoH Nepal/backlog', {
+      group: 'https://watchdog.example.org/alerting/list?search=group',
+      rules: [{ title: 'Sentinel Backlog', url: 'https://watchdog.example.org/alerting/list?search=rule' }],
+      all: ['https://watchdog.example.org/alerting/list?search=group', 'https://watchdog.example.org/alerting/list?search=rule'],
+    }],
+  ]);
+  const args = {
+    brief, items: [item], links: new Map(), runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
+    channel: 'C123', alertGroups: [nepalBacklog], alertLinks, staleAfterDays: 14,
+  };
+
+  it('adds one reply per alert group after the item replies, with the instances, links and registered metadata', () => {
+    const payload = buildPayload(args);
+    expect(payload.replies).to.have.length(2);
+    expect(payload.replies[0].item_id).to.equal(item.item_id);
+    const reply = payload.replies[1];
+    expect(reply).to.include({ alert_key: 'MoH Nepal/backlog', item_id: null });
+    expect(reply.text).to.include('MoH Nepal');
+    expect(reply.text).to.include('backlog');
+    expect(reply.text).to.match(/Sentinel Backlog on nepal-b\.example\.org .*stale/);
+    expect(reply.text).to.include('<https://watchdog.example.org/alerting/list?search=group|');
+    expect(reply.text).to.include('<https://watchdog.example.org/alerting/list?search=rule|Sentinel Backlog>');
+    expect(reply.metadata).to.deep.equal({
+      event_type: ALERTS_EVENT,
+      event_payload: { run_id: '2026-09-18', date: '2026-09-18', group: 'MoH Nepal', category: 'backlog', firing: 2 },
+    });
+    expect(ALERTS_EVENT).to.equal('agent_watchdog.alerts');
+    expect(reply.blocks[0].type).to.equal('section');
+  });
+
+  it('lists at most fifty instances and says how many more there are', () => {
+    const payload = buildPayload({ ...args, alertGroups: [many], alertLinks: new Map() });
+    const reply = payload.replies[1];
+    expect(MAX_ALERT_INSTANCES).to.equal(50);
+    expect(reply.text.match(/DB Fragmentation on/g)).to.have.length(50);
+    expect(reply.text).to.include('and 10 more');
+    expect(reply.text.length).to.be.at.most(4000);
+  });
+
+  it('keeps the alerts bullet in the parent text and blocks as an indented section', () => {
+    const payload = buildPayload(args);
+    const sections = payload.parent.blocks.filter((b) => b.type === 'section').map((b) => b.text.text);
+    expect(sections[0]).to.include('MoH Nepal alerts: 2 firing, 1 stale for more than 14 days\n   ◦ backlog: 2 firing');
+  });
+});

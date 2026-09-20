@@ -188,9 +188,10 @@ One evaluation of a rule for one label set, as reported at run time (FR-064, FR-
 | `value` | string or null | The evaluated value as Grafana reports it; untrusted, never rendered into bullet text. |
 
 Instances are grouped for the post by `group` and `category` (FR-066): each Alert Group carries
-`{ group, category, importance (highest), firing, new, stale, oldest_started_at, rule_uids,
-instance_ids, link_ref }`, where `link_ref` is what the link builder turns into the filtered
-alert-list link (FR-070). A group's thread reply lists at most fifty instances and the count of the
+`{ alert_key, group, category, importance (highest), firing, new, stale, oldest_started_at, rule_uids,
+titles, instance_ids, hosts, instances }`, where `titles` and `hosts` are what the link builder turns
+into the filtered alert-list links, one for the group and one per rule (FR-070). Groups are ordered by
+importance, then group and category in code-point order. A group's thread reply lists at most fifty instances and the count of the
 rest (Edge Cases).
 
 ### Alert Episode
@@ -319,7 +320,10 @@ a programme. A slot with one Item is an `item` bullet; with two or more Items a 
 Alert Groups of one Project Group share one `alerts` bullet with a sub-bullet per category and
 never mix with Items. The model's draft carries one `{ item_id, text }`
 per body Item; code assembles the Bullets from the draft and the layout, and the gate rejects a
-draft whose item ids differ from the layout's body items.
+draft whose item ids differ from the layout's body items. `rollup/layout.json` lists the slots with
+`item_ids` and `alert_keys`, plus `body_items`, `thread_items`, `one_line`, `body_alerts` and
+`thread_alerts`; the roll-up prompt carries the slots and tells the model that `alerts` slots are
+written by code.
 
 ### Thread Reply
 

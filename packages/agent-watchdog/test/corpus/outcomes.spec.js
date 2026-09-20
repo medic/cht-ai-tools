@@ -47,3 +47,44 @@ describe('corpus/outcomes (FR-030)', () => {
     expect(await readOutcomes(dataDir, { from: '2026-10-01', to: '2026-10-31' })).to.deep.equal([]);
   });
 });
+
+describe('corpus/outcomes: alert episodes (FR-067, User Story 8)', () => {
+  const { appendAlertEpisodes, readAlertEpisodes } = require('../../src/corpus/outcomes');
+  let dataDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await ensureDataLayout(dataDir);
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const episode = (id) => ({
+    episode_id: id, instance_id: 'i'.repeat(12), rule_uid: 'FzCrECYVk', title: 'Sentinel Backlog',
+    host: 'nepal-a.example.org', project_url: 'https://nepal-a.example.org', group: 'MoH Nepal', category: 'backlog',
+    importance: 'high', started_at: '2026-09-17T06:00:00Z', cleared_at: '2026-09-19T06:00:00Z', duration_hours: 48,
+    correlations: { expected_load_window_id: null, version_change: null, related_candidates: [], related_items: [] },
+    explanation: null,
+  });
+
+  it('appends cleared episodes once per id as alert_episode records that item readers never see', async () => {
+    const first = await appendAlertEpisodes({
+      dataDir, date: '2026-09-19', runId: '2026-09-19', episodes: [episode('e1e1e1e1e1e1')],
+    });
+    expect(first.appended).to.equal(1);
+    const again = await appendAlertEpisodes({
+      dataDir, date: '2026-09-19', runId: '2026-09-19-f1', episodes: [episode('e1e1e1e1e1e1'), episode('e2e2e2e2e2e2')],
+    });
+    expect(again.appended).to.equal(1);
+    const file = path.join(dataDir, 'corpus', 'outcomes', '2026-09-19.jsonl');
+    const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+    expect(lines).to.have.length(2);
+    expect(lines[0])
+      .to.include({ kind: 'alert_episode', date: '2026-09-19', run_id: '2026-09-19', episode_id: 'e1e1e1e1e1e1' });
+    await appendOutcomes({ dataDir, date: '2026-09-19', runId: '2026-09-19', byItem: {
+      aaaaaaaaaaaa: entry({ up: 1, verdict: 'confirmed' }),
+    } });
+    // Item outcome readers (calibration) see only item outcomes; the episode reader sees only episodes.
+    expect(await readOutcomes(dataDir, { from: '2026-09-01', to: '2026-09-30' })).to.have.length(1);
+    expect((await readAlertEpisodes(dataDir, { from: '2026-09-01', to: '2026-09-30' })).map((e) => e.episode_id))
+      .to.deep.equal(['e1e1e1e1e1e1', 'e2e2e2e2e2e2']);
+  });
+});

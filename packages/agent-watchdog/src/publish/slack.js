@@ -103,7 +103,12 @@ const createSlackPublisher = ({
       const posted = await post({
         text: reply.text, blocks: reply.blocks, thread_ts: parent.ts, metadata: reply.metadata,
       });
-      replies.push({ item_id: reply.item_id, ts: posted.ts, permalink: await permalinkOf(posted.ts) });
+      replies.push({
+        item_id: reply.item_id || null,
+        alert_key: reply.alert_key || null,
+        ts: posted.ts,
+        permalink: await permalinkOf(posted.ts),
+      });
     }
     return {
       channel_id: parent.channel || channel,

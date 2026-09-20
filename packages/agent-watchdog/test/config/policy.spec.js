@@ -183,3 +183,68 @@ describe('config/policy: programme groups and the ignore list (FR-068, User Stor
     expect(matchesGlob('kenya.example.org', '*nepal*')).to.equal(false);
   });
 });
+
+describe('config/policy: the alert policy alerts.yaml (FR-065, User Story 8)', () => {
+  let dir;
+  beforeEach(() => {
+    dir = tempDir();
+  });
+  afterEach(() => removeDir(dir));
+
+  it('ships the FR-065 mapping, the staleness threshold and the category metrics as the package default', () => {
+    const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+    expect(policy.alerts.stale_after_days).to.equal(14);
+    expect(policy.alerts.rules['API Server Down']).to.deep.equal({ category: 'availability', importance: 'critical' });
+    expect(policy.alerts.rules['Sentinel Backlog']).to.deep.equal({ category: 'backlog', importance: 'high' });
+    expect(policy.alerts.rules['Outbound Push Backlog']).to.deep.equal({ category: 'backlog', importance: 'high' });
+    expect(policy.alerts.rules['Message Delivery Rate']).to.deep.equal({ category: 'messaging', importance: 'high' });
+    expect(policy.alerts.rules['DB Conflicts Rate']).to.deep.equal({ category: 'database', importance: 'medium' });
+    expect(policy.alerts.rules['Client Feedback/Error Rate'])
+      .to.deep.equal({ category: 'client_errors', importance: 'medium' });
+    expect(policy.alerts.rules['Users Over Replication Limit'])
+      .to.deep.equal({ category: 'replication', importance: 'medium' });
+    expect(policy.alerts.rules['DB Fragmentation']).to.deep.equal({ category: 'database', importance: 'low' });
+    expect(policy.alerts.rules['Server Time Accurate']).to.deep.equal({ category: 'host', importance: 'low' });
+    expect(policy.alerts.categories.backlog)
+      .to.deep.equal(['cht_sentinel_backlog_count', 'cht_outbound_push_backlog_count']);
+    expect(Object.keys(policy.alerts.categories))
+      .to.include.members(Object.values(policy.alerts.rules).map((r) => r.category));
+    expect(policy.sources.alerts).to.include('alerts.yaml');
+  });
+
+  it('covers alerts.yaml with the policy hash', () => {
+    const before = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR }).hash;
+    fs.writeFileSync(path.join(dir, 'alerts.yaml'), [
+      'stale_after_days: 7', 'rules:', '  Sentinel Backlog: { category: backlog, importance: high }',
+      'categories: { backlog: [cht_sentinel_backlog_count] }', '',
+    ].join('\n'));
+    const policy = loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+    expect(policy.hash).to.not.equal(before);
+    expect(policy.alerts.stale_after_days).to.equal(7);
+    expect(Object.keys(policy.alerts.rules)).to.deep.equal(['Sentinel Backlog']);
+  });
+
+  const alertsWith = (lines) => {
+    fs.writeFileSync(path.join(dir, 'alerts.yaml'), [...lines, ''].join('\n'));
+    return () => loadPolicy({ configDir: dir, defaultsDir: DEFAULTS_DIR });
+  };
+
+  it('rejects a bad staleness threshold, an unknown importance, a category without metrics and a bad slug', () => {
+    expect(alertsWith(['stale_after_days: 0', 'rules: {}', 'categories: {}']))
+      .to.throw(PolicyError, /stale_after_days/);
+    expect(alertsWith(['stale_after_days: 400', 'rules: {}', 'categories: {}']))
+      .to.throw(PolicyError, /stale_after_days/);
+    expect(alertsWith(['rules:', '  X: { category: backlog, importance: urgent }', 'categories: { backlog: [] }']))
+      .to.throw(PolicyError, /importance/);
+    expect(alertsWith(['rules:', '  X: { category: backlog, importance: high }', 'categories: {}']))
+      .to.throw(PolicyError, /categories/);
+    expect(alertsWith(['rules:', '  X: { category: Back Log, importance: high }', 'categories: { backlog: [] }']))
+      .to.throw(PolicyError, /category/);
+  });
+
+  it('defaults stale_after_days to 14 and accepts an empty category list', () => {
+    const policy = alertsWith(['rules:', '  X: { category: host, importance: low }', 'categories: { host: [] }'])();
+    expect(policy.alerts.stale_after_days).to.equal(14);
+    expect(policy.alerts.categories.host).to.deep.equal([]);
+  });
+});

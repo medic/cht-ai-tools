@@ -129,9 +129,10 @@ const compare = (a, b) => {
  * @param {Map<string, number>} [options.previousItemIds] consecutive prior runs that contained each id
  * @param {object|null} [options.cards] loaded pattern cards (src/corpus/cards.js); matched before persistence
  * @param {(projectUrl: string) => string} [options.groupOf] the project's group label; everything is "Other" without it
+ * @param {object[]} [options.alertGroups] Alert Groups that take body slots of their own (FR-066)
  */
 const rankItems = ({
-  items, feedbackByItem = new Map(), previousItemIds = new Map(), cards = null, groupOf = undefined,
+  items, feedbackByItem = new Map(), previousItemIds = new Map(), cards = null, groupOf = undefined, alertGroups = [],
 }) => {
   const withPersistence = matchPatternCards(items, cards).items.map((item) => ({
     ...item,
@@ -139,7 +140,7 @@ const rankItems = ({
   }));
   const influenced = applyFeedbackInfluence(withPersistence, feedbackByItem);
   const sorted = [...influenced].sort(compare);
-  const slots = slotByKey(buildLayout(sorted, groupOf ? { groupOf } : {}));
+  const slots = slotByKey(buildLayout(sorted, { ...(groupOf ? { groupOf } : {}), alertGroups }));
   return sorted.map((item, index) => {
     const slot = slots.get(item.item_id) || null;
     return { ...item, rank: index + 1, placement: slot ? 'body' : 'thread', slot };

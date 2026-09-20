@@ -5,6 +5,12 @@ Feedback from yesterday: {{mrkdwn summary_text}}
 {{#if has_brief}}
 • the brief itself: {{mrkdwn brief_text}}
 {{/if}}
+{{#if has_alerts}}
+_Alert groups:_
+{{#each alerts}}
+• {{mrkdwn key_text}}: {{mrkdwn tally_text}}
+{{/each}}
+{{/if}}
 {{#if has_proposals}}
 _Proposals written for review:_
 {{#each proposals}}

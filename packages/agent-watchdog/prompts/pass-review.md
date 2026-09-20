@@ -21,6 +21,10 @@ raised.
 
 {{changes}}
 
+## Firing alerts for this project
+
+{{alerts}}
+
 ## Instructions
 
 - Emit the complete revised set of items, not only the differences.

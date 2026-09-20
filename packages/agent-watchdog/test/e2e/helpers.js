@@ -51,11 +51,22 @@ const fakeTracer = () => ({
   traceId: 't1',
 });
 
+// The default client also answers the feedback stage's reads with empty threads, so a second day can run without
+// scripting feedback (User Story 7's specs replace these with recorded threads).
+const emptyPage = { ok: true, messages: [], has_more: false, response_metadata: { next_cursor: '' } };
+
 const fakeSlack = () => {
   let counter = 0;
   return {
     files: { uploadV2: sinon.stub().resolves({ ok: true, files: [{ files: [{ id: 'F0001' }] }] }) },
-    reactions: { add: sinon.stub().resolves({ ok: true }) },
+    reactions: {
+      add: sinon.stub().resolves({ ok: true }),
+      get: sinon.stub().resolves({ ok: true, type: 'message', message: { type: 'message', reactions: [] } }),
+    },
+    conversations: {
+      replies: sinon.stub().resolves(emptyPage),
+      history: sinon.stub().resolves(emptyPage),
+    },
     chat: {
       postMessage: sinon.spy(async () => {
         counter += 1;
@@ -265,9 +276,11 @@ const createScriptedEngine = ({
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
   useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null, historyDays = {},
-  patternCards = undefined, definition = undefined, hostAliases = {},
+  patternCards = undefined, definition = undefined, hostAliases = {}, alertsStatus = {},
 }) => {
-  const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart, historyDays, hostAliases });
+  const fake = createFakeGrafana({
+    fixtureDir: fixturePath('runs', caseName), runStart, historyDays, hostAliases, alertsStatus,
+  });
   const out = capture();
   const err = capture();
   const browserLauncher = fakeBrowserLauncher();

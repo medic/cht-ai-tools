@@ -42,8 +42,8 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 
 Environment variables per `.env.example` and `contracts/environment.md`; policy files
 `projects.yaml` (annotations, programme `groups` by host glob, `ignore` list), `dashboards.yaml`,
-`thresholds.yaml` under `AGENT_WATCHDOG_CONFIG_DIR` with defaults in `config/defaults/`. Safety rails
-and hard caps are code.
+`thresholds.yaml`, `alerts.yaml` (category and importance per alert rule title, staleness, category metrics)
+under `AGENT_WATCHDOG_CONFIG_DIR` with defaults in `config/defaults/`. Safety rails and hard caps are code.
 
 ## Working locally
 
@@ -77,6 +77,12 @@ Body layout: five bullets of two lines, a programme's items as up to eight one-l
 collapsed, computed in `src/rollup/layout.js` before the roll-up call and written to `rollup/layout.json`. The
 model writes item lines only; group lines are code; `bullet_count`, `bullet_length` and `thread_order` check the
 draft against the layout. Ignored hosts never enter `discovery.projects`.
+
+Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
+failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert
+groups as code-built `alerts` bullets, the model never writes them; `publish` posts one reply per alert group
+(`agent_watchdog.alerts`) with links the gate resolved against the collected data; episodes are append-only events
+in `alerts/episodes.jsonl` (durable), cleared ones also in `corpus/outcomes/` as `alert_episode`.
 
 Feedback: `feedback.jsonl` is permanent (never purged); `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` bounds
 how long a record adjusts ranking. Each run reviews new notes with one bounded call each, writes proposals

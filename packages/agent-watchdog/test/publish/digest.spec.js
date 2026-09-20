@@ -130,3 +130,39 @@ describe('publish/digest (FR-062)', () => {
     expect(text).to.not.include('Proposals written');
   });
 });
+
+describe('publish/digest: alert-group feedback (User Story 8)', () => {
+  it('acknowledges reactions and notes on alert groups in their own lines, naming no person', () => {
+    const records = [
+      record({
+        feedback_id: 'a1a1a1a1a1a1', target: 'alert_group', item_id: null, alert_key: 'MoH Nepal/backlog',
+        verdict: 'down',
+      }),
+      record({
+        feedback_id: 'a2a2a2a2a2a2', target: 'alert_group', item_id: null, alert_key: 'MoH Nepal/backlog',
+        verdict: 'down', author: 'U8', source_ts: '2.2',
+      }),
+      record({
+        feedback_id: 'a3a3a3a3a3a3', target: 'alert_group', item_id: null, alert_key: 'MoH Nepal/backlog', kind: 'note',
+        verdict: null, note: 'known migration <@U0123ABCD>', source_ts: '2.3',
+      }),
+      record({
+        feedback_id: 'a4a4a4a4a4a4', target: 'alert_group', item_id: null, alert_key: 'eCHIS Kenya/messaging',
+        verdict: 'up', source_ts: '2.4',
+      }),
+    ];
+    const built = buildDigest({
+      runId: '2026-09-19', date: '2026-09-19', records, byItem: {}, items: [], retention: RETENTION,
+    });
+    expect(built.digest.alerts).to.deep.equal([
+      { alert_key: 'MoH Nepal/backlog', up: 0, down: 2, notes: 1 },
+      { alert_key: 'eCHIS Kenya/messaging', up: 1, down: 0, notes: 0 },
+    ]);
+    expect(built.digest.items).to.deep.equal([]);
+    expect(built.text).to.include('MoH Nepal/backlog: 2 thumbs-down, 1 note');
+    expect(built.text).to.include('eCHIS Kenya/messaging: 1 thumbs-up');
+    expect(built.text).to.not.include('U0123ABCD');
+    expect(built.digest.acknowledged).to.have.length(4);
+    expect(built.metadata.event_payload.acknowledged).to.equal(4);
+  });
+});

@@ -344,3 +344,99 @@ describe('cli/stages/feedback', () => {
     expect(client.conversations.history).to.not.have.been.called;
   });
 });
+
+describe('feedback/ingest: reactions and notes on alert-group replies (FR-066, User Story 8)', () => {
+  const PARENT = '1758100000.000100';
+  const ITEM_REPLY = '1758100001.000200';
+  const ALERT_REPLY = '1758100002.000300';
+  const NOTE_TS = '1758100003.000400';
+  const items = loadJson('slack', 'items-2026-09-17.json');
+
+  let dataDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const alertsClient = () => ({
+    conversations: {
+      replies: sinon.spy(async () => ({
+        ok: true,
+        has_more: false,
+        response_metadata: { next_cursor: '' },
+        messages: [
+          {
+            type: 'message', ts: PARENT, thread_ts: PARENT, bot_id: 'B001', text: 'brief',
+            metadata: {
+              event_type: 'agent_watchdog.brief',
+              event_payload: { run_id: '2026-09-17', date: '2026-09-17', kind: 'brief' },
+            },
+          },
+          {
+            type: 'message', ts: ITEM_REPLY, thread_ts: PARENT, bot_id: 'B001', text: 'item',
+            metadata: {
+              event_type: 'agent_watchdog.item',
+              event_payload: {
+                run_id: '2026-09-17', item_id: items[0].item_id, project_url: items[0].project_url,
+                metric: items[0].metric,
+              },
+            },
+          },
+          {
+            type: 'message', ts: ALERT_REPLY, thread_ts: PARENT, bot_id: 'B001', text: 'alerts',
+            metadata: {
+              event_type: 'agent_watchdog.alerts',
+              event_payload: {
+                run_id: '2026-09-17', date: '2026-09-17', group: 'MoH Nepal', category: 'backlog', firing: 5,
+              },
+            },
+          },
+          {
+            type: 'message', ts: NOTE_TS, thread_ts: PARENT, user: 'U7',
+            text: 'MoH Nepal backlog alerts: known migration, ignore this week',
+          },
+        ],
+      })),
+      history: sinon.stub().resolves({
+        ok: true, messages: [], has_more: false, response_metadata: { next_cursor: '' },
+      }),
+    },
+    reactions: {
+      get: sinon.spy(async ({ timestamp }) => ({
+        ok: true, type: 'message',
+        message: { reactions: timestamp === ALERT_REPLY ? [{ name: '-1', users: ['U7', 'U8'], count: 2 }] : [] },
+      })),
+    },
+  });
+
+  it('records a thumbs-down on an alert-group reply and a note naming the group against the alert key', async () => {
+    const run = await RunDir.create(dataDir, '2026-09-17');
+    await run.writeJson('run.json', { run_id: '2026-09-17', status: 'published' });
+    await run.writeJson('rollup/publication.json', {
+      channel_id: 'C123', ts: PARENT, permalink: null,
+      replies: [
+        { item_id: items[0].item_id, alert_key: null, ts: ITEM_REPLY },
+        { item_id: null, alert_key: 'MoH Nepal/backlog', ts: ALERT_REPLY },
+      ],
+    });
+    await run.writeJson('rollup/items.ranked.json', items);
+    const client = alertsClient();
+    const doc = await ingest(dataDir, client);
+    const alertRecords = doc.records.filter((r) => r.target === 'alert_group');
+    expect(alertRecords.map((r) => `${r.kind}:${r.verdict}:${r.author}`).sort()).to.deep.equal([
+      'note:null:U7', 'reaction:down:U7', 'reaction:down:U8',
+    ]);
+    for (const record of alertRecords) {
+      schemas.Feedback.parse(record);
+      expect(record).to.include({ alert_key: 'MoH Nepal/backlog', item_id: null, matched: true });
+    }
+    expect(doc.alerts['MoH Nepal/backlog']).to.deep.include({ up: 0, down: 2 });
+    expect(doc.alerts['MoH Nepal/backlog'].notes)
+      .to.deep.equal(['MoH Nepal backlog alerts: known migration, ignore this week']);
+    // Alert feedback never touches an item's tallies or the unmatched list.
+    expect(Object.keys(doc.by_item)).to.deep.equal([]);
+    expect(doc.unmatched).to.deep.equal([]);
+    expect((await readAll(dataDir)).filter((r) => r.target === 'alert_group')).to.have.length(3);
+  });
+});

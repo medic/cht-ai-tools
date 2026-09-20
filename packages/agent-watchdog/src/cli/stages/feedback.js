@@ -14,7 +14,7 @@ const inputs = [];
 const NO_REVIEW = Object.freeze({ skipped: 'no engine', classified: [], unclassified: [], calls: [] });
 
 const emptyDocument = (runId, skipped) => ({
-  run_id: runId, since: null, sources: [], records: [], unmatched: [], horizons: [], by_item: {},
+  run_id: runId, since: null, sources: [], records: [], unmatched: [], horizons: [], by_item: {}, alerts: {},
   brief: { up: 0, down: 0, notes: [] }, projects: {}, skipped, review: { ...NO_REVIEW, skipped },
 });
 

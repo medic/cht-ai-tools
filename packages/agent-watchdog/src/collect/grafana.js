@@ -1,5 +1,6 @@
 'use strict';
-// Grafana client: dashboards, search, annotations and the Prometheus datasource proxy (research.md R-5).
+// Grafana client: dashboards, search, annotations, the Prometheus datasource proxy (research.md R-5) and the
+// Grafana-managed alerting endpoints (R-14).
 // Read-only, bearer-token authenticated, bounded by AGENT_WATCHDOG_HTTP_TIMEOUT_MS.
 const codes = require('../cli/exit-codes');
 
@@ -13,6 +14,10 @@ class HttpError extends Error {
 }
 
 const noop = { debug() {}, info() {}, warn() {}, error() {} };
+
+const ALERT_RULES_PATH = '/api/prometheus/grafana/api/v1/rules';
+const ALERT_INSTANCES_PATH = '/api/prometheus/grafana/api/v1/alerts';
+const MAX_ALERT_PAGES = 100;
 
 const toNumber = (value) => Number(value);
 
@@ -70,6 +75,17 @@ const createGrafanaClient = (options) => {
     return response.json();
   };
 
+  // Grafana-managed alerting (research.md R-14): the rules endpoint pages with groupNextToken.
+  const alertingEnvelope = async (pathname, params) => {
+    const envelope = await request(pathname, params);
+    if (!envelope || envelope.status !== 'success') {
+      const type = (envelope && envelope.errorType) || 'error';
+      const detail = (envelope && envelope.error) || 'unknown error';
+      throw new Error(`Grafana alerting ${pathname} failed: ${type}: ${detail}`);
+    }
+    return envelope;
+  };
+
   const prometheus = async (endpoint, params) => {
     const envelope = await request(`${proxyPath}/api/v1/${endpoint}`, params);
     if (!envelope || envelope.status !== 'success') {
@@ -102,6 +118,34 @@ const createGrafanaClient = (options) => {
         value: [toNumber(series.value[0]), toNumber(series.value[1])],
       }));
     },
+    /** Grafana-managed rules with their instances, every page followed; raw envelopes kept for the record. */
+    alertRules: async ({ groupLimit = null } = {}) => {
+      const groups = [];
+      const raw = [];
+      let token = null;
+      let pages = 0;
+      do {
+        const params = {};
+        if (groupLimit) {
+          params.group_limit = groupLimit;
+        }
+        if (token) {
+          params.group_next_token = token;
+        }
+        const envelope = await alertingEnvelope(ALERT_RULES_PATH, params);
+        raw.push(envelope);
+        pages += 1;
+        const data = envelope.data || {};
+        groups.push(...(data.groups || []));
+        token = data.groupNextToken || null;
+      } while (token && pages < MAX_ALERT_PAGES);
+      return { groups, pages, raw };
+    },
+    /** Firing and pending instances alone, when the rules endpoint cannot be read. */
+    alertInstances: async () => {
+      const envelope = await alertingEnvelope(ALERT_INSTANCES_PATH);
+      return (envelope.data && envelope.data.alerts) || [];
+    },
   };
 };
 
@@ -129,4 +173,4 @@ const verifyDatasourceUid = (client, dashboards) => {
   }
 };
 
-module.exports = { createGrafanaClient, verifyDatasourceUid, HttpError };
+module.exports = { createGrafanaClient, verifyDatasourceUid, HttpError, ALERT_RULES_PATH, ALERT_INSTANCES_PATH };

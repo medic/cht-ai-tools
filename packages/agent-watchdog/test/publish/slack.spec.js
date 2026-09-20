@@ -6,9 +6,25 @@ const codes = require('../../src/cli/exit-codes');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 const { makeItem, makeBrief, quietLogger } = require('../rollup/factories');
 
+const settle = (stream) => new Promise((resolve) => {
+  if (!stream || typeof stream.on !== 'function') {
+    resolve();
+    return;
+  }
+  stream.on('open', () => {
+    stream.destroy();
+    resolve();
+  });
+  stream.on('error', () => resolve());
+  stream.on('close', () => resolve());
+});
+
 const fakeClient = () => ({
   files: {
-    uploadV2: sinon.stub().resolves({ ok: true, files: [{ ok: true, files: [{ id: 'F123', title: 'brief' }] }] }),
+    uploadV2: sinon.stub().callsFake(async ({ file }) => {
+      await settle(file);
+      return { ok: true, files: [{ ok: true, files: [{ id: 'F123', title: 'brief' }] }] };
+    }),
   },
   chat: {
     postMessage: sinon.stub().callsFake(async ({ thread_ts: threadTs }) => ({
@@ -203,5 +219,28 @@ describe('publish/slack: feedback digest and seen reactions (FR-062)', () => {
     expect(results.map((r) => [r.source_ts, r.ok])).to.deep.equal([['1.1', true], ['1.2', true], ['1.3', false]]);
     expect(results[2].error).to.include('missing_scope');
     expect(logger.events.some((e) => e.level === 'warn' && e.event === 'slack.reaction_failed')).to.equal(true);
+  });
+});
+
+describe('publish/slack: alert-group replies (User Story 8)', () => {
+  it('records the alert key of an alert-group reply beside the item replies', async () => {
+    const client = fakeClient();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
+    const payload = {
+      parent: { text: 'brief', blocks: [{ type: 'header', text: { type: 'plain_text', text: 'h' } }], metadata: {} },
+      image: null,
+      replies: [
+        { item_id: 'a'.repeat(12), text: 'item', blocks: [], metadata: { event_type: 'agent_watchdog.item' } },
+        {
+          alert_key: 'MoH Nepal/backlog', item_id: null, text: 'alerts', blocks: [],
+          metadata: { event_type: 'agent_watchdog.alerts' },
+        },
+      ],
+    };
+    const publication = await publisher.publish({ payload, imagePath: null });
+    expect(publication.replies).to.have.length(2);
+    expect(publication.replies[0]).to.include({ item_id: 'a'.repeat(12), alert_key: null });
+    expect(publication.replies[1]).to.include({ item_id: null, alert_key: 'MoH Nepal/backlog' });
+    expect(client.chat.postMessage.thirdCall.args[0].metadata.event_type).to.equal('agent_watchdog.alerts');
   });
 });

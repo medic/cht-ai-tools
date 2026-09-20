@@ -21,48 +21,65 @@ const WATCHDOG = 'Watchdog';
 const layoutEntries = (entries, { slots: maxSlots = BODY_SLOTS, maxChildren = MAX_CHILDREN } = {}) => {
   const slots = [];
   const open = new Map();
+  const openAlerts = new Map();
   const thread = [];
+  const alertsThread = [];
   for (const entry of entries) {
     const group = entry.group || UNGROUPED;
-    const collapsible = group !== UNGROUPED;
-    const shared = collapsible ? open.get(group) : undefined;
+    const isAlerts = entry.type === 'alerts';
+    // Alert Groups of one programme share one `alerts` slot, a sub-bullet per category, and never mix with items.
+    const collapsible = isAlerts || group !== UNGROUPED;
+    const shared = collapsible ? (isAlerts ? openAlerts : open).get(group) : undefined;
+    const overflow = isAlerts ? alertsThread : thread;
     if (shared) {
       if (shared.keys.length < maxChildren) {
         shared.keys.push(entry.key);
       } else {
-        thread.push(entry.key);
+        overflow.push(entry.key);
       }
       continue;
     }
     if (slots.length < maxSlots) {
-      const slot = { slot: slots.length + 1, kind: 'item', group, keys: [entry.key] };
+      const slot = { slot: slots.length + 1, kind: isAlerts ? 'alerts' : 'item', group, keys: [entry.key] };
       slots.push(slot);
       if (collapsible) {
-        open.set(group, slot);
+        (isAlerts ? openAlerts : open).set(group, slot);
       }
       continue;
     }
-    thread.push(entry.key);
+    overflow.push(entry.key);
   }
   for (const slot of slots) {
-    slot.kind = slot.keys.length > 1 ? 'group' : 'item';
+    if (slot.kind !== 'alerts') {
+      slot.kind = slot.keys.length > 1 ? 'group' : 'item';
+    }
   }
+  const itemSlots = slots.filter((slot) => slot.kind !== 'alerts');
   return {
     slots,
-    body: slots.flatMap((slot) => slot.keys),
+    body: itemSlots.flatMap((slot) => slot.keys),
     thread,
-    one_line: slots.filter((slot) => slot.kind === 'group').flatMap((slot) => slot.keys),
+    one_line: itemSlots.filter((slot) => slot.kind === 'group').flatMap((slot) => slot.keys),
+    alerts_body: slots.filter((slot) => slot.kind === 'alerts').flatMap((slot) => slot.keys),
+    alerts_thread: alertsThread,
   };
 };
 
 /** The stored form (rollup/layout.json): slots with item ids and one-line flags, body and thread ids. */
 const toLayoutDocument = (layout) => ({
   slots: layout.slots.map((slot) => ({
-    slot: slot.slot, kind: slot.kind, group: slot.group, item_ids: [...slot.keys], one_line: slot.kind === 'group',
+    slot: slot.slot,
+    kind: slot.kind,
+    group: slot.group,
+    item_ids: slot.kind === 'alerts' ? [] : [...slot.keys],
+    alert_keys: slot.kind === 'alerts' ? [...slot.keys] : [],
+    one_line: slot.kind === 'group',
   })),
   body_items: [...layout.body],
   thread_items: [...layout.thread],
   one_line: [...layout.one_line],
+  body_alerts: [...(layout.alerts_body || [])],
+  thread_alerts: [...(layout.alerts_thread || [])],
 });
 
 /** Map a project url to its Project Group label from a discovery document; unknown hosts are `Other`. */
@@ -71,13 +88,36 @@ const groupOfProjects = (discovery) => {
   return (projectUrl) => byUrl.get(projectUrl) || UNGROUPED;
 };
 
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 };
+// Alert Groups rank among items by importance: critical before every item, otherwise after the items of the same
+// severity (FR-066).
+const ALERT_RANK = { critical: -1, high: 0, medium: 1, low: 2 };
+
 /**
- * Lay out ranked items by their project's group.
- * @param {object[]} items ranked items
- * @param {{ groupOf?: (projectUrl: string) => string }} [options]
+ * The ranked items and the Alert Groups as one ordered list of layout entries.
+ * @param {object[]} items ranked items (severity, item_id, project_url)
+ * @param {object[]} alertGroups Alert Groups (alert_key, group, importance)
+ * @param {(projectUrl: string) => string} [groupOf]
  */
-const buildLayout = (items, { groupOf = () => UNGROUPED } = {}) => toLayoutDocument(
-  layoutEntries(items.map((item) => ({ key: item.item_id, group: groupOf(item.project_url) }))),
+const interleaveAlerts = (items, alertGroups = [], groupOf = () => UNGROUPED) => [
+  ...items.map((item, order) => ({
+    key: item.item_id, group: groupOf(item.project_url), type: 'item',
+    primary: SEVERITY_RANK[item.severity] === undefined ? 2 : SEVERITY_RANK[item.severity], secondary: 0, order,
+  })),
+  ...alertGroups.map((group, order) => ({
+    key: group.alert_key, group: group.group, type: 'alerts',
+    primary: ALERT_RANK[group.importance] === undefined ? 1 : ALERT_RANK[group.importance], secondary: 1, order,
+  })),
+].sort((a, b) => a.primary - b.primary || a.secondary - b.secondary || a.order - b.order)
+  .map(({ key, group, type }) => ({ key, group, type }));
+
+/**
+ * Lay out ranked items by their project's group, with the Alert Groups placed among them by importance.
+ * @param {object[]} items ranked items
+ * @param {{ groupOf?: (projectUrl: string) => string, alertGroups?: object[] }} [options]
+ */
+const buildLayout = (items, { groupOf = () => UNGROUPED, alertGroups = [] } = {}) => toLayoutDocument(
+  layoutEntries(interleaveAlerts(items, alertGroups, groupOf)),
 );
 
 /** Slot number per key, for placement. */
@@ -98,11 +138,54 @@ const groupBulletText = ({ label, projects, issues }) => (issues === projects
   ? `${label}: ${plural(projects, 'project')} with issues`
   : `${label}: ${plural(projects, 'project')} with ${plural(issues, 'issue')}`);
 
+/** The alerts line, written by code (FR-066): "MoH Nepal alerts: 15 firing, 3 stale for more than 14 days". */
+const alertsBulletText = ({ label, firing, stale, staleAfterDays }) => (stale > 0
+  ? `${label} alerts: ${firing} firing, ${stale} stale for more than ${staleAfterDays} days`
+  : `${label} alerts: ${firing} firing, none stale`);
+
+const MAX_TITLES_IN_LINE = 2;
+
+/** One sub-bullet per category, written by code: count, rules, oldest start, stale and new counts. */
+const alertCategoryLine = (group) => {
+  const titles = group.titles || [];
+  const shown = titles.slice(0, MAX_TITLES_IN_LINE).join(', ');
+  const more = titles.length > MAX_TITLES_IN_LINE ? `, +${titles.length - MAX_TITLES_IN_LINE} more` : '';
+  const parts = [`${group.category}: ${group.firing} firing (${shown}${more})`];
+  parts.push(`oldest since ${String(group.oldest_started_at).slice(0, 10)}`);
+  if (group.stale > 0) {
+    parts.push(`${group.stale} stale`);
+  }
+  if (group.new > 0) {
+    parts.push(`${group.new} new`);
+  }
+  return parts.join(', ');
+};
+
+const alertsBullet = (slot, alertGroups, staleAfterDays) => {
+  const groups = slot.alert_keys.map((key) => alertGroups.find((g) => g.alert_key === key)).filter(Boolean);
+  const firing = groups.reduce((sum, g) => sum + g.firing, 0);
+  const stale = groups.reduce((sum, g) => sum + g.stale, 0);
+  return {
+    kind: 'alerts',
+    item_id: null,
+    group: slot.group,
+    text: alertsBulletText({ label: slot.group, firing, stale, staleAfterDays }),
+    children: groups.map((g) => ({ item_id: null, text: alertCategoryLine(g) })),
+    alert_key: groups.length === 1 ? groups[0].alert_key : slot.group,
+  };
+};
+
 /**
  * Build Bullet entities from a layout document. `textFor(id)` gives an entry's line (the model's for items, code's
- * for candidates); `hostFor(id)` its project host, to count the projects behind a group line.
+ * for candidates); `hostFor(id)` its project host, to count the projects behind a group line. Alert bullets are
+ * entirely code-built from the Alert Groups (FR-066).
  */
-const assembleBullets = ({ layout, textFor, hostFor }) => layout.slots.map((slot) => {
+const assembleBullets = ({
+  layout, textFor, hostFor, alertGroups = [], staleAfterDays = 14,
+}) => layout.slots.map((slot) => {
+  if (slot.kind === 'alerts') {
+    return alertsBullet(slot, alertGroups, staleAfterDays);
+  }
   if (slot.kind === 'group') {
     const children = slot.item_ids.map((id) => ({ item_id: id, text: textFor(id) }));
     const projects = new Set(slot.item_ids.map(hostFor)).size;
@@ -120,6 +203,6 @@ const assembleBullets = ({ layout, textFor, hostFor }) => layout.slots.map((slot
 });
 
 module.exports = {
-  layoutEntries, toLayoutDocument, buildLayout, groupOfProjects, slotByKey, groupBulletText, assembleBullets,
-  BODY_SLOTS, MAX_CHILDREN, UNGROUPED, WATCHDOG,
+  layoutEntries, toLayoutDocument, buildLayout, interleaveAlerts, groupOfProjects, slotByKey, groupBulletText,
+  alertsBulletText, alertCategoryLine, assembleBullets, BODY_SLOTS, MAX_CHILDREN, UNGROUPED, WATCHDOG,
 };

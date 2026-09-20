@@ -5,6 +5,7 @@ const { buildPayload } = require('../../publish/payload');
 const { createSlackPublisher } = require('../../publish/slack');
 const { buildDigest } = require('../../publish/digest');
 const { readUnacknowledged, markAcknowledged, feedbackFile } = require('../../feedback/store');
+const { buildAlertGroupLinks } = require('../../links/build');
 
 const name = 'publish';
 const inputs = ['rollup/brief.json'];
@@ -57,6 +58,16 @@ const suppressedFor = async (runDir, discovery) => {
   return out;
 };
 
+/** Alert Groups in body order (the layout's body alerts, then the thread's), or none when alerting was unavailable. */
+const orderedAlertGroups = (classified, layout) => {
+  if (!classified || !classified.available) {
+    return [];
+  }
+  const byKey = new Map((classified.groups || []).map((group) => [group.alert_key, group]));
+  const order = layout ? [...(layout.body_alerts || []), ...(layout.thread_alerts || [])] : [...byKey.keys()];
+  return order.map((key) => byKey.get(key)).filter(Boolean);
+};
+
 /** The digest input the feedback stage left for this run, read defensively: nothing there means nothing new. */
 const feedbackInputs = async (ctx, runDir) => {
   if (ctx.feedbackIngested) {
@@ -100,6 +111,13 @@ const run = async (ctx) => {
     },
   });
 
+  const classified = runDir.exists('alerts.classified.json') ? await runDir.readJson('alerts.classified.json') : null;
+  const layout = runDir.exists('rollup/layout.json') ? await runDir.readJson('rollup/layout.json') : null;
+  const alertGroups = orderedAlertGroups(classified, layout);
+  const grafanaUrl = ctx.config.endpoints && ctx.config.endpoints.grafanaUrl;
+  const alertLinks = new Map(alertGroups
+    .map((group) => [group.alert_key, grafanaUrl ? buildAlertGroupLinks({ grafanaUrl, group }) : null]));
+
   const payload = buildPayload({
     brief,
     items,
@@ -109,6 +127,9 @@ const run = async (ctx) => {
     audience: 'internal',
     channel,
     digest: built,
+    alertGroups,
+    alertLinks,
+    staleAfterDays: (classified && classified.stale_after_days) || 14,
   });
   await runDir.writeJson('rollup/payload.json', payload);
   if (built) {

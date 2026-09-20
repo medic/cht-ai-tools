@@ -1,0 +1,277 @@
+{
+  "folder": "CHT",
+  "folder_uid": "cht",
+  "page_size": 2,
+  "groups": [
+    {
+      "name": "10m",
+      "interval": 600,
+      "rules": [
+        {
+          "uid": "ot6lYCYVz",
+          "title": "DB Fragmentation",
+          "for": "1h",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 13,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "nepal-a.example.org",
+              "labels": {
+                "db": "medic"
+              },
+              "state": "Alerting",
+              "active_at": "2026-09-16T00:00:00Z",
+              "value": "9.2"
+            },
+            {
+              "host": "nepal-b.example.org",
+              "labels": {
+                "db": "medic"
+              },
+              "state": "Alerting",
+              "active_at": "2026-08-01T00:00:00Z",
+              "value": "11.4"
+            },
+            {
+              "host": "nepal-c.example.org",
+              "labels": {
+                "db": "sentinel"
+              },
+              "state": "Alerting",
+              "active_at": "2026-09-17T00:00:00Z",
+              "value": "8.7"
+            }
+          ]
+        },
+        {
+          "uid": "KgP8PjY4k",
+          "title": "Outbound Push Backlog",
+          "for": "1h",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 2,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "nepal-a.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T22:00:00Z",
+              "value": "48"
+            },
+            {
+              "host": "nepal-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-08-25T00:00:00Z",
+              "value": "310"
+            }
+          ]
+        },
+        {
+          "uid": "FzCrECYVk",
+          "title": "Sentinel Backlog",
+          "for": "1h",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 3,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "nepal-a.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T20:00:00Z",
+              "value": "1200"
+            },
+            {
+              "host": "nepal-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-08-20T00:00:00Z",
+              "value": "4400"
+            },
+            {
+              "host": "nepal-c.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-18T03:00:00Z",
+              "value": "900",
+              "until": "2026-09-19T00:00:00Z"
+            },
+            {
+              "host": "cht-dev.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T10:00:00Z",
+              "value": "700"
+            }
+          ]
+        },
+        {
+          "uid": "hURoyjYVk",
+          "title": "Server Time Accurate",
+          "for": "1h",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 19,
+          "query": "vector(1)",
+          "instances": []
+        },
+        {
+          "uid": "ttAeECYVz",
+          "title": "Users Over Replication Limit",
+          "for": "1h",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 21,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "echis-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T09:00:00Z",
+              "value": "12"
+            },
+            {
+              "host": "echis-a.example.org",
+              "labels": {},
+              "state": "Pending",
+              "active_at": "2026-09-18T05:50:00Z",
+              "value": "3"
+            }
+          ]
+        },
+        {
+          "uid": "diskUsage1",
+          "title": "Disk Usage High",
+          "for": "1h",
+          "dashboard_uid": null,
+          "panel_id": null,
+          "query": "node_filesystem_avail_bytes",
+          "instances": [
+            {
+              "host": "nepal-a.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T12:00:00Z",
+              "value": "91"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1m",
+      "interval": 60,
+      "rules": [
+        {
+          "uid": "Q1A-BjL4k",
+          "title": "API Server Down",
+          "for": "30m",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 16,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "nepal-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-18T05:00:00Z",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "uid": "nBTZsCY4k",
+          "title": "Client Feedback/Error Rate",
+          "for": "1m",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 14,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "echis-a.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-18T01:00:00Z",
+              "value": "140"
+            },
+            {
+              "host": "echis-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-19T02:00:00Z",
+              "value": "95",
+              "since": "2026-09-19T02:00:00Z"
+            }
+          ]
+        },
+        {
+          "uid": "gli1YjL4k",
+          "title": "DB Conflicts Rate",
+          "for": "1m",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 7,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "nepal-c.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-18T04:00:00Z",
+              "value": "61"
+            }
+          ]
+        },
+        {
+          "uid": "0R-OsCYVz",
+          "title": "Message Delivery Rate",
+          "for": "1m",
+          "dashboard_uid": "oa2OfL-Vk",
+          "panel_id": 27,
+          "query": "vector(1)",
+          "instances": [
+            {
+              "host": "echis-a.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T18:00:00Z",
+              "value": "0.71"
+            },
+            {
+              "host": "echis-b.example.org",
+              "labels": {},
+              "state": "Alerting",
+              "active_at": "2026-09-17T18:00:00Z",
+              "value": "0.64"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "watchdog",
+      "interval": 60,
+      "rules": [
+        {
+          "uid": "wdScrape01",
+          "title": "Watchdog Scrape Failures",
+          "for": "5m",
+          "dashboard_uid": null,
+          "panel_id": null,
+          "query": "up{job=\"prometheus\"}",
+          "instances": [
+            {
+              "host": null,
+              "labels": {
+                "job": "prometheus"
+              },
+              "state": "Alerting",
+              "active_at": "2026-09-17T23:00:00Z",
+              "value": "3"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

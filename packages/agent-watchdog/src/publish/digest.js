@@ -150,6 +150,7 @@ const buildDigest = ({
     return null;
   }
   const perItem = new Map();
+  const perAlert = new Map();
   const brief = { up: 0, down: 0, notes: 0 };
   for (const record of records) {
     if (record.target === 'item' && record.item_id) {
@@ -157,10 +158,16 @@ const buildDigest = ({
         perItem.set(record.item_id, { item_id: record.item_id, up: 0, down: 0, notes: 0 });
       }
       countInto(perItem.get(record.item_id), record);
+    } else if (record.target === 'alert_group' && record.alert_key) {
+      if (!perAlert.has(record.alert_key)) {
+        perAlert.set(record.alert_key, { alert_key: record.alert_key, up: 0, down: 0, notes: 0 });
+      }
+      countInto(perAlert.get(record.alert_key), record);
     } else {
       countInto(brief, record);
     }
   }
+  const digestAlerts = [...perAlert.values()];
   const digestItems = [...perItem.values()].map((entry) => ({
     ...entry,
     ...identityOf(entry.item_id, byItem, items),
@@ -185,6 +192,7 @@ const buildDigest = ({
     run_id: runId,
     acknowledged: records.map((r) => r.feedback_id),
     items: digestItems,
+    alerts: digestAlerts,
     brief,
     proposals,
     unmatched: unmatchedNotes,
@@ -201,6 +209,8 @@ const buildDigest = ({
     })),
     has_brief: brief.up + brief.down + brief.notes > 0,
     brief_text: tallyText(brief),
+    has_alerts: digestAlerts.length > 0,
+    alerts: digestAlerts.map((entry) => ({ key_text: entry.alert_key, tally_text: tallyText(entry) })),
     has_proposals: proposals.length > 0,
     proposals: proposals.map((p, i) => ({ destination_text: destinations[i], path_text: p.path || p.proposal_id })),
     has_unmatched: unmatchedNotes.length > 0,
@@ -223,6 +233,10 @@ const buildDigest = ({
     ...(view.has_brief ? [`• the brief itself: ${mrkdwn(view.brief_text)}`] : []),
   ];
   const blocks = [section(itemLines.join('\n'))];
+  if (view.has_alerts) {
+    const lines = view.alerts.map((a) => `• ${mrkdwn(a.key_text)}: ${mrkdwn(a.tally_text)}`);
+    blocks.push(section(`_Alert groups:_\n${lines.join('\n')}`));
+  }
   if (view.has_proposals) {
     const lines = view.proposals.map((p) => `• ${mrkdwn(p.destination_text)}: ${mrkdwn(p.path_text)}`);
     blocks.push(section(`_Proposals written for review:_\n${lines.join('\n')}`));
