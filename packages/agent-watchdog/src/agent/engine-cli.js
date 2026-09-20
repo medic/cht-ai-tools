@@ -3,6 +3,7 @@
 // one `claude -p` process per project session fed stream-json user turns over stdin, its stream-json stdout
 // mapped to the same turn objects as the SDK engine by src/agent/turn-mapper.js. Hooks do not fire under
 // --bare, so the harness enforces the turn cap and the wall clock from the event stream itself.
+const { RUNTIME_TOOLS } = require('../../agent/hooks');
 const { forStructuredOutput } = require('./output-schema');
 const childProcess = require('node:child_process');
 const fs = require('node:fs/promises');
@@ -37,9 +38,8 @@ const buildArgs = ({ systemPromptFile, tools, mcpConfigFile, outputSchema, model
     '--system-prompt-file', systemPromptFile,
     '--tools', '',
   ];
-  if (tools.length) {
-    args.push('--allowed-tools', ...tools);
-  }
+  // The runtime's own StructuredOutput tool must be allowed for --json-schema output (agent/hooks.js).
+  args.push('--allowed-tools', ...tools, ...RUNTIME_TOOLS);
   args.push('--permission-mode', 'dontAsk');
   if (mcpConfigFile) {
     args.push('--mcp-config', mcpConfigFile);

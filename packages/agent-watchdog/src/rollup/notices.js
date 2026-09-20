@@ -52,4 +52,19 @@ const resolvedNotice = (cleared) => {
   return `Resolved since the previous run: ${named.join('; ')}${rest}`;
 };
 
-module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice };
+const dollars = (n) => `$${Number(n).toFixed(2)}`;
+
+/** The run budget stopped the analysis (agent.summary.json `run_budget`): how far it got and what it left out. */
+const runBudgetNotice = (summary) => {
+  const budget = summary && summary.run_budget;
+  if (!budget || !budget.reached || !(budget.not_analysed || []).length) {
+    return null;
+  }
+  const analysed = (summary.projects_analysed || []).length;
+  const left = budget.not_analysed.length;
+  return `Analysis incomplete: the run budget of ${dollars(budget.limit)} was reached after ${analysed} of `
+    + `${analysed + left} projects (${dollars(budget.spent)} spent); ${plural(left, 'project')} `
+    + `${left === 1 ? 'was' : 'were'} not analysed`;
+};
+
+module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice };

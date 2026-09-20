@@ -18,6 +18,17 @@ describe('rollup/notices', () => {
     expect(housekeepingNotice([])).to.equal(null);
   });
 
+  it('says when the run budget stopped the analysis and how many projects were left out', () => {
+    const { runBudgetNotice } = require('../../src/rollup/notices');
+    expect(runBudgetNotice({
+      run_budget: { limit: 25, spent: 24.7, reached: true, not_analysed: ['https://a.example.org', 'https://b.example.org'] },
+      projects_analysed: Array.from({ length: 30 }, (_, i) => `https://p${i}.example.org`),
+    })).to.equal('Analysis incomplete: the run budget of $25.00 was reached after 30 of 32 projects ($24.70 spent); '
+      + '2 projects were not analysed');
+    expect(runBudgetNotice({ run_budget: { limit: 25, spent: 3, reached: false, not_analysed: [] } })).to.equal(null);
+    expect(runBudgetNotice(null)).to.equal(null);
+  });
+
   it('lists episodes that were open and no longer fire, with how long they fired', () => {
     const events = [
       {

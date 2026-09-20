@@ -5,7 +5,7 @@
 const { forStructuredOutput } = require('./output-schema');
 const os = require('node:os');
 const path = require('node:path');
-const { buildHooks } = require('../../agent/hooks');
+const { buildHooks, RUNTIME_TOOLS } = require('../../agent/hooks');
 const { createSdkToolServer } = require('./tools/sdk-server');
 const { createTurnMapper, normaliseUsage, blockText } = require('./turn-mapper');
 
@@ -121,7 +121,7 @@ const createSdkEngine = ({
       systemPrompt,
       settingSources: [],
       tools: [],
-      allowedTools: tools,
+      allowedTools: [...tools, ...RUNTIME_TOOLS],
       permissionMode: 'dontAsk',
       strictMcpConfig: true,
       persistSession: false,

@@ -1,4 +1,4 @@
-const { buildHooks } = require('../../agent/hooks');
+const { buildHooks, RUNTIME_TOOLS } = require('../../agent/hooks');
 
 describe('agent/hooks', () => {
   const allowed = ['mcp__cht-docs__search_docs', 'mcp__watchdog__get_windows'];
@@ -20,6 +20,22 @@ describe('agent/hooks', () => {
     const input = { hook_event_name: 'PreToolUse', tool_name: 'mcp__watchdog__get_windows', tool_input: {} };
     const ok = await pre(input, 't2', {});
     expect(ok.decision).to.equal('approve');
+  });
+
+  it('approves the runtime\'s StructuredOutput tool without listing it and never records it', async () => {
+    const recorder = sinon.spy();
+    const logger = { warn: sinon.spy() };
+    const hooks = buildHooks({ allowed: ['mcp__watchdog__get_windows'], recorder, logger });
+    const pre = hooks.PreToolUse[0].hooks[0];
+    expect(await pre({ tool_name: 'StructuredOutput', tool_input: { items: [] } }))
+      .to.deep.equal({ decision: 'approve' });
+    expect(logger.warn.called).to.equal(false);
+    const post = hooks.PostToolUse[0].hooks[0];
+    await post({ tool_name: 'StructuredOutput', tool_input: { items: [] }, tool_response: 'ok' });
+    expect(recorder.called, 'the findings hand-off is not a tool call worth replaying').to.equal(false);
+    await post({ tool_name: 'mcp__watchdog__get_windows', tool_input: {}, tool_response: 'x' });
+    expect(recorder.calledOnce).to.equal(true);
+    expect(RUNTIME_TOOLS).to.deep.equal(['StructuredOutput']);
   });
 
   it('records every tool result and never blocks on PostToolUse', async () => {

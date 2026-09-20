@@ -153,6 +153,40 @@ describe('cli/stages/agent', () => {
     expect(peak).to.equal(1);
   });
 
+  it('stops starting sessions at the run budget and names the projects left unanalysed', async () => {
+    // Two projects have candidates (alpha, gamma) and each session costs 0.8; a run budget of 1.0 leaves 0.2 for
+    // the second session, below the 0.25 minimum, so it is never opened.
+    const engine = createFakeEngine({ responses: (text) => ({
+      structuredOutput: findingsFor(projectFor(text), METRIC), result: { total_cost_usd: 0.8 },
+    }) });
+    const context = ctx(engine);
+    context.config.bounds.projectConcurrency = 1;
+    context.config.bounds.maxBudgetUsdRun = 1.0;
+    const summary = await stage.run(context);
+    expect(engine.sessions).to.have.length(1);
+    expect(engine.sessions[0].options.bounds.maxBudgetUsd, 'the first session gets the project budget').to.equal(1);
+    expect(summary.projects_analysed).to.have.length(1);
+    expect(summary.run_budget).to.deep.equal({
+      limit: 1, spent: 0.8, reached: true, not_analysed: [projects.find((p) => p.slug === 'gamma-example-org').url],
+    });
+    expect(summary.bounds_hit).to.include('budget');
+    expect(logs.some((l) => l.event === 'agent.run_budget_reached' && l.not_analysed === 1)).to.equal(true);
+    const written = await runDir.readJson('agent.summary.json');
+    expect(written.run_budget.not_analysed).to.have.length(1);
+  });
+
+  it('grants a session only what the run budget still allows', async () => {
+    const engine = createFakeEngine({ responses: (text) => ({
+      structuredOutput: findingsFor(projectFor(text), METRIC), result: { total_cost_usd: 0.5 },
+    }) });
+    const context = ctx(engine);
+    context.config.bounds.projectConcurrency = 1;
+    context.config.bounds.maxBudgetUsdRun = 1.3;
+    const summary = await stage.run(context);
+    expect(engine.sessions.map((s) => s.options.bounds.maxBudgetUsd)).to.deep.equal([1, 0.8]);
+    expect(summary.run_budget).to.deep.equal({ limit: 1.3, spent: 1, reached: false, not_analysed: [] });
+  });
+
   it('propagates the reference-source flag and bounds from any project', async () => {
     const engine = createFakeEngine({ responses: (userText) => {
       const project = projectFor(userText);

@@ -35,7 +35,7 @@ type, requiredness and consumer.
 | Variable | Type | Default | Hard cap in code | Notes |
 |---|---|---|---|---|
 | `AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT` | number | 2.00 | 10.00 | Per-project session budget, passed as `maxBudgetUsd`. |
-| `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN` | number | 25.00 | 100.00 | Whole run: projects, roll-up, feedback parsing. Enforced by the harness before each call. |
+| `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN` | number | 25.00 | 100.00 | Whole run. Enforced across sessions by the agent stage (revision 14): a session is granted at most what the run has left after finished and running sessions, none opens under $0.25, and the projects left out are named in the brief's notice. |
 | `AGENT_WATCHDOG_MAX_TURNS` | integer | 20 | 50 | Passed as `maxTurns` per pass. |
 | `AGENT_WATCHDOG_MODEL_TIMEOUT_MS` | integer | 900000 | 1800000 | Abort one analysis call after 15 minutes. |
 | `AGENT_WATCHDOG_HTTP_TIMEOUT_MS` | integer | 15000 | 60000 | Grafana API, Slack and link-resolution requests. |

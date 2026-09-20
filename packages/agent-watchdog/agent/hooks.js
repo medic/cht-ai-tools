@@ -9,8 +9,12 @@
  * @param {Function} [options.gate] async (lastAssistantMessage) => { ok, reasons }
  * @param {object} [options.logger]
  */
+// The runtime hands structured output back through a tool of its own; denying it leaves the model unable to answer
+// and spending its budget on retries (first hosted run, S-4). It is approved always and recorded never.
+const RUNTIME_TOOLS = Object.freeze(['StructuredOutput']);
+
 const buildHooks = ({ allowed, recorder, gate = null, logger = null }) => {
-  const allowedSet = new Set(allowed || []);
+  const allowedSet = new Set([...(allowed || []), ...RUNTIME_TOOLS]);
 
   const preToolUse = async (input) => {
     if (allowedSet.has(input.tool_name)) {
@@ -23,7 +27,7 @@ const buildHooks = ({ allowed, recorder, gate = null, logger = null }) => {
   };
 
   const postToolUse = async (input) => {
-    if (recorder) {
+    if (recorder && !RUNTIME_TOOLS.includes(input.tool_name)) {
       recorder({ tool_name: input.tool_name, tool_input: input.tool_input, tool_response: input.tool_response });
     }
     return {};
@@ -47,4 +51,4 @@ const buildHooks = ({ allowed, recorder, gate = null, logger = null }) => {
   };
 };
 
-module.exports = { buildHooks };
+module.exports = { buildHooks, RUNTIME_TOOLS };

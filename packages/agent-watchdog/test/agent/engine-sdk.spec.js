@@ -89,7 +89,8 @@ describe('agent/engine-sdk', () => {
     const o = captured.options;
     expect(o.settingSources).to.deep.equal([]);
     expect(o.tools).to.deep.equal([]);
-    expect(o.allowedTools).to.deep.equal(definition.tools.allowed);
+    // The runtime hands structured output back through its own StructuredOutput tool: it must be allowed (S-4).
+    expect(o.allowedTools).to.deep.equal([...definition.tools.allowed, 'StructuredOutput']);
     expect(o.permissionMode).to.equal('dontAsk');
     expect(o.strictMcpConfig).to.equal(true);
     expect(o.persistSession).to.equal(false);
@@ -178,7 +179,7 @@ describe('agent/engine-sdk', () => {
       bounds: { maxTurns: 3, maxBudgetUsd: 0.5, timeoutMs: 5000 }, model: 'm', effort: 'high', name: 'rollup',
     });
     expect(turn.structuredOutput).to.deep.equal({ headline: 'h' });
-    expect(captured.options.allowedTools).to.deep.equal([]);
+    expect(captured.options.allowedTools).to.deep.equal(['StructuredOutput']);
     expect(captured.options.mcpServers).to.deep.equal({});
     expect(captured.options.maxTurns).to.equal(3);
     expect(captured.prompts[0].message.content).to.equal('write the brief');

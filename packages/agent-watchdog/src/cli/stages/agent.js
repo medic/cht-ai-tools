@@ -19,6 +19,8 @@ const atomic = require('../../store/atomic');
 const name = 'agent';
 const inputs = ['discovery.json'];
 const HISTORY_RUNS = 30;
+// No session opens with less than this to spend: below it a pass over a project's candidates cannot finish.
+const MIN_SESSION_BUDGET_USD = 0.25;
 
 const asArray = (doc, key) => {
   if (Array.isArray(doc)) {
@@ -168,11 +170,35 @@ const run = async (ctx) => {
   const results = new Array(plan.length).fill(null);
   let cursor = 0;
 
+  // The run budget (AGENT_WATCHDOG_MAX_BUDGET_USD_RUN) is enforced here, across sessions: a session is granted at most
+  // what the run has left after what finished sessions spent and what running ones may still spend, and no session
+  // opens for less than MIN_SESSION_BUDGET_USD. Projects left out are named, so the brief can say so.
+  const runBudget = ctx.config.bounds.maxBudgetUsdRun;
+  const projectBudget = ctx.config.bounds.maxBudgetUsdProject;
+  const round6 = (n) => Number(n.toFixed(6));
+  let spent = 0;
+  let reserved = 0;
+  const notAnalysed = [];
+  let budgetReached = false;
+
   const worker = async () => {
     while (cursor < plan.length) {
       const index = cursor;
       cursor += 1;
       const { project, candidates, changes } = plan[index];
+      const remaining = runBudget === undefined || runBudget === null
+        ? projectBudget
+        : round6(runBudget - spent - reserved);
+      if (remaining < MIN_SESSION_BUDGET_USD) {
+        budgetReached = true;
+        notAnalysed.push(project.url);
+        logger.warn('agent.run_budget_reached', {
+          project_url: project.url, run_budget_usd: runBudget, spent_usd: spent, not_analysed: notAnalysed.length,
+        });
+        continue;
+      }
+      const granted = round6(Math.min(projectBudget, remaining));
+      reserved = round6(reserved + granted);
       const getWindows = async (p, metric) => {
         const rel = `${p.slug}/inputs/windows.json.gz`;
         const windows = p.slug && ctx.runDir.exists(rel) ? asArray(await ctx.runDir.readGz(rel), 'windows') : [];
@@ -195,23 +221,31 @@ const run = async (ctx) => {
         replay: replay ? replay.watchdog : null,
         recorder: replay ? replay.recorder : () => {},
       });
-      logger.info('agent.session_start', { project_url: project.url, candidates: candidates.length });
-      results[index] = await runProjectSession({
-        engine, definition, project, candidates, changes,
-        feedback: feedbackFor(feedbackAll, project),
-        alerts: alertsFor(project),
-        memory,
-        activeWindow: activeWindowFrom(changes, discovery),
-        config: ctx.config,
-        gate: deps.gate,
-        runDir: ctx.runDir,
-        logger,
-        tracer: ctx.tracer,
-        deadline,
-        localTools,
-        localServers: replay ? replay.localServers : {},
-        mcpConfig: replay ? { mcpServers: {} } : mcpConfig,
+      logger.info('agent.session_start', {
+        project_url: project.url, candidates: candidates.length, budget_usd: granted,
       });
+      try {
+        results[index] = await runProjectSession({
+          engine, definition, project, candidates, changes,
+          feedback: feedbackFor(feedbackAll, project),
+          alerts: alertsFor(project),
+          memory,
+          activeWindow: activeWindowFrom(changes, discovery),
+          config: ctx.config,
+          gate: deps.gate,
+          runDir: ctx.runDir,
+          logger,
+          tracer: ctx.tracer,
+          deadline,
+          localTools,
+          localServers: replay ? replay.localServers : {},
+          mcpConfig: replay ? { mcpServers: {} } : mcpConfig,
+          budgetUsd: granted,
+        });
+      } finally {
+        reserved = round6(reserved - granted);
+        spent = round6(spent + ((results[index] && results[index].cost_usd) || 0));
+      }
     }
   };
 
@@ -222,7 +256,13 @@ const run = async (ctx) => {
     projects_analysed: analysed,
     projects_skipped: skipped,
     items: results.filter(Boolean).flatMap((r) => r.items),
-    bounds_hit: [...new Set(results.filter(Boolean).flatMap((r) => r.bounds_hit))],
+    bounds_hit: [...new Set([
+      ...results.filter(Boolean).flatMap((r) => r.bounds_hit), ...(budgetReached ? ['budget'] : []),
+    ])],
+    run_budget: {
+      limit: runBudget === undefined || runBudget === null ? null : runBudget,
+      spent, reached: budgetReached, not_analysed: notAnalysed,
+    },
     reference_sources_unavailable: results.some((r) => r && r.reference_sources_unavailable),
     cost_usd: Number(results.filter(Boolean).reduce((sum, r) => sum + (r.cost_usd || 0), 0).toFixed(6)),
     usage: results.filter(Boolean).reduce((total, r) => {
@@ -236,6 +276,7 @@ const run = async (ctx) => {
   logger.info('agent.done', {
     analysed: analysed.length, skipped: skipped.length, items: summary.items.length, cost_usd: summary.cost_usd,
     bounds_hit: summary.bounds_hit, reference_sources_unavailable: summary.reference_sources_unavailable,
+    run_budget_usd: runBudget, not_analysed: notAnalysed.length,
   });
   return summary;
 };

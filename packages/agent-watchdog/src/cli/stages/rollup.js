@@ -5,7 +5,7 @@ const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
-const { housekeepingNotice, clearedEpisodes, resolvedNotice } = require('../../rollup/notices');
+const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
 const { readEpisodeEvents } = require('../../alerts/episodes');
 const { bareKey } = require('../../analyze/kinds');
 const { updateEpisodes } = require('../../alerts/episodes');
@@ -179,6 +179,11 @@ const run = async (ctx) => {
   }
   if (classified && !classified.available) {
     notices.push(`Alerts unavailable: ${classified.reason || 'the alerting endpoints did not answer'}`);
+  }
+  // The run budget may have stopped the analysis short (FR-012): the brief says how far it got.
+  const budgetNotice = runBudgetNotice(await readIfExists(runDir, 'agent.summary.json', null));
+  if (budgetNotice) {
+    notices.push(budgetNotice);
   }
   // Old news and good news (FR-080): stale alerts on dead hosts once, and episodes that cleared since the last run.
   if (alertsAvailable) {

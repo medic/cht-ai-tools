@@ -57,7 +57,7 @@ const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budg
 const runProjectSession = async ({
   engine, definition, project, candidates, changes, feedback = [], memory = '', activeWindow = null, config, gate,
   runDir, logger, tracer = null, now = () => new Date(), deadline = null, localTools = [], localServers = {},
-  mcpConfig = null, alerts = [],
+  mcpConfig = null, alerts = [], budgetUsd = null,
 }) => {
   const slug = project.slug;
   const date = now().toISOString().slice(0, 10);
@@ -255,7 +255,12 @@ const runProjectSession = async ({
     localTools,
     localServers,
     mcpConfig: mcpConfig || engine.mcpConfig || null,
-    bounds: { maxTurns: bounds.maxTurns, maxBudgetUsd: bounds.maxBudgetUsdProject, timeoutMs: bounds.modelTimeoutMs },
+    bounds: {
+      maxTurns: bounds.maxTurns,
+      // The stage may grant less than the project budget when the run budget is nearly spent (FR-012).
+      maxBudgetUsd: budgetUsd === null || budgetUsd === undefined ? bounds.maxBudgetUsdProject : budgetUsd,
+      timeoutMs: bounds.modelTimeoutMs,
+    },
     model: config.model.name,
     effort: config.model.effort,
     sessionName: slug,

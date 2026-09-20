@@ -68,6 +68,15 @@ run, prints a JSON comparison of items before and after, and is the diff a promp
 PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
 against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.
 
+### Budgets
+
+`AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT` caps one project's session and `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN`
+the whole run. The run cap is enforced across sessions: a session is granted at most what the run
+has left after finished and running sessions, no session opens with less than $0.25, and the brief's
+notices say how many projects were analysed before the budget ran out and how many were left out.
+The runtime hands structured output back through a tool of its own, `StructuredOutput`, which the
+hooks and both engines always allow; nothing else outside `agent/tools.json` is.
+
 ### When the analysis cannot run
 
 A model session that fails before producing a result, because the runtime exited, refused the

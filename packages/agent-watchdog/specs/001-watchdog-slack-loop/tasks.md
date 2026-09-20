@@ -425,6 +425,15 @@ markers by code (FR-078 to FR-082).
 **Checkpoint**: the second hosted run shows one line for a programme-wide alert, metrics next to alerts, housekeeping
 and resolved notices, and markers in Slack and in the image.
 
+## Phase 18: Structured-output tool and run budget (revision 14, 2026-09-20)
+
+**Purpose**: The second complete hosted run denied the runtime's `StructuredOutput` tool in every session and
+spent the full project budget each time; the run budget was declared but never enforced (research.md R-20).
+
+- [X] T186 [P] Tests first: `test/agent/hooks.spec.js` (runtime tool approved, not recorded), `test/agent/engine-sdk.spec.js` and `test/agent/engine-cli.spec.js` (allowed tools), `test/agent/stage-agent.spec.js` (run budget stops sessions, grants the remainder), `test/rollup/notices.spec.js` (budget notice)
+- [X] T187 `RUNTIME_TOOLS` in `agent/hooks.js`, allowed in `src/agent/engine-sdk.js` and `src/agent/engine-cli.js`
+- [X] T188 Run budget across sessions in `src/cli/stages/agent.js` with `budgetUsd` on `src/agent/session-loop.js`; `run_budget` in the agent summary; `runBudgetNotice` in `src/rollup/notices.js` read by `src/cli/stages/rollup.js`; environment contract, `.env.example`, spec edge case, research R-20, README, AGENTS
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -615,4 +624,9 @@ US3 can proceed in parallel, then US4, US5 and US6.
   durable episode record before the run appends its own events; connected users enter ranking as an order of
   magnitude so confidence still decides among peers; markers are added at render time and never stored, so
   feedback matching, replay and the gate see plain text; the image alt text stays plain for screen readers.
+- Structured-output tool and run budget (2026-09-20, Phase 18): the runtime tool is approved in the hook and the
+  engines rather than added to `agent/tools.json`, which stays the list of tools the model may reach for; the
+  hand-off is not recorded in `tool-calls.jsonl` since replay serves recorded MCP results, not the runtime's own
+  mechanics; the minimum session budget is $0.25 because a pass over a project's candidates cannot finish below
+  it; the budget reserved for running sessions counts against the run budget so concurrency cannot overshoot it.
 

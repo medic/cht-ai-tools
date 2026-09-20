@@ -934,3 +934,25 @@ replay comparison work on plain text); a threshold per rule for patterns (reject
 window generalise; a rule-specific knob can come with feedback); ranking by absolute user counts
 (rejected: a project with 1,200 users would always beat one with 400 whatever the confidence).
 
+## R-20. The runtime's structured-output tool, and the run budget (S-4 continued)
+
+**Evidence**: hosted run `2026-09-19-f5` on 2026-09-20: every session logged
+`agent.tool_denied` for `tool_name: StructuredOutput`, ended with `bounds_hit: ["budget"]` and cost
+$2.07 to $2.35 with zero items; `src/config/schema.js` declared `AGENT_WATCHDOG_MAX_BUDGET_USD_RUN`
+but no code read it (run record, repo).
+
+**Findings**: with `outputFormat` set, the Claude Code runtime delivers structured output through a
+tool of its own named `StructuredOutput`. Our PreToolUse hook and the `allowedTools` list denied
+every tool not in `agent/tools.json`, so the model could never hand its findings back and spent the
+whole per-project budget on retries. The per-project budget held; the run budget existed only on
+paper, so ninety projects would have cost about $190.
+
+**Decision**: `agent/hooks.js` approves `StructuredOutput` always and never records it as a tool
+call; both engines add it to the allowed tools whenever an output schema is set. The agent stage
+enforces the run budget across sessions: a session is granted `min(project budget, run budget minus
+what finished sessions spent minus what running sessions may still spend)`, no session opens under
+$0.25, and the projects left out are listed in `agent.summary.json` (`run_budget`) and named in the
+brief's `Analysis incomplete` notice. Measure before tuning: with the tool approved, the next run
+gives the first real per-project cost; until then a lower per-project budget and a cheaper model
+for the per-project passes are the safe settings.
+

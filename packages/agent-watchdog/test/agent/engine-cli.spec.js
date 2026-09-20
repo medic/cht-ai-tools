@@ -107,7 +107,7 @@ describe('agent/engine-cli', function () {
       '--input-format', 'stream-json', '--output-format', 'stream-json',
       '--system-prompt-file', promptFile,
       '--tools', '',
-      '--allowed-tools', ...definition.tools.allowed,
+      '--allowed-tools', ...definition.tools.allowed, 'StructuredOutput',
       '--permission-mode', 'dontAsk',
       '--mcp-config', mcpFile,
       '--strict-mcp-config',
@@ -165,7 +165,9 @@ describe('agent/engine-cli', function () {
     });
     expect(turn.structuredOutput).to.deep.equal({ headline: 'h' });
     const [record] = readRecord(recordFile);
-    expect(record.argv).to.not.include('--allowed-tools');
+    // Only the runtime's own StructuredOutput tool is allowed when the turn has no tools.
+    expect(record.argv.slice(record.argv.indexOf('--allowed-tools'), record.argv.indexOf('--allowed-tools') + 2))
+      .to.deep.equal(['--allowed-tools', 'StructuredOutput']);
     expect(record.argv).to.not.include('--mcp-config');
     expect(record.argv).to.include('--strict-mcp-config');
     const toolsAt = record.argv.indexOf('--tools');

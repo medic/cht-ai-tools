@@ -407,7 +407,9 @@ line that shows the alert and its metric together.
   "nothing to flag" headline (revision 13).
 - Tracing cannot be flushed at the end of a run (credentials rejected, exporter unreachable): the
   failure is logged and the run's exit code is unaffected (revision 13).
-- Tool loop, token or cost bound reached: stop, use what was gathered, say so in the post.
+- Tool loop, token or cost bound reached: stop, use what was gathered, say so in the post. The
+  run budget is enforced across sessions: once it is spent no further session opens, and the brief
+  names how many projects were analysed and how many were left out (revision 14).
 - Second run on the same date: refuse unless explicitly forced; a forced run supersedes and
   links the earlier post.
 - Fetched text (forum, documentation, issues, annotations, notes, corpus items) attempts to

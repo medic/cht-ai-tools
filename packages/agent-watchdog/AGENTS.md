@@ -24,7 +24,11 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
   draft-07 only. A model session that fails before a result is an `error` bound with its message on
   the pass record, and a run whose sessions all failed publishes the degraded brief naming the
   failure, never "nothing to flag". A tracing flush failure is logged and never changes the exit code.
-- The model's tools are the enumerated list in `agent/tools.json`. No shell, web or file tools.
+- The model's tools are the enumerated list in `agent/tools.json`. No shell, web or file tools. The
+  runtime's own `StructuredOutput` tool is the one exception, approved by `agent/hooks.js` so the model
+  can hand its findings back; it is never recorded as a tool call.
+- Budgets are enforced in code: the project budget by the runtime, the run budget across sessions by
+  `src/cli/stages/agent.js`, which names the projects it could not analyse.
 - Secrets never appear in prompts, logs, posts, run records or this repository. `scripts/scan-secrets.js`
   checks the repository in CI and every run scans its own artefacts at the end (SC-010); a deliberate
   sample value in a test carries `// scan-secrets:allow` on its line.
