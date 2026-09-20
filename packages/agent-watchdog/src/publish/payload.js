@@ -244,13 +244,13 @@ const buildPayload = ({
 
   if (brief.kind === 'heartbeat' || brief.kind === 'failure') {
     const view = {
-      headline: brief.headline,
+      headline: withMarker(headlineMarker(brief), brief.headline),
       has_expected_load_notice: Boolean(brief.expected_load_notice),
       expected_load_notice: brief.expected_load_notice || '',
       has_trace: Boolean(brief.footer && brief.footer.trace_url),
       trace_url: brief.footer ? brief.footer.trace_url : null,
       has_notices: Boolean(brief.notices && brief.notices.length),
-      notices_text: (brief.notices || []).join(' · '),
+      notices_text: (brief.notices || []).map(markedNotice).join(' · '),
       cost_text: formatCost(brief.footer ? brief.footer.cost_usd : 0),
     };
     const text = truncate(template(brief.kind)(view).trim(), TEXT_MAX);

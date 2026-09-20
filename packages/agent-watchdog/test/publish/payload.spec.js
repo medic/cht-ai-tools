@@ -103,6 +103,7 @@ describe('publish/payload', () => {
     const heartbeat = buildPayload({ ...args, brief: quiet, items: [] });
     expect(heartbeat.parent.blocks).to.equal(undefined);
     expect(heartbeat.parent.text).to.include('All quiet');
+    expect(heartbeat.parent.text, 'the heartbeat headline carries its marker (FR-082)').to.include('✅ All quiet');
     expect(heartbeat.parent.metadata.event_payload.kind).to.equal('heartbeat');
     expect(heartbeat.replies).to.deep.equal([]);
     expect(heartbeat.image).to.equal(null);
