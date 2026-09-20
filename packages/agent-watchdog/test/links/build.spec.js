@@ -66,6 +66,11 @@ describe('links/build: alert-list links (FR-070, research.md R-14)', () => {
       .to.equal('namespace:CHT state:firing label:instance=~"^(north-a\\.example\\.org|north-b\\.example\\.org)$"');
     expect(links.rules.map((r) => r.title)).to.deep.equal(['Outbound Push Backlog', 'Sentinel Backlog']);
     expect(new URL(links.rules[1].url).searchParams.get('search')).to.include('rule:"Sentinel Backlog"');
-    expect(links.all).to.have.length(3);
+    // Links without the host filter, for a reply the filtered ones would not fit in (revision 17).
+    expect(new URL(links.short.group).searchParams.get('search')).to.equal('namespace:CHT state:firing');
+    expect(links.short.rules.map((r) => r.title)).to.deep.equal(['Outbound Push Backlog', 'Sentinel Backlog']);
+    expect(new URL(links.short.rules[1].url).searchParams.get('search'))
+      .to.equal('namespace:CHT state:firing rule:"Sentinel Backlog"');
+    expect(links.all).to.have.length(6);
   });
 });

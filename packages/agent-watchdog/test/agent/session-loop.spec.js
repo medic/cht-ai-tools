@@ -231,6 +231,33 @@ describe('agent/session-loop', () => {
     expect(slow.errors[0].bound).to.equal('timeout');
   });
 
+  it('records a result the runtime marks as an error as an error bound with its message and stops (revision 17)',
+    async () => {
+      const text = "There's an issue with the selected model (claude-opus-4.8). It may not exist or you may not have "
+        + 'access to it. Run --model to pick a different model.';
+      const zero = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      const engine = createFakeEngine({ responses: [
+        { structuredOutput: null, result: { subtype: 'success', is_error: true, result_text: text, usage: zero,
+          total_cost_usd: 0, num_turns: 1 } },
+      ] });
+      const result = await run(engine);
+      expect(result.bounds_hit).to.deep.equal(['error']);
+      expect(result.items).to.deep.equal([]);
+      expect(result.errors).to.deep.equal([{ pass: 1, attempt: 1, message: text, bound: 'error' }]);
+      // No revision and no second pass: the failure will not change with a new prompt.
+      expect(engine.sessions[0].turns).to.have.length(1);
+      const passes = await runDir.readJson(`${project.slug}/passes.json`);
+      expect(passes.bounds_hit).to.deep.equal(['error']);
+      expect(passes.errors[0].message).to.include('selected model');
+      // A budget stop the runtime also marks as an error keeps its bound.
+      const budget = createFakeEngine({ responses: [
+        { structuredOutput: null, result: { subtype: 'error_max_budget_usd', is_error: true, result_text: 'budget' } },
+      ] });
+      const stopped = await run(budget);
+      expect(stopped.bounds_hit).to.deep.equal(['budget']);
+      expect(stopped.errors).to.deep.equal([]);
+    });
+
   it('honours the run deadline before opening a new turn', async () => {
     const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
     const result = await run(engine, { deadline: Date.now() - 1 });

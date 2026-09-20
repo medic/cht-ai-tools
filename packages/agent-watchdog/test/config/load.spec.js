@@ -193,6 +193,23 @@ describe('config/load', () => {
     expect(() => loadConfig({ env, command: 'purge' })).to.not.throw();
   });
 
+  it('rejects a model id that is not lowercase letters, digits and hyphens, and names the format', () => {
+    const env = { ...baseEnv(), AGENT_WATCHDOG_MODEL: 'claude-opus-4.8' };
+    let error;
+    try {
+      loadConfig({ env, command: 'run' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error.code).to.equal(78);
+    expect(error.keys).to.deep.equal(['AGENT_WATCHDOG_MODEL']);
+    expect(error.message).to.include('claude-opus-4-8');
+    const fine = { ...baseEnv(), AGENT_WATCHDOG_MODEL: 'claude-opus-4-8', AGENT_WATCHDOG_MODEL_DISTILL: 'opus' };
+    expect(() => loadConfig({ env: fine, command: 'run' })).to.not.throw();
+    const upper = { ...baseEnv(), AGENT_WATCHDOG_MODEL_FEEDBACK: 'Claude-Sonnet' };
+    expect(() => loadConfig({ env: upper, command: 'run' })).to.throw(ConfigError);
+  });
+
   it('reads the optional claude executable path for the cli engine', () => {
     const unset = loadConfig({ env: baseEnv(), command: 'run' });
     expect(unset.config.runtime.claudePath).to.equal(null);

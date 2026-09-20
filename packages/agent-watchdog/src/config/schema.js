@@ -55,6 +55,11 @@ const int = (min, max) => z.coerce.number().int().min(min).max(max);
 const num = (min, max) => z.coerce.number().min(min).max(max);
 const text = z.string().min(1);
 const url = z.url();
+// Model ids as the API names them: a dot or a capital is a typo the runtime would only report at the first turn.
+const modelId = text.regex(
+  /^[a-z0-9][a-z0-9-]*$/,
+  'model ids use lowercase letters, digits and hyphens, as the API names them (claude-opus-4-8, not claude-opus-4.8)',
+);
 
 const modelCommands = ['run', 'replay', 'distill', 'calibrate'];
 const forRun = ({ command }) => command === 'run';
@@ -111,7 +116,7 @@ const VARIABLES = [
   {
     env: 'AGENT_WATCHDOG_MODEL',
     path: 'model.name',
-    schema: text,
+    schema: modelId,
     default: 'claude-fable-5-1',
   },
   {
@@ -123,19 +128,19 @@ const VARIABLES = [
   {
     env: 'AGENT_WATCHDOG_MODEL_FEEDBACK',
     path: 'model.feedback',
-    schema: text,
+    schema: modelId,
     defaultFrom: 'model.name',
   },
   {
     env: 'AGENT_WATCHDOG_MODEL_CALIBRATION',
     path: 'model.calibration',
-    schema: text,
+    schema: modelId,
     defaultFrom: 'model.name',
   },
   {
     env: 'AGENT_WATCHDOG_MODEL_DISTILL',
     path: 'model.distill',
-    schema: text,
+    schema: modelId,
     defaultFrom: 'model.name',
   },
   {

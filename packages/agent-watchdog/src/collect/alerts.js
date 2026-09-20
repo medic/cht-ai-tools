@@ -62,7 +62,10 @@ const panelIdOf = (annotations) => {
   return Number.isInteger(n) ? n : null;
 };
 
-const hostOfLabels = (labels) => (labels && labels.instance ? normaliseHost(labels.instance) : null);
+// A scrape port (`host:9100` from a node exporter) is not part of the project's host (revision 17).
+const hostOfLabels = (labels) => (labels && labels.instance
+  ? normaliseHost(labels.instance).replace(/:\d+$/, '')
+  : null);
 
 const instanceRecord = ({ ruleUid, title, alert, ruleAnnotations = {} }) => {
   const labels = alert.labels || {};

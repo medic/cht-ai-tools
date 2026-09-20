@@ -38,6 +38,8 @@ describe('agent/turn-mapper', () => {
       permission_denials: [],
       errors: [],
       stop_reason: 'end_turn',
+      is_error: false,
+      result_text: null,
     });
     expect(turn.toolCalls).to.deep.equal([]);
     expect(turn.referenceUnavailable).to.equal(false);
@@ -104,6 +106,24 @@ describe('agent/turn-mapper', () => {
     expect(turn.structuredOutput).to.equal(null);
   });
 
+  it('exposes a result the runtime marks as an error with its text, as the CLI reports a bad model (revision 17)',
+    () => {
+      const mapper = createTurnMapper();
+      mapper.beginTurn();
+      const text = "There's an issue with the selected model (claude-opus-4.8). It may not exist or you may not have "
+        + 'access to it. Run --model to pick a different model.';
+      const turn = mapper.handle(result({
+        subtype: 'success', is_error: true, result: text, structured_output: undefined, total_cost_usd: 0,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      }));
+      expect(turn.structuredOutput).to.equal(null);
+      expect(turn.result).to.include({ subtype: 'success', is_error: true, result_text: text, total_cost_usd: 0 });
+      // The text is capped so a runaway runtime message cannot flood the pass record.
+      mapper.beginTurn();
+      const long = mapper.handle(result({ is_error: true, result: 'x'.repeat(2000) }));
+      expect(long.result.result_text).to.have.length(500);
+    });
+
   it('counts assistant messages in the current turn and synthesises a capped result with the calls so far', () => {
     const mapper = createTurnMapper();
     mapper.handle(init());
@@ -129,6 +149,8 @@ describe('agent/turn-mapper', () => {
       permission_denials: [],
       errors: ['harness turn cap reached'],
       stop_reason: null,
+      is_error: false,
+      result_text: null,
     });
     expect(capped.toolCalls).to.have.length(1);
     expect(mapper.assistantTurns).to.equal(0);

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 16)
+**Status**: Draft (revision 17)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -474,6 +474,22 @@ line that shows the alert and its metric together.
   says so, with the count of projects and what was spent, and degrades to the computed candidates
   when nothing else was produced, instead of reading as a day with no metric changes (FR-067 for
   alerts, FR-012 for the bound, revision 16).
+- The runtime answers a turn with a result it marks as an error (a model it cannot use, an
+  authentication problem) rather than with structured output: the project's analysis fails with the
+  runtime's own message, is not retried with a revision prompt, and the brief names the failure; it
+  never reads as a quiet day (FR-058, revision 17).
+- A model id is written with a dot or a capital (`claude-opus-4.8`): the configuration is rejected
+  before anything runs, naming the form the API uses (`claude-opus-4-8`) (FR-051, revision 17).
+- An alert group's thread reply would exceed one message block: it is fitted by code, never by
+  cutting a link, keeping as many instances as fit, then naming fewer of a pattern's hosts with the
+  count of the rest, then dropping the per-rule filtered links, then using links without the host
+  filter (FR-066, revision 17).
+- An alert instance's label names the host with a scrape port (`host:9100`): the port is not part
+  of the host, so the instance joins its project and programme (FR-068, revision 17).
+- An episode is open on a host the run now ignores: it is neither observed nor cleared, and never
+  reported as resolved, because the run stopped watching it (FR-067, FR-068, revision 17).
+- A run analyses only some projects (a project filter): a host whose scrape target discovery found
+  down still counts as dead for housekeeping (FR-080, revision 17).
 
 ## Requirements *(mandatory)*
 
@@ -645,7 +661,8 @@ Alerts and groups
   the oldest start, the number stale, and a code-built link to the filtered alert list; when a
   group has several categories the bullet carries one sub-bullet per category. Alert bullets rank
   with flagged items by importance, critical first. Each alert group gets one thread reply listing
-  its instances (at most fifty, with the count of the rest) that can receive reactions and notes.
+  its instances (at most fifty, with the count of the rest) that can receive reactions and notes;
+  the reply is fitted into one message block by code, and a link is never cut (revision 17).
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -1082,6 +1099,17 @@ Configuration
   spend, and the brief degrades to the candidates when nothing else exists. The measured first-pass
   cost of one project with 22 candidates exceeded $0.75 at the configured model and effort; the
   per-project budget is tuned after measuring one complete session, not guessed (revision 16).
+- Q: The next single-project preview completed with exit 0, cost $0.00 and "Alerts only": was it a
+  success? → A: No. The model id `claude-opus-4.8` does not exist; the runtime answered every turn
+  in under half a second with a result marked as an error and no usage, and the harness read it as a
+  turn without structured output, so six turns were "revised" for nothing and the brief called it a
+  quiet day. Now a result the runtime marks as an error fails the project's analysis with the
+  runtime's message, and model ids are validated at startup. The same output showed four more
+  defects, all fixed: the Kenya client-errors reply was cut mid-link (replies are now fitted without
+  cutting a link); two node-exporter hosts with `:9100` fell into "Other" (the port is stripped);
+  a resolved line named an ignored training host (episodes on ignored hosts are left alone); and
+  stale API-down alerts on dead hosts were not housekeeping in a preview (discovery's target health
+  stands in for projects not analysed) (revision 17).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

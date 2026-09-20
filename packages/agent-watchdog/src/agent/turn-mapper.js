@@ -5,6 +5,9 @@
 // The runtime reports `total_cost_usd` as a running total across the turns of one session (sdk.d.ts), so the
 // per-turn cost handed to the session loop is the delta and the running total travels as `cumulative_cost_usd`.
 
+/** Cap on the runtime's result text kept on a turn, so a runaway message cannot flood the pass record. */
+const RESULT_TEXT_MAX = 500;
+
 const normaliseUsage = (usage = {}) => ({
   input_tokens: usage.input_tokens || 0,
   output_tokens: usage.output_tokens || 0,
@@ -108,6 +111,10 @@ const createTurnMapper = ({ docsServer = 'cht-docs' } = {}) => {
           permission_denials: message.permission_denials || [],
           errors: message.errors || [],
           stop_reason: message.stop_reason || null,
+          // The runtime reports some failures (a model it cannot use, an authentication problem) as a result it
+          // marks with is_error and explains in `result` (revision 17).
+          is_error: Boolean(message.is_error),
+          result_text: typeof message.result === 'string' ? message.result.slice(0, RESULT_TEXT_MAX) : null,
         },
       });
     }
@@ -128,6 +135,8 @@ const createTurnMapper = ({ docsServer = 'cht-docs' } = {}) => {
       permission_denials: [],
       errors,
       stop_reason: null,
+      is_error: false,
+      result_text: null,
     },
   });
 

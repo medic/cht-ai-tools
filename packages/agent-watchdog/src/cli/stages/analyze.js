@@ -8,7 +8,7 @@ const { computeCandidates, suppressByHorizon } = require('../../analyze/candidat
 const { normaliseHost } = require('../../config/policy');
 const { roleMatches } = require('../../analyze/thresholds');
 const { runStartOf } = require('./collect');
-const { classifyAlerts } = require('../../alerts/classify');
+const { classifyAlerts, deadHostsFromDiscovery } = require('../../alerts/classify');
 const { previousRunIds } = require('../../rollup/history');
 const { RunDir } = require('../../store/run-dir');
 
@@ -89,6 +89,11 @@ const run = async (ctx) => {
     ? await runDir.readJson('alerts.json')
     : { available: false, reason: 'alerts.json was not collected' };
   const dataDir = (config.storage && config.storage.dataDir) || runDir.dataDir;
+  // Projects this run did not analyse (a project filter) still count as dead when discovery found their scrape
+  // target down, so housekeeping holds in a preview too (FR-080, revision 17).
+  for (const host of deadHostsFromDiscovery(discovery)) {
+    deadHosts.add(host);
+  }
   const classified = classifyAlerts({
     collected,
     alertsPolicy: policy.alerts || { stale_after_days: 14, rules: {}, categories: {} },

@@ -385,3 +385,25 @@ result while the brief would have read "alerts only" (research.md R-21).
 - **VII**: unchanged.
 - **VIII**: one audience; the log carries the operator hint (which variable to raise), the brief only
   the fact and the spend. Result: PASS.
+
+### Revision 17 delta: a run that read as quiet, and four defects in the same output
+
+Re-checked on 2026-09-20 after a single-project preview exited 0 at $0.00 with "Alerts only": the
+model id was a typo the runtime reported as an error result, which the harness took for a turn
+without structured output (research.md R-22). The same payload showed a reply cut mid-link, two
+hosts misgrouped by a scrape port, a resolved line on an ignored host, and stale alerts on dead
+hosts not treated as housekeeping in a preview.
+
+- **I**: no new dependency; a regular expression on model ids, two fields on the mapped result, a
+  fitting loop over the reply's parts, and links without the host filter from the same builder.
+- **II**: tests first for each: the mapper's `is_error`, the session loop's error bound without
+  retries, the model id rejection, the reply fitting (43 and 140 hosts), the port strip, ignored
+  hosts on episodes and the resolved notice, dead hosts from discovery.
+- **III**: what fails, what fits and what is dead are all decided by code from the runtime's own
+  message, the block limit and discovery's target health.
+- **IV**: `alerts.classified.json` gains `ignored_hosts`; nothing else is stored.
+- **V**: no new stage.
+- **VI**: unchanged.
+- **VII**: the model id is configuration, validated where the rest is; no prompt changes.
+- **VIII**: one audience; the reply keeps its links whole because they are what the reader clicks.
+  Result: PASS.

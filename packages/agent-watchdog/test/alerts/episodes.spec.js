@@ -160,6 +160,23 @@ describe('alerts/episodes', () => {
       expect(events.every((e) => e.duration_hours === null || e.duration_hours >= 0)).to.equal(true);
     });
 
+  it('neither observes nor clears an episode on a host that is now ignored, and counts it (revision 17)', async () => {
+    const training = classified('sentinel', 'training-1.south.example.org');
+    await updateEpisodes({
+      dataDir, runId: '2026-09-18', date: '2026-09-18', runStart: new Date(RUN_START),
+      classified: { instances: [training] }, discovery: { projects: [] },
+    });
+    const out = await updateEpisodes({
+      dataDir, runId: '2026-09-19', date: '2026-09-19', runStart: new Date(DAY2), classified: { instances: [] },
+      ignoredHosts: ['training-1.south.example.org'], discovery: { projects: [] },
+    });
+    expect(out.cleared).to.deep.equal([]);
+    expect(out.observed).to.deep.equal([]);
+    expect(out.ignored).to.equal(1);
+    expect(openEpisodes(await readEpisodeEvents(dataDir)).size).to.equal(1);
+    expect(fs.existsSync(path.join(dataDir, 'corpus', 'outcomes', '2026-09-19.jsonl'))).to.equal(false);
+  });
+
   it('is durable for retention and empty on a fresh volume', async () => {
     const { classify } = require('../../src/store/retention');
     expect(classify('alerts/episodes.jsonl')).to.equal('durable');

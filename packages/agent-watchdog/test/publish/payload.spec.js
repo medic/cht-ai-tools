@@ -332,13 +332,86 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
     expect(reply.blocks[0].type).to.equal('section');
   });
 
-  it('lists at most fifty instances and says how many more there are', () => {
+  it('lists at most fifty instances, fewer when the block cannot hold them, and says how many more there are', () => {
     const payload = buildPayload({ ...args, alertGroups: [many], alertLinks: new Map() });
     const reply = payload.replies[1];
     expect(MAX_ALERT_INSTANCES).to.equal(50);
-    expect(reply.text.match(/DB Fragmentation on/g)).to.have.length(50);
-    expect(reply.text).to.include('and 10 more');
-    expect(reply.text.length).to.be.at.most(4000);
+    const shown = (reply.text.match(/DB Fragmentation on/g) || []).length;
+    expect(shown).to.be.at.most(50).and.at.least(20);
+    expect(reply.text).to.include(`and ${60 - shown} more`);
+    expect(reply.text.length).to.be.at.most(3000);
+    expect(reply.text).to.equal(reply.blocks[0].text.text);
+  });
+
+  it('fits an alert reply into one section without cutting a link: fewer hosts named, then shorter links', () => {
+    const hosts = Array.from({ length: 43 }, (_, i) => `county-${String(i).padStart(2, '0')}.south.example.org`);
+    const instances = hosts.map((h) => classified('delivery', h, { started_at: '2026-09-18T00:00:00Z' }));
+    const wide = alertGroupOf(instances, {
+      patterns: [{
+        title: 'Message Delivery Rate', count: 43, of: 47, since_min: '2026-09-18', since_max: '2026-09-20', hosts,
+        instance_ids: instances.map((i) => i.instance_id),
+      }],
+    });
+    const filteredFor = (list, extra) => 'https://watchdog.example.org/alerting/list?search='
+      + encodeURIComponent(`namespace:CHT state:firing ${extra}label:instance=~"^(${list.join('|')})$"`);
+    const filtered = (extra) => filteredFor(hosts, extra);
+    const shortRule = 'https://watchdog.example.org/alerting/list?search=rule';
+    const linksFor = (list) => ({
+      group: filteredFor(list, ''),
+      rules: [{ title: 'Message Delivery Rate', url: filteredFor(list, 'rule:"Message Delivery Rate" ') }],
+      short: {
+        group: 'https://watchdog.example.org/alerting/list?search=all',
+        rules: [{ title: 'Message Delivery Rate', url: shortRule }],
+      },
+      all: [],
+    });
+    const links = linksFor(hosts);
+    const wellFormed = (text) => {
+      expect(text.length).to.be.at.most(3000);
+      expect(text).to.not.include('…<');
+      expect(text).to.not.match(/…$/);
+      const linksInText = [...text.matchAll(/<(https?:[^|>]+)\|([^>]*)>/g)];
+      expect(linksInText.length).to.be.at.least(1);
+      for (const [, url] of linksInText) {
+        expect(url).to.match(/^https:\/\/watchdog\.example\.org\/alerting\/list\?search=/);
+      }
+      return linksInText;
+    };
+    // Forty-three hosts: both filtered links do not fit, so the per-rule filtered link goes and the filtered group
+    // link is kept with every host still named; the short links are not needed yet.
+    const payload = buildPayload({ ...args, alertGroups: [wide], alertLinks: new Map([[wide.alert_key, links]]) });
+    const reply = payload.replies[1];
+    const text = reply.blocks[0].text.text;
+    expect(reply.text).to.equal(text);
+    wellFormed(text);
+    expect(text).to.include(filtered(''));
+    expect(text).to.not.include(filtered('rule:"Message Delivery Rate" '));
+    expect(text).to.not.include(shortRule);
+    expect(text).to.include('county-00.south.example.org').and.include('county-42.south.example.org');
+    expect(text).to.not.match(/\+\d+ more/);
+    expect(text).to.include('Programme-wide: Message Delivery Rate on 43 of 47 projects');
+    // Many more hosts: even the group link filtered by host is too long, so the links without the host filter are
+    // used, the host list stays elided with its count, and no link is cut.
+    const crowd = Array.from({ length: 140 }, (_, i) => `facility-${String(i).padStart(3, '0')}.south.example.org`);
+    const crowdInstances = crowd.map((h) => classified('delivery', h, { started_at: '2026-09-18T00:00:00Z' }));
+    const crowded = alertGroupOf(crowdInstances, {
+      patterns: [{
+        title: 'Message Delivery Rate', count: 140, of: 150, since_min: '2026-09-18', since_max: '2026-09-20',
+        hosts: crowd, instance_ids: crowdInstances.map((i) => i.instance_id),
+      }],
+    });
+    const crowdedPayload = buildPayload({
+      ...args, alertGroups: [crowded], alertLinks: new Map([[crowded.alert_key, linksFor(crowd)]]),
+    });
+    const crowdedText = crowdedPayload.replies[1].blocks[0].text.text;
+    wellFormed(crowdedText);
+    expect(crowdedText).to.include(shortRule);
+    expect(crowdedText).to.not.include('label%3Ainstance');
+    expect(crowdedText).to.match(/facility-000\.south\.example\.org.*, \+128 more/);
+    expect(crowdedText).to.not.include('facility-139');
+    // A group that fits keeps every host and the filtered links.
+    const small = buildPayload(args);
+    expect(small.replies[1].text).to.include('https://watchdog.example.org/alerting/list?search=rule');
   });
 
   it('keeps the alerts bullet in the parent text and blocks as an indented section', () => {

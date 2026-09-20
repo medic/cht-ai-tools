@@ -80,11 +80,16 @@ const classifyAlerts = ({
   // Ages count from when the alerts were read (the snapshot is live), else from the run start: a forced re-run of
   // a past date otherwise sees alerts that started after its date (revision 16).
   const start = new Date(observedAt || (collected && collected.fetched_at) || runStart);
+  // Hosts whose instances were dropped at collection (FR-068): the episodes on them are neither observed nor
+  // cleared, since the run no longer watches them (revision 17).
+  const ignoredHosts = [...new Set(((collected && collected.ignored) || []).map((i) => i.host).filter(Boolean))]
+    .sort();
   if (!collected || !collected.available) {
     return {
       available: false,
       reason: collected && collected.reason ? collected.reason : 'no alert data was collected',
       observed_at: start.toISOString(),
+      ignored_hosts: ignoredHosts,
       stale_after_days: staleAfterDays,
       rules: [],
       instances: [],
@@ -122,6 +127,7 @@ const classifyAlerts = ({
     available: true,
     reason: null,
     observed_at: start.toISOString(),
+    ignored_hosts: ignoredHosts,
     stale_after_days: staleAfterDays,
     rules,
     instances,
@@ -138,4 +144,25 @@ const classifyAlerts = ({
   };
 };
 
-module.exports = { classifyAlerts, importanceOf, UNCATEGORISED, DEFAULT_STALE_AFTER_DAYS };
+/**
+ * Hosts whose CHT scrape target discovery found down (FR-080): the fallback for projects this run did not analyse
+ * (a project filter), where the current window's scrape metric is not computed. The job comes from the policy's
+ * scrape-target metric (`up{job="cht"}`), `cht` when it names none.
+ */
+const deadHostsFromDiscovery = (discovery) => {
+  const dead = new Set();
+  if (!discovery) {
+    return dead;
+  }
+  const match = /job="([^"]+)"/.exec(String(discovery.scrape_target_metric || ''));
+  const job = match ? match[1] : 'cht';
+  for (const project of discovery.projects || []) {
+    const target = (project.scrape_targets || []).find((t) => t.job === job);
+    if (target && target.health === 'down') {
+      dead.add(project.host);
+    }
+  }
+  return dead;
+};
+
+module.exports = { classifyAlerts, deadHostsFromDiscovery, importanceOf, UNCATEGORISED, DEFAULT_STALE_AFTER_DAYS };

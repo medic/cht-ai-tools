@@ -96,6 +96,14 @@ describe('collect/alerts', () => {
       expect(doc.instances.some((i) => i.state === 'pending')).to.equal(true);
     });
 
+    it('strips a scrape port from the instance label so the host matches its project (revision 17)', () => {
+      const { hostOfLabels } = require('../../src/collect/alerts');
+      expect(hostOfLabels({ instance: 'samburu.south.example.org:9100' })).to.equal('samburu.south.example.org');
+      expect(hostOfLabels({ instance: 'https://north-a.example.org' })).to.equal('north-a.example.org');
+      expect(hostOfLabels({ instance: 'North-A.example.org:443' })).to.equal('north-a.example.org');
+      expect(hostOfLabels({})).to.equal(null);
+    });
+
     it('drops instances on ignored hosts and counts them', () => {
       expect(doc.instances.some((i) => i.host === 'cht-dev.example.org')).to.equal(false);
       expect(doc.ignored)

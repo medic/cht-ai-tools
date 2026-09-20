@@ -201,6 +201,7 @@ const run = async (ctx) => {
     const cleared = clearedEpisodes({
       events: await readEpisodeEvents(dataDirForHistory), firingIds,
       runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`), observedAt: alertsObservedAt,
+      ignoredHosts: classified.ignored_hosts || [],
     });
     const resolved = resolvedNotice(cleared);
     if (resolved) {
@@ -283,6 +284,7 @@ const run = async (ctx) => {
       date: ctx.date,
       runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
       observedAt: alertsObservedAt,
+      ignoredHosts: classified.ignored_hosts || [],
       classified,
       items: ranked,
       candidatesByProject,

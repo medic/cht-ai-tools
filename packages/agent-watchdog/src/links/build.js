@@ -69,14 +69,27 @@ const buildAlertListLink = ({ grafanaUrl, terms }) => {
   return `${base}${ALERT_LIST_PATH}?search=${encodeURIComponent(terms.join(' '))}`;
 };
 
-/** One link for the whole Alert Group and one per rule title in it (FR-066, FR-070). */
+/**
+ * One link for the whole Alert Group and one per rule title in it (FR-066, FR-070), plus `short` links without the
+ * host filter for a reply the filtered ones would not fit in (revision 17).
+ */
 const buildAlertGroupLinks = ({ grafanaUrl, group }) => {
   const hosts = group.hosts || [];
   const groupLink = buildAlertListLink({ grafanaUrl, terms: alertTerms({ hosts }) });
-  const rules = (group.titles || []).map((title) => ({
+  const titles = group.titles || [];
+  const rules = titles.map((title) => ({
     title, url: buildAlertListLink({ grafanaUrl, terms: alertTerms({ hosts, title }) }),
   }));
-  return { group: groupLink, rules, all: [groupLink, ...rules.map((r) => r.url)] };
+  const short = {
+    group: buildAlertListLink({ grafanaUrl, terms: alertTerms({}) }),
+    rules: titles.map((title) => ({ title, url: buildAlertListLink({ grafanaUrl, terms: alertTerms({ title }) }) })),
+  };
+  return {
+    group: groupLink,
+    rules,
+    short,
+    all: [groupLink, ...rules.map((r) => r.url), short.group, ...short.rules.map((r) => r.url)],
+  };
 };
 
 module.exports = {

@@ -31,11 +31,12 @@ const housekeepingNotice = (housekeeping) => {
 
 /** Open episodes whose instance no longer fires, with how long they fired, oldest first (`observedAt`, else
  * `runStart`, is when the alerts were read). */
-const clearedEpisodes = ({ events, firingIds, runStart, observedAt = null }) => {
+const clearedEpisodes = ({ events, firingIds, runStart, observedAt = null, ignoredHosts = [] }) => {
   const reference = observedAt || runStart;
   const start = reference instanceof Date ? reference.getTime() : Date.parse(reference);
+  const ignored = new Set(ignoredHosts);
   return [...openEpisodes(events).values()]
-    .filter((episode) => !firingIds.has(episode.instance_id))
+    .filter((episode) => !firingIds.has(episode.instance_id) && !(episode.host && ignored.has(episode.host)))
     .map((episode) => ({
       instance_id: episode.instance_id,
       title: episode.title,

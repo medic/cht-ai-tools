@@ -48,7 +48,11 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    first, body items first, then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
    the rule titles, at most fifty instances with host and days firing, the count of the rest, and
    the code-built link to the filtered alert list) with `metadata.event_type: 'agent_watchdog.alerts'`,
-   in body order (FR-066). Replies are never broadcast.
+   in body order (FR-066). A reply is fitted into one 3,000-character section by code and a link is
+   never cut: as many instances as fit, then a pattern's hosts elided to twelve with the count of the
+   rest, then the per-rule filtered links dropped, then the links without the host filter
+   (`buildAlertGroupLinks(...).short`); `text` and the block carry the same fitted string. Replies are
+   never broadcast.
 4. **Record** `chat.getPermalink({ channel, message_ts })` for the parent and each reply into
    `publication.json`; permalinks of thread replies carry `thread_ts` and `cid`.
 5. A forced re-run posts a new parent whose first context block links the superseded post's

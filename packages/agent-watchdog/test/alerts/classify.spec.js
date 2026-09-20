@@ -1,6 +1,6 @@
 // FR-065: category and importance from alerts.yaml, unknown titles uncategorised and medium, staleness after the
 // configured days, newness against the previous run.
-const { classifyAlerts, importanceOf, UNCATEGORISED } = require('../../src/alerts/classify');
+const { classifyAlerts, importanceOf, UNCATEGORISED, deadHostsFromDiscovery } = require('../../src/alerts/classify');
 const { rule, instance, alertsPolicy, PROJECT_GROUPS, RUN_START } = require('../helpers/alerts');
 
 const runStart = new Date(RUN_START);
@@ -67,6 +67,35 @@ describe('alerts/classify classifyAlerts', () => {
     });
     expect(fallback.observed_at).to.equal(runStart.toISOString());
     expect(fallback.instances[0].days_firing).to.equal(12);
+  });
+
+  it('lists the ignored hosts once and derives dead hosts from the discovery targets (revision 17)', () => {
+    const ignored = [
+      { host: 'training-1.south.example.org', pattern: 'training-*', title: 'Sentinel Backlog' },
+      { host: 'training-1.south.example.org', pattern: 'training-*', title: 'API Server Down' },
+      { host: 'cht-dev.example.org', pattern: '*-dev.*', title: 'Sentinel Backlog' },
+    ];
+    const out = classify(null, { collected: { ...collectedWith(instances), ignored } });
+    expect(out.ignored_hosts).to.deep.equal(['cht-dev.example.org', 'training-1.south.example.org']);
+    expect(classify().ignored_hosts).to.deep.equal([]);
+    const unavailable = classifyAlerts({
+      collected: { available: false, reason: 'HTTP 503', rules: [], instances: [], ignored },
+      alertsPolicy: alertsPolicy(), projectGroups: PROJECT_GROUPS, previous: null, runStart,
+    });
+    expect(unavailable.ignored_hosts).to.deep.equal(['cht-dev.example.org', 'training-1.south.example.org']);
+
+    const discovery = {
+      scrape_target_metric: 'up{job="cht"}',
+      projects: [
+        { host: 'dead.example.org', scrape_targets: [{ job: 'cht', health: 'down' }, { job: 'other', health: 'up' }] },
+        { host: 'alive.example.org', scrape_targets: [{ job: 'cht', health: 'up' }] },
+        { host: 'express.example.org', scrape_targets: [{ job: 'cht-express-metrics', health: 'down' }] },
+        { host: 'unknown.example.org', scrape_targets: [] },
+      ],
+    };
+    expect([...deadHostsFromDiscovery(discovery)]).to.deep.equal(['dead.example.org']);
+    expect([...deadHostsFromDiscovery({ projects: [] })]).to.deep.equal([]);
+    expect([...deadHostsFromDiscovery(null)]).to.deep.equal([]);
   });
 
   it('classifies every instance with category, importance, known, group, started_at, days_firing and stale', () => {

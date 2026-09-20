@@ -452,6 +452,17 @@ and would have read "alerts only" while its one session was stopped by the budge
 - [X] T193 `ctx.now` in `src/cli/commands/run.js`; the clock on the alert snapshot in `src/cli/stages/collect.js`; `observedAt` and `observed_at` in `src/alerts/classify.js`; `observedAt`, the clamp and `alerts.episode_duration_clamped` in `src/alerts/episodes.js`; `observedAt` on `clearedEpisodes` in `src/rollup/notices.js`
 - [X] T194 `src/rollup/analysis.js` (`analysisRecord`, `INCOMPLETE_BOUNDS`) used by `src/cli/stages/rollup.js` with `rollup.analysis_incomplete`; the cut-off notice and reason in `src/rollup/brief.js`; spec edge cases, FR-067 and clarification (revision 16); data-model Alert Instance and Alert Episode rows; run-directory contract; plan revision 16 delta; research R-21 and smoke S-20
 
+## Phase 21: An error result read as a quiet day, and four payload defects (revision 17, 2026-09-20)
+
+**Purpose**: A single-project preview exited 0 at $0.00 with "Alerts only" because the model id was a typo the
+runtime reported as an error result; the same payload cut a reply mid-link, misgrouped ported hosts, resolved an
+ignored host and missed housekeeping in a preview (research.md R-22).
+
+- [X] T195 [P] Tests first: `test/agent/turn-mapper.spec.js` (`is_error`, `result_text`), `test/agent/session-loop.spec.js` (error bound without retries, budget stop keeps its bound), `test/config/load.spec.js` (model id format), `test/publish/payload.spec.js` (fitting at 43 and 140 hosts, fewer than fifty instances when needed), `test/links/build.spec.js` (`short` links), `test/collect/alerts.spec.js` (port strip), `test/alerts/classify.spec.js` (`ignored_hosts`, `deadHostsFromDiscovery`), `test/alerts/episodes.spec.js` and `test/rollup/notices.spec.js` (ignored hosts)
+- [X] T196 `is_error` and `result_text` in `src/agent/turn-mapper.js`; the error bound in `src/agent/session-loop.js` (`agent.turn_error`); `modelId` in `src/config/schema.js`
+- [X] T197 Reply fitting in `src/publish/payload.js` (`INSTANCE_STEPS`, `MAX_PATTERN_HOSTS`, `hostList`); `short` links in `src/links/build.js`; `hostOfLabels` port strip in `src/collect/alerts.js`
+- [X] T198 `ignored_hosts` and `deadHostsFromDiscovery` in `src/alerts/classify.js`; `ignoredHosts` on `src/alerts/episodes.js` and `src/rollup/notices.js`, threaded by `src/cli/stages/rollup.js`; discovery dead hosts in `src/cli/stages/analyze.js`; spec edge cases, FR-066 and clarification (revision 17); data-model; environment, slack-payload and run-directory contracts; `.env.example`; plan revision 17 delta; research R-22 and smoke S-21
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

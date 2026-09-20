@@ -220,7 +220,7 @@ One evaluation of a rule for one label set, as reported at run time (FR-064, FR-
 |---|---|---|
 | `instance_id` | string | Hash of `rule_uid` and the sorted label pairs, `alertname` excluded. |
 | `rule_uid`, `title`, `category`, `importance` | | Copied from the Alert Rule. |
-| `host` | string or null | The `instance` label, normalised as for Projects (research.md R-6); null when the rule has no such label. |
+| `host` | string or null | The `instance` label, normalised as for Projects (research.md R-6) and with a scrape port (`:9100`) removed; null when the rule has no such label. |
 | `project_url` | string or null | Derived from `host`. |
 | `group` | string | The host's Project Group label; `Watchdog` when `host` is null. Instances on ignored hosts are dropped at collection and counted in `alerts.json`. |
 | `labels`, `annotations` | object | As collected; untrusted data. |
@@ -248,7 +248,7 @@ in `alerts/episodes.jsonl`.
 |---|---|---|
 | `episode_id` | string | Hash of `instance_id` and the date of `started_at`. |
 | `event` | enum | `opened` (first run to see it firing) \| `observed` (each later run while firing) \| `cleared` (first run that no longer sees it firing). |
-| `run_id`, `at` | string, timestamp | The run that wrote the event and the time it read the alerts (its start within seconds for the scheduled run; a forced re-run's own clock). |
+| `run_id`, `at` | string, timestamp | The run that wrote the event and the time it read the alerts (its start within seconds for the scheduled run; a forced re-run's own clock). An open episode on a host the run now ignores (`ignored_hosts` on the classified file) is neither observed nor cleared. |
 | `instance_id`, `rule_uid`, `title`, `host`, `project_url`, `group`, `category`, `importance` | | Copied from the instance. |
 | `started_at`, `cleared_at` | timestamp, timestamp or null | `cleared_at` only on `cleared`. |
 | `duration_hours` | number or null | On `cleared`; never negative (clock skew between the source and the run is recorded as zero and logged). |

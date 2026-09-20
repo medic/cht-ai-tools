@@ -18,6 +18,9 @@ const ALERTS_EVENT = 'agent_watchdog.alerts';
 // An alert group's thread reply lists at most this many instances and the count of the rest (FR-066).
 const MAX_ALERT_INSTANCES = 50;
 const SECTION_MAX = 3000;
+// Alert replies are fitted into one section: instance counts tried in this order, pattern hosts named up to this.
+const INSTANCE_STEPS = Object.freeze([MAX_ALERT_INSTANCES, 40, 30, 20, 15, 10, 5, 0]);
+const MAX_PATTERN_HOSTS = 12;
 
 /** Slack mrkdwn needs exactly these three escapes for untrusted text. */
 const mrkdwn = (value) => String(value === undefined || value === null ? '' : value)
@@ -166,46 +169,84 @@ const evidenceText = (evidence) => {
  * One thread reply per Alert Group (FR-066): programme-wide patterns as one paragraph each (FR-078), the other
  * instances oldest first with their metric (FR-079), the rest counted, code-built links.
  */
+const hostList = (hosts, max) => (hosts.length <= max
+  ? hosts.join(', ')
+  : `${hosts.slice(0, max).join(', ')}, +${hosts.length - max} more`);
+
 const alertReplyFor = ({ group, links, runId, date, staleAfterDays }) => {
   const patterns = group.patterns || [];
   const inPattern = new Set(patterns.flatMap((p) => p.instance_ids || []));
   const members = (group.instances || []).filter((instance) => !inPattern.has(instance.instance_id));
-  const shown = members.slice(0, MAX_ALERT_INSTANCES);
-  const rest = members.length - shown.length;
-  const linkList = links
+  const fullLinks = links
     ? [
       { url: links.group, label: `all firing ${group.category} alerts for ${group.group}` },
       ...(links.rules || []).map((rule) => ({ url: rule.url, label: rule.title })),
     ]
     : [];
-  const text = truncate(template('alert-group')({
-    group: group.group,
-    category: group.category,
-    importance_label: String(group.importance || 'medium').toUpperCase(),
-    summary_text: `${group.firing} firing, ${group.stale} stale for more than ${staleAfterDays} days, `
-      + `${group.new} new since the previous run`,
-    patterns: patterns.map((p) => ({
-      text: withMarker(MARKERS.pattern,
-        `Programme-wide: ${p.title} on ${p.count} of ${p.of} projects, first ${p.since_min}, last ${p.since_max}`),
-      hosts: (p.hosts || []).join(', '),
-    })),
-    instances: shown.map((instance) => ({
-      title: instance.title,
-      host: instance.host || 'watchdog',
-      since_text: `${String(instance.started_at).slice(0, 10)} (${instance.days_firing}d)`,
-      stale: Boolean(instance.stale),
-      new: Boolean(instance.new),
-      evidence_text: evidenceText(instance.evidence),
-    })),
-    has_rest: rest > 0,
-    rest_text: `${rest} more`,
-    links: linkList,
-  }).trim(), TEXT_MAX);
+  const short = (links && links.short) || null;
+  let shortLinks = [];
+  if (short && (short.rules || []).length) {
+    shortLinks = short.rules.map((rule) => ({ url: rule.url, label: `${rule.title} (all projects)` }));
+  } else if (short && short.group) {
+    shortLinks = [{ url: short.group, label: 'all firing alerts' }];
+  }
+  const render = ({ instanceMax, hostMax, linkList }) => {
+    const shown = members.slice(0, instanceMax);
+    const rest = members.length - shown.length;
+    return template('alert-group')({
+      group: group.group,
+      category: group.category,
+      importance_label: String(group.importance || 'medium').toUpperCase(),
+      summary_text: `${group.firing} firing, ${group.stale} stale for more than ${staleAfterDays} days, `
+        + `${group.new} new since the previous run`,
+      patterns: patterns.map((p) => ({
+        text: withMarker(MARKERS.pattern,
+          `Programme-wide: ${p.title} on ${p.count} of ${p.of} projects, first ${p.since_min}, last ${p.since_max}`),
+        hosts: hostList(p.hosts || [], hostMax),
+      })),
+      instances: shown.map((instance) => ({
+        title: instance.title,
+        host: instance.host || 'watchdog',
+        since_text: `${String(instance.started_at).slice(0, 10)} (${instance.days_firing}d)`,
+        stale: Boolean(instance.stale),
+        new: Boolean(instance.new),
+        evidence_text: evidenceText(instance.evidence),
+      })),
+      has_rest: rest > 0,
+      rest_text: `${rest} more`,
+      links: linkList,
+    }).trim();
+  };
+  // One section block, never a link cut in two (revision 17): keep as many instances as possible; for each count
+  // try the filtered links, then the group link alone, then the links without the host filter, each with every
+  // pattern host named before the host list is elided.
+  let text = null;
+  const variants = [fullLinks, fullLinks.slice(0, 1), shortLinks];
+  for (const instanceMax of INSTANCE_STEPS) {
+    for (const linkList of variants) {
+      for (const hostMax of [Infinity, MAX_PATTERN_HOSTS]) {
+        const candidate = render({ instanceMax, hostMax, linkList });
+        if (text === null && candidate.length <= SECTION_MAX) {
+          text = candidate;
+        }
+      }
+    }
+    if (text !== null) {
+      break;
+    }
+  }
+  if (text === null) {
+    // Nothing fits even bare: keep the links whole and cut the body in front of them.
+    const linksText = shortLinks.map((l) => link(l.url, l.label)).join('\n');
+    const body = render({ instanceMax: 0, hostMax: MAX_PATTERN_HOSTS, linkList: [] });
+    const room = Math.max(0, SECTION_MAX - linksText.length - 1);
+    text = `${truncate(body, room)}\n${linksText}`.trim();
+  }
   return {
     alert_key: group.alert_key,
     item_id: null,
     text,
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: truncate(text, SECTION_MAX) } }],
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
     metadata: {
       event_type: ALERTS_EVENT,
       event_payload: { run_id: runId, date, group: group.group, category: group.category, firing: group.firing },

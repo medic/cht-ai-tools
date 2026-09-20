@@ -158,6 +158,18 @@ const runProjectSession = async ({
       if (bound) {
         boundsHit.add(bound);
       }
+      // A result the runtime marks as an error (a model it cannot use, an authentication problem) is a failure
+      // with the runtime's own message, not a draft to revise: a new prompt would not change it (revision 17).
+      const runtimeError = Boolean(lastTurn.result && lastTurn.result.is_error) && !bound
+        && subtype !== 'error_max_structured_output_retries';
+      if (runtimeError) {
+        const message = String(lastTurn.result.result_text || (lastTurn.result.errors || [])[0]
+          || `the runtime reported ${subtype} without a result`).slice(0, 500);
+        logger.warn('agent.turn_error', { project_url: project.url, pass, attempt, subtype, message });
+        errors.push({ pass, attempt, message, bound: 'error' });
+        boundsHit.add('error');
+        break;
+      }
       findings = lastTurn.structuredOutput;
       let reasons;
       if (findings && typeof findings === 'object') {

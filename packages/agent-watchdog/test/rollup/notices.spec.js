@@ -57,5 +57,11 @@ describe('rollup/notices', () => {
     expect(resolvedNotice(many)).to.match(threeNamed);
     expect(resolvedNotice(many)).to.not.include('Rule 3');
     expect(resolvedNotice([])).to.equal(null);
+    // An episode on a host the run now ignores is not resolved: the run simply stopped watching it.
+    const ignored = clearedEpisodes({
+      events, firingIds: new Set(['b']), runStart: new Date('2026-09-18T06:00:00Z'),
+      ignoredHosts: ['north-a.example.org'],
+    });
+    expect(ignored).to.deep.equal([]);
   });
 });

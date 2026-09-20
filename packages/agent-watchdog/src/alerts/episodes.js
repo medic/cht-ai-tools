@@ -77,8 +77,10 @@ const hoursBetween = (from, to) => Math.round(((to - Date.parse(from)) / 3600000
  */
 const updateEpisodes = async ({
   dataDir, runId, date, runStart, observedAt = null, classified, items = [], candidatesByProject = {},
-  discovery = null, previousDiscovery = null, categories = {}, logger = noop,
+  discovery = null, previousDiscovery = null, categories = {}, ignoredHosts = [], logger = noop,
 }) => {
+  const ignoredSet = new Set(ignoredHosts);
+  let ignored = 0;
   const start = new Date(observedAt || runStart);
   const at = start.toISOString();
   const events = await readEpisodeEvents(dataDir);
@@ -123,6 +125,11 @@ const updateEpisodes = async ({
     if (firingIds.has(instanceId)) {
       continue;
     }
+    // A host the run now ignores is no longer watched: its episode is neither observed nor cleared (revision 17).
+    if (episode.host && ignoredSet.has(episode.host)) {
+      ignored += 1;
+      continue;
+    }
     const hours = hoursBetween(episode.started_at, start.getTime());
     if (hours < 0) {
       logger.warn('alerts.episode_duration_clamped', {
@@ -146,8 +153,10 @@ const updateEpisodes = async ({
   if (cleared.length) {
     await appendAlertEpisodes({ dataDir, date, runId, episodes: cleared });
   }
-  logger.info('alerts.episodes', { opened: opened.length, observed: observed.length, cleared: cleared.length });
-  return { opened, observed, cleared };
+  logger.info('alerts.episodes', {
+    opened: opened.length, observed: observed.length, cleared: cleared.length, ignored,
+  });
+  return { opened, observed, cleared, ignored };
 };
 
 module.exports = {

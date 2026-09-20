@@ -606,6 +606,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-18 | On the hosted watchdog, from the eighth consecutive daily run, `collect.project` reports `fetched` equal to the metric count, `reused` three times that, no trailing query, and the collect stage under fifteen minutes in `run.json` | Reuse depends on the real run cadence, retention and proxy timings |
 | S-19 | With `AGENT_WATCHDOG_ENGINE=cli` and `ANTHROPIC_API_KEY` blank on a machine where `claude` is logged in, the first pass completes with no authentication error, `agent.cli_auth` reports `mode: login`, and the run leaves no new directory under `~/.claude/projects/` | Whether print mode accepts the subscription login with `--setting-sources ""`, and whether the auto-memory switch holds there, only a live run shows |
 | S-20 | A forced re-run of the previous date (`--force --date <yesterday>`) completes the roll-up, its `alerts.classified.json` carries `observed_at` at the clock time, and every cleared episode has a duration of zero or more | Only the hosted alert state has instances that started after the analysed date |
+| S-21 | With a valid model id, a single-project preview on the operator's login completes at least one session with `cost_usd` above zero and either accepted items or a converged empty result, and `agent.turn_error` never appears | Only the hosted runtime shows whether the model is available to the plan |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1022,3 +1023,38 @@ stopped by the budget or the turn cap with no accepted items are incomplete, and
 result ($X spent)` and degrades to the candidates when nothing else exists. The log line
 `rollup.analysis_incomplete` carries the operator hint. Budget tuning waits for one complete session
 measured with a higher per-project budget (constitution: measurement before tuning).
+
+## R-22. A result the runtime marks as an error, and four defects seen in one payload
+
+**Evidence** (live, 2026-09-20): the single-project preview after R-21 exited 0 with `cost_usd: 0`,
+`items: 0` and the headline "Alerts only: 67 firing across 61 projects, no metric changes to flag".
+Its `passes.json` held two passes of three attempts each, every attempt `subtype: success`, zero
+usage, `duration_ms` under 500, and the gate reason "structured output missing or invalid (success)".
+A probe of the installed CLI 2.1.278 with the configured id (`claude -p --output-format json --model
+claude-opus-4.8 …`) answered in 464 ms with `{ type: 'result', subtype: 'success', is_error: true,
+total_cost_usd: 0, result: "There's an issue with the selected model (claude-opus-4.8). It may not
+exist or you may not have access to it. Run --model to pick a different model." }`. The headless
+guide (docs) states the rule: "When a failure happens inside the run, such as missing authentication,
+Claude Code prints the failure as the result on stdout." The same payload showed: the eCHIS Kenya
+client-errors reply at 3,999 characters cut to 2,999 with an ellipsis inside the second link; `Low
+Disk Space` instances on `samburu.echis.go.ke:9100` and `interop.echis.go.ke:9100` under "Other"
+because the port defeated the `*.echis.go.ke` pattern; "Resolved since the previous run: Message
+Delivery (2h) on training-3.echis.go.ke" for a host the ignore list drops; and seven `API Server
+Down` alerts stale for 74 days on hosts with `cht_version: null` counted as alerts, not housekeeping,
+because dead hosts were derived only from the analysed project's changes.
+
+**Decision**: the turn mapper carries `is_error` and the first 500 characters of the runtime's
+`result` text; a result marked as an error that is not a budget or turn stop (nor the structured-output
+retry exhaustion, which stays a rejected draft) ends the project's analysis as an `error` bound with
+that message, without revision turns, so the brief degrades and names it (revision 13 path). Model ids
+(`AGENT_WATCHDOG_MODEL` and the per-stage overrides) must match `^[a-z0-9][a-z0-9-]*$`; the
+configuration error names the form the API uses. Alert replies are fitted into one section without
+cutting a link: instance counts 50, 40, 30, 20, 15, 10, 5, 0; for each, the filtered links, then the
+group link alone, then the links without the host filter (`short` from `buildAlertGroupLinks`, also
+resolved by the gate); within each, every pattern host, then twelve with the count of the rest; a body
+that still does not fit is cut in front of whole links. `hostOfLabels` strips a trailing `:port`.
+The classification lists `ignored_hosts`; episodes on them are neither observed nor cleared and the
+resolved notice skips them. Dead hosts for housekeeping are the union of the analysed projects' scrape
+metric at zero and discovery's `scrape_targets` health `down` for the policy's scrape job. The correct
+ids for the models discussed are `claude-opus-4-8` and `claude-opus-5`; the measured cost of a complete
+session is still to be taken (S-21).
