@@ -19,13 +19,18 @@ const groupFor = (host, groups = []) => {
   return group ? group.label : UNGROUPED;
 };
 
-/** The metric key: the panel expression without its instance matcher (data-model.md, Metric Window). */
+/**
+ * The metric key: the panel expression without its instance matcher (data-model.md, Metric Window) and without a
+ * display-only `>= 0` comparison, so a panel that only keeps zero visible is the same metric as its plain twin
+ * (FR-077).
+ */
 const metricKey = (expr) => String(expr)
   .replace(/,\s*instance\s*=~?\s*"[^"]*"/g, '')
   .replace(/instance\s*=~?\s*"[^"]*"\s*,\s*/g, '')
   .replace(/instance\s*=~?\s*"[^"]*"/g, '')
   .replace(/\{\s*\}/g, '')
-  .trim();
+  .trim()
+  .replace(/\s*>=\s*0$/, '');
 
 const hasTargets = (panel) => Array.isArray(panel.targets) && panel.targets.some((t) => t && t.expr);
 

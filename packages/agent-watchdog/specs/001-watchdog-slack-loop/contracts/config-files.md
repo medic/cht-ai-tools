@@ -129,6 +129,12 @@ logs a warning and the rule cannot fire; only the three FR-014 high rules are ac
 `high_when` (the list is validated against an enum, so a new high rule needs a code change and a
 spec amendment).
 
+`metric_kinds` (revision 14, FR-076) declares how a metric key is analysed, by bare metric name or
+`name{labels}` selector: `clock` (never a candidate), `uptime` (a fall below half the previous sample
+is a restart), `counter` (compared as the increase over each window). A metric in none of the lists,
+and any expression built with functions or arithmetic, is a gauge. When the file carries no
+`metric_kinds`, the stock CHT metrics apply (see `config/defaults/thresholds.yaml`).
+
 ## `alerts.yaml`
 
 The reviewed alert policy (FR-065): category and importance per Grafana-managed rule title, the

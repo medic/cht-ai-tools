@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 13)
+**Status**: Draft (revision 14)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -327,9 +327,9 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
    appear, each at most two lines with at most eight sub-bullets, and the gate rejects a draft that
    exceeds any of these limits.
 
-### User Story 10 - An honest brief with metrics that mean something (Priority: P2, proposed)
+### User Story 10 - An honest brief with metrics that mean something (Priority: P2)
 
-*Proposed in revision 13 after the first hosted runs; not yet planned or tasked.* The first
+*Proposed in revision 13 after the first hosted runs, accepted and planned in revision 14.* The first
 complete preview run computed 2,058 candidates, lost every model session to a runtime error, and
 published "no metric changes to flag". Its candidate list was also two thirds noise: counters and
 clocks, which only ever rise, tripped the sustained-rise rule on every project, and five panels
@@ -671,6 +671,16 @@ Alerts and groups
   returns several series for a project MUST make that window unavailable, naming the labels that
   differ, rather than have one series chosen over the others. Breakdown analysis per route, code or
   database is a later feature (Out of Scope). Added in revision 12.
+- **FR-076**: Each metric MUST be analysed according to its kind, declared in the reviewed
+  thresholds policy (`metric_kinds`) by metric name, with the stock CHT metrics as the default: a
+  gauge as a level; a counter as its increase over each window, its trailing baseline as daily
+  increases, and never by the sustained-rise rule; an uptime as restarts, where a fall below half
+  the previous sample is one restart and raises a medium candidate; a clock as excluded from every
+  rule. An expression built with functions or arithmetic is a gauge, since its author already
+  derived the quantity. Every computed change MUST record its kind and aggregate, and evidence
+  drawn from a counter MUST say it is an increase. Added in revision 14.
+- **FR-077**: Two panels whose expressions differ only by a display comparison that keeps zero
+  visible (`>= 0`) MUST be one metric in discovery, analysis and the brief. Added in revision 14.
 
 Memory, proposals and the knowledge corpus
 

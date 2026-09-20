@@ -95,6 +95,68 @@ describe('analyze/changes', () => {
     expect(() => schemas.ComputedChange.parse(change)).to.not.throw();
   });
 
+  describe('metric kinds (FR-076)', () => {
+    const KINDS = {
+      counter: ['cht_couchdb_doc_total'], uptime: ['cht_date_uptime_seconds'], clock: ['cht_date_current_millis'],
+    };
+    const counterWindow = (name, start, perStep, extra = {}) => window(name, Array.from({ length: 5 }, (_, i) => [
+      RUN_START - (4 - i) * 300, start + i * perStep,
+    ]), { metric: 'cht_couchdb_doc_total{db="medic"}', ...extra });
+
+    it('analyses a counter as the increase over each window and its trailing daily increases', () => {
+      const trailing = window('trailing_14d', Array.from({ length: 21 }, (_, i) => [
+        RUN_START - (20 - i) * 86400, 100000 + i * 1000 + (i === 20 ? 4000 : 0),
+      ]), { metric: 'cht_couchdb_doc_total{db="medic"}' });
+      const [change] = computeChanges({
+        windows: [counterWindow('current', 120000, 50), counterWindow('previous_day', 115000, 25), trailing],
+        project, kinds: KINDS,
+      });
+      expect(change).to.include({
+        kind: 'counter', aggregate: 'increase', current_value: 200, previous_day_value: 100,
+      });
+      expect(change.pct_change_vs_previous_day).to.equal(100);
+      expect(change.monotonic_rise_hours).to.equal(0);
+      // Daily increases of the trailing maxima, excluding today: nineteen days of exactly 1000.
+      expect(change.trailing_mean).to.equal(1000);
+      expect(change.trailing_stddev).to.equal(0);
+      expect(change.deviation_sigma).to.equal(null);
+      expect(change.restarts_24h).to.equal(null);
+    });
+
+    it('counts a counter reset as an increase from zero', () => {
+      const values = [[RUN_START - 1200, 500], [RUN_START - 900, 520], [RUN_START - 600, 10], [RUN_START - 300, 30]];
+      const [change] = computeChanges({
+        windows: [window('current', values, { metric: 'cht_couchdb_doc_total' })], project, kinds: KINDS,
+      });
+      // +20, then a reset to 10 counted as +10, then +20.
+      expect(change.current_value).to.equal(50);
+    });
+
+    it('analyses an uptime as restarts and a clock as excluded, with no level rules for either', () => {
+      const uptime = window('current', [
+        [RUN_START - 1200, 100000], [RUN_START - 900, 100300], [RUN_START - 600, 50], [RUN_START - 300, 350],
+      ], { metric: 'cht_date_uptime_seconds' });
+      const clock = window('current', [[RUN_START - 300, 1.7e12], [RUN_START, 1.7e12 + 300000]], {
+        metric: 'cht_date_current_millis',
+      });
+      const changes = computeChanges({ windows: [uptime, clock], project, kinds: KINDS });
+      const byMetric = Object.fromEntries(changes.map((c) => [c.metric, c]));
+      expect(byMetric.cht_date_uptime_seconds).to.include({
+        kind: 'uptime', aggregate: 'restarts', restarts_24h: 1, current_value: 350, pct_change_vs_previous_day: null,
+        deviation_sigma: null, monotonic_rise_hours: 0,
+      });
+      expect(byMetric.cht_date_current_millis).to.include({ kind: 'clock', aggregate: 'excluded', restarts_24h: null });
+    });
+
+    it('keeps gauges as levels, and treats a derived expression as a gauge even when it names a counter', () => {
+      const derived = window('current', [[RUN_START - 300, 40], [RUN_START, 42]], {
+        metric: 'increase(cht_couchdb_doc_total[1d])',
+      });
+      const changes = computeChanges({ windows: [window('current', rising), derived], project, kinds: KINDS });
+      expect(changes.every((c) => c.kind === 'gauge' && c.aggregate === 'level')).to.equal(true);
+    });
+  });
+
   it('handles several metrics independently', () => {
     const windows = [
       window('current', [[RUN_START, 1]]),

@@ -853,3 +853,45 @@ resolution for heavy expressions (rejected: the value would still be a single ro
 current windows would disagree with the baseline); recording rules for the per-route quantile
 (deferred: cht-watchdog change, and the breakdown story would need them anyway).
 
+## R-18. Metric kinds: which CHT metrics are levels, counters, uptimes or clocks (FR-076)
+
+**Evidence**: `medic/cht-watchdog` `main` `exporters/json/config/cht.yml` (fetched 2026-09-20): the
+metric names and their `help` texts, the source of what each number means; the first complete hosted
+run's `candidates.json` files (1,431 of 2,058 candidates from the sustained-rise rule, almost all on
+totals, sequences, uptime and the clock); Prometheus `increase()` semantics for counter resets
+(repo, run record, docs).
+
+**Findings**:
+- The json exporter maps `/api/v2/monitoring` fields to metrics whose names do not follow Prometheus
+  naming conventions: `cht_sentinel_backlog_count`, `cht_outbound_push_backlog_count`,
+  `cht_connected_users_count`, `cht_replication_limit_count` and `cht_conflict_count` are gauges
+  despite `_count`; `cht_api_nodejs_active_handles_total` is a gauge despite `_total`. A suffix
+  heuristic would misclassify the most important gauges, so the kind is declared per metric.
+- Cumulative quantities: `cht_couchdb_doc_total` ("the number of docs in the db"),
+  `cht_couchdb_doc_del_total`, `cht_couchdb_update_sequence` ("the number of changes in the db"),
+  `cht_feedback_total` ("feedback docs created"), and the API's `_count`, `_sum` and
+  `cpu_seconds_total` series. Their level is history; the signal is the increase per day.
+- `cht_date_uptime_seconds` ("how long API has been running") rises until a restart resets it; the
+  reset is the signal. `cht_date_current_millis` is the server clock; the dashboards derive skew from
+  it, and the derived expression is a gauge in its own right.
+- `cht_messaging_outgoing_total` mixes cumulative statuses (`delivered`, `failed`) with current ones
+  (`due`, `scheduled`, `muted`); the dashboards already show `rate()` panels for the cumulative ones,
+  so the totals stay gauges in the default policy and a deployment may pin `name{status="delivered"}`
+  as a counter.
+
+**Decision**: `metric_kinds` in `thresholds.yaml`, lists of metric names or `name{labels}` selectors
+under `clock`, `uptime` and `counter`, with the stock CHT metrics above as the code default when the
+file carries no lists. The kind is looked up on the bare key after a display comparison and a plain
+`sum()` wrapper are stripped; anything else is a gauge. A counter's change uses `increase()`
+semantics (a reset counts from zero) over each window and daily increases from the trailing maxima;
+an uptime's change counts samples below half their predecessor as restarts (noise on the hosted
+series is well under that) and raises a medium `restart` candidate; a clock raises nothing. A panel
+whose expression is another panel's plus ` >= 0` shares its metric key (FR-077). The fake watchdog
+accumulates a counter's per-day level and answers a rate-wrapped counter like a gauge, as Prometheus
+would.
+
+**Alternatives considered**: a name-suffix heuristic (rejected above); learning kinds from the data
+(a series that never decreases) (rejected: a slowly growing gauge such as connected users would be
+mistaken, and the operator could not review the decision); dropping counters from the dashboards
+(rejected: docs per day and feedback per day are useful signals once read as increases).
+

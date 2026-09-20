@@ -52,7 +52,9 @@ const run = async (ctx) => {
     requireInputs(runDir, [rel]);
     const stored = await runDir.readGz(rel);
     const active = activeWindow(defaults, project, runStart);
-    const changes = computeChanges({ windows: stored.windows, project, activeWindow: active });
+    const changes = computeChanges({
+      windows: stored.windows, project, activeWindow: active, kinds: policy.thresholds.metric_kinds || {},
+    });
     const thresholds = effectiveThresholds(policy.thresholds, project.thresholds, { globalSource });
     const raw = computeCandidates({ changes, project, thresholds, policy, date: ctx.date, windows: stored.windows });
     const { kept: candidates, suppressed } = suppressByHorizon(raw, horizons, { date: ctx.date });

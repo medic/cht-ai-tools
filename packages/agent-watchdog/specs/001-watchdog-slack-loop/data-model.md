@@ -154,7 +154,10 @@ metric per run; kept for the long retention period because the model saw it.
 | Field | Type | Rules |
 |---|---|---|
 | `project_url`, `metric`, `panel_ref` | | As above. |
-| `current_value` | number or null | Last value of `current`, or the aggregate the panel uses. |
+| `kind` | enum | `gauge` \| `counter` \| `uptime` \| `clock`, from `thresholds.yaml` `metric_kinds` by bare metric name (FR-076); default `gauge`. |
+| `aggregate` | enum | `level` (gauge, clock) \| `increase` (counter: every value below is the increase over its window) \| `restarts` (uptime) \| `excluded` (clock: no rule applies). |
+| `restarts_24h` | integer or null | Uptime only: samples in `current` that fell below half their predecessor. |
+| `current_value` | number or null | Last value of `current`, or for a counter its increase over `current`. |
 | `previous_day_value`, `previous_week_value`, `previous_cycle_value` | number or null | Null when the window is unavailable. |
 | `pct_change_vs_previous_day` | number or null | `(current - previous_day) / abs(previous_day) * 100`; null when `previous_day` is 0 or unavailable. |
 | `trailing_mean`, `trailing_stddev` | number or null | Over `trailing_14d` daily values; null below 14 days of history. |
@@ -171,7 +174,7 @@ A deterministic flag on a Computed Change (Key Entities; FR-006, FR-014).
 |---|---|---|
 | `candidate_id` | string | Hash of `project_url`, `metric`, `rule`, `date`. |
 | `project_url`, `metric`, `panel_ref` | | As above. |
-| `rule` | enum | `pct_change` \| `deviation` \| `monotonic` \| `target_down` \| `backlog_absolute`. |
+| `rule` | enum | `pct_change` \| `deviation` \| `monotonic` \| `target_down` \| `backlog_absolute`. | `restart` (uptime reset, medium floor; FR-076).
 | `threshold` | object | `{ source: 'default' \| 'global' \| 'project', value }` — which threshold fired (FR-014). |
 | `observed` | number | The value compared against the threshold. |
 | `severity_floor` | enum | `low` \| `medium` \| `high`. `high` only from the FR-014 high rules: `target_down`; outbound push backlog above zero; sentinel backlog above three times its baseline. |

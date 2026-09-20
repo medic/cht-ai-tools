@@ -15,6 +15,9 @@ confirm meaning, inspect series, match pattern cards and check history when it h
 
 {{changes}}
 
+A change with `aggregate: increase` compares a counter's increase over each window, not its level; `restarts`
+counts uptime resets in the current window; `excluded` metrics raise no candidate.
+
 ## Feedback on earlier briefs for this project
 
 {{feedback}}

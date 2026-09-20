@@ -22,5 +22,19 @@ metric_roles:                           # maps roles above to metric keys (resea
   scrape_target: up{job="cht"}
   outbound_push_backlog: cht_outbound_push_backlog_count
   sentinel_backlog: cht_sentinel_backlog_count
+metric_kinds:                           # how a metric key is analysed (FR-076); the first match wins; anything
+  clock: [cht_date_current_millis]      #   built with functions or arithmetic is a gauge. clock: never a candidate
+  uptime: [cht_date_uptime_seconds]     #   uptime: a fall below half the previous sample is a restart; no level rule
+  counter:                              #   counter: analysed as the increase over each window, never as a level
+    - cht_couchdb_doc_total
+    - cht_couchdb_doc_del_total
+    - cht_couchdb_update_sequence
+    - cht_feedback_total
+    - cht_api_http_request_duration_seconds_count
+    - cht_api_http_response_size_bytes_sum
+    - cht_api_http_request_size_bytes_sum
+    - cht_api_nodejs_gc_duration_seconds_count
+    - cht_api_nodejs_gc_duration_seconds_sum
+    - cht_api_process_cpu_seconds_total
 display:
   persisting_days_label: persisting {n} days

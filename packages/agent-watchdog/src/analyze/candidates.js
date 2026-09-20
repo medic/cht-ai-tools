@@ -28,17 +28,32 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
   const candidates = [];
 
   for (const change of changes) {
+    if (change.kind === 'clock') {
+      // A clock is not a signal (FR-076); its skew, when a panel derives it, is a gauge of its own.
+      continue;
+    }
     const u = unit(change.metric);
     const baselineWindow = change.baseline === 'previous_cycle' ? 'previous_cycle' : 'previous_day';
     const baselineValue = change.baseline === 'previous_cycle'
       ? change.previous_cycle_value
       : change.previous_day_value;
+    // A counter's values are increases over the window, said on every evidence line so no reader takes them for levels.
+    const increaseNote = change.aggregate === 'increase' ? { note: 'increase over the window' } : {};
     const evidence = (extra = []) => [
-      { window: 'current', value: change.current_value, unit: u },
-      ...(baselineValue !== null ? [{ window: baselineWindow, value: baselineValue, unit: u }] : []),
+      { window: 'current', value: change.current_value, unit: u, ...increaseNote },
+      ...(baselineValue !== null ? [{ window: baselineWindow, value: baselineValue, unit: u, ...increaseNote }] : []),
       ...extra,
     ];
     const fired = [];
+
+    if (change.kind === 'uptime' && change.restarts_24h) {
+      fired.push({
+        rule: 'restart', observed: change.restarts_24h, threshold: { source: 'default', value: 0 },
+        evidence: [
+          { window: 'current', value: change.current_value, unit: u, note: 'uptime at the end of the window' },
+        ],
+      });
+    }
 
     if (change.pct_change_vs_previous_day !== null
       && Math.abs(change.pct_change_vs_previous_day) >= rules.pct_change_vs_previous_day) {
@@ -96,7 +111,7 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
     const highRule = fired.some((f) => f.rule === 'target_down' || f.rule === 'backlog_absolute');
     if (highRule || sentinelHigh) {
       floor = 'high';
-    } else if (fired.length >= 2) {
+    } else if (fired.length >= 2 || fired.some((f) => f.rule === 'restart')) {
       floor = 'medium';
     }
 

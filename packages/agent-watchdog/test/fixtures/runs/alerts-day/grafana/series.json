@@ -170,6 +170,7 @@
     },
     "cht_couchdb_doc_total": {
       "unit": "count",
+      "kind": "counter",
       "levels": {
         "alpha.example.org": {
           "base": 1200,

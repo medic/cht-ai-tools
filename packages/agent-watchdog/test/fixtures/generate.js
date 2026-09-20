@@ -154,7 +154,8 @@ const baseMetrics = () => ({
   cht_date_uptime_seconds: { unit: 's', levels: levels(2592000, 0.001) },
   cht_date_current_millis: { unit: 'ms', levels: levels(120, 0.02) },
   cht_couchdb_fragmentation: { unit: 'ratio', levels: levels(2.3, 0.01) },
-  cht_couchdb_doc_total: { unit: 'count', levels: levels(1200, 0.02) },
+  // A counter: the level is the per-day increase (docs created a day), accumulated by the fake (FR-076).
+  cht_couchdb_doc_total: { unit: 'count', kind: 'counter', levels: levels(1200, 0.02) },
   cht_connected_users_count: { unit: 'count', levels: levels(1085, 0.02) },
   cht_messaging_outgoing_total: { unit: 'count', levels: levels(950, 0.03) },
   cht_api_http_request_total: { unit: 'reqps', levels: levels(12, 0.05) },

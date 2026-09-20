@@ -193,10 +193,33 @@ const createFakeGrafana = ({
     return def.anomaly.host === host || (def.anomaly.hosts || []).includes(host) ? def.anomaly : null;
   };
 
-  const sampleAt = (host, metric, ts) => {
+  // A counter (`kind: counter` on the series definition) accumulates its per-day level as a rate: the value at a
+  // time is the sum of whole days since the origin plus the fraction of the current day. Its daily value is the
+  // day's closing total, so the trailing maxima and the current window agree on daily increases (FR-076).
+  const COUNTER_ORIGIN_DAYS = 60;
+  const counterAt = (host, metric, ts) => {
+    const day = Math.floor(ts / DAY);
+    const origin = Math.floor(runStart / DAY) - COUNTER_ORIGIN_DAYS;
+    let total = 0;
+    for (let d = origin; d < day; d += 1) {
+      total += levelFor(host, metric, d) || 0;
+    }
+    const today = levelFor(host, metric, day);
+    if (today === null || today === undefined) {
+      return null;
+    }
+    return total + today * ((ts - day * DAY) / DAY);
+  };
+
+  const isCounter = (metric) => Boolean(series.metrics[metric] && series.metrics[metric].kind === 'counter');
+
+  const sampleAt = (host, metric, ts, { asGauge = false } = {}) => {
     if (metric === 'up') {
       const down = (series.down || []).includes(host) && ts >= runStart - DAY;
       return down ? 0 : 1;
+    }
+    if (isCounter(metric) && !asGauge) {
+      return counterAt(host, metric, ts);
     }
     const level = levelFor(host, metric, Math.floor(ts / DAY));
     if (level === null || level === undefined) {
@@ -215,9 +238,12 @@ const createFakeGrafana = ({
     return level + jitter;
   };
 
-  const dailyAt = (host, metric, ts) => {
+  const dailyAt = (host, metric, ts, { asGauge = false } = {}) => {
     if (metric === 'up') {
       return sampleAt(host, metric, ts);
+    }
+    if (isCounter(metric) && !asGauge) {
+      return counterAt(host, metric, Math.floor(ts / DAY) * DAY + DAY - 1);
     }
     const anomaly = anomalyFor(host, metric);
     if (anomaly && Math.floor(ts / DAY) === Math.floor(runStart / DAY)) {
@@ -234,11 +260,16 @@ const createFakeGrafana = ({
     return series.hosts.filter((h) => h === wanted || new RegExp(`^${wanted}$`).test(h));
   };
 
+  // `increase(counter[1d])`, `rate(...)` and their kin are what the dashboards derive from a counter: the fixture
+  // levels are that derived quantity, so a wrapped counter samples like a gauge.
+  const RATE_FUNCTION = /\b(increase|rate|irate|delta|deriv)\s*\(/;
+
   const matrix = (expr, start, end, step) => {
     const metric = metricNameOf(expr || '');
     if (!metric) {
       return [];
     }
+    const asGauge = RATE_FUNCTION.test(expr || '');
     const daily = /max_over_time|avg_over_time|min_over_time/.test(expr) && step >= DAY;
     const result = [];
     for (const host of hostsFor(expr)) {
@@ -249,7 +280,7 @@ const createFakeGrafana = ({
         if (daily && since !== null && ts <= since) {
           continue;
         }
-        const v = daily ? dailyAt(host, metric, ts) : sampleAt(host, metric, ts);
+        const v = daily ? dailyAt(host, metric, ts, { asGauge }) : sampleAt(host, metric, ts, { asGauge });
         if (v !== null && v !== undefined) {
           values.push([ts, String(Number(v.toFixed(3)))]);
         }

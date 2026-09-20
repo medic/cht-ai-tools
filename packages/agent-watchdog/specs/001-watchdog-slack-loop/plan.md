@@ -307,6 +307,27 @@ Re-checked on 2026-09-20 after the first hosted run: 95 projects, 364 range quer
   Metric Window; it removes the trailing subqueries from the daily path, which were the slow and
   fragile part. Result: PASS.
 
+### Revision 14 delta: User Stories 10 and 11 planned (FR-076 to FR-082)
+
+Checked on 2026-09-20 when the two stories proposed in revision 13 were accepted.
+
+- **I**: no new dependency. Metric kinds are a list in `thresholds.yaml` with the stock CHT metrics as
+  the code default; emoji are Unicode characters placed by code; the container image gains the Noto
+  colour emoji font so the rendered image shows them.
+- **II**: kinds, increases, restarts, deduplication, patterns, housekeeping, resolved lines, ranking
+  and markers are all unit-tested; the fake watchdog accumulates a counter so the fixture days keep
+  their recorded candidates; the fixtures use placeholder programme names and hosts, never the
+  hosted watchdog's.
+- **III**: which metrics are counters, which alerts form a pattern, which are housekeeping and how
+  items rank are all decided by code from the policy and the data; the model still writes only
+  item text.
+- **IV**: nothing new is read or stored; the ledger and the run directory carry the same data.
+- **V**: no new stage; the roll-up gains notice builders and the payload gains markers.
+- **VI**: housekeeping suggests removing or silencing a stale alert; the watchdog changes nothing.
+- **VII**: `metric_kinds` and the alert categories change by pull request; a metric absent from the
+  lists is a gauge, never guessed.
+- **VIII**: one audience; markers are status and severity only (FR-015). Result: PASS.
+
 ### Revision 12 delta: one series per project (FR-075)
 
 Re-checked on 2026-09-20 after the second hosted run: the per-route p90 panel timed out and hit

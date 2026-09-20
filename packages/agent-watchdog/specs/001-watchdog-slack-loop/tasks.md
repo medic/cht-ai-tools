@@ -396,6 +396,20 @@ failures as timeouts, published "no metric changes to flag" over 2,058 candidate
 - [X] T174 Guard the success-path trace flush in `src/cli/commands/run.js`; skip phone matches inside tokens with letters in `src/verify/patterns.js`, `src/verify/scan.js`, `src/verify/checks/personal_data_absent.js`; categorise `Message Delivery (2h)` and `Low Disk Space - 80% Full` in `config/defaults/alerts.yaml`
 - [X] T175 Spec revision 13 (edge cases, clarification, proposed User Stories 10 and 11), research R-2 addendum and S-4 result, data model, run-directory contract, README, AGENTS
 
+## Phase 16: User Story 10, metrics that mean something (revision 14)
+
+**Purpose**: Analyse each metric by its kind (FR-076) and merge display duplicates (FR-077), so the candidate list
+stops being two thirds counters and clocks rising as they always do.
+
+- [X] T176 [P] [US10] Tests first: `test/analyze/kinds.spec.js`; `test/analyze/changes.spec.js` for counter increases, resets, uptime restarts and excluded clocks; `test/analyze/candidates.spec.js` for the `restart` rule, the clock exclusion and increase evidence; `test/collect/discovery.spec.js` for the `>= 0` key
+- [X] T177 [US10] `src/analyze/kinds.js` (`metricKind`, `increaseOver`, `dailyIncreases`, `restartsIn`); `kind`, `aggregate`, `restarts_24h` on the Computed Change and `restart` on the Candidate rule in `src/model/schemas.js`
+- [X] T178 [US10] `metric_kinds` in `src/config/policy.js` with the stock CHT metrics as the default and in `config/defaults/thresholds.yaml`; kinds threaded through `src/analyze/changes.js`, `src/analyze/candidates.js`, `src/cli/stages/analyze.js`; increase and restart wording in `src/rollup/deterministic-brief.js`; the aggregate explained in `prompts/pass-first.md`
+- [X] T179 [US10] Display comparison stripped from the metric key in `src/collect/discovery.js`
+- [X] T180 [US10] The fake watchdog accumulates `kind: counter` series and answers rate-wrapped counters like a gauge (`test/helpers/fake-grafana.js`); `cht_couchdb_doc_total` marked a counter in `test/fixtures/generate.js`, fixtures regenerated; spec FR-076 and FR-077, plan delta, research R-18, data model, config-files contract
+
+**Checkpoint**: `npm run replay:eval` unchanged on the three fixture days; the hosted run's candidate count falls with
+the counters and clocks gone.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -573,4 +587,10 @@ US3 can proceed in parallel, then US4, US5 and US6.
   new `capacity` category with no related metrics, since node exporter disk metrics are not on the dashboards; the
   phone pattern skips a match whose surrounding token carries letters, in the scan and in the gate alike; User
   Stories 10 and 11 are proposed in the spec and await approval before planning.
+- User Story 10 decisions (2026-09-20): kinds are declared, not inferred from names or data, because the stock CHT
+  gauges end in `_count` and one gauge ends in `_total`; a rate-wrapped counter is a gauge because the dashboard
+  author derived it; `sum(counter)` keeps the counter kind since a sum of counters is a counter; a restart needs a
+  fall below half the previous sample so scrape jitter never counts; `restart` has a medium floor on its own;
+  `cht_messaging_outgoing_total` stays a gauge by default because its statuses mix cumulative and current counts;
+  the `>= 0` display comparison is stripped from the metric key while `> 0` stays, since that one filters.
 

@@ -130,6 +130,25 @@ const HighRule = z.object({
   path: ['condition'],
 });
 
+// Stock CHT metrics whose level is not the signal (FR-076, research.md R-18): the default when thresholds.yaml
+// carries no `metric_kinds`. Names match the json exporter's metric names; a `name{labels}` entry pins one series.
+const STOCK_METRIC_KINDS = Object.freeze({
+  clock: ['cht_date_current_millis'],
+  uptime: ['cht_date_uptime_seconds'],
+  counter: [
+    'cht_couchdb_doc_total', 'cht_couchdb_doc_del_total', 'cht_couchdb_update_sequence', 'cht_feedback_total',
+    'cht_api_http_request_duration_seconds_count', 'cht_api_http_response_size_bytes_sum',
+    'cht_api_http_request_size_bytes_sum', 'cht_api_nodejs_gc_duration_seconds_count',
+    'cht_api_nodejs_gc_duration_seconds_sum', 'cht_api_process_cpu_seconds_total',
+  ],
+});
+
+const MetricKinds = z.object({
+  clock: z.array(z.string().min(1)).default([]),
+  uptime: z.array(z.string().min(1)).default([]),
+  counter: z.array(z.string().min(1)).default([]),
+}).strict();
+
 const ThresholdsFile = z.object({
   trailing_days: z.number().int().min(2),
   candidate_rules: z.object({
@@ -148,6 +167,11 @@ const ThresholdsFile = z.object({
     sentinel_backlog: z.string().min(1),
   }).strict(),
   display: z.object({ persisting_days_label: z.string() }).strict().optional(),
+  metric_kinds: MetricKinds.default(() => ({
+    clock: [...STOCK_METRIC_KINDS.clock],
+    uptime: [...STOCK_METRIC_KINDS.uptime],
+    counter: [...STOCK_METRIC_KINDS.counter],
+  })),
 }).strict();
 
 // The alert policy (FR-065): category and importance per Grafana-managed rule title, staleness, category metrics.
@@ -236,5 +260,6 @@ const loadPolicy = ({ configDir, defaultsDir }) => {
 
 module.exports = {
   loadPolicy, normaliseHost, PolicyError, ExpectedLoadWindow, ThresholdsFile, DashboardsFile, ProjectsFile, HIGH_RULES,
+  STOCK_METRIC_KINDS,
   globToRegExp, matchesGlob, RESERVED_GROUPS, AlertsFile, ALERT_IMPORTANCE,
 };

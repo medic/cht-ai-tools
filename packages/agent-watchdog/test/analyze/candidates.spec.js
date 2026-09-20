@@ -103,6 +103,33 @@ describe('analyze/candidates', () => {
     expect(candidates.find((c) => c.metric === 'cht_replication_limit_count').severity_floor).to.equal('low');
   });
 
+  it('raises a medium restart candidate for an uptime reset and nothing for a clock (FR-076)', () => {
+    const uptime = change('cht_date_uptime_seconds', {
+      kind: 'uptime', aggregate: 'restarts', restarts_24h: 2, current_value: 350,
+      previous_day_value: 86000, pct_change_vs_previous_day: null, deviation_sigma: null, monotonic_rise_hours: 0,
+    });
+    const clock = change('cht_date_current_millis', {
+      kind: 'clock', aggregate: 'excluded', current_value: 1.7e12,
+      previous_day_value: 1.6e12, pct_change_vs_previous_day: 6, deviation_sigma: 9, monotonic_rise_hours: 24,
+    });
+    const out = computeCandidates({ changes: [uptime, clock], project, thresholds, policy, date: DATE, unitOf });
+    expect(out).to.have.length(1);
+    expect(out[0]).to.include({
+      rule: 'restart', observed: 2, severity_floor: 'medium', metric: 'cht_date_uptime_seconds',
+    });
+    expect(out[0].evidence[0]).to.include({ window: 'current', value: 350, note: 'uptime at the end of the window' });
+  });
+
+  it('marks a counter\'s evidence as increases over the window', () => {
+    const counter = change('cht_couchdb_doc_total{db="medic"}', {
+      kind: 'counter', aggregate: 'increase', current_value: 900,
+      previous_day_value: 300, pct_change_vs_previous_day: 200, deviation_sigma: 0.5, monotonic_rise_hours: 0,
+    });
+    const out = computeCandidates({ changes: [counter], project, thresholds, policy, date: DATE, unitOf });
+    expect(out.map((c) => c.rule)).to.deep.equal(['pct_change']);
+    expect(out[0].evidence.every((e) => e.note === 'increase over the window')).to.equal(true);
+  });
+
   it('raises nothing below the thresholds or on null measures', () => {
     const changes = [
       change('cht_conflict_count', {

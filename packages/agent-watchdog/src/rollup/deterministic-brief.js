@@ -72,11 +72,16 @@ const orderCandidates = (candidates) => [...candidates].sort((a, b) => {
 });
 
 const candidateText = (candidate) => {
+  const host = hostOf(candidate.project_url);
+  if (candidate.rule === 'restart') {
+    const times = candidate.observed === 1 ? 'once' : `${plain(candidate.observed)} times`;
+    return `${candidate.metric} on ${host}: restarted ${times} in the last 24 h (restart)`;
+  }
   const current = evidenceValue(candidate, ['current']);
   const baseline = evidenceValue(candidate, BASELINE_WINDOWS);
   const currentText = plain(current === null ? candidate.observed : current);
-  const host = hostOf(candidate.project_url);
-  return `${candidate.metric} on ${host}: ${currentText} vs ${plain(baseline)} (${candidate.rule})`;
+  const perDay = (candidate.evidence || []).some((e) => e.note === 'increase over the window') ? '/day' : '';
+  return `${candidate.metric} on ${host}: ${currentText}${perDay} vs ${plain(baseline)}${perDay} (${candidate.rule})`;
 };
 
 /**

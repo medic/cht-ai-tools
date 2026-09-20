@@ -42,6 +42,12 @@ describe('collect/discovery', () => {
       expect(metricKey('increase(cht_feedback_total{instance=~"$cht_instance"}[1d])'))
         .to.equal('increase(cht_feedback_total[1d])');
       expect(metricKey('up{job="cht", instance="alpha.example.org"}')).to.equal('up{job="cht"}');
+      // A display-only comparison keeps zero visible on the dashboard; it is the same metric (FR-077).
+      expect(metricKey('cht_conflict_count{instance=~"$cht_instance"} >= 0')).to.equal('cht_conflict_count');
+      expect(metricKey('cht_couchdb_doc_total{instance=~"$cht_instance", db="_users"} >= 0'))
+        .to.equal('cht_couchdb_doc_total{db="_users"}');
+      expect(metricKey('cht_outbound_push_backlog_count{instance=~"$cht_instance"} > 0'), 'a filter is not display')
+        .to.equal('cht_outbound_push_backlog_count > 0');
     });
 
     it('leaves expressions without an instance matcher alone', () => {

@@ -12,8 +12,10 @@ describe('model/schemas', () => {
       'previewed', 'unposted', 'failed', 'refused',
     ]);
     expect(enums.CandidateRule.options).to.deep.equal(
-      ['pct_change', 'deviation', 'monotonic', 'target_down', 'backlog_absolute'],
+      ['pct_change', 'deviation', 'monotonic', 'target_down', 'backlog_absolute', 'restart'],
     );
+    expect(enums.MetricKind.options).to.deep.equal(['gauge', 'counter', 'uptime', 'clock']);
+    expect(enums.Aggregate.options).to.deep.equal(['level', 'increase', 'restarts', 'excluded']);
   });
 
   it('validates a Project with a derived url and rejects a URL as identity', () => {

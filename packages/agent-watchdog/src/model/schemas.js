@@ -18,7 +18,9 @@ const enums = {
     'previewed', 'unposted', 'failed', 'refused',
   ]),
   StageStatus: z.enum(['running', 'completed', 'failed', 'skipped', 'degraded']),
-  CandidateRule: z.enum(['pct_change', 'deviation', 'monotonic', 'target_down', 'backlog_absolute']),
+  CandidateRule: z.enum(['pct_change', 'deviation', 'monotonic', 'target_down', 'backlog_absolute', 'restart']),
+  MetricKind: z.enum(['gauge', 'counter', 'uptime', 'clock']),
+  Aggregate: z.enum(['level', 'increase', 'restarts', 'excluded']),
   ThresholdSource: z.enum(['default', 'global', 'project']),
   Baseline: z.enum(['previous_day', 'previous_cycle']),
   Placement: z.enum(['body', 'thread']),
@@ -177,6 +179,10 @@ const ComputedChange = z.object({
   monotonic_rise_hours: z.number().min(0),
   baseline: enums.Baseline,
   expected_load_window_id: z.string().nullable(),
+  // How the metric was analysed (FR-076): a level, a counter's increase over the window, restarts, or excluded.
+  kind: enums.MetricKind.default('gauge'),
+  aggregate: enums.Aggregate.default('level'),
+  restarts_24h: z.number().int().min(0).nullable().default(null),
 }).strict();
 
 const Evidence = z.object({
