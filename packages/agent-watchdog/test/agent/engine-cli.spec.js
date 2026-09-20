@@ -2,6 +2,7 @@
 // stdin turns, tool-call recording, harness bounds and mapping parity with the SDK engine.
 const { forStructuredOutput } = require('../../src/agent/output-schema');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { Writable } = require('node:stream');
 const { createCliEngine } = require('../../src/agent/engine-cli');
@@ -19,8 +20,12 @@ const TOKEN = 'secret-token-123';
 const env = { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp', AGENT_WATCHDOG_DOCS_MCP_TOKEN: TOKEN };
 const definition = loadDefinition({ paths: PACKAGE_PATHS, env });
 const mcpConfig = definition.renderMcpConfig(env);
-const logger = createLogger({ level: 'error', stream: new Writable({ write(c, e, cb) {
-  cb(); 
+const logs = [];
+const logger = createLogger({ level: 'info', stream: new Writable({ write(chunk, encoding, cb) {
+  for (const line of chunk.toString().split('\n').filter(Boolean)) {
+    logs.push(JSON.parse(line));
+  }
+  cb();
 } }) });
 const localTools = [{ name: 'get_windows', description: 'd', schema: {}, handler: async () => ({ content: [] }) }];
 
@@ -43,7 +48,7 @@ const readRecord = (file) => {
   for (const line of fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
     const event = JSON.parse(line);
     if (event.event === 'start') {
-      records.push({ argv: event.argv, stdin_lines: [] });
+      records.push({ argv: event.argv, env: event.env, stdin_lines: [] });
     } else {
       records[records.length - 1].stdin_lines.push(event.line);
     }
@@ -63,13 +68,18 @@ describe('agent/engine-cli', function () {
     recordFile = path.join(dataDir, 'fake-claude.jsonl');
     scenarioFile = path.join(dataDir, 'scenario.json');
   });
-  afterEach(() => removeDir(dataDir));
+  afterEach(() => {
+    removeDir(dataDir);
+    logs.length = 0;
+  });
 
-  const config = () => ({
+  const config = (overrides = {}) => ({
     model: { name: 'claude-fable-5-1', effort: 'max' },
     bounds: { maxTurns: 20, maxBudgetUsdProject: 2, modelTimeoutMs: 5000 },
     storage: { dataDir },
     runtime: {},
+    secrets: { anthropicApiKey: 'sk-ant-test' },
+    ...overrides,
   });
   const writeScenario = (scenario) => fs.writeFileSync(scenarioFile, JSON.stringify(scenario));
   const fakeEnv = (extra = {}) => ({
@@ -114,6 +124,10 @@ describe('agent/engine-cli', function () {
       '--json-schema', JSON.stringify(forStructuredOutput(definition.outputSchemas.findings)),
       '--model', 'claude-fable-5-1', '--effort', 'max', '--max-budget-usd', '1.5',
     ]);
+    // Key mode: the runtime gets a private configuration directory and the key, and keeps no auto memory.
+    expect(record.env.CLAUDE_CONFIG_DIR).to.equal(path.join(os.tmpdir(), 'agent-watchdog-runtime'));
+    expect(record.env.has_api_key).to.equal(true);
+    expect(record.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).to.equal('1');
     expect(fs.readFileSync(promptFile, 'utf8')).to.equal('prefix\n__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\nsuffix');
     expect(path.dirname(mcpFile)).to.not.include(runDir.root);
     expect(fs.statSync(mcpFile).mode.toString(8).slice(-3)).to.equal('600');
@@ -137,6 +151,65 @@ describe('agent/engine-cli', function () {
     expect(session.sessionId).to.equal('sess-1');
     await session.close();
     expect(fs.existsSync(mcpFile)).to.equal(false);
+  });
+
+  it('without an API key runs claude on its own login: no --bare, no settings sources, no config-dir override',
+    async () => {
+      writeScenario({ session_id: 'sess-login', turns: [{ result: success({ a: 1 }) }] });
+      const engine = makeEngine({
+        engine: { config: config({ secrets: { anthropicApiKey: null } }) },
+        env: { ANTHROPIC_API_KEY: '', HOME: dataDir },
+      });
+      const session = await openWithTools(engine);
+      const turn = await session.turn('first prompt');
+      const [record] = readRecord(recordFile);
+      expect(record.argv).to.not.include('--bare');
+      expect(record.argv.slice(0, 5))
+        .to.deep.equal(['-p', '--verbose', '--no-session-persistence', '--setting-sources', '']);
+      expect(record.argv).to.include.members(['--strict-mcp-config', '--permission-mode', 'dontAsk']);
+      expect(record.argv[record.argv.indexOf('--tools') + 1]).to.equal('');
+      // The login lives in the default configuration directory, so it is not redirected; the blank key that
+      // `--env-file` produces is removed, because print mode always uses a key when one is present.
+      expect(record.env.CLAUDE_CONFIG_DIR).to.equal(null);
+      expect(record.env.has_api_key).to.equal(false);
+      expect(record.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).to.equal('1');
+      expect(turn.structuredOutput).to.deep.equal({ a: 1 });
+      await session.close();
+      const auth = logs.filter((l) => l.event === 'agent.cli_auth');
+      expect(auth).to.have.length(1);
+      expect(auth[0]).to.include({ mode: 'login', credentials_found: false });
+      expect(logs.filter((l) => l.event === 'agent.cli_login_missing')).to.have.length(1);
+    });
+
+  it('login mode keeps an explicit CLAUDE_CONFIG_DIR and reports when its credentials file exists', async () => {
+    writeScenario({ turns: [{ result: success({ a: 1 }) }] });
+    const configDir = path.join(dataDir, 'claude-config');
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, '.credentials.json'), '{}');
+    const engine = makeEngine({
+      engine: { config: config({ secrets: {} }) }, env: { CLAUDE_CONFIG_DIR: configDir },
+    });
+    const session = await openWithTools(engine);
+    await session.turn('x');
+    await session.close();
+    const [record] = readRecord(recordFile);
+    expect(record.env.CLAUDE_CONFIG_DIR).to.equal(configDir);
+    expect(record.env.has_api_key).to.equal(false);
+    const [auth] = logs.filter((l) => l.event === 'agent.cli_auth');
+    expect(auth).to.include({ mode: 'login', credentials_found: true, config_dir: configDir });
+    expect(logs.filter((l) => l.event === 'agent.cli_login_missing')).to.deep.equal([]);
+  });
+
+  it('with an API key keeps bare mode and says so once', async () => {
+    writeScenario({ turns: [{ result: success({ a: 1 }) }] });
+    const engine = makeEngine();
+    const session = await openWithTools(engine);
+    await session.turn('x');
+    await session.close();
+    const auth = logs.filter((l) => l.event === 'agent.cli_auth');
+    expect(auth).to.have.length(1);
+    expect(auth[0]).to.include({ mode: 'api_key' });
+    expect(auth[0]).to.not.have.property('credentials_found');
   });
 
   it('feeds later turns over the same stdin after each result and reports per-turn cost deltas', async () => {

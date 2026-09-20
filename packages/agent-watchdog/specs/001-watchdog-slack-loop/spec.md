@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 14)
+**Status**: Draft (revision 15)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -462,6 +462,10 @@ line that shows the alert and its metric together.
 - A plain selector returns several series for one project (a per-database gauge without the
   database pinned): every window of that metric is unavailable with the differing labels named;
   a sibling panel that pins the label is analysed as usual (FR-075).
+- The command-line engine runs without `ANTHROPIC_API_KEY` on a machine where the runtime is logged
+  in: the run uses that login and loads none of the operator's settings, rules, instruction files or
+  memory; a blank key left by an environment file counts as unset; with the SDK engine the missing
+  key remains a configuration error that names the alternative (FR-050).
 
 ## Requirements *(mandatory)*
 
@@ -767,7 +771,10 @@ Operations
   call, and MUST reconcile the runtime's cost estimate with recorded usage.
 - **FR-050**: The same agent definition — skill, tools, reference sources, prompts, output schema
   and verification hooks — MUST be usable both by this system's scheduled run and by a
-  contributor invoking the agent runtime directly, from one configuration source.
+  contributor invoking the agent runtime directly, from one configuration source. When no API key
+  is configured, the contributor's face MUST run on the contributor's own runtime login while
+  loading none of the contributor's settings, rules, instruction files or memory; the scheduled run
+  authenticates with the key (revision 15).
 
 Configuration
 
@@ -1049,6 +1056,12 @@ Configuration
   failure; a tracing flush failure never changes the exit code; version strings are not phone
   numbers to the scan. Proposed for approval: User Story 10 (honest brief, metric semantics) and
   User Story 11 (correlation and consolidation).
+- Q: With `AGENT_WATCHDOG_ENGINE=cli` and `ANTHROPIC_API_KEY` left empty because `claude` is logged
+  in on a Team plan, the run exited 78; should the binary simply be used as logged in? → A: Yes. The
+  key is required only for the `sdk` engine. Without it the command-line engine runs `claude` on the
+  operator's login, without bare mode (which never reads a login) and isolated by flags instead: no
+  settings sources, no built-in tools, strict MCP configuration, no session persistence, auto memory
+  off. The scheduled run keeps the key (FR-050, revision 15).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 
@@ -1058,7 +1071,8 @@ Decisions already taken during design that belong in the plan, listed so they ar
   `claude -p` as the identical local face; both are configured from one source (skill directory,
   MCP configuration, hooks JSON, output schema, system-prompt file). Production uses bare mode
   semantics: no filesystem settings discovery, explicit allow-listed tools, shell and web tools
-  disabled, permission prompts off.
+  disabled, permission prompts off. A contributor's `claude -p` run without an API key uses the
+  contributor's login with the same isolation achieved by flags (revision 15).
 - Model: `claude-fable-5-1` at maximum effort for analysis and roll-up, both read from the
   environment; per-stage model overrides so small stages can be moved to a cheaper model later;
   cost bounded per project and per run with the SDK's budget option; prompt caching kept effective

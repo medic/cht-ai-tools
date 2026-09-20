@@ -345,3 +345,23 @@ Prometheus's sample limit as a trailing subquery, and ten API panels group by ro
   the log and in `discovery.json`.
 - **VI to VIII**: unchanged. The breakdown story is recorded as Out of Scope rather than half-built.
   Result: PASS.
+
+### Revision 15 delta: the command-line engine on the operator's login (FR-050)
+
+Re-checked on 2026-09-20 after a contributor's preview run with `AGENT_WATCHDOG_ENGINE=cli` and no
+API key exited 78: `claude` was logged in on a Team plan, and `--bare` never reads a login
+(research.md R-3, login mode).
+
+- **I**: no new dependency; the key's requirement depends on the engine, and the engine drops
+  `--bare` for `--setting-sources ""` when no key is configured.
+- **II**: tests first in `test/config/load.spec.js` and `test/agent/engine-cli.spec.js`; the fake
+  `claude` records the environment it starts with, so both modes are asserted without the network.
+- **III**: unchanged; authentication is not analysis.
+- **IV**: nothing new is stored; auto memory is switched off in both modes so a run leaves nothing in
+  the operator's memory directory, and no session is persisted.
+- **V**: the same engine and the same argument list apart from the isolation flags; the mode is
+  logged once per engine as `agent.cli_auth`.
+- **VI**: unchanged.
+- **VII**: no settings file, rule or instruction file of the operator's reaches the prompt in either
+  mode; managed settings still apply, as the runtime documents.
+- **VIII**: unchanged. Result: PASS.

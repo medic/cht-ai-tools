@@ -164,6 +164,40 @@ carries; the harness ignores everything but the message types the SDK engine alr
 SDK-only; all four are in the installed CLI's help. It reported `--max-turns` as present; it is
 not in 2.1.278.
 
+**Login mode (added 2026-09-20)**. A contributor's run with `AGENT_WATCHDOG_ENGINE=cli` and
+`ANTHROPIC_API_KEY` left blank exited 78, because the key was required for every model command and
+the engine always passed `--bare`. Evidence: the installed help (installed) says of `--bare`
+"Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are
+never read)"; the headless guide (docs, https://code.claude.com/docs/en/headless) says "bare mode
+doesn't use your subscription login" and that without `--bare` a `-p` session "loads the same context
+an interactive session would, including anything configured in the working directory or
+`~/.claude`"; the environment reference (docs, https://code.claude.com/docs/en/env-vars) says of
+`ANTHROPIC_API_KEY` "In non-interactive mode (`-p`), the key is always used when present", so a blank
+key must be removed from the child environment; the memory guide (docs,
+https://code.claude.com/docs/en/memory) says project rules "are skipped if you exclude `project` from
+`--setting-sources`" and "To disable auto memory via environment variable, set
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`"; the installed SDK's type documentation (installed,
+`@anthropic-ai/claude-agent-sdk/sdk.d.ts`) says `settingSources` "Must include `'project'` to load
+CLAUDE.md files" and the SDK passes `--setting-sources=` (empty) for `[]`. A probe of the installed
+2.1.278 with empty stdin accepted `-p --verbose --no-session-persistence --setting-sources "" --settings
+'{"autoMemoryEnabled":false}' --input-format stream-json --output-format stream-json --tools ""
+--permission-mode dontAsk --strict-mcp-config` and exited 0 without a model call (installed). Precedent:
+cht-agent's `claude-cli` provider (repo, `src/llm/providers/claude-cli.ts` on `memory/draft-verification`)
+runs `claude -p` on the operator's login by inheriting the environment and passing no `--bare`.
+
+**Decision**: the key is required for model commands only when the engine is `sdk`. The CLI engine
+has two modes chosen by whether a key is configured: key mode keeps `--bare` and the private
+`CLAUDE_CONFIG_DIR`, and puts the configured key in the child environment itself; login mode drops
+`--bare`, passes `--setting-sources ""`, removes the blank key from the child environment, leaves
+`CLAUDE_CONFIG_DIR` where the login is (`~/.claude` unless set) and reports `agent.cli_auth`
+(`mode`, `config_dir`, `credentials_found`), warning once when no `.credentials.json` is there (macOS
+may keep the login in the keychain). `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` is exported in both modes.
+`--tools ""`, `--strict-mcp-config`, `--permission-mode dontAsk` and `--no-session-persistence` are
+unchanged. The scheduled container run keeps the key: the image has no login and its
+`CLAUDE_CONFIG_DIR` is scratch. Not adopted: `--restricted` (it keeps Bash, file and web tools unless
+removed and adds nothing over `--tools ""` plus `--setting-sources ""`), and an `apiKeyHelper` that
+reads the login's token (fragile, and it would route a subscription login through the key path).
+
 ## R-4. cht-docs-mcp tool names and result shape
 
 **Evidence**: live calls from this session to the CHT documentation MCP service on 2026-09-19.
@@ -570,6 +604,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-16 | Sub-bullets rendered as indented `◦` lines inside a bullet's `section` block display legibly in Slack desktop and mobile | Leading whitespace in `mrkdwn` is undocumented |
 | S-17 | `smoke/grafana.js --project <host>` collects every window of every per-project panel of the hosted dashboards without one `query failed` window: derived expressions in the trailing subquery form and `$interval` resolved to the dashboard's value | The first preview run showed the fake accepted queries Prometheus rejects; only the hosted proxy proves the resolved forms |
 | S-18 | On the hosted watchdog, from the eighth consecutive daily run, `collect.project` reports `fetched` equal to the metric count, `reused` three times that, no trailing query, and the collect stage under fifteen minutes in `run.json` | Reuse depends on the real run cadence, retention and proxy timings |
+| S-19 | With `AGENT_WATCHDOG_ENGINE=cli` and `ANTHROPIC_API_KEY` blank on a machine where `claude` is logged in, the first pass completes with no authentication error, `agent.cli_auth` reports `mode: login`, and the run leaves no new directory under `~/.claude/projects/` | Whether print mode accepts the subscription login with `--setting-sources ""`, and whether the auto-memory switch holds there, only a live run shows |
 
 ## Corrections this research makes to files outside `specs/`
 

@@ -64,7 +64,7 @@ npm ci && npm run lint && npm test
 node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18            # preview, posts nothing
 node --env-file=.env bin/agent-watchdog.js run --date 2026-09-18 --stage collect      # one stage at a time
 node --env-file=.env bin/agent-watchdog.js replay --date 2026-09-18 --prompts ./p2    # offline, prints the diff
-AGENT_WATCHDOG_ENGINE=cli node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18
+AGENT_WATCHDOG_ENGINE=cli node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18  # blank key: your claude login
 npm run replay:eval                                                                  # fixture regression gate
 node --env-file=.env bin/agent-watchdog.js calibrate --week 2026-W38                # weekly threshold report
 node --env-file=.env bin/agent-watchdog.js distill                                  # corpus → proposed cards

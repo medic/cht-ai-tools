@@ -12,7 +12,8 @@ to Slack unless the step says so.
 - Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
 - A Chromium for rendering: `npx playwright-core install chromium-headless-shell`, or set
   `AGENT_WATCHDOG_CHROMIUM_PATH` to a system Chromium.
-- Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY`; a Grafana service-account
+- Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY` (or, with
+  `AGENT_WATCHDOG_ENGINE=cli`, a `claude` login and the key left blank); a Grafana service-account
   token with the Viewer role on the watchdog you point at (`AGENT_WATCHDOG_GRAFANA_TOKEN`,
   `AGENT_WATCHDOG_GRAFANA_URL`, `AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID`); Langfuse keys and
   `LANGFUSE_BASE_URL`. `SLACK_BOT_TOKEN` and `AGENT_WATCHDOG_SLACK_CHANNEL_ID` are needed only for
@@ -99,6 +100,7 @@ PR.
 
 ```sh
 AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date <date> --project <host>
+# with ANTHROPIC_API_KEY blank the cli engine runs on your claude login; agent.cli_auth in the log names the mode
 node smoke/agent-parity.js --date <date> --project <host>
 ```
 

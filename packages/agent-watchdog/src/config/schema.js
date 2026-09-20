@@ -60,6 +60,9 @@ const modelCommands = ['run', 'replay', 'distill', 'calibrate'];
 const forRun = ({ command }) => command === 'run';
 const forModel = ({ command }) => modelCommands.includes(command);
 const forPosting = ({ command, dryRun }) => command === 'run' && !dryRun;
+// The SDK runtime authenticates with the key only; the cli engine can run on the operator's `claude` login
+// instead (research.md R-3, login mode), so the key is optional there.
+const forSdkModel = (context) => forModel(context) && context.engine !== 'cli';
 
 // Each entry: environment name, dotted config path, zod schema, default, requiredness, flag alias.
 const VARIABLES = [
@@ -68,7 +71,8 @@ const VARIABLES = [
     path: 'secrets.anthropicApiKey',
     schema: text,
     secret: true,
-    required: forModel,
+    required: forSdkModel,
+    hint: 'the sdk engine needs it; with AGENT_WATCHDOG_ENGINE=cli and no key, the run uses the local claude login',
   },
   {
     env: 'SLACK_BOT_TOKEN',

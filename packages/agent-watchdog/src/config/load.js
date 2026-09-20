@@ -46,6 +46,15 @@ const readDryRun = (env, flags) => {
   return typeof raw === 'string' && ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
 };
 
+// The engine decides whether the model key is required, so it is read ahead of the variable loop with the
+// same precedence (flag, environment, default); an invalid value is reported by the enumeration itself.
+const readEngine = (env, flags) => {
+  if (!isUnset(flags.engine)) {
+    return String(flags.engine).trim();
+  }
+  return isUnset(env.AGENT_WATCHDOG_ENGINE) ? 'sdk' : env.AGENT_WATCHDOG_ENGINE.trim();
+};
+
 /**
  * Build the configuration for one command.
  * @param {object} options
@@ -59,7 +68,7 @@ const loadConfig = ({ env = process.env, flags = {}, command = 'run', withPolicy
   const config = { paths: { ...PACKAGE_PATHS } };
   const sources = {};
   const problems = [];
-  const context = { command, dryRun: readDryRun(env, flags) };
+  const context = { command, dryRun: readDryRun(env, flags), engine: readEngine(env, flags) };
 
   for (const variable of VARIABLES) {
     let raw;
@@ -81,7 +90,8 @@ const loadConfig = ({ env = process.env, flags = {}, command = 'run', withPolicy
     if (raw === undefined) {
       const required = typeof variable.required === 'function' ? variable.required(context) : false;
       if (required) {
-        problems.push({ env: variable.env, message: `required for command "${command}" but not set` });
+        const hint = variable.hint ? ` (${variable.hint})` : '';
+        problems.push({ env: variable.env, message: `required for command "${command}" but not set${hint}` });
       }
       sources[variable.env] = source;
       setPath(config, variable.path, null);

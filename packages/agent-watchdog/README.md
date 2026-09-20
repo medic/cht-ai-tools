@@ -61,9 +61,13 @@ at it and any file you leave out falls back to `config/defaults/`. A `projects.y
 real programme groups and ignore list is what makes a preview run against the hosted watchdog read
 like the real brief.
 
-The `cli` engine drives the same agent definition through `claude -p --bare` (set
+The `cli` engine drives the same agent definition through `claude -p` (set
 `AGENT_WATCHDOG_CLAUDE_PATH` when `claude` is not on your PATH) and serves the read-only tools to it
-through `agent-watchdog tools-server` over stdio. Replay serves recorded tool results from the stored
+through `agent-watchdog tools-server` over stdio. With `ANTHROPIC_API_KEY` set it runs in bare mode;
+leave the key blank and it runs on your own `claude` login (run `claude` and `/login` once), loading
+none of your settings, rules, CLAUDE.md or memory. The log line `agent.cli_auth` names the mode. Costs
+reported in login mode are the runtime's estimates and count against your plan's usage limits; the
+scheduled container run always uses the key. Replay serves recorded tool results from the stored
 run, prints a JSON comparison of items before and after, and is the diff a prompt change attaches to its
 PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
 against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.

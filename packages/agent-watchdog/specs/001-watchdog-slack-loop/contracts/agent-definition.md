@@ -25,7 +25,7 @@ into `run.json` (`versions`). No file under `agent/` or `prompts/` is ever writt
 
 | Concern | SDK option | CLI flag | Value |
 |---|---|---|---|
-| No filesystem settings, no CLAUDE.md | `settingSources: []` (omitting it loads all sources) | `--bare` (skips CLAUDE.md auto-discovery, hooks, plugin sync, keychain) | fixed in code |
+| No filesystem settings, no CLAUDE.md | `settingSources: []` (omitting it loads all sources) | key mode: `--bare` (skips CLAUDE.md auto-discovery, hooks, plugin sync, keychain); login mode: `--setting-sources ""` (no settings files, rules or CLAUDE.md; managed settings still apply) | fixed in code |
 | No built-in tools | `tools: []` | `--tools ""` | fixed in code |
 | Only enumerated MCP tools | `allowedTools`, plus per-server `tools: [{ name, permission_policy }]` policies in the MCP config | `--allowed-tools`, same policies in `mcp.json` | fixed in code |
 | No permission prompts, deny by default | `permissionMode: 'dontAsk'` | `--permission-mode dontAsk` | fixed in code |
@@ -34,8 +34,8 @@ into `run.json` (`versions`). No file under `agent/` or `prompts/` is ever writt
 | Wall clock per analysis call | `abortController` + timer | process kill after timer | `AGENT_WATCHDOG_MODEL_TIMEOUT_MS` |
 | Model, effort | `model`, `effort` | `--model`, `--effort` | `AGENT_WATCHDOG_MODEL`, `AGENT_WATCHDOG_EFFORT` |
 | No session files on disk | `persistSession: false` | `--no-session-persistence` (print mode only) | fixed in code |
-| Subprocess environment | `env: { ...process.env, CLAUDE_CONFIG_DIR, DISABLE_AUTOUPDATER: '1', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' }` (the option replaces the environment, so it is spread explicitly) | same variables exported | image `ENV` |
-| Authentication | `ANTHROPIC_API_KEY` in the subprocess environment | same; `--bare` reads only `ANTHROPIC_API_KEY` | secret |
+| Subprocess environment | `env: { ...process.env, CLAUDE_CONFIG_DIR, DISABLE_AUTOUPDATER: '1', DISABLE_TELEMETRY: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' }` (the option replaces the environment, so it is spread explicitly) | same variables exported plus `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`; `CLAUDE_CONFIG_DIR` is redirected in key mode only | image `ENV` |
+| Authentication | `ANTHROPIC_API_KEY` in the subprocess environment | key mode: the configured key in the environment, and `--bare` reads only that; login mode (no key configured): the operator's `claude` login under `CLAUDE_CONFIG_DIR` or `~/.claude`, the blank key removed from the environment, no `--bare` (bare mode never reads a login) | secret |
 | Structured output retries | runtime-internal; result `subtype: 'error_max_structured_output_retries'` is treated as a gate failure | same via the result event | |
 
 ## MCP servers
@@ -82,10 +82,11 @@ record: findings.pass<n>.json, verification.pass<n>.json, passes.json, session.j
   earlier tool results stay in context (FR-057). The `Stop` hook also runs the gate and returns
   `{ decision: 'block', reason }` when it fails, which is a second line of defence; the harness
   decision is authoritative because it also sees `structured_output` on the result message.
-- CLI: one `claude -p --bare --verbose --input-format stream-json --output-format stream-json`
-  process per project (print mode refuses stream-json output without `--verbose`, verified against
-  2.1.278); the harness writes user messages to stdin after each `result` event, so the session is
-  likewise shared without persisting anything to disk.
+- CLI: one `claude -p --verbose --input-format stream-json --output-format stream-json` process per
+  project, with `--bare` in key mode and `--setting-sources ""` in login mode (print mode refuses
+  stream-json output without `--verbose`, verified against 2.1.278); the harness writes user messages
+  to stdin after each `result` event, so the session is likewise shared without persisting anything to
+  disk.
 - Both: `tool_use` and `tool_result` events are appended to `tool-calls.jsonl` (SDK: `PostToolUse`
   hook plus the message stream; CLI: the `stream-json` events). `PreToolUse` (SDK) denies any tool
   not on the list even if the runtime would allow it; the CLI relies on `--tools ""` and
@@ -96,7 +97,7 @@ record: findings.pass<n>.json, verification.pass<n>.json, passes.json, session.j
 | Gap | Effect | Mitigation |
 |---|---|---|
 | CLI has no `--max-turns` | Turn cap is harness-enforced on the CLI | The harness closes stdin and terminates the process when the count is exceeded; recorded as `bounds_hit: ['turns']`. |
-| CLI `--bare` skips hooks | No in-process guard on the CLI | Same checks run in the harness; the allow-list is enforced by `--tools ""` and `--allowed-tools`. |
+| CLI hooks never fire (`--bare` in key mode, no settings loaded in login mode) | No in-process guard on the CLI | Same checks run in the harness; the allow-list is enforced by `--tools ""` and `--allowed-tools`. |
 | Structured output per turn in `stream-json` mode | Must hold for the multi-turn loop on both engines | Smoke test `smoke/agent-parity.js` runs one recorded project through both engines and diffs the artefacts; a difference fails the build. |
 
 ## What the model never receives

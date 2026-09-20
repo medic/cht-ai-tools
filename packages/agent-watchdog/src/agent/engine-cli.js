@@ -1,12 +1,21 @@
 'use strict';
 // The `claude` command-line face of the same agent definition (contracts/agent-definition.md, research.md R-3):
 // one `claude -p` process per project session fed stream-json user turns over stdin, its stream-json stdout
-// mapped to the same turn objects as the SDK engine by src/agent/turn-mapper.js. Hooks do not fire under
-// --bare, so the harness enforces the turn cap and the wall clock from the event stream itself.
+// mapped to the same turn objects as the SDK engine by src/agent/turn-mapper.js. Hooks never fire (bare mode
+// skips them; login mode loads no settings), so the harness enforces the turn cap and the wall clock from the
+// event stream itself.
+//
+// Two authentication modes, chosen by whether ANTHROPIC_API_KEY is configured:
+// - key mode: `--bare` with the key in a private configuration directory (the verified production shape);
+// - login mode: no key, so the runtime uses the operator's `claude` login. Bare mode never reads that login,
+//   so the process runs without `--bare` and is isolated by flags instead: `--setting-sources ""` (no settings
+//   files, rules or CLAUDE.md), `--tools ""`, `--strict-mcp-config`, `--no-session-persistence`, and the
+//   auto-memory switch in the environment.
 const { RUNTIME_TOOLS } = require('../../agent/hooks');
 const { forStructuredOutput } = require('./output-schema');
 const childProcess = require('node:child_process');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createTurnMapper } = require('./turn-mapper');
@@ -19,25 +28,46 @@ const DEFAULT_EXECUTABLE = 'claude';
 const KILL_GRACE_MS = 2000;
 const STDERR_SNIPPET = 500;
 
+const DEFAULT_CONFIG_DIR = path.join(os.tmpdir(), 'agent-watchdog-runtime');
+
+/** Where the runtime keeps its login: CLAUDE_CONFIG_DIR, else `~/.claude`. */
+const claudeConfigDir = (env) => env.CLAUDE_CONFIG_DIR || path.join(env.HOME || os.homedir(), '.claude');
+
 // PATH falls back to this process's PATH: without one neither `claude` nor a `#!/usr/bin/env node` tool server
-// could be found, and a caller passing a reduced environment never means to hide the executables.
-const subprocessEnv = (env) => ({
-  ...env,
-  PATH: env.PATH || process.env.PATH,
-  CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR || path.join(os.tmpdir(), 'agent-watchdog-runtime'),
-  DISABLE_AUTOUPDATER: '1',
-  DISABLE_TELEMETRY: '1',
-  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-});
+// could be found, and a caller passing a reduced environment never means to hide the executables. Auto memory
+// is off in both modes: nothing of a run belongs in the operator's memory directory.
+const subprocessEnv = (env, { apiKey = null } = {}) => {
+  const child = {
+    ...env,
+    PATH: env.PATH || process.env.PATH,
+    DISABLE_AUTOUPDATER: '1',
+    DISABLE_TELEMETRY: '1',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+  };
+  if (apiKey) {
+    child.ANTHROPIC_API_KEY = apiKey;
+    child.CLAUDE_CONFIG_DIR = env.CLAUDE_CONFIG_DIR || DEFAULT_CONFIG_DIR;
+  } else {
+    // Print mode uses a key whenever the variable is present, even blank (as `--env-file` leaves it), which
+    // would hide the login; the configuration directory stays where the login is.
+    delete child.ANTHROPIC_API_KEY;
+  }
+  return child;
+};
 
 /** The verified print-mode argument list; --verbose is required by the CLI for stream-json output. */
-const buildArgs = ({ systemPromptFile, tools, mcpConfigFile, outputSchema, model, effort, maxBudgetUsd }) => {
-  const args = [
-    '-p', '--bare', '--verbose', '--no-session-persistence',
-    '--input-format', 'stream-json', '--output-format', 'stream-json',
-    '--system-prompt-file', systemPromptFile,
-    '--tools', '',
-  ];
+const buildArgs = ({
+  systemPromptFile, tools, mcpConfigFile, outputSchema, model, effort, maxBudgetUsd, login = false,
+}) => {
+  const args = ['-p'];
+  if (login) {
+    args.push('--verbose', '--no-session-persistence', '--setting-sources', '');
+  } else {
+    args.push('--bare', '--verbose', '--no-session-persistence');
+  }
+  args.push('--input-format', 'stream-json', '--output-format', 'stream-json');
+  args.push('--system-prompt-file', systemPromptFile, '--tools', '');
   // The runtime's own StructuredOutput tool must be allowed for --json-schema output (agent/hooks.js).
   args.push('--allowed-tools', ...tools, ...RUNTIME_TOOLS);
   args.push('--permission-mode', 'dontAsk');
@@ -74,11 +104,28 @@ const createCliEngine = ({
   spawn = childProcess.spawn, claudePath = null, binPath = DEFAULT_BIN, replay = false,
 }) => {
   const executable = claudePath || (config.runtime && config.runtime.claudePath) || DEFAULT_EXECUTABLE;
-  const debug = (event, fields) => {
+  const apiKey = (config.secrets && config.secrets.anthropicApiKey) || null;
+  const login = !apiKey;
+  const log = (level, event, fields) => {
     if (logger) {
-      logger.debug(event, fields);
+      logger[level](event, fields);
     }
   };
+  const debug = (event, fields) => log('debug', event, fields);
+  if (login) {
+    const configDir = claudeConfigDir(env);
+    const credentialsFound = fsSync.existsSync(path.join(configDir, '.credentials.json'));
+    log('info', 'agent.cli_auth', { mode: 'login', config_dir: configDir, credentials_found: credentialsFound });
+    if (!credentialsFound) {
+      log('warn', 'agent.cli_login_missing', {
+        config_dir: configDir,
+        hint: 'no credentials file there; run `claude` and /login (macOS may keep the login in the keychain), '
+          + 'or set ANTHROPIC_API_KEY',
+      });
+    }
+  } else {
+    log('info', 'agent.cli_auth', { mode: 'api_key' });
+  }
 
   const stdioServer = (serverName, sessionName) => {
     if (!runDir || !sessionName) {
@@ -142,7 +189,7 @@ const createCliEngine = ({
   };
 
   const start = (args) => new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env: subprocessEnv(env), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { env: subprocessEnv(env, { apiKey }), stdio: ['pipe', 'pipe', 'pipe'] });
     const onError = (error) => reject(new Error(`could not start ${executable}: ${error.message}`));
     child.once('error', onError);
     child.once('spawn', () => {
@@ -165,7 +212,7 @@ const createCliEngine = ({
       const systemPromptFile = await writeSystemPrompt(systemPrompt, sessionName, tempDir);
       const mcpConfigFile = await writeMcpConfig(servers, sessionName, tempDir);
       const args = buildArgs({
-        systemPromptFile, tools, mcpConfigFile, outputSchema, model, effort, maxBudgetUsd: bounds.maxBudgetUsd,
+        systemPromptFile, tools, mcpConfigFile, outputSchema, model, effort, maxBudgetUsd: bounds.maxBudgetUsd, login,
       });
       child = await start(args);
     } catch (error) {
@@ -346,4 +393,4 @@ const createCliEngine = ({
   return { name: 'cli', mcpConfig, openSession, singleTurn };
 };
 
-module.exports = { createCliEngine, buildArgs, redactMcpConfig, subprocessEnv };
+module.exports = { createCliEngine, buildArgs, redactMcpConfig, subprocessEnv, claudeConfigDir };

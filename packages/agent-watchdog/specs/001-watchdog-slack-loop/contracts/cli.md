@@ -26,7 +26,7 @@ The daily pipeline: `purge`, `feedback`, `collect`, `analyze`, `agent`, `rollup`
 | `--date` | `YYYY-MM-DD` | today, UTC | Date to analyse; also the run directory name. |
 | `--project` | URL, repeatable | all discovered | Restrict analysis to these projects; discovery still runs. |
 | `--stage` | stage name | none | Run only this stage from the previous stage's files (FR-043). Exit 65 when inputs are missing. |
-| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | Which face of the same agent definition runs the passes (FR-050). `cli` runs `claude -p --bare --verbose … --input-format stream-json --output-format stream-json` (print mode requires `--verbose` for stream-json output) and serves the local tools through `tools-server`. |
+| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | Which face of the same agent definition runs the passes (FR-050). `cli` runs `claude -p --verbose … --input-format stream-json --output-format stream-json` (print mode requires `--verbose` for stream-json output), with `--bare` when `ANTHROPIC_API_KEY` is set and, without a key, on the operator's `claude` login with `--setting-sources ""` instead; it serves the local tools through `tools-server`. |
 | `--dry-run` | flag | `AGENT_WATCHDOG_DRY_RUN` | Preview mode: every artefact, `payload.json`, nothing posted (FR-025). |
 | `--force` | flag | off | Allow a second run for the same date; the new run supersedes and links the earlier post (FR-042). |
 | `--since` | `YYYY-MM-DD` | derived from `AGENT_WATCHDOG_FEEDBACK_LOOKBACK_RUNS` | Read feedback from posts on or after this date instead of the last N runs (FR-026). |

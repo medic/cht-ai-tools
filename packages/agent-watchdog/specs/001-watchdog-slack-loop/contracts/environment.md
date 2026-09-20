@@ -13,7 +13,7 @@ type, requiredness and consumer.
 
 | Variable | Required | Consumer | Notes |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | yes | agent runtime | Read by the Claude Code runtime the SDK launches. |
+| `ANTHROPIC_API_KEY` | yes for the `sdk` engine | agent runtime | Read by the Claude Code runtime. Optional with `AGENT_WATCHDOG_ENGINE=cli`: unset or blank, the run uses the operator's `claude` login (login mode, [agent-definition.md](./agent-definition.md)); the scheduled run always sets it. |
 | `SLACK_BOT_TOKEN` | yes unless `--dry-run` | publish, feedback | Bot token of the `agent-watchdog` Slack app. Scopes in [slack-payload.md](./slack-payload.md). |
 | `AGENT_WATCHDOG_GRAFANA_TOKEN` | yes | collect | Service-account token, Viewer role, on the hosted watchdog Grafana. |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | yes | trace | Tracing is not optional: the footer needs the trace link (FR-019, FR-049). |
@@ -28,7 +28,7 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_MODEL_FEEDBACK` | string | value of `MODEL` | Feedback-note parsing. |
 | `AGENT_WATCHDOG_MODEL_CALIBRATION` | string | value of `MODEL` | Weekly calibration summary. |
 | `AGENT_WATCHDOG_MODEL_DISTILL` | string | value of `MODEL` | Corpus distillation. |
-| `AGENT_WATCHDOG_ENGINE` | enum `sdk\|cli` | `sdk` | `cli` shells out to `claude -p`; same agent definition (FR-050). |
+| `AGENT_WATCHDOG_ENGINE` | enum `sdk\|cli` | `sdk` | `cli` shells out to `claude -p`; same agent definition (FR-050). With the key: `--bare` and a private `CLAUDE_CONFIG_DIR`. Without it: the operator's login, no `--bare`, `--setting-sources ""`. |
 
 ## Bounds (every model interaction is capped; hard caps live in code)
 
@@ -93,7 +93,9 @@ These are baked into the image as `ENV` and documented here so the deployment do
 repeat them: `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`,
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`
 (writable scratch for the agent runtime; sessions are not persisted to it because the SDK is run
-with `persistSession: false`), `NODE_ENV=production`. See [container.md](./container.md).
+with `persistSession: false`), `NODE_ENV=production`. See [container.md](./container.md). The runtime
+would also look for a `claude` login under `CLAUDE_CONFIG_DIR`, so the image has none: the scheduled run
+authenticates with `ANTHROPIC_API_KEY`; login mode is for a contributor's machine.
 
 ## Deliberately not configurable
 

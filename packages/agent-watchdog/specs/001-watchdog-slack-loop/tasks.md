@@ -434,6 +434,15 @@ spent the full project budget each time; the run budget was declared but never e
 - [X] T187 `RUNTIME_TOOLS` in `agent/hooks.js`, allowed in `src/agent/engine-sdk.js` and `src/agent/engine-cli.js`
 - [X] T188 Run budget across sessions in `src/cli/stages/agent.js` with `budgetUsd` on `src/agent/session-loop.js`; `run_budget` in the agent summary; `runBudgetNotice` in `src/rollup/notices.js` read by `src/cli/stages/rollup.js`; environment contract, `.env.example`, spec edge case, research R-20, README, AGENTS
 
+## Phase 19: The command-line engine on the operator's login (revision 15, 2026-09-20)
+
+**Purpose**: A contributor's preview with `AGENT_WATCHDOG_ENGINE=cli` and no API key exited 78 although `claude`
+was logged in; bare mode never reads a login (research.md R-3, login mode).
+
+- [X] T189 [P] Tests first: `test/config/load.spec.js` (key optional for model commands on the cli engine, required with the sdk engine, the message names the alternative), `test/agent/engine-cli.spec.js` (login mode without `--bare`, `--setting-sources ""`, no config-dir override, blank key removed; key mode unchanged and the key handed to the child; `agent.cli_auth` and `agent.cli_login_missing`); `test/helpers/fake-claude.js` records its environment
+- [X] T190 `forSdkModel` and the hint on `ANTHROPIC_API_KEY` in `src/config/schema.js`; `engine` in the loader context and the hint in the message in `src/config/load.js`
+- [X] T191 Login mode in `src/agent/engine-cli.js` (`buildArgs` `login`, `subprocessEnv` `apiKey`, `claudeConfigDir`, the auth log lines); environment, agent-definition and cli contracts; `.env.example`; README; AGENTS; quickstart; spec FR-050, edge case and clarification; plan revision 15 delta; research R-3 login mode and smoke S-19
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

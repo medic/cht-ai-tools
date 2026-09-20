@@ -160,6 +160,39 @@ describe('config/load', () => {
     expect(effective.model.name).to.equal('claude-fable-5-1');
   });
 
+  it('does not require ANTHROPIC_API_KEY for model commands when the engine is cli', () => {
+    const env = { ...baseEnv(), AGENT_WATCHDOG_ENGINE: 'cli' };
+    delete env.ANTHROPIC_API_KEY;
+    for (const command of ['run', 'replay', 'distill', 'calibrate']) {
+      const { config } = loadConfig({ env, command });
+      expect(config.model.engine).to.equal('cli');
+      expect(config.secrets.anthropicApiKey).to.equal(null);
+    }
+    // A blank value, as `--env-file` produces from `ANTHROPIC_API_KEY=`, counts as unset.
+    const blank = loadConfig({ env: { ...env, ANTHROPIC_API_KEY: '' }, command: 'run' });
+    expect(blank.config.secrets.anthropicApiKey).to.equal(null);
+    // The flag chooses the engine before the requirement is evaluated.
+    const cliFlag = { env: { ...env, AGENT_WATCHDOG_ENGINE: 'sdk' }, flags: { engine: 'cli' }, command: 'run' };
+    expect(loadConfig(cliFlag).config.model.engine).to.equal('cli');
+  });
+
+  it('still requires ANTHROPIC_API_KEY for the sdk engine and points at the cli engine in the message', () => {
+    const env = baseEnv();
+    delete env.ANTHROPIC_API_KEY;
+    let error;
+    try {
+      loadConfig({ env, command: 'run' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error.code).to.equal(78);
+    expect(error.keys).to.deep.equal(['ANTHROPIC_API_KEY']);
+    expect(error.message).to.include('sdk engine').and.include('AGENT_WATCHDOG_ENGINE=cli');
+    const sdkFlag = { env: { ...env, AGENT_WATCHDOG_ENGINE: 'cli' }, flags: { engine: 'sdk' }, command: 'run' };
+    expect(() => loadConfig(sdkFlag)).to.throw(ConfigError);
+    expect(() => loadConfig({ env, command: 'purge' })).to.not.throw();
+  });
+
   it('reads the optional claude executable path for the cli engine', () => {
     const unset = loadConfig({ env: baseEnv(), command: 'run' });
     expect(unset.config.runtime.claudePath).to.equal(null);

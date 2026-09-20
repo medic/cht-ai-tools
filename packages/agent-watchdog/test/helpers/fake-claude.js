@@ -3,7 +3,7 @@
 // A stand-in for the `claude` executable for the CLI-engine tests and the User Story 3 end-to-end test. It speaks
 // the print-mode stream-json protocol: one init event, then, for every user message on stdin, the scripted
 // events and a result. Driven by environment variables:
-//   FAKE_CLAUDE_RECORD    JSONL file receiving { event: 'start', argv } and { event: 'stdin', line } events
+//   FAKE_CLAUDE_RECORD    JSONL file receiving { event: 'start', argv, env } and { event: 'stdin', line } events
 //   FAKE_CLAUDE_MODE      scripted (default) | findings | hang | chatter
 //   FAKE_CLAUDE_SCENARIO  scripted mode: JSON { session_id?, mcp_servers?, turns: [{ messages, result }] }
 //   FAKE_CLAUDE_DATA_DIR  findings mode: the data volume whose latest run answers the prompt
@@ -33,7 +33,16 @@ const mode = env.FAKE_CLAUDE_MODE || 'scripted';
 const scenario = mode === 'scripted' ? JSON.parse(fs.readFileSync(env.FAKE_CLAUDE_SCENARIO, 'utf8')) : {};
 const sessionId = scenario.session_id || 'fake-cli-session';
 
-record({ event: 'start', argv, pid: process.pid });
+// The start record also carries what the engine put in the environment, so tests can check each authentication
+// mode: the config-directory override, whether an API key reached the process, and the auto-memory switch.
+record({
+  event: 'start', argv, pid: process.pid,
+  env: {
+    CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR || null,
+    has_api_key: Object.prototype.hasOwnProperty.call(env, 'ANTHROPIC_API_KEY'),
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY: env.CLAUDE_CODE_DISABLE_AUTO_MEMORY || null,
+  },
+});
 emit({
   type: 'system', subtype: 'init', session_id: sessionId,
   mcp_servers: scenario.mcp_servers || [{ name: 'cht-docs', status: 'connected' }],
