@@ -56,6 +56,11 @@ agent-watchdog distill [--all] [--item <relative-path>]                       # 
 agent-watchdog purge --dry-run                                                # what retention would remove; runs first in every run
 ```
 
+Your own policy files go under `config/local/`, which git ignores: point `AGENT_WATCHDOG_CONFIG_DIR`
+at it and any file you leave out falls back to `config/defaults/`. A `projects.yaml` there with your
+real programme groups and ignore list is what makes a preview run against the hosted watchdog read
+like the real brief.
+
 The `cli` engine drives the same agent definition through `claude -p --bare` (set
 `AGENT_WATCHDOG_CLAUDE_PATH` when `claude` is not on your PATH) and serves the read-only tools to it
 through `agent-watchdog tools-server` over stdio. Replay serves recorded tool results from the stored
