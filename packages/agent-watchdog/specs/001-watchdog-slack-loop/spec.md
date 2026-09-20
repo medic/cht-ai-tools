@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 6)
+**Status**: Draft (revision 7)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -209,6 +209,53 @@ name in a later replay.
    index of pattern cards and reads full cards only when relevant, so the size of the corpus
    does not grow the cost of every run.
 
+### User Story 7 - Feedback acknowledged and made permanent (Priority: P3)
+
+An engineer who reacts to an item or leaves a note wants to know it was seen, what it changed,
+and how to make the lesson permanent. The next run reviews the feedback it read: reactions are
+tallied by code, notes with a reusable lesson become proposals for the place the lesson belongs
+(the skill, a prompt, a project annotation, a threshold or a pattern card), and one digest reply
+in the new brief's thread reports, per item, what changed today, which proposals were written and
+where, and how long the feedback keeps influencing ranking. Feedback records are kept permanently
+for audit; only their automatic influence on ranking is bounded.
+
+**Why this priority**: it closes the loop for the people giving feedback and turns notes into
+reviewed, permanent improvements instead of memory that may be condensed away; it depends on
+User Stories 2 and 4.
+
+**Independent Test**: seed thumbs and notes of each kind (an expectation with a horizon, a
+project fact, a skill lesson, a prompt complaint, a threshold complaint) on a recorded post; run
+the next day; verify one digest reply naming each item's effect and each proposal with its
+destination and path; verify a second run acknowledges nothing again; verify the records survive
+a purge dated a year later and that records older than the influence window no longer adjust
+confidence.
+
+**Acceptance Scenarios**:
+
+1. **Given** reactions and notes on yesterday's post, **When** today's run completes, **Then** the
+   new brief's thread carries exactly one feedback digest reply that states, per item, what the
+   feedback changed today (confidence raised or lowered, or the candidate suppressed until its
+   horizon), that the record is kept permanently at its path, how many days it keeps influencing
+   ranking, and that the item's outcome is recorded in the knowledge corpus.
+2. **Given** a note carrying a reusable lesson, **When** the run reviews it, **Then** a proposal
+   file names one destination (skill, prompt, project annotation, threshold or pattern card) and
+   states the lesson in pattern-level terms; the digest names the proposal's path and destination;
+   and no skill, prompt, threshold or configuration file was modified.
+3. **Given** only thumbs-up or thumbs-down without notes, **When** the run reviews them, **Then**
+   no model call is made and no proposal is written; the digest reports the tallies and their
+   effect only.
+4. **Given** feedback that was acknowledged in an earlier digest, **When** a later run reads the
+   same post again, **Then** it is not acknowledged again; the digest lists only feedback not
+   previously acknowledged, and a run that acknowledges nothing posts no digest.
+5. **Given** a feedback record older than the influence window, **When** items are ranked,
+   **Then** it no longer adjusts confidence, while it remains in the feedback file unchanged and
+   is never purged.
+6. **Given** notes written by named people, **When** the digest is posted, **Then** it names no
+   person and contains no personal data.
+7. **Given** proposals produced from feedback that nobody has adopted, **When** the weekly
+   calibration report runs, **Then** it lists them with their age, so the reminder lives in one
+   place and the feedback itself never expires.
+
 ### Edge Cases
 
 - Metrics source unreachable or timing out: post a failure notice, exit non-zero, publish no
@@ -233,6 +280,14 @@ name in a later replay.
 - A corpus item is enormous or binary: it is skipped with a note in the distillation report,
   never truncated silently.
 - Dates are UTC; expected-load windows carry their own timezone in configuration.
+- The classification call for notes fails: the digest still acknowledges the feedback with its
+  tallies and effect, marks the notes as not yet classified, and the next run classifies them and
+  names the late proposals in its own digest.
+- Preview mode: the digest is part of the printed payload, nothing is posted, and no record is
+  marked acknowledged, so the next real run acknowledges it.
+- Slack unavailable when the digest would be posted: the run is already marked unposted (above)
+  and the records stay unacknowledged for the next run.
+- Reactions on a heartbeat post: acknowledged in the next digest as feedback on the brief.
 
 ## Requirements *(mandatory)*
 
@@ -341,12 +396,40 @@ Feedback
 - **FR-027**: The system MUST map thumbs-up and thumbs-down to items by stable identity, and notes
   to items by explicit reference; unmatched notes MUST be recorded as such.
 - **FR-028**: The system MUST persist each piece of feedback with date, item identity, verdict,
-  note and author.
+  note and author, in an append-only record that is never purged (FR-059).
 - **FR-029**: Feedback MUST influence subsequent runs: repeatedly dismissed patterns rank lower,
   confirmed patterns rank higher, and notes that state an expectation are honoured until their
-  stated horizon.
+  stated horizon. Ranking influence counts only records within the configured influence window
+  (FR-060). The feedback read that day, with author identifiers removed, MUST be part of the
+  roll-up's context so the memory update can reflect it (User Story 2, scenario 1).
 - **FR-030**: Confirmed and dismissed items, with their notes, MUST be appended to the knowledge
   corpus as run outcomes so that distillation learns from operation as well as from history.
+
+Feedback review and acknowledgement
+
+- **FR-059**: Feedback records MUST be kept permanently in the append-only feedback file; no
+  retention setting removes or compacts them. Run records and raw series keep their FR-040
+  periods.
+- **FR-060**: Feedback MUST adjust ranking only within an influence window, configurable
+  (`AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS`, default 30 days) with a hard cap in code; a horizon
+  stated in a note is honoured until its date regardless of the window; the history the analysis
+  can read and the corpus outcomes are unaffected by the window.
+- **FR-061**: Each run MUST review the feedback it read that day. Reactions are tallied by code
+  and never sent to the model for classification. Each note is classified by one bounded,
+  schema-validated model call into one of: expectation or horizon (already handled by FR-029),
+  project annotation, skill, prompt, threshold, pattern card, or no reusable lesson. Every
+  classification other than the first and the last MUST produce a proposal (FR-032, FR-033) that
+  names its destination and states the lesson in pattern-level terms; the system MUST NOT apply
+  it.
+- **FR-062**: The system MUST acknowledge feedback with at most one digest reply per run, posted
+  in the thread of the brief or heartbeat published that day and built by code from structured
+  fields: per item the effect applied today, the proposals written with destination and path,
+  and one statement that the records are kept permanently at their path and influence ranking
+  for the configured window. The digest MUST name no person, MUST acknowledge each record once
+  (the acknowledgement is stored on the record with the run that posted it), MUST be part of
+  the preview payload, and MUST be omitted when there is nothing new to acknowledge.
+- **FR-063**: The weekly calibration report MUST list every proposal still awaiting review, with
+  its age in days and its destination.
 
 Memory, proposals and the knowledge corpus
 
@@ -378,7 +461,8 @@ Persistence and reproducibility
 - **FR-040**: The system MUST NOT retain raw metric series longer than a short configurable
   period, because the hosted watchdog is the source of record; computed changes, candidates,
   items, feedback and memory — the inputs the model saw — MUST be retained for the long period.
-  Defaults: 14 days for raw series and rendered images, 30 days for everything else.
+  Feedback records are exempt from retention and kept permanently (FR-059). Defaults: 14 days
+  for raw series and rendered images, 30 days for everything else.
 - **FR-041**: The system MUST support offline replay of any stored run from its retained inputs;
   replay MUST NOT contact the metrics source or Slack.
 - **FR-042**: Runs MUST be idempotent per date; a second run on the same date MUST require an
@@ -442,9 +526,13 @@ Configuration
 - **Brief**: the published post for a run: headline, bullets, image, footer.
 - **Thread Reply**: the per-item message that carries reactions.
 - **Feedback**: a verdict (up, down, retracted) or note from a named person about an item or a
-  brief, dated.
+  brief, dated; kept permanently; carries the run that acknowledged it and, for notes, its
+  classification and the proposal it produced.
+- **Feedback Digest**: the once-per-run thread reply that acknowledges new feedback, states its
+  effect and names the proposals written from it.
 - **Memory**: the agent's curated, size-capped notes, versioned by diff.
-- **Proposal**: a suggested change to skill, prompts or thresholds awaiting human review.
+- **Proposal**: a suggested change to the skill, a prompt, a threshold, a project annotation or
+  a pattern card, awaiting human review.
 - **Corpus Item**: a raw file placed in the knowledge corpus, tracked by content hash and
   distillation status.
 - **Pattern Card**: a reviewed, structured description of a recurring watchdog pattern, cited back
@@ -484,6 +572,10 @@ Configuration
   public repository, verified by an automated check on every PR and every run.
 - **SC-011**: From a brief, a reader reaches the configuration that reorders priorities in two
   clicks or fewer.
+- **SC-012**: Every reaction and note left on a brief is acknowledged in the next run's digest,
+  exactly once, verified by replay on recorded feedback.
+- **SC-013**: A feedback record left on day N is present and unchanged in the feedback file on
+  day N+365, verified by a retention test; no purge setting can remove it.
 
 ## Assumptions
 
@@ -580,6 +672,16 @@ Configuration
 - Q: Where is the SC-002 thumbs-down rate measured from, given 30-day retention of items and
   feedback? → A: from the run outcomes appended to the knowledge corpus (FR-030), which fall
   outside the FR-040 retention limits.
+- Q: How long are feedback records kept? → A: Permanently; they are kilobytes a month and the
+  audit trail of every reaction (FR-059). The earlier 30-day answer applies to run records, not
+  to feedback.
+- Q: How long does feedback influence ranking? → A: 30 days by default, configurable with a hard
+  cap; horizons stated in notes are honoured until their date (FR-060).
+- Q: How is feedback acknowledged? → A: one code-built digest reply per run in that day's brief
+  thread, once per record; never a reply per reaction (FR-062).
+- Q: Where do lessons from notes become permanent? → A: as proposal files for the skill, a
+  prompt, a project annotation, a threshold or a pattern card, never applied automatically
+  (FR-061); the weekly report lists proposals still awaiting review (FR-063).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 
@@ -625,3 +727,10 @@ Decisions already taken during design that belong in the plan, listed so they ar
   repository; retention split as in FR-040.
 - Package is CommonJS on Node 22 per the constitution; the SDK is loaded through dynamic import if
   it ships as ES modules only.
+- Feedback review (User Story 7): `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` joins the environment
+  contract; `feedback.jsonl` becomes a durable class and the purge stops compacting it; Feedback
+  records gain `acknowledged_run_id`, `classification` and `proposal_id`; the digest is a new
+  Slack template and a new registered metadata event type; note classification uses
+  `AGENT_WATCHDOG_MODEL_FEEDBACK` with a new prompt file; the Proposal type gains
+  `project_annotation` (a `projects.yaml` change); the calibration report gains an
+  `open_proposals` list; and the roll-up prompt receives the day's matched feedback.
