@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 8)
+**Status**: Draft (revision 9)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -13,8 +13,9 @@ to run the same agent on their own machine and see exactly what it would post.
 ### User Story 1 - Daily brief for the on-call engineer (Priority: P1)
 
 A Medic engineer responsible for hosted CHT projects opens Slack in the morning and finds one
-post from agent-watchdog: a headline, at most three flagged items across all monitored projects,
-each with the metric evidence, why it matters now, a suggested check and a link straight to the
+post from agent-watchdog: a headline, at most five bullets across all monitored projects (a
+bullet may carry sub-bullets for a programme's projects or alerts, User Stories 8 and 9), each
+with the metric evidence, why it matters now, a suggested check and a link straight to the
 relevant dashboard view for that project and time window, plus a rendered image of the brief.
 On a day with nothing worth flagging, the post is a single line saying so and what was checked.
 
@@ -35,9 +36,9 @@ quiet day and verify the one-line post.
 2. **Given** no project's metrics differ notably from their baselines, **When** the run
    executes, **Then** a single-line post states all is quiet and how many projects and panels
    were checked, and no thread replies are created.
-3. **Given** more than three items qualify, **When** the run executes, **Then** the three
-   highest-ranked appear as bullets and the remainder appear as additional threaded replies,
-   each still individually reactable.
+3. **Given** more items qualify than five bullets can hold, **When** the run executes, **Then**
+   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, and the
+   remainder appear as additional threaded replies, each still individually reactable.
 4. **Given** the run falls inside a configured expected-load window (month-end, sync week),
    **When** a metric rises in line with the same phase of the previous cycle, **Then** it is
    not flagged and the post notes that the window is active.
@@ -256,6 +257,76 @@ confidence.
    calibration report runs, **Then** it lists them with their age, so the reminder lives in one
    place and the feedback itself never expires.
 
+### User Story 8 - Alerts in the brief (Priority: P2)
+
+The hosted watchdog already raises Grafana alerts (API server down, sentinel and outbound push
+backlogs, conflicts, feedback rate, message delivery, fragmentation, replication limit, server
+time, and whatever else operators provision). An engineer reading the brief wants to know which
+alerts are firing right now, which are new, which have been firing so long that nobody is acting
+on them, and which matter most, grouped so that fifteen alerts about one thing read as one line.
+Over time the team wants a record of when each alert fired, what else was happening, and why.
+
+**Why this priority**: the alerts are the existing monitoring stack's own judgement; a brief that
+ignores them makes the reader open two tools.
+
+**Independent Test**: record a day on which the hosted watchdog has firing alerts of several
+rules across several projects, including some firing for weeks; run; verify the brief carries
+grouped alert bullets with counts, staleness and working links, one thread reply per alert group,
+an episode record per alert instance with its correlations, and that a day with no firing alerts
+adds nothing.
+
+**Acceptance Scenarios**:
+
+1. **Given** alerts are firing when the run executes, **When** the brief is composed, **Then** it
+   states per project group how many alerts fire, grouped by category, with the oldest start and a
+   link to the filtered alert list, for example "MoH-Nepal alerts: 15 firing, 12 about disk usage,
+   3 stale for more than 14 days".
+2. **Given** an alert has been firing longer than the configured staleness threshold, **When**
+   the brief is composed, **Then** it is marked stale and counted separately from new and
+   persisting alerts.
+3. **Given** the reviewed alert policy assigns importance to rule titles, **When** alerts compete
+   with flagged items for the body, **Then** critical alerts rank first and unknown rules are
+   reported as uncategorised with medium importance.
+4. **Given** alerts are numerous, **When** the brief is composed, **Then** one bullet per project
+   group summarises them with one sub-bullet per category, and the full list is in that group's
+   thread reply, which can receive reactions and notes like an item.
+5. **Given** an alert started or cleared since the previous run, **When** the run completes,
+   **Then** an episode record holds when it started and cleared, the expected-load window and any
+   CHT version change in force at the start, the flagged items on the same project and metric in
+   the same window, and the analysis's explanation when it produced one; episodes are appended to
+   the knowledge corpus.
+6. **Given** the alerting endpoints are unreachable, **When** the run executes, **Then** the brief
+   notes that alerts were unavailable and the run otherwise completes.
+
+### User Story 9 - Grouped briefing for programmes (Priority: P2)
+
+Medic's hosted watchdog monitors projects that belong to programmes, today eCHIS Kenya and MoH
+Nepal, plus development instances nobody wants in the brief. A reader wants the body to say
+"Nepal: 5 projects with issues" with one line per project underneath, and never to see a `.dev`
+host.
+
+**Why this priority**: with dozens of projects a flat list of items hides the programme-level
+picture, and development instances add noise.
+
+**Independent Test**: declare two groups by host pattern and an ignore pattern in the project
+annotations; run against recorded metrics with issues on several projects of one group and on a
+development host; verify the group bullet with sub-bullets, the per-project thread replies, the
+ignored host's absence from analysis and post, and the "Other" group for unmatched hosts.
+
+**Acceptance Scenarios**:
+
+1. **Given** `projects.yaml` declares groups by host pattern, **When** several projects of one
+   group have flagged items, **Then** the body shows one bullet for the group, "Nepal: 5 projects
+   with issues", with one sub-bullet per project item in rank order, and each project item still
+   has its own thread reply.
+2. **Given** a host matches the ignore list, **When** the run executes, **Then** it is discovered
+   and counted as ignored but neither analysed, nor charged for model usage, nor named in the post.
+3. **Given** a host matches no group, **When** the brief is composed, **Then** it is reported under
+   the group "Other".
+4. **Given** five or more bullets qualify, **When** the brief is composed, **Then** at most five
+   appear, each at most two lines with at most eight sub-bullets, and the gate rejects a draft that
+   exceeds any of these limits.
+
 ### Edge Cases
 
 - Metrics source unreachable or timing out: post a failure notice, exit non-zero, publish no
@@ -288,6 +359,15 @@ confidence.
 - Slack unavailable when the digest would be posted: the run is already marked unposted (above)
   and the records stay unacknowledged for the next run.
 - Reactions on a heartbeat post: acknowledged in the next digest as feedback on the brief.
+- The alerting endpoints answer but Grafana's alert state history is not configured: episodes are
+  built from the run's own daily observations (first seen, last seen), not from Grafana's history.
+- An alert instance carries no `instance` label (a rule about the watchdog itself): it belongs to
+  no project and is reported under a "Watchdog" group.
+- A project is both flagged by the analysis and alerting: one bullet carries both; nothing is
+  counted twice, and the alert episode links to the item.
+- Hundreds of alerts fire at once: grouping keeps the body within its limits and the thread reply
+  lists at most fifty instances per group, with the count of the rest.
+- Every host is ignored or no host matches a group: the brief still names the counts.
 
 ## Requirements *(mandatory)*
 
@@ -321,7 +401,9 @@ Analysis
   evidence (values and windows), why it matters now, a suggested check, a structured reference to
   the dashboard view (dashboard, panel, project, window) from which the link is built, a
   confidence, the number of days it has persisted, and the pattern card it matches if any.
-- **FR-010**: The system MUST rank flagged items and place at most three in the post body.
+- **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
+  bullet is one item or, when a project group has several flagged projects or several alerts, one
+  group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
 - **FR-011**: Items MUST be produced in a machine-validated structure; output that fails
   validation MUST NOT be published.
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
@@ -339,8 +421,9 @@ Analysis
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
   they appear in the watchdog, PromQL where it helps the reader confirm. Emoji are permitted as
-  status and severity markers. At most three bullets, at most two lines each; these structural
-  limits are checked by the verification gate. No separate writing or voice skill is applied.
+  status and severity markers. At most five bullets of at most two lines each, each bullet with at
+  most eight sub-bullets of one line each; these structural limits are checked by the verification
+  gate. No separate writing or voice skill is applied.
 
 Analysis passes
 
@@ -374,7 +457,7 @@ Verification gate
 Publishing
 
 - **FR-019**: The system MUST post one message per run to the configured Slack channel containing
-  a headline, at most three bullets, the brief image, and a footer with a link to the prompts, a
+  a headline, at most five bullets (FR-010), the brief image, and a footer with a link to the prompts, a
   link to the deployment configuration, a link to the run's trace, and the run's cost in currency.
 - **FR-020**: The system MUST post each flagged item as its own threaded reply so it can receive
   reactions independently.
@@ -438,6 +521,40 @@ Feedback review and acknowledgement
   added in preview mode.
 - **FR-063**: The weekly calibration report MUST list every proposal still awaiting review, with
   its age in days and its destination.
+
+Alerts and groups
+
+- **FR-064**: Each run MUST read the Grafana-managed alert rules and their firing instances from
+  the hosted watchdog with the same read-only credential used for metrics, recording per instance
+  the rule, the project (from the `instance` label), the state and since when it has fired. When
+  the alerting endpoints are unavailable the brief MUST say so and the run MUST complete.
+- **FR-065**: Alerts MUST be classified by code: category and importance from a reviewed policy
+  file (`alerts.yaml`, keyed by rule title; unknown rules are medium and reported as
+  uncategorised), newness against the previous run, and staleness after a configurable number of
+  days firing (default 14). Initial importance: critical for API Server Down; high for Sentinel
+  Backlog, Outbound Push Backlog and Message Delivery Rate; medium for DB Conflicts Rate, Client
+  Feedback/Error Rate and Users Over Replication Limit; low for DB Fragmentation and Server Time
+  Accurate.
+- **FR-066**: The brief MUST summarise firing alerts per project group and category with counts,
+  the oldest start, the number stale, and a code-built link to the filtered alert list; when a
+  group has several categories the bullet carries one sub-bullet per category. Alert bullets rank
+  with flagged items by importance, critical first. Each alert group gets one thread reply listing
+  its instances (at most fifty, with the count of the rest) that can receive reactions and notes.
+- **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
+  when it started and cleared, its duration, and correlations computed by code (the expected-load
+  window active at the start, a CHT version change within a day of the start, flagged items on the
+  same project and a related metric in the same window). The analysis pass receives the project's
+  firing alerts as context; an item that explains an alert is linked to the episode as its
+  explanation. Episodes are appended to the knowledge corpus as run outcomes are.
+- **FR-068**: `projects.yaml` MUST support project groups (a label and host patterns) and an
+  ignore list of host patterns. Ignored hosts are discovered and counted but MUST NOT be analysed,
+  incur model usage or be named in any post. Hosts matching no group belong to "Other".
+- **FR-069**: When a group has more than one flagged project, the body MUST show one bullet for the
+  group naming the count, with one sub-bullet per project item in rank order; a group with one
+  flagged project shows that item as today. Every project item keeps its own thread reply.
+- **FR-070**: Links to alerts MUST be built by code from the collected rule definitions and labels
+  to the watchdog's alert list, and MUST pass the same allow-list and resolution checks as
+  dashboard links.
 
 Memory, proposals and the knowledge corpus
 
@@ -531,8 +648,17 @@ Configuration
   project, metric and pattern so it can be tracked across days.
 - **Verification Report**: the result of the gate for one draft — each check, pass or fail, with
   reasons.
-- **Brief**: the published post for a run: headline, bullets, image, footer.
-- **Thread Reply**: the per-item message that carries reactions.
+- **Brief**: the published post for a run: headline, up to five bullets each with optional
+  sub-bullets, image, footer.
+- **Thread Reply**: the per-item message that carries reactions; alert groups have one too.
+- **Project Group**: a programme such as MoH Nepal or eCHIS Kenya, declared by host patterns in
+  the project annotations, plus "Other" for unmatched hosts and "Watchdog" for alerts without a
+  project.
+- **Alert Rule**: a Grafana-managed rule provisioned on the hosted watchdog, with the category and
+  importance the reviewed alert policy assigns to its title.
+- **Alert Instance**: one firing evaluation of a rule for one project, with its state and start.
+- **Alert Episode**: the durable record of one instance from start to clear, with the correlations
+  computed for it and the explanation the analysis produced, if any.
 - **Feedback**: a verdict (up, down, retracted) or note from a named person about an item or a
   brief, dated; kept permanently; carries the run that acknowledged it and, for notes, its
   classification and the proposal it produced.
@@ -584,6 +710,11 @@ Configuration
   exactly once, verified by replay on recorded feedback.
 - **SC-013**: A feedback record left on day N is present and unchanged in the feedback file on
   day N+365, verified by a retention test; no purge setting can remove it.
+- **SC-014**: Every alert firing on the hosted watchdog at run time appears in that day's brief
+  body or thread, grouped, with a link that resolves, verified by replay on recorded alert
+  fixtures.
+- **SC-015**: No published body exceeds five bullets, two lines per bullet or eight sub-bullets per
+  bullet, verified by the gate report of every post.
 
 ## Assumptions
 
@@ -601,6 +732,9 @@ Configuration
   notes.
 - Contributors running the agent themselves hold their own model credentials and their own
   watchdog read access.
+- Development instances of the hosted watchdog are recognisable by host pattern (`*.dev.*`,
+  `*-dev.*`); programme membership is likewise a host pattern, with placeholders until the real
+  patterns are set by the hosting team.
 
 ## Dependencies
 
@@ -611,6 +745,9 @@ Configuration
 - Deployment configuration, secrets and scheduling in `medic-infrastructure`.
 - A tracing backend and a Slack app with permission to post, upload, read reactions and read
   thread replies in one channel.
+- Grafana-managed alerting on the hosted watchdog, readable with the same Viewer service-account
+  token as the metrics; which alerting endpoints that role can read is verified before
+  implementation (User Story 8).
 
 ## Out of Scope
 
@@ -643,7 +780,9 @@ Configuration
   and proposals; humans change prompts, skill and thresholds by PR.
 - Q: What is the data source? → A: Medic's hosted CHT Watchdog, read-only, one metrics store
   across all projects.
-- Q: How many items in the post body? → A: at most three; further items go to the thread.
+- Q: How many items in the post body? → A: at most five top-level bullets, each with up to eight
+  one-line sub-bullets (revised from three in revision 9, FR-010, FR-015); further items go to the
+  thread, and every project item keeps its own thread reply.
 - Q: Where do reference lookups come from? → A: the CHT documentation search service
   (cht-docs-mcp): documentation, community forum, GitHub issues and pull requests.
 - Q: Can the agent be run outside production? → A: Yes. Any contributor can run every stage and
@@ -700,6 +839,19 @@ Configuration
   matching (FR-028).
 - Q: What does a project-annotation proposal contain? → A: a ready-to-paste `projects.yaml`
   fragment plus a short rationale, with the host flagged for the reviewer (FR-061).
+- Q: Do alerts belong in the brief? → A: Yes. Each run reads the Grafana-managed alert rules and
+  firing instances with the same read-only credential, classifies them by code from a reviewed
+  policy (category, importance, staleness after 14 days by default), groups them per programme
+  and category, links to the filtered alert list, and keeps a durable episode per instance with
+  its correlations (FR-064 to FR-067, FR-070).
+- Q: How are programmes and development instances handled? → A: `projects.yaml` declares groups
+  by host pattern (placeholders for MoH Nepal and eCHIS Kenya until the real patterns are set in
+  medic-infrastructure) and an ignore list (`*.dev.*`, `*-dev.*`); unmatched hosts are "Other";
+  ignored hosts are neither analysed nor posted (FR-068).
+- Q: How is the bot identified in Slack? → A: reaffirmed on 2026-09-19: an internal Slack app
+  whose display name and icon are set in the app configuration; no per-message `username` or
+  `icon_emoji` and no `chat:write.customize` scope; a non-rotating bot token, since rotation
+  cannot be turned off and needs the app's client secret to refresh (FR-047 unchanged).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 
@@ -752,3 +904,14 @@ Decisions already taken during design that belong in the plan, listed so they ar
   `AGENT_WATCHDOG_MODEL_FEEDBACK` with a new prompt file; the Proposal type gains
   `project_annotation` (a `projects.yaml` change); the calibration report gains an
   `open_proposals` list; and the roll-up prompt receives the day's matched feedback.
+- Alerts and groups (User Stories 8 and 9): verify against the hosted Grafana with the Viewer token
+  which of `GET /api/prometheus/grafana/api/v1/rules`, `GET /api/prometheus/grafana/api/v1/alerts`
+  and `GET /api/alertmanager/grafana/api/v2/alerts` answer (the provisioning API is expected to
+  need a higher role and is not used), whether alert state history (`/api/v1/rules/history`) is
+  configured, and the URL form of the filtered alert list; `alerts.yaml` joins the policy files
+  with the mapping in FR-065 and `stale_after_days`; `projects.yaml` gains `groups` and
+  `ignore`; the run stores `alerts.json` and appends `alerts/episodes.jsonl` (durable); the
+  Bullet entity gains `children`; the body limit constants and the gate's bullet checks move to
+  five bullets and eight sub-bullets; alert groups post one thread reply with metadata
+  `agent_watchdog.alerts`; the fake Grafana gains alert endpoints and a recorded alert fixture
+  day.
