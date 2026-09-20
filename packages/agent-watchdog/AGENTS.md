@@ -53,8 +53,14 @@ node --env-file=.env bin/agent-watchdog.js run --date 2026-09-18 --stage collect
 node --env-file=.env bin/agent-watchdog.js replay --date 2026-09-18 --prompts ./p2    # offline, prints the diff
 AGENT_WATCHDOG_ENGINE=cli node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18
 npm run replay:eval                                                                  # fixture regression gate
+node --env-file=.env bin/agent-watchdog.js calibrate --week 2026-W38                # weekly threshold report
 ```
 
 A prompt, skill or schema change attaches the `replay` comparison to its PR and must keep `npm run
 replay:eval` green. Replay never contacts Grafana or Slack: tool results come from the stored run's
 `tool-calls.jsonl`, and anything unrecorded is answered `unavailable` and counted in the comparison.
+
+Learning is review-gated: the roll-up and `calibrate` write proposals under `<data>/proposals/` with
+hostnames and personal identifiers masked and flagged; a run never writes to `prompts/`, `skill/`,
+`schema/`, `agent/` or the policy files. Memory (`<data>/memory/memory.md`) is capped, condensed within the
+cap by a bounded model call with a deterministic fallback, and every change is a diff under `memory/history/`.

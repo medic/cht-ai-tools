@@ -4,6 +4,10 @@ const stage = require('../../src/cli/stages/rollup');
 const { RunDir } = require('../../src/store/run-dir');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 const { makeItem, makeCandidate, makeDiscovery, makeConfig, quietLogger } = require('./factories');
+const { loadDefinition } = require('../../src/agent/definition');
+const { PACKAGE_PATHS } = require('../../src/config/schema');
+const { estimateTokens } = require('../../src/rollup/memory');
+const { parseProposalFile } = require('../../src/rollup/proposals');
 
 const pass = (n, items) => ({
   pass: n,
@@ -87,7 +91,9 @@ describe('cli/stages/rollup', () => {
     expect(brief.footer).to.include({ trace_url: 'https://langfuse.example.org/trace/t1', cost_usd: 0.06 });
     expect(brief.checked.candidates).to.equal(1);
     const output = await runDir.readJson('rollup/rollup-output.json');
-    expect(output).to.have.keys(['memory_update', 'proposals', 'memory']);
+    expect(output).to.have.keys(['memory_update', 'proposals', 'proposal_ids', 'proposals_superseded', 'memory']);
+    expect(output.proposal_ids).to.deep.equal([]);
+    expect(out.proposals).to.deep.equal([]);
     expect(output.memory).to.include({ applied: false, reason: 'no change' });
   });
 
@@ -138,6 +144,80 @@ describe('cli/stages/rollup', () => {
     expect(ctx.engine.singleTurn.called).to.equal(false);
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.headline).to.include('All quiet');
+  });
+
+  it('writes proposals from the accepted draft with identifiers masked and flagged (FR-032, FR-033)', async () => {
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null },
+        proposals: [{
+          type: 'skill',
+          title: 'Sentinel climbs before month end on alpha.example.org',
+          body: 'Seen on alpha.example.org, confirmed by <@U0123ABCD>: a rise over six hours precedes a stuck'
+            + ' transition.',
+        }],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    ctx.feedbackAuthors = ['U0123ABCD'];
+    const out = await stage.run(ctx);
+    const id = '2026-09-18-skill-sentinel-climbs-before-month-end-on-hostname';
+    expect(out.proposals).to.deep.equal([id]);
+    const file = path.join(dataDir, 'proposals', `${id}.md`);
+    expect(fs.existsSync(file)).to.equal(true);
+    expect(fs.existsSync(runDir.path('proposals', `${id}.md`))).to.equal(true);
+    const text = fs.readFileSync(file, 'utf8');
+    const { frontMatter, body } = parseProposalFile(text);
+    expect(body).to.include('Seen on [hostname], confirmed by [person]');
+    expect(body).to.not.include('alpha.example.org');
+    expect(frontMatter.title).to.equal('Sentinel climbs before month end on [hostname]');
+    expect(frontMatter.flags.map((f) => f.kind)).to.deep.equal(['hostname', 'person']);
+    const output = await runDir.readJson('rollup/rollup-output.json');
+    expect(output.proposal_ids).to.deep.equal([id]);
+    expect(output.proposals_superseded).to.deep.equal([]);
+    expect(output.proposals).to.have.length(1);
+  });
+
+  it('condenses an over-cap memory update through the model instead of failing and folds its cost in', async () => {
+    const item = makeItem();
+    const over = `${Array.from({ length: 300 }, (_, i) => `note ${i}: something durable`).join('\n')}\n`;
+    const draft = {
+      headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+      expected_load_notice: null, memory_update: { replace_with: over }, proposals: [],
+    };
+    const turn = (structuredOutput, cost) => ({
+      structuredOutput,
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: cost, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    const ctx = ctxWith(null);
+    ctx.config.behaviour = { memoryMaxTokens: 500 };
+    ctx.definition = loadDefinition({ paths: PACKAGE_PATHS, env: { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://d/mcp' } });
+    ctx.engine.singleTurn = sinon.stub()
+      .onFirstCall().resolves(turn(draft, 0.01))
+      .onSecondCall().resolves(turn({ memory: 'condensed durable facts\n' }, 0.02));
+    const out = await stage.run(ctx);
+    expect(out.kind).to.equal('brief');
+    expect(ctx.engine.singleTurn.secondCall.args[0].name).to.equal('memory-condense');
+    expect(fs.readFileSync(path.join(dataDir, 'memory', 'memory.md'), 'utf8')).to.equal('condensed durable facts\n');
+    expect(runDir.exists('memory.patch')).to.equal(true);
+    expect(out.calls.map((c) => c.cost_usd)).to.deep.equal([0.01, 0.02]);
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.footer.cost_usd).to.equal(0.08);
+    const output = await runDir.readJson('rollup/rollup-output.json');
+    expect(output.memory).to.include({ applied: true, reason: 'condensed', condensed_by: 'model' });
+    expect(Math.ceil(estimateTokens(over) * 1.1)).to.be.greaterThan(500);
   });
 
   it('refuses to run without discovery.json', async () => {

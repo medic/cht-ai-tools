@@ -189,16 +189,16 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ### Tests for User Story 4
 
-- [ ] T084 [P] [US4] Write failing tests `test/rollup/proposals.spec.js` and `test/corpus/scrub.spec.js`: proposal files `proposals/<date>-<type>-<slug>.md` with `type` in `skill`, `prompt`, `threshold`, `pattern_card`; pattern-level bodies; identifiers (discovered hostnames, e-mail addresses, Slack user ids, feedback author names) masked in the body and listed under `flags` with `kind` in `hostname`, `person`, `address`, `secret`; `status` `proposed` or `superseded`; a guard test asserting `prompts/`, `skill/`, `schema/`, `agent/` and the policy files are never written by a run
-- [ ] T085 [P] [US4] Write failing tests `test/calibration/report.spec.js` and `test/calibration/suggest.spec.js`: per project and metric `distribution` percentiles of daily percentage change and deviation, `outcomes` counts, `current_threshold`, `suggested_threshold`, `effect_last_30d` with `items_kept`, `items_dropped`, `confirmed_kept`; `pass_change_rate` (FR-058); `week` as `YYYY-Www`; threshold proposals written from the report; `feedback_rate` over the last sixty days from `corpus/outcomes/`: the share of items that received a thumbs-down and no thumbs-up, overall and by month (SC-002)
-- [ ] T086 [P] [US4] Write failing tests `test/rollup/memory-condense.spec.js`: at the cap the agent condenses within the cap, the change is stored as a diff, and the run does not fail
+- [X] T084 [P] [US4] Write failing tests `test/rollup/proposals.spec.js` and `test/corpus/scrub.spec.js`: proposal files `proposals/<date>-<type>-<slug>.md` with `type` in `skill`, `prompt`, `threshold`, `pattern_card`; pattern-level bodies; identifiers (discovered hostnames, e-mail addresses, Slack user ids, feedback author names) masked in the body and listed under `flags` with `kind` in `hostname`, `person`, `address`, `secret`; `status` `proposed` or `superseded`; a guard test asserting `prompts/`, `skill/`, `schema/`, `agent/` and the policy files are never written by a run
+- [X] T085 [P] [US4] Write failing tests `test/calibration/report.spec.js` and `test/calibration/suggest.spec.js`: per project and metric `distribution` percentiles of daily percentage change and deviation, `outcomes` counts, `current_threshold`, `suggested_threshold`, `effect_last_30d` with `items_kept`, `items_dropped`, `confirmed_kept`; `pass_change_rate` (FR-058); `week` as `YYYY-Www`; threshold proposals written from the report; `feedback_rate` over the last sixty days from `corpus/outcomes/`: the share of items that received a thumbs-down and no thumbs-up, overall and by month (SC-002)
+- [X] T086 [P] [US4] Write failing tests `test/rollup/memory-condense.spec.js`: at the cap the agent condenses within the cap, the change is stored as a diff, and the run does not fail
 
 ### Implementation for User Story 4
 
-- [ ] T087 [US4] Implement `src/rollup/proposals.js` and `src/corpus/scrub.js`; wire proposal writing into `src/cli/stages/rollup.js`
-- [ ] T088 [US4] Implement `src/calibration/report.js`, `src/calibration/suggest.js`, `prompts/calibration.md` (summary with `AGENT_WATCHDOG_MODEL_CALIBRATION`) and the command `src/cli/commands/calibrate.js` (`--week`, `--project`), including `feedback_rate` computed from `src/corpus/outcomes.js`
-- [ ] T089 [US4] Implement memory condensation in `src/rollup/memory.js` with a condensation prompt in `prompts/rollup.md`
-- [ ] T090 [US4] Write `test/e2e/us4.spec.js` covering the four US4 acceptance scenarios
+- [X] T087 [US4] Implement `src/rollup/proposals.js` and `src/corpus/scrub.js`; wire proposal writing into `src/cli/stages/rollup.js`
+- [X] T088 [US4] Implement `src/calibration/report.js`, `src/calibration/suggest.js`, `prompts/calibration.md` (summary with `AGENT_WATCHDOG_MODEL_CALIBRATION`) and the command `src/cli/commands/calibrate.js` (`--week`, `--project`), including `feedback_rate` computed from `src/corpus/outcomes.js`
+- [X] T089 [US4] Implement memory condensation in `src/rollup/memory.js` with a condensation prompt in `prompts/rollup.md`
+- [X] T090 [US4] Write `test/e2e/us4.spec.js` covering the four US4 acceptance scenarios
 
 **Checkpoint**: Proposals and a calibration report exist for the recorded days, and every reviewed file is byte-identical after the run.
 

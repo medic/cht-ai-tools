@@ -4,7 +4,9 @@ Daily analysis of the CHT projects monitored by Medic's hosted [CHT Watchdog](ht
 posted to Slack as a short brief that flags what a human should look into. It reads metrics
 through Grafana, computes changes deterministically, asks a bounded Claude Agent SDK session to
 interpret them with read-only tools, verifies every number and link in code, and posts one
-message with one threaded reply per item. Reactions and thread notes shape the next day's brief.
+message with one threaded reply per item. Reactions and thread notes shape the next day's brief,
+and what the agent learns arrives as proposal files for human review, never as changes to its own
+prompts, skill or thresholds.
 
 It flags; it never acts. Paging stays with the existing monitoring stack.
 
@@ -44,6 +46,7 @@ agent-watchdog run --date 2026-09-18 --stage collect              # then analyze
 agent-watchdog replay --date 2026-09-18 --prompts ./prompts-experiment --label experiment > diff.json
 agent-watchdog replay --from 2026-08-20 --to 2026-09-18 --prompts ./prompts-experiment > summary.json
 AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date 2026-09-18 --project cht.example.org
+agent-watchdog calibrate --week 2026-W38 > calibration.json                   # weekly threshold evidence
 ```
 
 The `cli` engine drives the same agent definition through `claude -p --bare` (set
@@ -52,6 +55,15 @@ through `agent-watchdog tools-server` over stdio. Replay serves recorded tool re
 run, prints a JSON comparison of items before and after, and is the diff a prompt change attaches to its
 PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
 against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.
+
+### Learning under review
+
+The roll-up may propose skill, prompt or threshold changes; `calibrate` proposes threshold changes backed
+by the last thirty days of stored runs and feedback. Proposals are Markdown files with YAML front matter
+under `AGENT_WATCHDOG_DATA_DIR/proposals/` (copied beside the run that produced them). Project hostnames
+and personal identifiers are masked in the text and listed under `flags` for the reviewer; nothing about
+the agent changes until a human opens a pull request. Memory is capped and condensed within the cap when
+it overflows, and every memory change is stored as a diff under `memory/history/`.
 
 ## Contracts for deployment
 

@@ -34,3 +34,28 @@ describe('personal_data_absent: identifier fields', () => {
     expect(result.status).to.equal('fail');
   });
 });
+
+describe('personal_data_absent: brief drafts', () => {
+  const { check } = require('../../../src/verify/checks/personal_data_absent');
+  const { briefContext } = require('../helpers/context');
+
+  it('checks only what is published; proposals and memory are scrubbed and flagged by code instead (FR-033)', () => {
+    const ctx = briefContext();
+    const body = 'contact ops@example.org or +254 712 345 678';
+    ctx.draft.proposals = [{ type: 'prompt', title: 'Watch alpha', body }];
+    ctx.draft.memory_update = { replace_with: 'reviewer U0123ABCD (ops@example.org) confirmed the pattern' };
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('still fails on personal data in the headline, a bullet or the expected-load notice', () => {
+    const headline = briefContext();
+    headline.draft.headline = 'Ask ops@example.org about sentinel';
+    expect(check(headline).status).to.equal('fail');
+    const bullet = briefContext();
+    bullet.draft.bullets[0].text = 'call +254 712 345 678';
+    expect(check(bullet).reasons[0]).to.include('phone');
+    const notice = briefContext();
+    notice.draft.expected_load_notice = 'month-end, ask ops@example.org';
+    expect(check(notice).status).to.equal('fail');
+  });
+});

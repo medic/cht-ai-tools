@@ -96,7 +96,8 @@ const loadDefinition = ({ paths = PACKAGE_PATHS, env = process.env } = {}) => {
     outputSchemas,
     paths,
     hashes: {
-      prompts_hash: hashFiles(PROMPT_FILES.map(promptPath)),
+      // Every prompt file counts, including the ones read by other stages (feedback parsing, calibration).
+      prompts_hash: hashFiles(listFiles(paths.promptsDir)),
       skill_hash: hashFiles(listFiles(paths.skillDir)),
       schema_hash: hashFiles(listFiles(paths.schemaDir)),
     },

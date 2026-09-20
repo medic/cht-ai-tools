@@ -144,6 +144,18 @@ const activeWindowsFrom = async (runDir) => {
   return result;
 };
 
+/** Put the ingested feedback on the context: items, horizons, unmatched notes, brief reactions and authors. */
+const loadFeedbackContext = async (ctx, runDir) => {
+  const ingested = await runDir.readJson('feedback.ingested.json');
+  ctx.feedbackByItem = new Map(Object.entries(ingested.by_item || {}));
+  ctx.feedbackHorizons = ingested.horizons || [];
+  ctx.feedbackUnmatched = ingested.unmatched || [];
+  ctx.feedbackBrief = ingested.brief || null;
+  // Slack user ids of everyone who reacted or wrote a note, so proposals can mask them (FR-033).
+  ctx.feedbackAuthors = [...new Set((ingested.records || []).map((record) => record.author).filter(Boolean))];
+  return ingested;
+};
+
 const failureNotifier = (config, logger, deps) => {
   if (deps.slackPublisher) {
     return deps.slackPublisher;
@@ -293,6 +305,9 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       const stage = (deps.stages && deps.stages[name]) || loadStage(name);
       requireInputs(runDir, stage.inputs || []);
       currentStage = name;
+      if ((name === 'analyze' || name === 'rollup') && !ctx.feedbackByItem && runDir.exists('feedback.ingested.json')) {
+        await loadFeedbackContext(ctx, runDir);
+      }
       if (name === 'rollup') {
         ctx.memory = (await readMemory(dataDir)).text;
         ctx.previousItemIds = await previousItemCounts(dataDir, runId);
@@ -310,11 +325,7 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
         ctx.costSoFar = result.cost_usd || 0;
       }
       if (name === 'feedback' && runDir.exists('feedback.ingested.json')) {
-        const ingested = await runDir.readJson('feedback.ingested.json');
-        ctx.feedbackByItem = new Map(Object.entries(ingested.by_item || {}));
-        ctx.feedbackHorizons = ingested.horizons || [];
-        ctx.feedbackUnmatched = ingested.unmatched || [];
-        ctx.feedbackBrief = ingested.brief || null;
+        const ingested = await loadFeedbackContext(ctx, runDir);
         const { appended } = await appendOutcomes({ dataDir, date, runId, byItem: ingested.by_item || {} });
         log.info('corpus.outcomes', { appended, items: ctx.feedbackByItem.size });
       }

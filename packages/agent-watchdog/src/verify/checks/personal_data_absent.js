@@ -8,10 +8,18 @@ const NAME = 'personal_data_absent';
 const ID_FIELD = /\.(candidate_ids?|item_id|thread_order|dashboard_uid|session_id|pattern_card)(\[\d+\])?$/;
 const HEX_ID = /^[0-9a-f]{12,64}$/;
 
+const publishedSurface = (draft) => ({
+  headline: draft && draft.headline,
+  bullets: draft && draft.bullets,
+  expected_load_notice: draft && draft.expected_load_notice,
+});
+
 const check = (ctx) => {
   const reasons = [];
   const exempt = new Set((ctx.discovery && ctx.discovery.projects || []).map((p) => p.host));
-  const document = ctx.mode === 'brief' ? ctx.draft : ctx.findings;
+  // A brief draft is checked on its published surface only: proposals and the memory update never reach
+  // Slack, and code masks and flags identifiers in them instead of rejecting the brief (FR-033, US4 scenario 3).
+  const document = ctx.mode === 'brief' ? publishedSurface(ctx.draft) : ctx.findings;
   walkStrings(document, (text, path) => {
     if (exempt.has(text) || ID_FIELD.test(path) || HEX_ID.test(text)) {
       return;

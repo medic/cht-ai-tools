@@ -31,11 +31,15 @@ describe('rollup/memory (FR-031)', () => {
     expect(runDir.exists('memory.patch')).to.equal(false);
   });
 
-  it('refuses an update over the cap, counting a ten percent margin', async () => {
-    const text = 'x'.repeat(60);
-    const result = await applyMemoryUpdate({ dataDir, runDir, runId: '2026-09-18', replaceWith: text, maxTokens: 10 });
-    expect(result).to.include({ applied: false, reason: 'over cap', tokens: 15 });
-    expect(fs.existsSync(path.join(dataDir, 'memory', 'memory.md'))).to.equal(false);
+  it('condenses an update over the cap by code, counting a ten percent margin, instead of refusing it', async () => {
+    const text = `${Array.from({ length: 40 }, (_, i) => `note ${i + 1}`).join('\n')}\n`;
+    expect(Math.ceil(estimateTokens(text) * 1.1)).to.be.greaterThan(60);
+    const result = await applyMemoryUpdate({ dataDir, runDir, runId: '2026-09-18', replaceWith: text, maxTokens: 60 });
+    expect(result).to.include({ applied: true, reason: 'condensed', condensed_by: 'code', version: 1 });
+    const stored = fs.readFileSync(path.join(dataDir, 'memory', 'memory.md'), 'utf8');
+    expect(Math.ceil(estimateTokens(stored) * 1.1)).to.be.at.most(60);
+    expect(stored).to.match(/^<!-- condensed by code: \d+ lines dropped -->\n/);
+    expect(stored.endsWith('note 40\n')).to.equal(true);
   });
 
   it('applies an update, bumps the version and writes the same unified diff to both patch locations', async () => {

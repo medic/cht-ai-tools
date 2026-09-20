@@ -80,7 +80,11 @@ const fakeBrowserLauncher = () => {
 // Reads the run directory to answer like a careful model would: one item per metric with evidence
 // equal to the computed values (test/helpers/scripted-findings.js), and a brief whose numbers come from the
 // same evidence.
-const createScriptedEngine = ({ dataDir, briefMode = 'good', useTools = false }) => {
+// proposals: brief-draft proposals to emit; memoryText: a memory update to emit instead of the feedback notes;
+// condense: { maxChars, mode: 'fit' | 'overflow' } answers the memory-condensation call.
+const createScriptedEngine = ({
+  dataDir, briefMode = 'good', useTools = false, proposals = [], memoryText = undefined, condense = null,
+}) => {
   const { formatValue } = require('../../src/verify/format');
   const calls = { sessions: [], turns: [], singleTurns: [] };
 
@@ -141,8 +145,37 @@ const createScriptedEngine = ({ dataDir, briefMode = 'good', useTools = false })
     return `${existing}${existing ? '\n' : ''}${notes.map((n) => `- note (${runId}): ${n}`).join('\n')}\n`;
   };
 
+  // The memory condenser asks for a shorter memory; answer with the newest lines that fit, or overflow on purpose.
+  const condensed = (userPrompt) => {
+    const match = /<untrusted source="memory">\n([\s\S]*?)\n<\/untrusted>/.exec(userPrompt);
+    const memory = match ? match[1] : '';
+    if (condense && condense.mode === 'overflow') {
+      return `${memory}\n${'overflow '.repeat(200)}\n`;
+    }
+    const limit = condense && condense.maxChars ? condense.maxChars : 1000;
+    const lines = memory.split('\n');
+    const kept = [];
+    let size = 0;
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (size + lines[i].length + 1 > limit) {
+        break;
+      }
+      kept.unshift(lines[i]);
+      size += lines[i].length + 1;
+    }
+    return `${kept.join('\n')}\n`;
+  };
+
   const singleTurn = async (options) => {
     calls.singleTurns.push(options);
+    if (options.name === 'memory-condense') {
+      return {
+        structuredOutput: { memory: condensed(options.userPrompt) },
+        result: result(),
+        toolCalls: [],
+        referenceUnavailable: false,
+      };
+    }
     const ids = [...new Set(options.userPrompt.match(/\b[0-9a-f]{12}\b/g) || [])];
     const all = [];
     for (const project of projects().filter((p) => p.candidates.length > 0)) {
@@ -165,8 +198,8 @@ const createScriptedEngine = ({ dataDir, briefMode = 'good', useTools = false })
         bullets,
         thread_order: ordered.map((i) => i.id),
         expected_load_notice: null,
-        memory_update: { replace_with: memoryFromFeedback() },
-        proposals: [],
+        memory_update: { replace_with: memoryText === undefined ? memoryFromFeedback() : memoryText },
+        proposals,
       },
       result: result(),
       toolCalls: [],
@@ -179,7 +212,7 @@ const createScriptedEngine = ({ dataDir, briefMode = 'good', useTools = false })
 
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
-  useTools = false, engine = undefined,
+  useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null,
 }) => {
   const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart });
   const out = capture();
@@ -189,7 +222,7 @@ const runCase = async ({
   // engine itself (used to drive the real CLI engine against the fake claude executable).
   const scriptedEngine = engine === false
     ? undefined
-    : (engine || createScriptedEngine({ dataDir, briefMode, useTools }));
+    : (engine || createScriptedEngine({ dataDir, briefMode, useTools, proposals, memoryText, condense }));
   const args = {
     command: 'run',
     flags: { date, ...flags },
