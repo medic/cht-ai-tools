@@ -58,7 +58,11 @@ footer contains the trace link and the cost in USD; nothing was posted. The log 
 `collect.query_failed` warning: derived expressions use the trailing subquery form and the
 dashboards' `$interval` is resolved (FR-071); a `collect.unresolved_variable` warning names any
 panel left unavailable for a variable with no single value, and `discovery.json` shows what each
-dashboard variable resolved to.
+dashboard variable resolved to. Each `collect.project` line reports `fetched`, `reused` and
+`queries`: on the first run everything is fetched; run the same command for the next date and the
+previous-day and trailing windows are reused, so `queries` drops to two per metric, and to one from
+the eighth consecutive day (FR-072). A single slow query shows as one `collect.query_failed` line
+with the metric and window, and the run continues (FR-073).
 
 ## 4. One stage at a time (User Story 3, scenario 6)
 

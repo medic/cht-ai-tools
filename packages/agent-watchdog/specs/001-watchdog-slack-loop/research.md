@@ -558,6 +558,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-15 | An alert-list link `<grafana>/alerting/list?search=…` built by code opens the rule list filtered by `rule:` and `label:instance=~` terms | Page path and parameter behaviour read from front-end source, not documented |
 | S-16 | Sub-bullets rendered as indented `◦` lines inside a bullet's `section` block display legibly in Slack desktop and mobile | Leading whitespace in `mrkdwn` is undocumented |
 | S-17 | `smoke/grafana.js --project <host>` collects every window of every per-project panel of the hosted dashboards without one `query failed` window: derived expressions in the trailing subquery form and `$interval` resolved to the dashboard's value | The first preview run showed the fake accepted queries Prometheus rejects; only the hosted proxy proves the resolved forms |
+| S-18 | On the hosted watchdog, from the eighth consecutive daily run, `collect.project` reports `fetched` equal to the metric count, `reused` three times that, no trailing query, and the collect stage under fifteen minutes in `run.json` | Reuse depends on the real run cadence, retention and proxy timings |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -679,6 +680,9 @@ every rule shares one dashboard, so it filters nothing).
 - **S-17**: with the Viewer token, `node smoke/grafana.js --project <host>` reports "no panel query
   rejected by Prometheus" for a host with API metrics, and names any panel left unavailable for a
   variable with no single value.
+- **S-18**: on the hosted watchdog, the second daily run's `collect.project` lines show `reused`
+  for the previous-day and trailing windows and the eighth run's show `fetched` equal to the metric
+  count; `run.json` puts the collect stage under fifteen minutes at the default concurrency.
 
 ## R-15. Dashboard variables and the trailing baseline query (FR-071)
 
@@ -741,4 +745,58 @@ panels with variables (rejected: the API request rate, CPU and GC panels are the
 `$interval`); `[1d:]` with Prometheus's default resolution (rejected: the default evaluation
 interval is not the watchdog's to know, and `5m` matches the other windows); adding the datasource
 proxy's own variable substitution (none exists: the proxy forwards the query string as sent).
+
+## R-16. Collection at a hundred projects: reuse, ledger, retries, concurrency (FR-072 to FR-074)
+
+**Evidence**: the hosted preview run of 2026-09-20 (`run_id 2026-09-19-f2`: 95 analysed projects,
+24 ignored, 91 metrics, 364 range queries per project, `collect.project` at 63 to 67 seconds per
+project, one `TimeoutError` on `query_range` after the default 15-second HTTP timeout ending the
+run with exit 69); https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/
+(`[dataproxy] timeout`: "How long the data proxy should wait before timing out. Default is 30
+seconds"); Node 22 `AbortSignal.timeout()` rejecting `fetch` with a `TimeoutError`; the retention
+classes of R-6 and contracts/run-directory.md (raw 14 days, kept 30 days) (docs, run record).
+
+**Findings**:
+- Sequential collection of 95 projects at 65 seconds each is about 104 minutes, longer than the
+  default run budget of 60 minutes, and the deadline is taken before collection starts, so the
+  analysis stage would begin already out of time.
+- Three of the four windows are data an earlier run fetched: today's previous-day window is
+  yesterday's current window with identical bounds, since every run starts at 06:00 UTC of its date;
+  the previous-week window is the current window of the run seven days earlier; nineteen of the
+  twenty trailing daily maxima were fetched yesterday, and the twentieth is the maximum of today's
+  current window.
+- Grafana's data proxy gives up after 30 seconds by default, so a longer client timeout alone
+  changes nothing: the proxy answers 502 or 504 first. A heavy trailing subquery over twenty days
+  of a `sum(rate(...))` expression can exceed that.
+- Every fetch failure, timeout included, was classified as "metrics source unreachable" and ended
+  the run, although the source answered 1,092 queries in the three minutes before.
+
+**Decision**:
+- `src/collect/history.js`: per project, `storedWindow(metric, bound)` returns the current window of
+  the run `daysBack` days earlier (the latest run of that date, forced runs included) when its
+  `start`, `end`, `step_s` and metric match exactly and it was available; `ledgerWindow` builds the
+  trailing window from `history/<slug>.json`, a Daily Maxima Ledger with one number per metric per
+  day, when it holds at least fourteen of the days; `recordCurrent` writes today's maximum from the
+  current window; `backfill` fills the ledger from a fetched trailing window. The ledger is written
+  atomically once per project per run and purge compacts entries older than the kept period.
+- `collectWindows` fetches the current window always, reuses the comparison windows when stored,
+  builds the trailing window from the ledger when it can and fetches otherwise, and marks every
+  window with `source`: `fetched`, `stored:<run_id>` or `ledger`. Reuse is by exact bounds only.
+- The Grafana client gets `AGENT_WATCHDOG_QUERY_TIMEOUT_MS` (default 30000, the proxy's own
+  default; hard cap 300000) for range and instant queries. A query that times out or receives 502,
+  503 or 504 is retried once; a second failure is a `query failed` window, logged with metric and
+  window. Three consecutive query failures, or a connection failure that a retry does not clear,
+  are "metrics source unreachable" (exit 69) as before. Grafana API calls keep the HTTP timeout.
+- The collect stage runs projects through a worker pool of `AGENT_WATCHDOG_PROJECT_CONCURRENCY`
+  (default 3) and logs `fetched`, `reused` and `queries` per project and in total.
+- Cold day: 4 queries per metric; second day: 2 (current and previous week); from the eighth day: 1.
+  For 95 projects and 91 metrics that is 8,645 queries a day, about nine minutes at concurrency 3.
+
+**Alternatives considered**: a database (rejected: Prometheus is the time-series store, the run
+directory already holds the windows, and the ledger is a few kilobytes per project); querying
+Grafana for deltas (rejected: the proxy holds no results, so cost is the query count, which reuse
+removes); Prometheus recording rules for the derived API expressions (deferred: they live in
+cht-watchdog and would make even the fallback cheap); a longer client timeout alone (rejected: the
+proxy cuts at 30 seconds); skipping the trailing baseline for derived metrics (rejected: the
+deviation rule would stay blind on them).
 

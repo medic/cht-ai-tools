@@ -132,6 +132,92 @@ describe('collect/grafana', () => {
     expect(error.body).to.include('x'.repeat(1000));
   });
 
+  describe('query timeouts and retries (FR-073)', () => {
+    const ok = () => jsonResponse({ status: 'success', data: { resultType: 'matrix', result: [] } });
+    // A fetch that honours the abort signal like the real one: it rejects with the signal's reason on timeout.
+    const slow = (ms) => (url, init) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(ok()), ms);
+      init.signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(init.signal.reason);
+      });
+    });
+    const warnings = () => {
+      const logger = { debug() {}, info() {}, warn: sinon.spy(), error() {} };
+      return logger;
+    };
+    const range = (client) => client.queryRange({ query: 'x', start: 0, end: 1, step: 1 });
+
+    it('gives range and instant queries their own timeout and retries a timed-out query once', async () => {
+      const fetch = sinon.stub();
+      fetch.onCall(0).callsFake(slow(500));
+      fetch.onCall(1).resolves(ok());
+      const logger = warnings();
+      const client = clientWith(fetch, { queryTimeoutMs: 40, retryDelayMs: 0, logger });
+      expect(await range(client)).to.deep.equal([]);
+      expect(fetch.callCount).to.equal(2);
+      expect(logger.warn.calledOnce).to.equal(true);
+      expect(logger.warn.firstCall.args[0]).to.equal('grafana.query_retry');
+      expect(logger.warn.firstCall.args[1]).to.include({ attempt: 1, reason: 'timeout' });
+      expect(logger.warn.firstCall.args[1].path).to.include('/api/v1/query_range');
+    });
+
+    it('turns a second timeout into a failed query, not an unreachable source', async () => {
+      const client = clientWith(slow(500), { queryTimeoutMs: 40, retryDelayMs: 0, logger: warnings() });
+      const error = await range(client).catch((e) => e);
+      expect(error).to.be.instanceOf(HttpError);
+      expect(error).to.not.be.instanceOf(codes.ExitError);
+      expect(error.message).to.match(/timed out after 40 ms \(2 attempts\)/);
+      expect(error.message).to.include('/api/v1/query_range');
+    });
+
+    it('declares the source unreachable after three consecutive failed queries, reset by a success', async () => {
+      const fetch = sinon.stub();
+      let call = 0;
+      fetch.callsFake((url, init) => {
+        call += 1;
+        // Queries 1 to 4 (two attempts each) time out; query 3 succeeds; queries 4 to 6 time out again.
+        return call === 5 ? Promise.resolve(ok()) : slow(500)(url, init);
+      });
+      const client = clientWith(fetch, { queryTimeoutMs: 30, retryDelayMs: 0, logger: warnings() });
+      await expect(range(client)).to.be.rejectedWith(HttpError);
+      await expect(range(client)).to.be.rejectedWith(HttpError);
+      expect(await range(client), 'the third query succeeds on its first attempt').to.deep.equal([]);
+      await expect(range(client)).to.be.rejectedWith(HttpError);
+      await expect(range(client)).to.be.rejectedWith(HttpError);
+      const third = await range(client).catch((e) => e);
+      expect(third).to.be.instanceOf(codes.ExitError);
+      expect(third.code).to.equal(codes.UNAVAILABLE);
+      expect(third.message).to.match(/3 consecutive/);
+    });
+
+    it('retries a 502, 503 or 504 from the proxy once and reports the status when it persists', async () => {
+      const flaky = sinon.stub();
+      flaky.onCall(0).resolves(jsonResponse({ message: 'Bad Gateway' }, 502));
+      flaky.onCall(1).resolves(ok());
+      expect(await range(clientWith(flaky, { retryDelayMs: 0, logger: warnings() }))).to.deep.equal([]);
+      const down = clientWith(sinon.stub().resolves(new Response('upstream timed out', { status: 504 })), {
+        retryDelayMs: 0, logger: warnings(),
+      });
+      const error = await range(down).catch((e) => e);
+      expect(error).to.be.instanceOf(HttpError);
+      expect(error.status).to.equal(504);
+      expect(error).to.not.be.instanceOf(codes.ExitError);
+    });
+
+    it('keeps connection failures unreachable after one retry, and API timeouts unreachable at once', async () => {
+      const connectionError = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } });
+      const refused = sinon.stub().rejects(connectionError);
+      const client = clientWith(refused, { retryDelayMs: 0, logger: warnings() });
+      await rejectsWithCode(range(client), codes.UNAVAILABLE);
+      expect(refused.callCount).to.equal(2);
+      const api = clientWith(slow(500), { timeoutMs: 30, queryTimeoutMs: 5000, retryDelayMs: 0, logger: warnings() });
+      const started = Date.now();
+      await rejectsWithCode(api.search(), codes.UNAVAILABLE);
+      expect(Date.now() - started).to.be.below(400);
+    });
+  });
+
   it('surfaces a Prometheus error envelope as an error', async () => {
     const fetch = sinon.stub().resolves(jsonResponse({ status: 'error', errorType: 'bad_data', error: 'parse error' }));
     const query = clientWith(fetch).queryRange({ query: 'x{', start: 0, end: 1, step: 1 });

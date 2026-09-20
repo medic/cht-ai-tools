@@ -4,6 +4,8 @@ const { createGrafanaClient, verifyDatasourceUid } = require('../../collect/graf
 const { discover } = require('../../collect/discovery');
 const { collectAlerts } = require('../../collect/alerts');
 const { collectWindows } = require('../../collect/windows');
+const { createHistory } = require('../../collect/history');
+const { mapWithConcurrency } = require('../../collect/concurrency');
 const { activeWindow } = require('../../analyze/calendar');
 const { normaliseHost } = require('../../config/policy');
 
@@ -22,6 +24,7 @@ const run = async (ctx) => {
     token: config.secrets.grafanaToken,
     datasourceUid: config.endpoints.prometheusDatasourceUid,
     timeoutMs: config.bounds.httpTimeoutMs,
+    queryTimeoutMs: config.bounds.queryTimeoutMs,
     fetch: deps.fetch || globalThis.fetch,
     logger,
   });
@@ -52,10 +55,22 @@ const run = async (ctx) => {
   const projects = wanted.length ? discovery.projects.filter((p) => wanted.includes(p.host)) : discovery.projects;
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
 
-  for (const project of projects) {
+  // Projects run through a bounded pool (FR-074); each reuses what the data volume holds (FR-072) and extends
+  // its Daily Maxima Ledger, so a warm volume costs one query per metric.
+  const dataDir = (config.storage && config.storage.dataDir) || runDir.dataDir;
+  const runId = ctx.runId || runDir.runId;
+  const concurrency = Math.max(1, (config.bounds && config.bounds.projectConcurrency) || 1);
+  const totals = { fetched: 0, reused: 0, queries: 0 };
+  const collectStarted = process.hrtime.bigint();
+  await mapWithConcurrency(projects, concurrency, async (project) => {
     const started = process.hrtime.bigint();
     const active = activeWindow(defaults, project, runStart);
-    const { windows } = await collectWindows({ grafana, project, discovery, runStart, activeWindow: active, logger });
+    const history = deps.history === false
+      ? null
+      : await createHistory({ dataDir, runId, date: ctx.date, runStart, project }).load();
+    const { windows, stats } = await collectWindows({
+      grafana, project, discovery, runStart, activeWindow: active, logger, history,
+    });
     await runDir.writeGz(`${project.slug}/inputs/windows.json.gz`, {
       project_url: project.url,
       host: project.host,
@@ -63,17 +78,30 @@ const run = async (ctx) => {
       active_window_id: active ? active.id : null,
       windows,
     });
+    if (history) {
+      await history.save();
+    }
+    for (const key of Object.keys(totals)) {
+      totals[key] += stats[key];
+    }
     logger.info('collect.project', {
       project: project.host,
       windows: windows.length,
       unavailable: windows.filter((w) => !w.available).length,
+      fetched: stats.fetched,
+      reused: stats.reused,
+      queries: stats.queries,
       active_window: active ? active.id : null,
       duration_ms: Number(process.hrtime.bigint() - started) / 1e6,
     });
-  }
+  });
+  logger.info('collect.done', {
+    projects: projects.length, concurrency, ...totals,
+    duration_ms: Number(process.hrtime.bigint() - collectStarted) / 1e6,
+  });
 
   return {
-    projects: projects.length, metrics: discovery.metrics.length,
+    projects: projects.length, metrics: discovery.metrics.length, ...totals,
     alerts: alerts.available ? alerts.instances.filter((i) => i.state === 'firing').length : null,
   };
 };

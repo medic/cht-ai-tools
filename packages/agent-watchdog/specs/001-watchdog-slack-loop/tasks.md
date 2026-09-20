@@ -367,6 +367,22 @@ derived metric's trailing baseline and for every expression using the dashboards
 
 **Checkpoint**: `npm test` and `npm run replay:eval` pass with the validating fake; S-17 against the hosted watchdog.
 
+## Phase 14: Collection at a hundred projects (revision 11, 2026-09-20)
+
+**Purpose**: The first hosted run re-collected four windows per metric for 95 projects and one slow query failed
+the run (FR-072 to FR-074, SC-016, research.md R-16). Tests first.
+
+- [X] T162 [P] Add `test/collect/history.spec.js` (stored windows by exact bounds from the latest run of an earlier date, ledger build, record, backfill, save) and `test/collect/concurrency.spec.js`
+- [X] T163 [P] Extend `test/collect/grafana.spec.js` for the query timeout, one retry on timeout and 5xx, `query failed` after the second failure, unreachable after three consecutive failures, and `test/collect/windows.spec.js` for `source` per window, reuse and fallback
+- [X] T164 [P] Extend `test/store/retention.spec.js` for ledger compaction and `test/perf/fifty-projects.spec.js` for query counts on a cold and a warm day
+- [X] T165 Add `src/collect/history.js` (Daily Maxima Ledger under `history/<slug>.json`, stored-window lookup) and `source` to `MetricWindow` in `src/model/schemas.js`; `dataPaths.history` and `ensureDataLayout` in `src/store/run-dir.js`
+- [X] T166 Reuse stored windows and the ledger in `src/collect/windows.js`, fetching only what the volume lacks and marking every window's `source`
+- [X] T167 `AGENT_WATCHDOG_QUERY_TIMEOUT_MS` in `src/config/schema.js`, `.env.example`, `contracts/environment.md`; query timeout, one retry, consecutive-failure rule and `grafana.query_retry` log in `src/collect/grafana.js`; pass it from `src/cli/stages/collect.js`, `src/cli/commands/run.js`, `src/cli/commands/tools-server.js`, `smoke/grafana.js`
+- [X] T168 Worker pool `src/collect/concurrency.js`; concurrent projects, per-project `fetched`/`reused`/`queries` and a `collect.done` total in `src/cli/stages/collect.js`; ledger compaction in `src/store/retention.js`
+- [X] T169 Smoke S-18 note in `smoke/grafana.js` output; README, AGENTS, quickstart step 3; spec revision 11, plan delta, research R-16 and S-18, data model, run-directory and environment contracts
+
+**Checkpoint**: `npm test`, lint and `npm run replay:eval` pass; the perf spec shows 4 queries per metric on day one and 2 on day two with no trailing query; S-18 on the hosted watchdog.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -516,4 +532,15 @@ US3 can proceed in parallel, then US4, US5 and US6.
   multi-value list) makes the metric unavailable rather than guessed, and the panel still counts as checked; the
   fake Grafana validates only the two shapes that failed live, not full PromQL; the metric key keeps the variable
   text (`sum(rate(x[$interval]))`) as its identity, so stored runs and feedback stay comparable.
+- Collection at a hundred projects (2026-09-20, Phase 14, revision 11): the comparison windows are reused only on an
+  exact match of bounds, step and metric from the latest run of the earlier date (forced runs supersede plain ones);
+  the ledger records the maximum of the current window's samples and is filled from a fetched trailing window only
+  for days it lacks, so a recorded day is never overwritten; a trailing window is built from the ledger only with
+  fourteen or more of its days present; the query timeout defaults to 30 s because Grafana's data proxy gives up at
+  30 s, and a longer client timeout alone would change nothing; only timeouts and 502/503/504 count as query
+  failures for the three-consecutive rule (a 400 is the query's fault, not the source's); connection failures stay
+  unreachable after one retry; the fake Grafana's daily values are the day's level without jitter while the ledger
+  records the maximum of jittered samples, a small upward bias accepted for the second-day tests since no
+  expectation compares exact trailing numbers across days; `purge --dry-run` reports ledger entries it would compact
+  in `compacted`.
 

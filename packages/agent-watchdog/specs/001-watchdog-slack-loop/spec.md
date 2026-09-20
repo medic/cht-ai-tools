@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 10)
+**Status**: Draft (revision 11)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -344,8 +344,9 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 - An item persists for many days: shown as "persisting N days", not re-explained daily.
 - Conflicting reactions from several people: all recorded, aggregate shown.
 - Reaction removed: recorded as a retraction.
-- Fifty or more projects: the run completes within its time budget; projects with no candidates
-  incur no model usage.
+- A hundred projects: the run completes within its time budget; projects with no candidates
+  incur no model usage; collection fetches only the current windows once the data volume is warm
+  (FR-072, FR-074).
 - The documentation search service is unavailable: analysis proceeds with skill and memory only,
   and the brief notes that reference sources were unavailable.
 - A corpus item is enormous or binary: it is skipped with a note in the distillation report,
@@ -372,6 +373,15 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
   database name): the metric is recorded as unavailable with the variable named, no query is sent,
   and the panel still counts as checked; a panel using an interval variable or a Grafana built-in
   time variable is collected with the value resolved by code (FR-071).
+- One query times out or fails on a heavy expression while the source answers everything else:
+  the window is unavailable after one retry, the metric and window are logged, and the run goes
+  on; only a connection failure or consecutive query failures make the source unreachable
+  (FR-073).
+- The first runs, a gap in the runs, or a purged raw window: the missing comparison window is
+  fetched from the source; the ledger is filled from the fetched trailing window, so the second
+  run already builds its baseline locally (FR-072).
+- A forced re-run of a date: its current window replaces that day's ledger entry; the comparison
+  windows come from the latest run of each earlier date (FR-072).
 
 ## Requirements *(mandatory)*
 
@@ -565,6 +575,23 @@ Alerts and groups
   expression depends on a variable with no single value MUST be recorded as unavailable, naming
   the variable, without a query being sent. Baseline queries over a window MUST be valid for any
   panel expression, not only for bare series selectors. Added in revision 10.
+- **FR-072**: Collection MUST fetch from the metrics source only what the data volume does not
+  already hold for the run's windows. The current window is fetched every run. The previous-day,
+  previous-week and previous-cycle windows MUST be taken from the stored current windows of the
+  runs one, seven or one cycle of days earlier when a stored window exists with exactly the same
+  bounds, step and metric. The trailing baseline MUST be built from a per-project ledger of daily
+  maxima that every run extends from its current window, once the ledger holds enough days; a day
+  the volume lacks is fetched from the source as before, and a fetched trailing window fills the
+  ledger. Every run still writes its complete windows, each marked with its source (`fetched`, the
+  stored run it came from, or `ledger`), so replay stays self-contained (FR-041). Added in revision 11.
+- **FR-073**: A single query that fails or exceeds its timeout MUST make only its window
+  unavailable, after one retry, and the log MUST name the metric and window. The run MUST treat the
+  metrics source as unreachable (failure notice, non-zero exit) only when the source cannot be
+  connected to or when queries fail consecutively. Range and instant queries MUST have their own
+  timeout, distinct from the timeout of the Grafana API calls. Added in revision 11.
+- **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
+  bound, log per project what was fetched and what was reused, and complete within its share of
+  the run budget at the scale assumption of one hundred projects. Added in revision 11.
 
 Memory, proposals and the knowledge corpus
 
@@ -651,7 +678,11 @@ Configuration
 - **Run**: one scheduled or manual execution for one date; owns its inputs, changes, candidates,
   items, verification results, publications, usage, cost and version stamps.
 - **Metric Window**: a metric's values over a named period (current, previous day, previous week,
-  previous cycle) for one project.
+  previous cycle, trailing baseline) for one project, marked with where the values came from:
+  fetched, a stored earlier run, or the ledger.
+- **Daily Maxima Ledger**: per project, one number per metric per day, the maximum of that day's
+  current window; extended by every run and the source of the trailing baseline once it holds
+  enough days; entries older than the kept retention period are compacted.
 - **Candidate**: a deterministic flag on a metric window that exceeded a threshold or showed a
   sustained trend; input to analysis.
 - **Item**: a finding the analysis chose to surface; carries a stable identity derived from
@@ -725,6 +756,10 @@ Configuration
   fixtures.
 - **SC-015**: No published body exceeds five bullets, two lines per bullet or eight sub-bullets per
   bullet, verified by the gate report of every post.
+- **SC-016**: With a warm data volume, a run over one hundred projects fetches one range query per
+  metric per project and no trailing query, verified by query counts against the fake watchdog; a
+  single failed query never fails a run, verified by test; the hosted collection stage completes
+  within fifteen minutes at the default concurrency, read from the stage timings of the run record.
 
 ## Assumptions
 
@@ -862,6 +897,20 @@ Configuration
   whose display name and icon are set in the app configuration; no per-message `username` or
   `icon_emoji` and no `chat:write.customize` scope; a non-rotating bot token, since rotation
   cannot be turned off and needs the app's client secret to refresh (FR-047 unchanged).
+
+### Session 2026-09-20
+
+- Q: The first hosted run re-collects four windows per metric for 95 projects (364 queries and
+  about 65 seconds per project, over 100 minutes in all) and one slow query failed the whole run;
+  should collection fetch only the new day's data, and is a database needed? → A: Fetch the current
+  window only; take the previous-day and previous-week windows from the stored runs one and seven
+  days earlier; build the trailing baseline from a per-project ledger of daily maxima kept in the
+  data volume; fetch from the source only what the volume lacks. No database: Prometheus is the
+  time-series store and the run directory plus the ledger is the cache. A single failed query makes
+  only its window unavailable after one retry; the source is unreachable only on connection failure
+  or consecutive query failures; range queries get their own timeout. Collect projects concurrently
+  within the existing concurrency bound. Scale assumption raised to one hundred projects (FR-072 to
+  FR-074, SC-016, revision 11).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

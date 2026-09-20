@@ -137,13 +137,25 @@ const pickSeries = (result, host) => result.find((series) => {
   return !instance || normaliseHost(instance) === host;
 }) || result[0] || null;
 
+/** What the data volume holds for a comparison or trailing window (FR-072); the current window is always fetched. */
+const reusable = async (history, metric, bound) => {
+  if (!history || bound.window === 'current') {
+    return null;
+  }
+  return bound.daily ? history.ledgerWindow(metric, bound) : history.storedWindow(metric, bound);
+};
+
 /**
- * Collect every window for every per-project metric of one project.
- * @returns {{ project_url: string, windows: object[] }}
+ * Collect every window for every per-project metric of one project. With a `history` (src/collect/history.js) the
+ * comparison windows come from stored runs and the trailing baseline from the ledger when they can (FR-072).
+ * @returns {{ project_url: string, windows: object[], stats: { fetched: number, reused: number, queries: number } }}
  */
-const collectWindows = async ({ grafana, project, discovery, runStart, activeWindow = null, logger = noop }) => {
+const collectWindows = async ({
+  grafana, project, discovery, runStart, activeWindow = null, logger = noop, history = null,
+}) => {
   const bounds = windowBounds(runStart, { activeWindow });
   const windows = [];
+  const stats = { fetched: 0, reused: 0, queries: 0 };
   for (const spec of metricSpecs(discovery)) {
     const { query, unresolved } = queryFor(spec, project.host);
     if (unresolved.length) {
@@ -158,18 +170,33 @@ const collectWindows = async ({ grafana, project, discovery, runStart, activeWin
       let values = [];
       let available = true;
       let reason = null;
+      let source = 'fetched';
       try {
         if (unresolved.length) {
           throw new UnresolvedVariableError(unresolved);
         }
-        const result = await grafana.queryRange({
-          query: bound.daily ? trailingQuery(query) : query,
-          start: seconds(bound.start),
-          end: seconds(bound.end),
-          step: bound.step_s,
-        });
-        const series = pickSeries(result, project.host);
-        values = series ? series.values.filter(([, value]) => Number.isFinite(value)) : [];
+        const reused = await reusable(history, spec.metric, bound);
+        if (reused) {
+          values = reused.values;
+          source = reused.source;
+          stats.reused += 1;
+        } else {
+          stats.fetched += 1;
+          stats.queries += 1;
+          const result = await grafana.queryRange({
+            query: bound.daily ? trailingQuery(query) : query,
+            start: seconds(bound.start),
+            end: seconds(bound.end),
+            step: bound.step_s,
+          });
+          const series = pickSeries(result, project.host);
+          values = series ? series.values.filter(([, value]) => Number.isFinite(value)) : [];
+          if (history && values.length && bound.window === 'current') {
+            history.recordCurrent(spec.metric, values);
+          } else if (history && values.length && bound.daily) {
+            history.backfill(spec.metric, values);
+          }
+        }
         if (!values.length) {
           available = false;
           reason = 'no data';
@@ -204,10 +231,11 @@ const collectWindows = async ({ grafana, project, discovery, runStart, activeWin
         values: available ? values : [],
         available,
         unavailable_reason: reason,
+        source,
       }));
     }
   }
-  return { project_url: project.url, windows };
+  return { project_url: project.url, windows, stats };
 };
 
 module.exports = {

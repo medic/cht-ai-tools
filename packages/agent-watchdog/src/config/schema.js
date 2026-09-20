@@ -14,6 +14,7 @@ const HARD_CAPS = Object.freeze({
   projectConcurrency: 8,
   modelTimeoutMs: 1800000,
   httpTimeoutMs: 60000,
+  queryTimeoutMs: 300000,
   verifyMaxRetries: 2,
   runTimeoutMs: 7200000,
   feedbackInfluenceDays: 365,
@@ -169,6 +170,13 @@ const VARIABLES = [
     path: 'bounds.httpTimeoutMs',
     schema: int(100, HARD_CAPS.httpTimeoutMs),
     default: 15000,
+  },
+  {
+    // Range and instant queries through the datasource proxy (FR-073); Grafana's own proxy gives up at 30 s.
+    env: 'AGENT_WATCHDOG_QUERY_TIMEOUT_MS',
+    path: 'bounds.queryTimeoutMs',
+    schema: int(1000, HARD_CAPS.queryTimeoutMs),
+    default: 30000,
   },
   {
     env: 'AGENT_WATCHDOG_VERIFY_MAX_RETRIES',

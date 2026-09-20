@@ -47,11 +47,61 @@ const detailOf = (body) => {
  * @param {Function} [options.fetch] fetch implementation (tests inject a fake)
  * @param {object} [options.logger]
  */
+const QUERY_PATHS = /\/api\/v1\/(query_range|query)$/;
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const QUERY_ATTEMPTS = 2;
+const MAX_CONSECUTIVE_QUERY_FAILURES = 3;
+
+/** A query that failed after its retry: a timeout (status null) or a persistent 502, 503 or 504. */
+class QueryError extends HttpError {
+  constructor(message, { status = null, body = null, kind = 'timeout' } = {}) {
+    super(status, message, body);
+    this.name = 'QueryError';
+    this.kind = kind;
+  }
+}
+
+/**
+ * @param {object} options
+ * @param {string} options.baseUrl Grafana base URL
+ * @param {string} options.token service-account token (Viewer role)
+ * @param {string} options.datasourceUid Prometheus datasource uid proxied through Grafana
+ * @param {number} [options.timeoutMs] per-request timeout for Grafana API calls
+ * @param {number} [options.queryTimeoutMs] per-attempt timeout for range and instant queries (FR-073)
+ * @param {number} [options.retryDelayMs] pause before the one retry of a failed query
+ * @param {Function} [options.fetch] fetch implementation (tests inject a fake)
+ * @param {object} [options.logger]
+ */
 const createGrafanaClient = (options) => {
-  const { baseUrl, token, datasourceUid, timeoutMs = 15000, fetch = globalThis.fetch, logger = noop } = options;
+  const {
+    baseUrl, token, datasourceUid, timeoutMs = 15000, queryTimeoutMs = 30000, retryDelayMs = 500,
+    fetch = globalThis.fetch, logger = noop,
+  } = options;
   const base = String(baseUrl).replace(/\/+$/, '');
   const proxyPath = `/api/datasources/proxy/uid/${encodeURIComponent(datasourceUid)}`;
+  let consecutiveQueryFailures = 0;
 
+  const sleep = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve());
+
+  const unreachable = (url, error, extra = {}) => {
+    logger.warn('grafana.unreachable', { path: url.pathname, reason: error.name, message: error.message, ...extra });
+    return new codes.ExitError(codes.UNAVAILABLE, `metrics source unreachable: ${error.message}`, {
+      path: url.pathname, cause: error.name, ...extra,
+    });
+  };
+
+  const send = (url, timeout) => fetch(url.toString(), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(timeout),
+  });
+
+  /**
+   * One request. Grafana API calls get one attempt and their timeout; range and instant queries get their own
+   * timeout and one retry on a timeout, a connection failure or a 502, 503 or 504. A query that still fails is a
+   * QueryError for its window alone; three consecutive failed queries, or a connection failure the retry does not
+   * clear, mean the source is unreachable (FR-073).
+   */
   const request = async (pathname, params = {}) => {
     const url = new URL(`${base}${pathname}`);
     for (const [key, value] of Object.entries(params)) {
@@ -59,23 +109,58 @@ const createGrafanaClient = (options) => {
         url.searchParams.set(key, String(value));
       }
     }
-    const started = process.hrtime.bigint();
-    let response;
-    try {
-      response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch (error) {
-      logger.warn('grafana.unreachable', { path: url.pathname, reason: error.name, message: error.message });
-      throw new codes.ExitError(codes.UNAVAILABLE, `metrics source unreachable: ${error.message}`, {
-        path: url.pathname,
-        cause: error.name,
-      });
+    const isQuery = QUERY_PATHS.test(pathname);
+    const timeout = isQuery ? queryTimeoutMs : timeoutMs;
+    const attempts = isQuery ? QUERY_ATTEMPTS : 1;
+    let response = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const started = process.hrtime.bigint();
+      try {
+        response = await send(url, timeout);
+      } catch (error) {
+        const timedOut = Boolean(error) && error.name === 'TimeoutError';
+        if (!isQuery || (!timedOut && attempt === attempts)) {
+          throw unreachable(url, error);
+        }
+        if (attempt < attempts) {
+          logger.warn('grafana.query_retry', {
+            path: url.pathname, attempt, timeout_ms: timeout,
+            reason: timedOut ? 'timeout' : (error.name || 'connection'),
+          });
+          if (!timedOut) {
+            await sleep(retryDelayMs);
+          }
+          continue;
+        }
+        response = null;
+        break;
+      }
+      const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
+      logger.debug('grafana.request', { path: url.pathname, status: response.status, duration_ms: durationMs });
+      if (isQuery && RETRYABLE_STATUSES.has(response.status) && attempt < attempts) {
+        logger.warn('grafana.query_retry', { path: url.pathname, attempt, reason: `status ${response.status}` });
+        await sleep(retryDelayMs);
+        continue;
+      }
+      break;
     }
-    const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
-    logger.debug('grafana.request', { path: url.pathname, status: response.status, duration_ms: durationMs });
+
+    if (isQuery) {
+      if (!response || RETRYABLE_STATUSES.has(response.status)) {
+        consecutiveQueryFailures += 1;
+        if (consecutiveQueryFailures >= MAX_CONSECUTIVE_QUERY_FAILURES) {
+          const last = response ? `status ${response.status}` : `a timeout after ${timeout} ms`;
+          const error = new Error(`${consecutiveQueryFailures} consecutive query failures, last ${last}`);
+          error.name = response ? 'UpstreamError' : 'TimeoutError';
+          throw unreachable(url, error, { consecutive_failures: consecutiveQueryFailures });
+        }
+      } else {
+        consecutiveQueryFailures = 0;
+      }
+    }
+    if (!response) {
+      throw new QueryError(`Grafana query timed out after ${timeout} ms (${attempts} attempts) for ${url.pathname}`);
+    }
     if (response.status === 401 || response.status === 403) {
       const reason = `Grafana rejected the service-account token (${response.status}) for ${url.pathname}`;
       throw new codes.ExitError(codes.CONFIG, reason);
@@ -193,4 +278,7 @@ const verifyDatasourceUid = (client, dashboards) => {
   }
 };
 
-module.exports = { createGrafanaClient, verifyDatasourceUid, HttpError, ALERT_RULES_PATH, ALERT_INSTANCES_PATH };
+module.exports = {
+  createGrafanaClient, verifyDatasourceUid, HttpError, QueryError, MAX_CONSECUTIVE_QUERY_FAILURES, ALERT_RULES_PATH,
+  ALERT_INSTANCES_PATH,
+};

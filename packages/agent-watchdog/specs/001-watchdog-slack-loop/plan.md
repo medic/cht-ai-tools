@@ -279,3 +279,30 @@ variable (research.md R-15).
 - **V**: no new stage; the Grafana client's error message now carries the response detail, so the
   next such failure is legible from the log alone.
 - **VI to VIII**: unchanged. Result: PASS.
+
+### Revision 11 delta: collection at a hundred projects (FR-072 to FR-074)
+
+Re-checked on 2026-09-20 after the first hosted run: 95 projects, 364 range queries and about
+65 seconds per project, one query timeout failing the run (research.md R-16).
+
+- **I**: no new dependency; the ledger is a JSON file per project under the data volume, written
+  atomically like every other artefact; one new environment variable
+  (`AGENT_WATCHDOG_QUERY_TIMEOUT_MS`) with a hard cap.
+- **II**: the reuse of stored windows, the ledger, the retry and the consecutive-failure rule are
+  unit-tested against a temporary data volume and a fake client; the fifty-project performance
+  test counts queries on a cold and a warm day; the hosted numbers are smoke test S-18.
+- **III**: what is reused is decided by exact bounds, step and metric, never by proximity; every
+  window records its source; a fetched trailing window fills the ledger rather than the ledger
+  guessing a day.
+- **IV**: the same Viewer token, fewer requests; nothing new is stored beyond one number per metric
+  per day, and the ledger is compacted by the existing purge.
+- **V**: no new stage and no database; the collect stage gains a bounded worker pool with the
+  concurrency setting the analysis stage already honours; per-project logs name fetched and reused
+  counts, and every failed query names its metric and window.
+- **VI**: a slow query degrades one window, and the brief says which metrics were unavailable, as
+  before; nothing is retried more than once.
+- **VII**: unchanged.
+- **VIII**: unchanged.
+- **Complexity**: reuse adds one module (`src/collect/history.js`) and one field (`source`) to the
+  Metric Window; it removes the trailing subqueries from the daily path, which were the slow and
+  fragile part. Result: PASS.

@@ -155,6 +155,8 @@ const MetricWindow = z.object({
   values: z.array(z.tuple([z.number(), z.number()])),
   available: z.boolean(),
   unavailable_reason: z.string().nullable(),
+  // Where the values came from (FR-072): queried this run, the current window of a stored earlier run, or the ledger.
+  source: z.string().regex(/^(fetched|ledger|stored:[A-Za-z0-9._-]+)$/).default('fetched'),
 }).strict().refine((w) => w.available || w.unavailable_reason, {
   message: 'unavailable_reason is required when available is false',
   path: ['unavailable_reason'],

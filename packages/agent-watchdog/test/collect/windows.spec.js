@@ -70,6 +70,102 @@ describe('collect/windows', () => {
     });
   });
 
+  describe('reuse of stored windows and the ledger (FR-072)', () => {
+    const alpha = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
+    const discovery = {
+      run_start: RUN_START.toISOString(),
+      dashboards: [{
+        uid: 'd1', title: 'D', slug: 'd', url: '/d/d1/d', variables: {}, duplicate_panel_ids: [],
+        panels: [{
+          panel_id: 1, title: 'P1', ref_id: 'A', expr: 'cht_x{instance=~"$cht_instance"}', metric: 'cht_x',
+          unit: 'count', per_project: true, variables: [], unresolved: [],
+        }],
+      }],
+      scrape_target_metric: 'up{job="cht"}',
+      projects: [alpha],
+    };
+    const daily = (count) => Array.from({ length: count }, (_, i) => [seconds(RUN_START) - (count - 1 - i) * DAY, 1]);
+    const recording = () => {
+      const queries = [];
+      const grafana = {
+        queryRange: async ({ query, step }) => {
+          queries.push(query);
+          const fine = Array.from({ length: 5 }, (_, i) => [seconds(RUN_START) - i * 300, 2]);
+          const values = step === DAY ? daily(21) : fine;
+          return [{ metric: { instance: 'alpha.example.org' }, values }];
+        },
+      };
+      return { grafana, queries };
+    };
+    const fakeHistory = ({ stored = () => null, ledger = () => null } = {}) => ({
+      storedWindow: sinon.spy(async (metric, bound) => stored(metric, bound)),
+      ledgerWindow: sinon.spy((metric, bound) => ledger(metric, bound)),
+      recordCurrent: sinon.spy(),
+      backfill: sinon.spy(),
+    });
+
+    it('fetches everything and marks each window `fetched` when no history is given', async () => {
+      const { grafana, queries } = recording();
+      const result = await collectWindows({ grafana, project: alpha, discovery, runStart: RUN_START, logger: quiet });
+      expect(result.windows.every((w) => w.source === 'fetched')).to.equal(true);
+      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8 });
+      expect(queries).to.have.length(8);
+    });
+
+    it('reuses stored comparison windows and the ledger, fetching only the current window', async () => {
+      const { grafana, queries } = recording();
+      const history = fakeHistory({
+        stored: (metric, bound) => (bound.window === 'previous_day' || bound.window === 'previous_week'
+          ? { values: [[seconds(bound.end), 3]], source: `stored:2026-09-1${bound.window === 'previous_day' ? 7 : 1}` }
+          : null),
+        ledger: () => ({ values: daily(21), source: 'ledger' }),
+      });
+      const result = await collectWindows({
+        grafana, project: alpha, discovery, runStart: RUN_START, logger: quiet, history,
+      });
+      const ofMetric = result.windows.filter((w) => w.metric === 'cht_x');
+      const byWindow = Object.fromEntries(ofMetric.map((w) => [w.window, w]));
+      expect(byWindow.current.source).to.equal('fetched');
+      expect(byWindow.previous_day.source).to.equal('stored:2026-09-17');
+      expect(byWindow.previous_day.values).to.deep.equal([[seconds(RUN_START) - DAY, 3]]);
+      expect(byWindow.previous_week.source).to.equal('stored:2026-09-11');
+      expect(byWindow.trailing_14d.source).to.equal('ledger');
+      expect(byWindow.trailing_14d.available).to.equal(true);
+      expect(queries.filter((q) => q.includes('cht_x'))).to.deep.equal(['cht_x{instance="alpha.example.org"}']);
+      expect(queries.some((q) => q.includes('max_over_time'))).to.equal(false);
+      expect(history.recordCurrent.calledWith('cht_x')).to.equal(true);
+      expect(history.recordCurrent.firstCall.args[1]).to.have.length(5);
+      expect(history.backfill.called).to.equal(false);
+      expect(result.stats).to.deep.equal({ fetched: 2, reused: 6, queries: 2 });
+    });
+
+    it('fetches what the volume lacks and fills the ledger from a fetched trailing window', async () => {
+      const { grafana, queries } = recording();
+      const history = fakeHistory();
+      const result = await collectWindows({
+        grafana, project: alpha, discovery, runStart: RUN_START, logger: quiet, history,
+      });
+      expect(result.windows.every((w) => w.source === 'fetched')).to.equal(true);
+      expect(queries.filter((q) => q.includes('max_over_time'))).to.have.length(2);
+      expect(history.backfill.calledWith('cht_x')).to.equal(true);
+      expect(history.backfill.firstCall.args[1]).to.have.length(21);
+      expect(history.storedWindow.callCount, 'asked for every comparison window').to.equal(4);
+      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8 });
+    });
+
+    it('validates the source field on stored windows', () => {
+      const window = {
+        project_url: alpha.url, metric: 'cht_x', window: 'current', step_s: 300, unit: 'count', available: true,
+        values: [[1, 1]], unavailable_reason: null, start: '2026-09-17T06:00:00.000Z', end: '2026-09-18T06:00:00.000Z',
+        panel_ref: { dashboard_uid: 'd1', panel_id: 1, panel_title: 'P1', ref_id: 'A' },
+      };
+      expect(schemas.MetricWindow.parse(window).source).to.equal('fetched');
+      const stored = schemas.MetricWindow.parse({ ...window, source: 'stored:2026-09-17-f2' });
+      expect(stored.source).to.equal('stored:2026-09-17-f2');
+      expect(() => schemas.MetricWindow.parse({ ...window, source: 'guessed' })).to.throw();
+    });
+  });
+
   describe('dashboard variables in panel expressions (FR-071)', () => {
     const alpha = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
     const panel = ({ id, expr, metric, variables, unresolved }) => ({

@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 const { runCase } = require('../e2e/helpers');
+const { readGzipJson } = require('../../src/store/atomic');
 
 const PROJECTS = 50;
 const SOURCES = ['alpha.example.org', 'gamma.example.org', 'beta.example.org'];
@@ -62,5 +63,44 @@ describe('perf: fifty projects at concurrency 3 (Edge Cases, FR-013)', function 
     const brief = r.read('rollup/brief.json');
     expect(brief.bullets).to.have.length(5);
     expect(r.read('rollup/payload.json').replies).to.have.length(r.read('rollup/items.ranked.json').length);
+
+    // FR-072: a cold volume fetches four windows per metric; the next day reuses the previous-day window and the
+    // ledger, so only the current and previous-week windows are fetched and no trailing query is sent.
+    const metrics = r.read('discovery.json').metrics.length;
+    const rangeQueries = (run) => run.fake.calls
+      .map((c) => new URL(c.url))
+      .filter((u) => u.pathname.endsWith('/api/v1/query_range'))
+      .map((u) => u.searchParams.get('query'));
+    // Plus one range query per project from discovery, which reads the scrape target's history length.
+    expect(rangeQueries(r)).to.have.length(PROJECTS * (metrics * 4 + 1));
+    const day2 = await runCase({
+      caseName: 'seeded-anomaly', dataDir, hostAliases, date: '2026-09-19', runStart: '2026-09-19T06:00:00Z',
+      envExtra: { AGENT_WATCHDOG_PROJECT_CONCURRENCY: '3', AGENT_WATCHDOG_RUN_TIMEOUT_MS: String(RUN_TIMEOUT_MS) },
+    });
+    expect(day2.error, day2.error && day2.error.stack).to.equal(undefined);
+    expect(day2.code).to.equal(0);
+    const warm = rangeQueries(day2);
+    // Every fetched window is one query, plus discovery's one history query per project. A metric with no data
+    // cannot be reused (yesterday's current window was empty, the ledger has no day for it), so it is fetched again.
+    const all = [];
+    for (const project of day2.read('discovery.json').projects) {
+      all.push(...(await readGzipJson(path.join(day2.root, project.slug, 'inputs', 'windows.json.gz'))).windows);
+    }
+    const fetched = all.filter((w) => w.source === 'fetched');
+    const reused = all.filter((w) => w.source !== 'fetched');
+    expect(warm).to.have.length(fetched.length + PROJECTS);
+    expect(reused.length).to.be.at.least(all.length * 0.45);
+    // Trailing queries: only the trailing windows fetched again, plus discovery's history query per project.
+    const trailingFetched = fetched.filter((w) => w.window === 'trailing_14d').length;
+    expect(warm.filter((q) => q.includes('max_over_time'))).to.have.length(trailingFetched + PROJECTS);
+    expect(trailingFetched).to.be.below(all.filter((w) => w.window === 'trailing_14d').length * 0.2);
+    const alpha = all.filter((w) => w.project_url === 'https://alpha.example.org');
+    const withData = (name) => alpha.filter((w) => w.window === name && w.available);
+    expect(withData('current').length).to.be.above(0);
+    expect(withData('current').every((w) => w.source === 'fetched')).to.equal(true);
+    expect(withData('previous_day').every((w) => w.source === 'stored:2026-09-18')).to.equal(true);
+    expect(withData('previous_week').every((w) => w.source === 'fetched')).to.equal(true);
+    expect(withData('trailing_14d').every((w) => w.source === 'ledger')).to.equal(true);
+    expect(fs.existsSync(path.join(dataDir, 'history', 'alpha-example-org.json'))).to.equal(true);
   });
 });

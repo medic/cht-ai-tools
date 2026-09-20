@@ -24,6 +24,7 @@ const main = async () => {
     token: config.secrets.grafanaToken,
     datasourceUid: config.endpoints.prometheusDatasourceUid,
     timeoutMs: config.bounds.httpTimeoutMs,
+    queryTimeoutMs: config.bounds.queryTimeoutMs,
     logger,
   });
   const runStart = new Date();
@@ -100,6 +101,11 @@ const main = async () => {
   const windows = await collectWindows({ grafana, project, discovery, runStart, activeWindow: null, logger });
   const available = windows.windows.filter((w) => w.available).length;
   record('metric windows for one project', available > 0, `${available}/${windows.windows.length} windows available`);
+  // S-18 (R-16): with a warm data volume the daily run reuses three windows in four; this script runs without the
+  // volume, so it always fetches, and prints the counts a run would log as `collect.project`.
+  const { fetched, reused } = windows.stats;
+  const sources = `${fetched} fetched, ${reused} reused here; compare collect.project in the daily log`;
+  record('window sources (S-18)', true, sources);
   // S-17 (R-15): every panel expression, scoped and with its variables resolved, is accepted by Prometheus.
   const queryRejected = (w) => w.unavailable_reason && w.unavailable_reason.startsWith('query failed');
   const rejected = windows.windows.filter(queryRejected);

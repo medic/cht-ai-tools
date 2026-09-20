@@ -33,6 +33,7 @@ const liveQueryWindow = ({ config, discovery, deps, logger }) => {
     token: config.secrets.grafanaToken,
     datasourceUid: config.endpoints.prometheusDatasourceUid,
     timeoutMs: (config.bounds && config.bounds.httpTimeoutMs) || 15000,
+    queryTimeoutMs: (config.bounds && config.bounds.queryTimeoutMs) || 30000,
     fetch: deps.fetch || globalThis.fetch,
     logger,
   });

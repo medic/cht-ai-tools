@@ -117,6 +117,7 @@ A metric's values over one named period for one project (FR-004).
 | `values` | [number, number][] | `[epoch_seconds, value]` pairs; empty when unavailable. |
 | `available` | boolean | False when history is shorter than the window needs or the query failed. |
 | `unavailable_reason` | string or null | Required when `available` is false: `no data`, `insufficient history: N days`, `query failed: <detail>`, or `unresolved variable $name` when the panel expression depends on a dashboard variable with no single value (FR-071); the last is decided before any query is sent. |
+| `source` | string | `fetched` (queried this run), `stored:<run_id>` (the current window of that earlier run, reused because its bounds, step and metric match exactly) or `ledger` (built from the Daily Maxima Ledger); default `fetched` (FR-072). |
 
 Raw windows are the only artefact under the short retention period (FR-040).
 
@@ -124,6 +125,21 @@ Each dashboard in `discovery.json` carries `variables`, what its templating vari
 (a literal or null), and each panel record `variables` (the names its expression uses) and
 `unresolved` (those with no single value), so a window's `unresolved variable` reason is traceable
 to the dashboard document (FR-071).
+
+### Daily Maxima Ledger
+
+One file per project, `history/<project_slug>.json`, the source of the trailing baseline once it
+holds enough days (FR-072).
+
+| Field | Type | Rules |
+|---|---|---|
+| `host`, `project_url` | string | Project identity. |
+| `updated_at`, `run_id` | timestamp, string | The run that last wrote the file. |
+| `metrics` | object | `metric key → { "YYYY-MM-DD": number }`: the maximum of the current window whose end falls on that date at run start, or the trailing point of a fetched window for that date (backfill). One entry per metric per day; a forced re-run replaces the day's entry. |
+
+Entries older than the kept retention period are compacted by purge; the file itself persists.
+A trailing window is built from the ledger only when at least fourteen of its days are present;
+otherwise it is fetched and the fetched points fill the ledger.
 
 ### Computed Change
 
@@ -537,7 +553,12 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 
 ## Scale assumptions
 
-- Up to 50 projects, 10 dashboards and roughly 200 panel expressions per project.
+- Up to 100 projects, 10 dashboards and roughly 200 panel expressions per project (revision 11:
+  the hosted watchdog had 95 analysed projects and 91 per-project metrics on 2026-09-20).
+- Queries per day: four per metric per project on a cold volume, one from the eighth consecutive
+  day (FR-072); at 100 projects and 100 metrics that is 10,000 range queries, about ten minutes at
+  concurrency 3 and 180 ms per query. The ledger adds one number per metric per day per project,
+  under one megabyte across the volume.
 - Raw windows: five windows of 24 hours at a 5-minute step plus the 14-day trailing window is
   about 5,500 samples per metric. At 200 metrics a project's raw file is roughly 10 MB uncompressed;
   50 projects for 14 days is under 10 GB only if raw files are gzip-compressed on write, so

@@ -7,6 +7,7 @@ const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const { dataPaths, RUN_ID_PATTERN } = require('./run-dir');
+const { readJson, writeJsonAtomic } = require('./atomic');
 
 const DAY_MS = 86400000;
 const RAW_PATTERNS = [/\/inputs\/windows\.json\.gz$/, /\/rollup\/brief\.png$/];
@@ -54,8 +55,8 @@ const walk = async (dir) => {
 
 /**
  * Apply retention to the data volume.
- * @returns {{ removed: Array<{ path: string, class: string, age_days: number }>, compacted: number }} `compacted` is
- *   always 0 since feedback records became permanent; kept for callers that log it.
+ * @returns {{ removed: Array<{ path: string, class: string, age_days: number }>, compacted: number }} `compacted`
+ *   counts Daily Maxima Ledger entries older than the kept period that were dropped (FR-072).
  */
 const purge = async (dataDir, { rawDays, keptDays, now = new Date(), dryRun = false }) => {
   const p = dataPaths(dataDir);
@@ -95,9 +96,35 @@ const purge = async (dataDir, { rawDays, keptDays, now = new Date(), dryRun = fa
     }
   }
 
-  // feedback.jsonl is never read here: it is permanent (FR-059).
-  const compacted = 0;
+  // The Daily Maxima Ledger keeps its file; entries older than the kept period go (FR-072).
+  let compacted = 0;
+  if (fsSync.existsSync(p.history)) {
+    for (const entry of await fs.readdir(p.history)) {
+      if (!entry.endsWith('.json')) {
+        continue;
+      }
+      const file = path.join(p.history, entry);
+      const ledger = await readJson(file);
+      let dropped = 0;
+      for (const [metric, days] of Object.entries(ledger.metrics || {})) {
+        for (const day of Object.keys(days)) {
+          if (ageDays(day, now) > keptDays) {
+            delete days[day];
+            dropped += 1;
+          }
+        }
+        if (!Object.keys(days).length) {
+          delete ledger.metrics[metric];
+        }
+      }
+      if (dropped && !dryRun) {
+        await writeJsonAtomic(file, ledger);
+      }
+      compacted += dropped;
+    }
+  }
 
+  // feedback.jsonl is never read here: it is permanent (FR-059).
   return { removed, compacted };
 };
 

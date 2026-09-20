@@ -93,6 +93,7 @@ const createGrafanaSafely = (config, fetch, logger) => {
       token: config.secrets.grafanaToken,
       datasourceUid: config.endpoints.prometheusDatasourceUid,
       timeoutMs: config.bounds.httpTimeoutMs,
+      queryTimeoutMs: config.bounds.queryTimeoutMs,
       fetch: fetch || globalThis.fetch,
       logger,
     });

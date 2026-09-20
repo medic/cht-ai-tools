@@ -63,6 +63,19 @@ run, prints a JSON comparison of items before and after, and is the diff a promp
 PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
 against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.
 
+### What a run fetches
+
+Collection is incremental. Every run fetches each metric's current window; the previous-day and
+previous-week windows are reused from the stored runs one and seven days earlier when their bounds
+match exactly, and the fourteen-day baseline is built from a per-project ledger of daily maxima
+(`history/<slug>.json` in the data volume) once it holds fourteen days. What the volume lacks is
+fetched, so the first day costs four range queries per metric, the second two, and from the eighth
+consecutive day one. Each `collect.project` log line reports `fetched`, `reused` and `queries`, and
+every stored window carries its `source`. A slow or failed query is retried once and then makes only
+its window unavailable; the source counts as unreachable, and the run fails, only on a connection
+failure or three consecutive failed queries. Projects are collected concurrently within
+`AGENT_WATCHDOG_PROJECT_CONCURRENCY`.
+
 ### Learning under review
 
 The roll-up may propose skill, prompt or threshold changes; `calibrate` proposes threshold changes backed

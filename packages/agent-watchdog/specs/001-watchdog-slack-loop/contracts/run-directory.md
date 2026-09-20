@@ -17,7 +17,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
 │       ├── alerts.classified.json         # category, importance, staleness, groups (FR-065)   [kept]
 │       ├── <project_slug>/
-│       │   ├── inputs/windows.json.gz     # Metric Windows, raw series                         [raw]
+│       │   ├── inputs/windows.json.gz     # Metric Windows, raw series, each with its source   [raw]
 │       │   ├── changes.json               # Computed Changes                                   [kept]
 │       │   ├── candidates.json            # Candidates                                         [kept]
 │       │   ├── prompt.pass<n>.md          # the exact prompt sent for pass n                   [kept]
@@ -44,6 +44,8 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │   ├── memory.md                          # current curated memory                             [durable]
 │   └── history/<run_id>.patch             # one diff per change (FR-031)                       [durable]
 ├── feedback.jsonl                         # append-only Feedback records (FR-028), never purged   [durable]
+├── history/
+│   └── <project_slug>.json                # Daily Maxima Ledger: one number per metric per day [kept: entries compacted after 30 days]
 ├── alerts/episodes.jsonl                  # append-only Alert Episode events (FR-067)          [durable]
 ├── proposals/<date>-<type>-<slug>.md      # canonical proposal files (FR-032)                  [durable]
 ├── corpus/
@@ -66,7 +68,7 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 |---|---|---|
 | `purge` | retention settings, directory timestamps | deletions only, logged per file |
 | `feedback` | `publication.json` of the previous N runs, Slack | `feedback.ingested.json`, `feedback.jsonl` |
-| `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances) | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory) |
+| `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances), the stored current windows of the runs one and seven days earlier, `history/<slug>.json` | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory), `history/<slug>.json` extended with the day's maxima |
 | `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
 | `agent` | `candidates.json`, `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
 | `rollup` | all `findings.pass<last>.json`, `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |

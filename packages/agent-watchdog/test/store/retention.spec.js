@@ -58,6 +58,30 @@ describe('store/retention', () => {
     expect(fs.existsSync(old.root)).to.equal(true);
   });
 
+  it('compacts Daily Maxima Ledger entries older than the kept period and keeps the file (FR-072)', async () => {
+    const now = new Date('2026-09-18T06:00:00Z');
+    const ledgerDir = path.join(dataDir, 'history');
+    fs.mkdirSync(ledgerDir, { recursive: true });
+    const file = path.join(ledgerDir, 'alpha-example-org.json');
+    const ledger = {
+      host: 'alpha.example.org', project_url: 'https://alpha.example.org', run_id: '2026-09-17',
+      metrics: {
+        m: { '2026-09-08': 1, '2026-08-18': 2, '2026-08-09': 3 },
+        n: { '2026-08-01': 4 },
+      },
+    };
+    fs.writeFileSync(file, JSON.stringify(ledger));
+    const dry = await purge(dataDir, { rawDays: 14, keptDays: 30, now, dryRun: true });
+    expect(dry.compacted).to.equal(3);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).metrics.n).to.deep.equal({ '2026-08-01': 4 });
+    const result = await purge(dataDir, { rawDays: 14, keptDays: 30, now });
+    expect(result.compacted).to.equal(3);
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(after.metrics).to.deep.equal({ m: { '2026-09-08': 1 } });
+    expect(after.host).to.equal('alpha.example.org');
+    expect(result.removed.map((r) => r.path)).to.not.include(path.join('history', 'alpha-example-org.json'));
+  });
+
   it('never removes or compacts feedback.jsonl, even a year later (FR-059)', async () => {
     const p = dataPaths(dataDir);
     const text = [

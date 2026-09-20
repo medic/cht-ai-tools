@@ -94,6 +94,13 @@ it is sent (`src/collect/variables.js`; `$interval` to the dashboard's value, Gr
 the window); a variable with no single value makes the metric unavailable and is named in
 `collect.unresolved_variable`. The trailing baseline uses the subquery form for anything but a bare selector.
 The fake Grafana answers 400 like Prometheus for an unsubstituted variable or a range on a non-selector.
+A run fetches only what the data volume lacks (`src/collect/history.js`): the current window always, the
+previous-day and previous-week windows from the stored runs one and seven days earlier when their bounds match
+exactly, the trailing baseline from `history/<slug>.json` (one daily maximum per metric) once it holds fourteen
+days; every window carries its `source`. Range queries have their own timeout
+(`AGENT_WATCHDOG_QUERY_TIMEOUT_MS`), one retry, and fail only their window; three consecutive failures or a
+connection failure make the source unreachable (exit 69). Projects are collected concurrently within
+`AGENT_WATCHDOG_PROJECT_CONCURRENCY`.
 
 Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
 failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert
