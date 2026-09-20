@@ -55,20 +55,20 @@ describe('store/retention', () => {
     expect(fs.existsSync(old.root)).to.equal(true);
   });
 
-  it('compacts feedback.jsonl only for records whose outcomes were appended to the corpus', async () => {
+  it('never removes or compacts feedback.jsonl, even a year later (FR-059)', async () => {
     const p = dataPaths(dataDir);
-    const oldDate = daysAgo(45);
-    const otherOld = daysAgo(50);
-    fs.writeFileSync(p.feedbackFile, [
-      JSON.stringify({ feedback_id: 'a', date: oldDate, item_id: 'i1' }),
-      JSON.stringify({ feedback_id: 'b', date: otherOld, item_id: 'i2' }),
+    const text = [
+      JSON.stringify({ feedback_id: 'a', date: daysAgo(400), item_id: 'i1' }),
+      JSON.stringify({ feedback_id: 'b', date: daysAgo(50), item_id: 'i2' }),
       JSON.stringify({ feedback_id: 'c', date: daysAgo(2), item_id: 'i3' }),
-    ].join('\n') + '\n');
-    fs.writeFileSync(path.join(p.corpusOutcomes, `${oldDate}.jsonl`), JSON.stringify({ item_id: 'i1' }) + '\n');
-    const result = await purge(dataDir, { rawDays: 14, keptDays: 30, now: NOW });
-    const remaining = fs.readFileSync(p.feedbackFile, 'utf8').trim().split('\n')
-      .map(JSON.parse).map((r) => r.feedback_id);
-    expect(remaining).to.deep.equal(['b', 'c']);
-    expect(result.compacted).to.equal(1);
+    ].join('\n') + '\n';
+    fs.writeFileSync(p.feedbackFile, text);
+    fs.writeFileSync(path.join(p.corpusOutcomes, `${daysAgo(400)}.jsonl`), JSON.stringify({ item_id: 'i1' }) + '\n');
+    expect(classify('feedback.jsonl')).to.equal('durable');
+    const yearLater = new Date(NOW.getTime() + 365 * 86400000);
+    const result = await purge(dataDir, { rawDays: 14, keptDays: 30, now: yearLater });
+    expect(fs.readFileSync(p.feedbackFile, 'utf8')).to.equal(text);
+    expect(result.compacted).to.equal(0);
+    expect(fs.existsSync(`${p.feedbackFile}.tmp`)).to.equal(false);
   });
 });

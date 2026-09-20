@@ -30,7 +30,11 @@ const enums = {
   FeedbackTarget: z.enum(['item', 'brief']),
   FeedbackKind: z.enum(['reaction', 'note']),
   FeedbackVerdict: z.enum(['up', 'down', 'retracted']),
-  ProposalType: z.enum(['skill', 'prompt', 'threshold', 'pattern_card']),
+  // Where a note's lesson belongs (FR-061); `expectation` is handled by the horizon rule, `none` carries no lesson.
+  FeedbackClassification: z.enum([
+    'expectation', 'project_annotation', 'skill', 'prompt', 'threshold', 'pattern_card', 'none',
+  ]),
+  ProposalType: z.enum(['skill', 'prompt', 'threshold', 'pattern_card', 'project_annotation']),
   ProposalStatus: z.enum(['proposed', 'superseded']),
   FlagKind: z.enum(['hostname', 'person', 'address', 'secret']),
   CorpusKind: z.enum(['conversation', 'export', 'incident', 'explainer', 'run_outcome', 'unknown']),
@@ -293,6 +297,10 @@ const Feedback = z.object({
   author: z.string(),
   matched: z.boolean(),
   source_ts: z.string(),
+  // User Story 7: set once by the run whose digest acknowledged the record; a note's review outcome.
+  acknowledged_run_id: z.string().nullable().default(null),
+  classification: enums.FeedbackClassification.nullable().default(null),
+  proposal_id: z.string().nullable().default(null),
 }).strict().refine((f) => f.target !== 'item' || f.item_id, {
   message: 'item_id is required when target is item',
   path: ['item_id'],
@@ -369,6 +377,11 @@ const CalibrationReport = z.object({
     by_month: z.array(z.object({ month: z.string(), rate: z.number().nullable(), items: z.number().int() }).strict()),
   }).strict().optional(),
   proposals: z.array(z.string()),
+  open_proposals: z.array(z.object({
+    proposal_id: z.string(),
+    type: enums.ProposalType,
+    age_days: z.number().int().min(0),
+  }).strict()).optional(),
 }).strict();
 
 const PriorityList = z.object({

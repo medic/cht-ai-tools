@@ -15,7 +15,7 @@ const { createTracer } = require('../../trace/langfuse');
 const { schemas } = require('../../model/schemas');
 const { buildAllowlist, allowedHosts } = require('../../links/allowlist');
 const { isoWeekOf, weekRange } = require('../../calibration/week');
-const { buildCalibrationReport, reportWindow } = require('../../calibration/report');
+const { buildCalibrationReport, reportWindow, openProposalsFor } = require('../../calibration/report');
 const { summariseReport, PROMPT_FILE } = require('../../calibration/summary');
 
 const hostOf = (url) => {
@@ -101,6 +101,15 @@ const renderMarkdown = ({ week, report, window, summary, reason }) => {
   }
   lines.push('', '## Proposals', '');
   lines.push(...(report.proposals.length ? report.proposals.map((id) => `- ${id}`) : ['None.']));
+  // FR-063: the one place that reminds reviewers of what still awaits them, with how long it has waited.
+  lines.push('', '## Open proposals', '');
+  const open = report.open_proposals || [];
+  if (open.length) {
+    lines.push('| Proposal | Type | Age (days) |', '|---|---|---|');
+    lines.push(...open.map((p) => `| ${p.proposal_id} | ${p.type} | ${p.age_days} |`));
+  } else {
+    lines.push('None awaiting review.');
+  }
   return `${lines.join('\n')}\n`;
 };
 
@@ -184,6 +193,8 @@ module.exports = async function calibrate({
       }));
     }
     report.proposals = (written.written || []).map((w) => w.proposal_id);
+    // Proposals written just now are open too; recount after writing so the weekly list is complete.
+    report.open_proposals = await openProposalsFor(dataDir, now);
 
     const engine = engineOrNull({ deps, config, env, logger: log });
     const promptText = fs.readFileSync(path.join(config.paths.promptsDir, PROMPT_FILE), 'utf8');

@@ -1,4 +1,6 @@
 'use strict';
+const fs = require('node:fs');
+const { dataPaths } = require('../store/run-dir');
 // The weekly Calibration Report (US4 scenario 4, FR-058, SC-002): per project and metric, the observed
 // distribution of daily changes, reviewer outcomes, the current percentage-change threshold and a suggestion
 // with the effect it would have had on the last thirty days. Calibration targets the percentage-change rule;
@@ -223,6 +225,28 @@ const passChangeRate = (runs) => {
  *   feedbackWindowDays, now
  * @returns {Promise<object>} a validated Calibration Report with an empty `proposals` list
  */
+/** Every proposal still awaiting review, oldest first, with its age in days (FR-063). */
+const openProposalsFor = async (dataDir, now = new Date()) => {
+  const { readProposals } = require('../rollup/proposals');
+  const proposalsDir = dataPaths(dataDir).proposals;
+  if (!fs.existsSync(proposalsDir)) {
+    return [];
+  }
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  return (await readProposals(dataDir))
+    .filter((proposal) => proposal.status === 'proposed')
+    .map((proposal) => {
+      const created = proposal.created_at ? Date.parse(proposal.created_at) : NaN;
+      const since = Number.isNaN(created) ? Date.parse(`${proposal.proposal_id.slice(0, 10)}T00:00:00Z`) : created;
+      return {
+        proposal_id: proposal.proposal_id,
+        type: proposal.type,
+        age_days: Math.max(0, Math.floor((nowMs - since) / DAY_MS)),
+      };
+    })
+    .sort((a, b) => b.age_days - a.age_days || a.proposal_id.localeCompare(b.proposal_id));
+};
+
 const buildCalibrationReport = async ({
   dataDir, week, policy, config = null, projects = null, windowDays = WINDOW_DAYS,
   feedbackWindowDays = FEEDBACK_WINDOW_DAYS, now = new Date(),
@@ -255,10 +279,12 @@ const buildCalibrationReport = async ({
     pass_change_rate: passChangeRate(runs),
     feedback_rate: feedbackRateOf(filteredFeedback, feedbackWindowDays),
     proposals: [],
+    open_proposals: await openProposalsFor(dataDir, now),
   });
 };
 
 module.exports = {
   buildCalibrationReport, collectObservations, reportWindow, distributionOf, feedbackRateOf, passChangeRate,
+  openProposalsFor,
   WINDOW_DAYS, FEEDBACK_WINDOW_DAYS, OUTCOME_LAG_DAYS,
 };

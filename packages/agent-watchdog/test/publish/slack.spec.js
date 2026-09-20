@@ -149,3 +149,59 @@ describe('publish/slack', () => {
     expect(failure.ts).to.be.a('string');
   });
 });
+
+describe('publish/slack: feedback digest and seen reactions (FR-062)', () => {
+  const { createSlackPublisher } = require('../../src/publish/slack');
+  const { quietLogger } = require('../rollup/factories');
+  const digest = {
+    text: 'Feedback from yesterday: 1 reaction',
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'x' } }],
+    metadata: {
+      event_type: 'agent_watchdog.feedback_digest', event_payload: { run_id: 'r', date: 'd', acknowledged: 1 },
+    },
+    acknowledged: ['f1f1f1f1f1f1'], reactions: [],
+  };
+  const clientWith = (reactionsAdd) => ({
+    chat: {
+      postMessage: sinon.stub().callsFake(async ({ thread_ts: threadTs }) => (
+        { ok: true, channel: 'C123', ts: `${threadTs}5` }
+      )),
+      getPermalink: sinon.stub().callsFake(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://slack/p${ts}` })),
+    },
+    reactions: { add: reactionsAdd },
+  });
+
+  it('posts the digest as one threaded reply under the parent with its metadata', async () => {
+    const client = clientWith(sinon.stub().resolves({ ok: true }));
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
+    const publication = await publisher.postDigest({ digest, parentTs: '1.000' });
+    expect(client.chat.postMessage).to.have.been.calledOnce;
+    const call = client.chat.postMessage.firstCall.args[0];
+    expect(call).to.include({ channel: 'C123', thread_ts: '1.000', text: digest.text });
+    expect(call.blocks).to.deep.equal(digest.blocks);
+    expect(call.metadata.event_type).to.equal('agent_watchdog.feedback_digest');
+    expect(call).to.not.have.property('reply_broadcast');
+    expect(publication).to.deep.equal({ channel_id: 'C123', ts: '1.0005', permalink: 'https://slack/p1.0005' });
+  });
+
+  it('adds an eyes reaction per note, treats already_reacted as success and logs other failures', async () => {
+    const add = sinon.stub();
+    add.onFirstCall().resolves({ ok: true });
+    const apiError = (code) => Object.assign(new Error(`An API error occurred: ${code}`), { data: { error: code } });
+    add.onSecondCall().rejects(apiError('already_reacted'));
+    add.onThirdCall().rejects(apiError('missing_scope'));
+    const logger = quietLogger();
+    const publisher = createSlackPublisher({ client: clientWith(add), channel: 'C123', logger });
+    const records = [
+      { feedback_id: 'a', kind: 'note', source_ts: '1.1' },
+      { feedback_id: 'b', kind: 'note', source_ts: '1.2' },
+      { feedback_id: 'c', kind: 'note', source_ts: '1.3' },
+    ];
+    const results = await publisher.reactToNotes({ records });
+    expect(add.callCount).to.equal(3);
+    expect(add.firstCall.args[0]).to.deep.equal({ channel: 'C123', timestamp: '1.1', name: 'eyes' });
+    expect(results.map((r) => [r.source_ts, r.ok])).to.deep.equal([['1.1', true], ['1.2', true], ['1.3', false]]);
+    expect(results[2].error).to.include('missing_scope');
+    expect(logger.events.some((e) => e.level === 'warn' && e.event === 'slack.reaction_failed')).to.equal(true);
+  });
+});

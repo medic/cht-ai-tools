@@ -1,6 +1,7 @@
 'use strict';
 // Read reactions and notes from the previous runs' posts (FR-026 to FR-029; contracts/slack-payload.md).
-const { RunDir } = require('../store/run-dir');
+const path = require('node:path');
+const { RunDir, dataPaths } = require('../store/run-dir');
 const { schemas } = require('../model/schemas');
 const identity = require('../model/identity');
 const { appendRecords, readAll } = require('./store');
@@ -11,6 +12,8 @@ const BRIEF_EVENT = 'agent_watchdog.brief';
 const ITEM_EVENT = 'agent_watchdog.item';
 const VERDICTS = { '+1': 'up', thumbsup: 'up', '-1': 'down', thumbsdown: 'down' };
 const DAY_SECONDS = 86400;
+const DAY_MS = 86400000;
+const DEFAULT_INFLUENCE_DAYS = 30;
 
 const noop = { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} };
 
@@ -94,6 +97,7 @@ const emptyCounts = (meta = {}) => ({
   horizon: null,
 });
 
+/** Tallies count a record only inside the influence window (FR-060); horizons are tracked separately. */
 const applyRecord = (counts, record) => {
   if (record.kind === 'reaction') {
     if (record.verdict === 'retracted') {
@@ -107,10 +111,44 @@ const applyRecord = (counts, record) => {
     }
   } else if (record.kind === 'note' && record.note) {
     counts.notes.push(record.note);
-    if (record.horizon && (!counts.horizon || record.horizon > counts.horizon)) {
-      counts.horizon = record.horizon;
-    }
   }
+};
+
+/** A horizon stated in any stored note holds until its date, whatever the window (FR-060). */
+const applyHorizon = (counts, record, observedDate) => {
+  if (record.kind === 'note' && record.horizon && record.horizon >= observedDate
+    && (!counts.horizon || record.horizon > counts.horizon)) {
+    counts.horizon = record.horizon;
+  }
+};
+
+const isoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/** The first date whose records still adjust ranking: `influenceDays` before the run date, inclusive. */
+const windowStartFor = (observedDate, influenceDays) => (
+  isoDate(Date.parse(`${observedDate}T00:00:00Z`) - influenceDays * DAY_MS)
+);
+
+/** Item identity for a stored record: today's index, else the source run's ranked items (best effort). */
+const createMetaLookup = (dataDir, itemMeta) => {
+  const cache = new Map();
+  return async (record) => {
+    if (itemMeta.has(record.item_id)) {
+      return itemMeta.get(record.item_id);
+    }
+    if (!record.run_id || !cache.has(record.run_id)) {
+      let items = [];
+      try {
+        const run = RunDir.open(dataDir, record.run_id);
+        items = run.exists('rollup/items.ranked.json') ? await run.readJson('rollup/items.ranked.json') : [];
+      } catch {
+        items = [];
+      }
+      cache.set(record.run_id, new Map(items.map((item) => [item.item_id, item])));
+    }
+    const item = cache.get(record.run_id).get(record.item_id);
+    return item ? { project_url: item.project_url, metric: item.metric, pattern_card: item.pattern_card } : {};
+  };
 };
 
 const verdictOf = (counts) => {
@@ -131,9 +169,10 @@ const verdictOf = (counts) => {
  */
 const ingestFeedback = async ({
   client, channel, dataDir, runId, date, lookbackRuns = 7, since = null, engine = null, model, definition = null,
-  logger = noop, pace = async () => {}, now = () => new Date(),
+  logger = noop, pace = async () => {}, now = () => new Date(), influenceDays = DEFAULT_INFLUENCE_DAYS,
 }) => {
   const observedDate = date || now().toISOString().slice(0, 10);
+  const windowStart = windowStartFor(observedDate, influenceDays);
   const previous = await readAll(dataDir);
   const existingIds = new Set(previous.map((r) => r.feedback_id));
   const itemMeta = new Map();
@@ -232,12 +271,21 @@ const ingestFeedback = async ({
       ? items
       : itemReplies.map((r) => ({ item_id: r.item_id, ...(itemMeta.get(r.item_id) || {}) }));
     for (const message of notes) {
+      const feedbackId = identity.feedbackId(message.ts, message.user, 'note', null);
+      const stored = existingIds.has(feedbackId) ? previous.find((r) => r.feedback_id === feedbackId) : null;
+      if (stored) {
+        // A note already on record keeps the horizon fixed when it was first read: re-parsing "until 1 October"
+        // a year later would move it, and re-parsing costs a model call for nothing. Stored horizons that have
+        // not passed are carried by the stored-record path below.
+        candidates.push(stored);
+        continue;
+      }
       const { item } = matchNote({ text: message.text, items: knownItems });
       const parsed = await parseNoteWithModel({
         text: message.text, noteDate: observedDate, engine, model, definition,
       });
       candidates.push({
-        feedback_id: identity.feedbackId(message.ts, message.user, 'note', null),
+        feedback_id: feedbackId,
         date: observedDate, run_id: sourceId, target: item ? 'item' : 'brief', item_id: item ? item.item_id : null,
         kind: 'note', verdict: null, note: message.text, horizon: parsed.horizon, author: message.user,
         matched: Boolean(item), source_ts: message.ts,
@@ -269,17 +317,35 @@ const ingestFeedback = async ({
   const byItem = {};
   const brief = { up: 0, down: 0, notes: [] };
   const projects = {};
+  const metaFor = createMetaLookup(dataDir, itemMeta);
+  const knownHorizons = new Set(horizons.map((h) => `${h.item_id}|${h.horizon}`));
   for (const record of all) {
+    const inWindow = record.date >= windowStart;
     if (record.target === 'item' && record.item_id) {
       if (!byItem[record.item_id]) {
-        byItem[record.item_id] = emptyCounts(itemMeta.get(record.item_id));
+        byItem[record.item_id] = emptyCounts(await metaFor(record));
       }
-      applyRecord(byItem[record.item_id], record);
-      const projectUrl = byItem[record.item_id].project_url;
+      const counts = byItem[record.item_id];
+      if (inWindow) {
+        applyRecord(counts, record);
+      }
+      applyHorizon(counts, record, observedDate);
+      const projectUrl = counts.project_url;
       if (projectUrl) {
         (projects[projectUrl] = projects[projectUrl] || []).push(record);
       }
-    } else {
+      // A stored note whose horizon has not passed keeps suppressing (FR-060), even once its post is out of the
+      // look-back and the record out of the window; today's parse of the same note wins when both exist.
+      const key = `${record.item_id}|${record.horizon}`;
+      if (record.kind === 'note' && record.horizon && record.horizon >= observedDate && !knownHorizons.has(key)) {
+        knownHorizons.add(key);
+        horizons.push({
+          item_id: record.item_id, project_url: counts.project_url, metric: counts.metric,
+          pattern_card: counts.pattern_card, horizon: record.horizon, expected_max: null, observed_value: null,
+          note: record.note, author_count: 1, source_run_id: record.run_id, source: 'stored',
+        });
+      }
+    } else if (inWindow) {
       applyRecord(brief, record);
     }
   }
@@ -301,7 +367,9 @@ const ingestFeedback = async ({
     by_item: byItem,
     brief: { up: brief.up, down: brief.down, notes: brief.notes },
     projects,
+    influence: { days: influenceDays, window_start: windowStart },
+    records_path: path.resolve(dataPaths(dataDir).feedbackFile),
   };
 };
 
-module.exports = { ingestFeedback, previousRuns, VERDICTS };
+module.exports = { ingestFeedback, previousRuns, windowStartFor, VERDICTS, DEFAULT_INFLUENCE_DAYS };

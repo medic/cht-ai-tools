@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { writeProposals, readProposals, slugify, parseProposalFile } = require('../../src/rollup/proposals');
+const { writeProposals, readProposals, slugify, parseProposalFile, TYPES } = require('../../src/rollup/proposals');
 const { applyMemoryUpdate } = require('../../src/rollup/memory');
 const { RunDir, ensureDataLayout } = require('../../src/store/run-dir');
 const { PACKAGE_PATHS } = require('../../src/config/schema');
@@ -142,6 +142,26 @@ describe('rollup/proposals (FR-032, FR-033)', () => {
     ]);
     expect(all[0].body).to.equal('first version');
     expect(all[0].path).to.equal(path.join(dataDir, 'proposals', '2026-09-17-skill-backlog-climb.md'));
+  });
+
+  it('accepts project_annotation as a fifth destination (FR-061)', async () => {
+    expect(TYPES).to.include('project_annotation');
+    const { written } = await writeProposals({
+      dataDir, runDir, runId: '2026-09-18', date: '2026-09-18', now: NOW,
+      proposals: [{
+        type: 'project_annotation', title: 'Annotate the sentinel baseline',
+        body: [
+          'On one project the sentinel backlog is normally under 200.', '', '```yaml', 'projects:',
+          '  alpha.example.org:', '    notes: sentinel backlog normally under 200', '```', '',
+        ].join('\n'),
+        evidence: [{ feedback_id: 'abcdefabcdef' }],
+      }],
+    });
+    expect(written[0].type).to.equal('project_annotation');
+    const [stored] = await readProposals(dataDir);
+    expect(stored.type).to.equal('project_annotation');
+    expect(stored.body).to.include('[hostname]');
+    expect(stored.flags.map((f) => f.kind)).to.include('hostname');
   });
 
   it('skips a proposal with an unknown type, logging a warning instead of throwing', async () => {

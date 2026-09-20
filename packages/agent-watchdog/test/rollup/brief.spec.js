@@ -80,7 +80,8 @@ describe('rollup/brief composeBrief', () => {
     expect(out.calls[0]).to.include({ cost_usd: 0.02, model: 'claude-fable-5-1' });
     const call = engine.singleTurn.firstCall.args[0];
     expect(call.outputSchema.$id).to.include('brief.schema.json');
-    expect(call.systemPrompt).to.deep.equal(['ROLLUP TEMPLATE {{date}}']);
+    expect(call.systemPrompt[0]).to.match(/at most three bullets/i);
+    expect(call.userPrompt.startsWith('ROLLUP TEMPLATE 2026-09-18')).to.equal(true);
     expect(call.userPrompt).to.include(items[0].item_id);
     expect(call.userPrompt).to.include('<untrusted');
     expect(call.bounds).to.deep.equal({ maxTurns: 20, maxBudgetUsd: 2, timeoutMs: 900000 });
@@ -164,5 +165,67 @@ describe('rollup/brief composeBrief', () => {
     delete ctx.definition;
     await composeBrief({ ctx, items, ...base() });
     expect(engine.singleTurn.firstCall.args[0].systemPrompt[0]).to.match(/bullets/i);
+  });
+});
+
+describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story 7)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const rollupTemplate = fs.readFileSync(path.join(__dirname, '..', '..', 'prompts', 'rollup.md'), 'utf8');
+  const items = rankItems({ items: [makeItem()] });
+  const feedback = [{
+    item_id: items[0].item_id, project_url: items[0].project_url, metric: items[0].metric, pattern_card: null,
+    up: 0, down: 1, retracted: 0, verdict: 'dismissed', horizon: '2026-10-01',
+    notes: ['known migration, expected until 1 October'],
+    author: 'U0123ABCD',
+  }];
+  const ctxWith = (engine) => ({
+    config: makeConfig(), logger: quietLogger(), runId: '2026-09-18', date: '2026-09-18', engine,
+    gate: { verifyBrief: sinon.stub().resolves(accepted) }, definition: { rollup: rollupTemplate },
+  });
+  const inputs = () => ({
+    discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()], memory: 'alpha spikes at month end',
+    feedbackUnmatched: [{ feedback_id: 'ffffffffffff', note: 'what about beta?' }], expectedLoadNotice: null,
+    referenceSourcesUnavailable: false, footer: footer(), feedback, feedbackBrief: { up: 1, down: 0, notes: [] },
+  });
+
+  it('fills every placeholder of prompts/rollup.md and puts the matched feedback in the user turn', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    await composeBrief({ ctx: ctxWith(engine), items, ...inputs() });
+    const call = engine.singleTurn.firstCall.args[0];
+    expect(call.systemPrompt).to.have.length(1);
+    expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/at most three bullets/);
+    expect(call.systemPrompt[0]).to.not.include('{{');
+    expect(call.systemPrompt[0]).to.not.include('## Memory condensation');
+    expect(call.userPrompt).to.not.include('{{');
+    expect(call.userPrompt).to.include('Run date: 2026-09-18');
+    expect(call.userPrompt).to.include('<untrusted source="ranked-items">');
+    expect(call.userPrompt).to.include(items[0].item_id);
+    expect(call.userPrompt).to.match(/3 projects, \d+ panels, 1 candidate/);
+    expect(call.userPrompt).to.include('<untrusted source="feedback">');
+    expect(call.userPrompt).to.include('known migration, expected until 1 October');
+    expect(call.userPrompt).to.include('"verdict": "dismissed"');
+    expect(call.userPrompt).to.include('"horizon": "2026-10-01"');
+    expect(call.userPrompt).to.include('"brief"');
+    expect(call.userPrompt).to.not.include('U0123ABCD');
+    expect(call.userPrompt).to.not.match(/"author"/);
+    expect(call.userPrompt).to.include('<untrusted source="memory">');
+    expect(call.userPrompt).to.include('alpha spikes at month end');
+    expect(call.userPrompt).to.include('<untrusted source="unmatched-feedback-notes">');
+    expect(call.userPrompt).to.include('what about beta?');
+    const order = ['ranked-items', 'source="feedback"', 'source="memory"'].map((m) => call.userPrompt.indexOf(m));
+    expect(order).to.deep.equal([...order].sort((a, b) => a - b));
+  });
+
+  it('says so when there is no feedback, no memory and no expected-load window', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    await composeBrief({
+      ctx: ctxWith(engine), items, ...inputs(), feedback: [], feedbackBrief: null, memory: null, feedbackUnmatched: [],
+    });
+    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    expect(prompt).to.include('No feedback was recorded for this run.');
+    expect(prompt).to.include('No memory has been recorded yet.');
+    expect(prompt).to.include('No expected-load window is active.');
+    expect(prompt).to.not.include('{{');
   });
 });

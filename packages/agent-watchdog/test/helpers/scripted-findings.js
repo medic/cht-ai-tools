@@ -66,7 +66,9 @@ const itemsFor = async (project) => {
     if (change.previous_day_value !== null) {
       evidence.push({ window: 'previous_day', value: change.previous_day_value, unit });
     }
-    const severity = cands.some((c) => c.severity_floor === 'high') ? 'high' : 'low';
+    // The gate enforces the candidates' severity floor, so answer with the highest floor among them.
+    const rank = { low: 0, medium: 1, high: 2 };
+    const severity = cands.reduce((top, c) => (rank[c.severity_floor] > rank[top] ? c.severity_floor : top), 'low');
     items.push({
       item_key: { metric, pattern_card: null },
       severity,

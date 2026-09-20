@@ -105,21 +105,14 @@ const replyFor = ({ item, links, runId }) => {
   };
 };
 
-// Notes nobody could match to an item are surfaced in the thread so a human can clarify (US2 scenario 4).
-const unmatchedReply = ({ unmatchedNotes, runId, date }) => {
-  const notes = (unmatchedNotes || []).map((n) => (typeof n === 'string' ? n : n.note)).filter(Boolean);
-  if (!notes.length) {
-    return [];
+// The feedback digest (FR-062) is built by src/publish/digest.js and carried on the payload as posted:
+// its text, blocks and metadata, the record ids it acknowledges, and the reactions added after posting.
+const digestField = (built) => (built
+  ? {
+    text: built.text, blocks: built.blocks, metadata: built.metadata,
+    acknowledged: [...built.digest.acknowledged], reactions: [],
   }
-  const text = template('unmatched')({ count_text: String(notes.length), notes }).trim();
-  return [{
-    item_id: null,
-    kind: 'unmatched_notes',
-    text,
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
-    metadata: { event_type: BRIEF_EVENT, event_payload: { run_id: runId, date, kind: 'unmatched_notes' } },
-  }];
-};
+  : null);
 
 const briefMetadata = ({ runId, date, kind }) => ({
   event_type: BRIEF_EVENT,
@@ -128,10 +121,11 @@ const briefMetadata = ({ runId, date, kind }) => ({
 
 /**
  * Build the payload for a brief.
- * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel
+ * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel,
+ *   digest (from buildDigest, or null); unmatched notes travel inside the digest since User Story 7
  */
 const buildPayload = ({
-  brief, items = [], links = new Map(), runId, date, audience, channel = null, unmatchedNotes = [],
+  brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null,
 }) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
@@ -148,7 +142,10 @@ const buildPayload = ({
       cost_text: formatCost(brief.footer ? brief.footer.cost_usd : 0),
     };
     const text = truncate(template(brief.kind)(view).trim(), TEXT_MAX);
-    return { run_id: runId, kind: brief.kind, parent: { channel, text, metadata }, image: null, replies: [] };
+    return {
+      run_id: runId, kind: brief.kind, parent: { channel, text, metadata }, image: null, replies: [],
+      digest: digestField(digest),
+    };
   }
 
   const text = truncate(template('parent')({
@@ -171,10 +168,8 @@ const buildPayload = ({
       path: brief.image ? brief.image.path : null,
       slack_file_id: brief.image ? brief.image.slack_file_id : null,
     },
-    replies: [
-      ...[...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
-      ...unmatchedReply({ unmatchedNotes, runId, date }),
-    ],
+    replies: [...items].sort(rankOrder).map((item) => replyFor({ item, links, runId })),
+    digest: digestField(digest),
   };
 };
 

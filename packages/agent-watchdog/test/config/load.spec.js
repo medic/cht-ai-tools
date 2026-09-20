@@ -84,6 +84,22 @@ describe('config/load', () => {
     expect(error.keys).to.include.members(['AGENT_WATCHDOG_MAX_BUDGET_USD_RUN', 'AGENT_WATCHDOG_PASSES']);
   });
 
+  it('reads the feedback influence window with a default of 30 days and a hard cap of 365 (FR-060)', () => {
+    expect(HARD_CAPS.feedbackInfluenceDays).to.equal(365);
+    expect(loadConfig({ env: baseEnv(), command: 'run' }).config.behaviour.feedbackInfluenceDays).to.equal(30);
+    const env = { ...baseEnv(), AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS: '45' };
+    expect(loadConfig({ env, command: 'run' }).config.behaviour.feedbackInfluenceDays).to.equal(45);
+    const over = { ...baseEnv(), AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS: '400' };
+    let error;
+    try {
+      loadConfig({ env: over, command: 'run' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).to.be.instanceOf(ConfigError);
+    expect(error.keys).to.include('AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS');
+  });
+
   it('requires a minimum of one pass', () => {
     const env = { ...baseEnv(), AGENT_WATCHDOG_PASSES: '0' };
     expect(() => loadConfig({ env, command: 'run' })).to.throw(ConfigError);

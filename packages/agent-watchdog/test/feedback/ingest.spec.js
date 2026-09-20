@@ -263,8 +263,10 @@ describe('cli/stages/feedback', () => {
       secrets: { slackBotToken: token },
       endpoints: { slackChannelId: 'C123' },
       storage: { dataDir },
-      behaviour: { feedbackLookbackRuns: 7 },
-      model: { feedback: 'claude-fable-5-1' },
+      behaviour: { feedbackLookbackRuns: 7, feedbackInfluenceDays: 30 },
+      model: { feedback: 'claude-fable-5-1', effort: 'max' },
+      bounds: { maxTurns: 20, maxBudgetUsdProject: 2, modelTimeoutMs: 900000 },
+      paths: { promptsDir: path.join(__dirname, '..', '..', 'prompts') },
     },
   });
 
@@ -288,6 +290,49 @@ describe('cli/stages/feedback', () => {
     expect(doc.projects['https://alpha.example.org']).to.be.an('array');
     expect(result).to.include({ records: doc.records.length, unmatched: 1, horizons: 1, sources: 1 });
     expect(fs.existsSync(path.join(dataDir, 'feedback.jsonl'))).to.equal(true);
+  });
+
+  it('reviews the day\'s notes when an engine is present and records the review in the document', async () => {
+    await seedRun(dataDir, '2026-09-17');
+    const runDir = await RunDir.create(dataDir, '2026-09-18');
+    const client = fakeClient();
+    const engine = {
+      singleTurn: sinon.stub().callsFake(async ({ name }) => ({
+        structuredOutput: name === 'feedback-review'
+          ? { classification: 'none', title: 't', lesson: 'l', projects_yaml: null, rationale: 'r' }
+          : { horizon: null, expected_max: null, item_reference: null },
+        result: {
+          subtype: 'success',
+          usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          total_cost_usd: 0.001, num_turns: 1, duration_ms: 1, session_id: 's',
+        },
+        toolCalls: [],
+        referenceUnavailable: false,
+      })),
+    };
+    const ctx = await ctxFor(runDir, { slack: client });
+    ctx.engine = engine;
+    const result = await stage.run(ctx);
+    const doc = await runDir.readJson('feedback.ingested.json');
+    expect(doc.influence).to.deep.equal({ days: 30, window_start: '2026-08-19' });
+    expect(doc.review.classified.length).to.be.greaterThan(0);
+    expect(doc.review.classified.every((c) => c.classification === 'none')).to.equal(true);
+    expect(doc.review.unclassified).to.deep.equal([]);
+    expect(doc.review.skipped_reactions).to.be.greaterThan(0);
+    expect(doc.review.calls.length).to.equal(doc.review.classified.length);
+    expect(result.reviewed).to.equal(doc.review.classified.length);
+    const reviewCalls = engine.singleTurn.getCalls().filter((c) => c.args[0].name === 'feedback-review');
+    expect(reviewCalls.length).to.equal(doc.review.classified.length);
+    const stored = (await readAll(dataDir)).filter((r) => r.kind === 'note');
+    expect(stored.every((r) => r.classification === 'none')).to.equal(true);
+  });
+
+  it('records that review was skipped when no engine is available', async () => {
+    await seedRun(dataDir, '2026-09-17');
+    const runDir = await RunDir.create(dataDir, '2026-09-18');
+    await stage.run(await ctxFor(runDir, { slack: fakeClient() }));
+    const doc = await runDir.readJson('feedback.ingested.json');
+    expect(doc.review).to.deep.equal({ skipped: 'no engine', classified: [], unclassified: [], calls: [] });
   });
 
   it('passes --since through to the ingester', async () => {

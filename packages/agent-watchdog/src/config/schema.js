@@ -16,6 +16,7 @@ const HARD_CAPS = Object.freeze({
   httpTimeoutMs: 60000,
   verifyMaxRetries: 2,
   runTimeoutMs: 7200000,
+  feedbackInfluenceDays: 365,
 });
 
 const SECRET_KEYS = Object.freeze([
@@ -278,6 +279,12 @@ const VARIABLES = [
     path: 'behaviour.feedbackLookbackRuns',
     schema: int(1, 90),
     default: 7,
+  },
+  {
+    env: 'AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS',
+    path: 'behaviour.feedbackInfluenceDays',
+    schema: int(1, HARD_CAPS.feedbackInfluenceDays),
+    default: 30,
   },
   {
     env: 'AGENT_WATCHDOG_MEMORY_MAX_TOKENS',

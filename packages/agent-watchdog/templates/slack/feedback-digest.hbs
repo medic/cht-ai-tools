@@ -1,0 +1,24 @@
+Feedback from yesterday: {{mrkdwn summary_text}}
+{{#each items}}
+• {{mrkdwn host}} `{{mrkdwn metric}}`: {{mrkdwn tally_text}}; {{mrkdwn effect_text}}
+{{/each}}
+{{#if has_brief}}
+• the brief itself: {{mrkdwn brief_text}}
+{{/if}}
+{{#if has_proposals}}
+_Proposals written for review:_
+{{#each proposals}}
+• {{mrkdwn destination_text}}: {{mrkdwn path_text}}
+{{/each}}
+{{/if}}
+{{#if has_unmatched}}
+_Notes I could not match to an item_ ({{mrkdwn unmatched_count}}):
+{{#each unmatched}}
+• {{mrkdwn this}}
+{{/each}}
+Mention the project host or the metric in a note so the next run can attach it.
+{{/if}}
+{{#if has_unclassified}}
+{{mrkdwn unclassified_text}}
+{{/if}}
+{{mrkdwn retention_text}}

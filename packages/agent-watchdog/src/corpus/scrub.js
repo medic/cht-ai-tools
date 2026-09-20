@@ -123,4 +123,9 @@ const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
   return { text: out, flags };
 };
 
-module.exports = { scrub, maskEmail, maskPhone, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER, PLACEHOLDER };
+/** Replace Slack mentions and bare user ids with [person]; used wherever note text reaches a prompt or a post. */
+const maskPeople = (text) => String(text === null || text === undefined ? '' : text)
+  .replace(SLACK_MENTION, '[person]')
+  .replace(new RegExp(SLACK_USER_ID.source, 'g'), '[person]');
+
+module.exports = { scrub, maskEmail, maskPhone, maskPeople, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER, PLACEHOLDER };

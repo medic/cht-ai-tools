@@ -129,7 +129,7 @@ describe('publish/payload', () => {
   });
 });
 
-describe('publish/payload: unmatched feedback notes', () => {
+describe('publish/payload: feedback digest (FR-062)', () => {
   const { buildPayload } = require('../../src/publish/payload');
   const { makeBrief, makeItem } = require('../rollup/factories');
 
@@ -141,25 +141,35 @@ describe('publish/payload: unmatched feedback notes', () => {
     date: '2026-09-19',
     audience: 'internal',
   });
+  const built = {
+    digest: { run_id: '2026-09-19', acknowledged: ['f1f1f1f1f1f1', 'f2f2f2f2f2f2'] },
+    text: 'Feedback from yesterday: 2 reactions, 0 notes',
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Feedback from yesterday: 2 reactions, 0 notes' } }],
+    metadata: {
+      event_type: 'agent_watchdog.feedback_digest',
+      event_payload: { run_id: '2026-09-19', date: '2026-09-19', acknowledged: 2 },
+    },
+  };
 
-  it('adds one extra threaded reply listing the notes, escaped, with brief metadata', () => {
-    const payload = buildPayload({
-      ...base(),
-      unmatchedNotes: [{ note: 'is anyone looking at <the other one>?' }, 'plain string note'],
+  it('carries the digest on the payload with its acknowledged ids and no reactions yet', () => {
+    const payload = buildPayload({ ...base(), digest: built });
+    expect(payload.digest).to.deep.equal({
+      text: built.text, blocks: built.blocks, metadata: built.metadata,
+      acknowledged: ['f1f1f1f1f1f1', 'f2f2f2f2f2f2'], reactions: [],
     });
-    const extra = payload.replies[payload.replies.length - 1];
-    expect(extra.item_id).to.equal(null);
-    expect(extra.kind).to.equal('unmatched_notes');
-    expect(extra.text).to.include('&lt;the other one&gt;');
-    expect(extra.text).to.include('plain string note');
-    expect(extra.text).to.include('(2)');
-    expect(extra.metadata.event_type).to.equal('agent_watchdog.brief');
-    expect(extra.metadata.event_payload.kind).to.equal('unmatched_notes');
-    expect(payload.replies).to.have.length(2);
+    expect(payload.replies).to.have.length(1);
+    expect(payload.replies.some((r) => r.kind === 'unmatched_notes')).to.equal(false);
   });
 
-  it('adds nothing when there are no unmatched notes', () => {
-    expect(buildPayload({ ...base(), unmatchedNotes: [] }).replies).to.have.length(1);
-    expect(buildPayload(base()).replies).to.have.length(1);
+  it('sets digest to null when there is nothing to acknowledge, on briefs and heartbeats alike', () => {
+    expect(buildPayload(base()).digest).to.equal(null);
+    const heartbeat = buildPayload({ ...base(), brief: makeBrief({ kind: 'heartbeat', bullets: [] }) });
+    expect(heartbeat.digest).to.equal(null);
+    expect(heartbeat.replies).to.deep.equal([]);
+  });
+
+  it('no longer builds a separate unmatched-notes reply', () => {
+    expect(() => buildPayload({ ...base(), unmatchedNotes: [{ note: 'x' }] })).to.not.throw();
+    expect(buildPayload({ ...base(), unmatchedNotes: [{ note: 'x' }] }).replies).to.have.length(1);
   });
 });

@@ -3,6 +3,8 @@
 const { requireInputs } = require('./index');
 const { buildPayload } = require('../../publish/payload');
 const { createSlackPublisher } = require('../../publish/slack');
+const { buildDigest } = require('../../publish/digest');
+const { readUnacknowledged, markAcknowledged, feedbackFile } = require('../../feedback/store');
 
 const name = 'publish';
 const inputs = ['rollup/brief.json'];
@@ -13,6 +15,54 @@ const slackClient = (ctx) => {
   }
   const { WebClient } = require('@slack/web-api');
   return new WebClient(ctx.config.secrets.slackBotToken);
+};
+
+const DEFAULT_INFLUENCE_DAYS = 30;
+
+const lookup = (byItem, itemId) => {
+  if (!byItem) {
+    return undefined;
+  }
+  return byItem instanceof Map ? byItem.get(itemId) : byItem[itemId];
+};
+
+/**
+ * What feedback did to each ranked item's confidence, as a direction plus the confidence it now has. The
+ * ranked items already carry the adjusted value (src/rollup/rank.js), so no "before" is invented here.
+ */
+const adjustmentsFor = (items, byItem) => items.map((item) => {
+  const entry = lookup(byItem, item.item_id);
+  if (!entry) {
+    return null;
+  }
+  const net = (entry.up || 0) - (entry.down || 0);
+  let direction = null;
+  if (entry.verdict === 'confirmed' && net > 0) {
+    direction = 'up';
+  } else if (entry.verdict === 'dismissed' && net < 0) {
+    direction = 'down';
+  }
+  return direction ? { item_id: item.item_id, direction, after: item.confidence } : null;
+}).filter(Boolean);
+
+const suppressedFor = async (runDir, discovery) => {
+  const out = [];
+  for (const project of (discovery && discovery.projects) || []) {
+    const rel = `${project.slug}/suppressed.json`;
+    if (runDir.exists(rel)) {
+      const entries = await runDir.readJson(rel);
+      out.push(...(Array.isArray(entries) ? entries : []));
+    }
+  }
+  return out;
+};
+
+/** The digest input the feedback stage left for this run, read defensively: nothing there means nothing new. */
+const feedbackInputs = async (ctx, runDir) => {
+  if (ctx.feedbackIngested) {
+    return ctx.feedbackIngested;
+  }
+  return runDir.exists('feedback.ingested.json') ? runDir.readJson('feedback.ingested.json') : null;
 };
 
 const run = async (ctx) => {
@@ -26,6 +76,30 @@ const run = async (ctx) => {
     : new Map();
   const channel = ctx.config.endpoints.slackChannelId || null;
 
+  // The feedback digest (FR-062): every record no earlier digest acknowledged, what it changed today, the
+  // proposals written from it, and the retention statement. Nothing new means no digest.
+  const dataDir = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;
+  const ingested = await feedbackInputs(ctx, runDir);
+  const unacknowledged = await readUnacknowledged(dataDir);
+  const byItem = ctx.feedbackByItem || (ingested && ingested.by_item) || {};
+  const influenceDays = (ctx.config.behaviour && ctx.config.behaviour.feedbackInfluenceDays)
+    || (ingested && ingested.influence && ingested.influence.days)
+    || DEFAULT_INFLUENCE_DAYS;
+  const built = buildDigest({
+    runId: ctx.runId,
+    date: ctx.date,
+    records: unacknowledged,
+    byItem,
+    items,
+    adjustments: adjustmentsFor(items, byItem),
+    suppressed: await suppressedFor(runDir, discovery),
+    review: ingested ? ingested.review : null,
+    unmatched: (ingested && ingested.unmatched) || ctx.feedbackUnmatched || [],
+    retention: {
+      records_path: (ingested && ingested.records_path) || feedbackFile(dataDir), influence_days: influenceDays,
+    },
+  });
+
   const payload = buildPayload({
     brief,
     items,
@@ -34,12 +108,19 @@ const run = async (ctx) => {
     date: ctx.date,
     audience: 'internal',
     channel,
-    unmatchedNotes: ctx.feedbackUnmatched || [],
+    digest: built,
   });
   await runDir.writeJson('rollup/payload.json', payload);
+  if (built) {
+    await runDir.writeJson('rollup/feedback.digest.json', built.digest);
+    logger.info('publish.digest_built', {
+      acknowledged: built.digest.acknowledged.length, items: built.digest.items.length,
+      proposals: built.digest.proposals.length, unclassified: built.digest.unclassified,
+    });
+  }
 
   if (ctx.mode === 'preview') {
-    logger.info('publish.preview', { kind: brief.kind, replies: payload.replies.length });
+    logger.info('publish.preview', { kind: brief.kind, replies: payload.replies.length, digest: Boolean(built) });
     return { posted: false, payload };
   }
 
@@ -50,6 +131,23 @@ const run = async (ctx) => {
   } else {
     const imagePath = brief.image && brief.image.path ? runDir.path(brief.image.path) : null;
     publication = await publisher.publish({ payload, imagePath, superseded: ctx.supersededPermalink || null });
+  }
+  if (built) {
+    // Digest last, under today's parent; acknowledge only once the digest is out, then the courtesy reactions.
+    const digestPublication = await publisher.postDigest({ digest: payload.digest, parentTs: publication.ts });
+    const marked = await markAcknowledged(dataDir, built.digest.acknowledged, ctx.runId);
+    const notes = unacknowledged.filter((record) => record.kind === 'note');
+    const reactions = await publisher.reactToNotes({ records: notes });
+    await runDir.writeJson('rollup/feedback.digest.json', {
+      ...built.digest, reactions, publication: digestPublication,
+    });
+    publication.digest = digestPublication;
+    payload.digest.reactions = reactions;
+    await runDir.writeJson('rollup/payload.json', payload);
+    logger.info('publish.digest_posted', {
+      ts: digestPublication.ts, acknowledged: marked, reactions: reactions.filter((r) => r.ok).length,
+      reaction_failures: reactions.filter((r) => !r.ok).length,
+    });
   }
   await runDir.writeJson('rollup/publication.json', publication);
 

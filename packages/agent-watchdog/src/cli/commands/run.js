@@ -165,6 +165,7 @@ const loadFeedbackContext = async (ctx, runDir) => {
   ctx.feedbackBrief = ingested.brief || null;
   // Slack user ids of everyone who reacted or wrote a note, so proposals can mask them (FR-033).
   ctx.feedbackAuthors = [...new Set((ingested.records || []).map((record) => record.author).filter(Boolean))];
+  ctx.feedbackIngested = ingested;
   return ingested;
 };
 

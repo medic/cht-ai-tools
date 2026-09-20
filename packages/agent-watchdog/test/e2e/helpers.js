@@ -55,6 +55,7 @@ const fakeSlack = () => {
   let counter = 0;
   return {
     files: { uploadV2: sinon.stub().resolves({ ok: true, files: [{ files: [{ id: 'F0001' }] }] }) },
+    reactions: { add: sinon.stub().resolves({ ok: true }) },
     chat: {
       postMessage: sinon.spy(async () => {
         counter += 1;
@@ -163,8 +164,57 @@ const createScriptedEngine = ({
     return `${kept.join('\n')}\n`;
   };
 
+  // Feedback review (User Story 7): classify a note from its wording, the way a careful reviewer would.
+  const classifyNote = (userPrompt) => {
+    const match = /<untrusted source="feedback-note">\n([\s\S]*?)\n<\/untrusted>/.exec(userPrompt);
+    const note = (match ? match[1] : '').toLowerCase();
+    const host = (/host: ([a-z0-9.-]+)/.exec(userPrompt) || [])[1] || 'one project';
+    if (/\buntil\b|\bexpected\b/.test(note)) {
+      return { classification: 'expectation', title: 'Temporary expectation', lesson: 'A stated horizon.',
+        projects_yaml: null, rationale: 'Handled by the horizon rule.' };
+    }
+    if (/normally|usually|baseline/.test(note)) {
+      return {
+        classification: 'project_annotation', title: 'Record the usual backlog level for this project',
+        lesson: 'One project runs a higher sentinel backlog as a matter of course; annotate it so the analysis '
+          + 'reads its baseline correctly.',
+        projects_yaml: [
+          'projects:', `  ${host}:`,
+          '    notes: Sentinel backlog is normally around 300; a rise to three times that is the signal.', '',
+        ].join('\n'),
+        rationale: 'The note states a durable fact about one deployment, not a rule for every project.',
+      };
+    }
+    if (/wording|bullet|too long|format/.test(note)) {
+      return { classification: 'prompt', title: 'Shorter bullets with the comparison window first',
+        lesson: 'Lead each bullet with the window compared, then the values.', projects_yaml: null,
+        rationale: 'Readers asked for the comparison first.' };
+    }
+    if (/threshold|fires too often|noisy/.test(note)) {
+      return { classification: 'threshold', title: 'Raise the percentage-change default',
+        lesson: 'The default percentage-change rule fires on ordinary daily variation.', projects_yaml: null,
+        rationale: 'Repeated dismissals on the same rule.' };
+    }
+    if (/interpret|means|skill|pattern/.test(note)) {
+      return { classification: 'skill', title: 'Read a slow sentinel drain as recovery, not a new problem',
+        lesson: 'A falling backlog after a fix is recovery and should not be flagged as a change.',
+        projects_yaml: null, rationale: 'The skill lacks the recovery case.' };
+    }
+    return {
+      classification: 'none', title: 'Thanks', lesson: '', projects_yaml: null, rationale: 'No reusable lesson.',
+    };
+  };
+
   const singleTurn = async (options) => {
     calls.singleTurns.push(options);
+    if (options.name === 'feedback-review') {
+      return {
+        structuredOutput: classifyNote(options.userPrompt),
+        result: result(),
+        toolCalls: [],
+        referenceUnavailable: false,
+      };
+    }
     if (options.name === 'memory-condense') {
       return {
         structuredOutput: { memory: condensed(options.userPrompt) },

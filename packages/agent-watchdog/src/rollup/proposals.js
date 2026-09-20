@@ -12,7 +12,7 @@ const { dataPaths } = require('../store/run-dir');
 const { schemas } = require('../model/schemas');
 const { scrub } = require('../corpus/scrub');
 
-const TYPES = ['skill', 'prompt', 'threshold', 'pattern_card'];
+const TYPES = ['skill', 'prompt', 'threshold', 'pattern_card', 'project_annotation'];
 const SLUG_MAX = 60;
 const YAML_OPTIONS = { schema: 'core' };
 

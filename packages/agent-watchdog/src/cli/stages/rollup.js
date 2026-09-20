@@ -59,6 +59,14 @@ const condenserFor = (ctx, logger, calls, runId) => {
   }
 };
 
+const feedbackEntries = (byItem) => {
+  if (!byItem) {
+    return [];
+  }
+  const entries = byItem instanceof Map ? [...byItem.entries()] : Object.entries(byItem);
+  return entries.map(([itemId, entry]) => ({ item_id: itemId, ...entry }));
+};
+
 const run = async (ctx) => {
   const { runDir, logger } = ctx;
   requireInputs(runDir, inputs);
@@ -114,6 +122,9 @@ const run = async (ctx) => {
     referenceSourcesUnavailable,
     footer,
     notices,
+    // The day's matched feedback, keyed by item, so the memory update can reflect the notes (FR-029).
+    feedback: feedbackEntries(ctx.feedbackByItem),
+    feedbackBrief: ctx.feedbackBrief || null,
   });
 
   const dataDir = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;

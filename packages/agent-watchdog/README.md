@@ -4,9 +4,9 @@ Daily analysis of the CHT projects monitored by Medic's hosted [CHT Watchdog](ht
 posted to Slack as a short brief that flags what a human should look into. It reads metrics
 through Grafana, computes changes deterministically, asks a bounded Claude Agent SDK session to
 interpret them with read-only tools, verifies every number and link in code, and posts one
-message with one threaded reply per item. Reactions and thread notes shape the next day's brief,
-and what the agent learns arrives as proposal files for human review, never as changes to its own
-prompts, skill or thresholds.
+message with one threaded reply per item. Reactions and thread notes shape the next day's brief
+and are acknowledged in it, and what the agent learns arrives as proposal files for human review,
+never as changes to its own prompts, skill or thresholds.
 
 It flags; it never acts. Paging stays with the existing monitoring stack.
 
@@ -66,6 +66,18 @@ under `AGENT_WATCHDOG_DATA_DIR/proposals/` (copied beside the run that produced 
 and personal identifiers are masked in the text and listed under `flags` for the reviewer; nothing about
 the agent changes until a human opens a pull request. Memory is capped and condensed within the cap when
 it overflows, and every memory change is stored as a diff under `memory/history/`.
+
+### Feedback, acknowledged and permanent
+
+Every reaction and thread note is stored permanently in `feedback.jsonl` on the data volume; no retention
+setting removes it. Its effect on ranking is bounded instead: a record adjusts confidence for
+`AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` (30 by default), while a horizon stated in a note holds until its
+date. The next run reviews what it read: reactions are tallied in code, each note is classified once by a
+bounded model call into the place its lesson belongs (the skill, a prompt, a `projects.yaml` annotation, a
+threshold or a pattern card) and becomes a proposal file. One code-built digest reply per run, in that
+day's brief or heartbeat thread, names each item's effect, the proposals written and where the records
+live; each acknowledged note gets an `eyes` reaction (bot scope `reactions:write`). The weekly calibration
+report lists proposals still awaiting review with their age.
 
 ### Knowledge corpus
 

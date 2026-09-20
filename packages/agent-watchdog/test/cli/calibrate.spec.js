@@ -89,6 +89,10 @@ describe('cli/commands/calibrate', function () {
     expect(markdown).to.include(`# Calibration ${WEEK}`);
     expect(markdown).to.include('One metric looks noisy on one project');
     expect(markdown).to.include('2026-09-18-threshold-adjust-0');
+    // FR-063: proposals still awaiting review are listed with their age; the stubbed writer wrote no file, so none.
+    expect(stored.open_proposals).to.deep.equal([]);
+    expect(markdown).to.include('## Open proposals');
+    expect(markdown).to.include('None awaiting review.');
     expect(t.engine.singleTurn).to.have.been.calledOnce;
     const call = t.engine.singleTurn.firstCall.args[0];
     expect(call.model).to.equal('claude-fable-5-1');
@@ -172,5 +176,31 @@ describe('cli/commands/calibrate', function () {
     const markdown = fs.readFileSync(path.join(dataDir, 'calibration', `${WEEK}.md`), 'utf8');
     expect(markdown).to.not.include('See https://');
     expect(markdown).to.include('summary unavailable');
+  });
+});
+
+describe('cli/commands/calibrate: open proposals in the weekly report (FR-063)', () => {
+  const { writeProposals } = require('../../src/rollup/proposals');
+  let dataDir;
+  before(async () => {
+    dataDir = tempDir();
+    await buildCalibrationHistory({ dataDir, days: 30 });
+    await writeProposals({
+      dataDir, runId: '2026-09-10', date: '2026-09-10', now: () => new Date('2026-09-10T06:30:00Z'),
+      proposals: [{ type: 'prompt', title: 'Say which window moved', body: 'pattern-level' }],
+    });
+  });
+  after(() => removeDir(dataDir));
+
+  it('lists proposals awaiting review with their age and destination in the JSON and the markdown', async () => {
+    const t = argsFor(dataDir, { flags: { week: WEEK } });
+    expect(await calibrate(t.args)).to.equal(0);
+    const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'calibration', `${WEEK}.json`), 'utf8'));
+    expect(stored.open_proposals).to.deep.equal([
+      { proposal_id: '2026-09-10-prompt-say-which-window-moved', type: 'prompt', age_days: 8 },
+    ]);
+    const markdown = fs.readFileSync(path.join(dataDir, 'calibration', `${WEEK}.md`), 'utf8');
+    expect(markdown).to.include('## Open proposals');
+    expect(markdown).to.match(/2026-09-10-prompt-say-which-window-moved \| prompt \| 8/);
   });
 });

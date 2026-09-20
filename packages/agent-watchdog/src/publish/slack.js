@@ -127,13 +127,47 @@ const createSlackPublisher = ({
 
   const postHeartbeat = (payload) => postTextOnly(payload);
 
+  /** The feedback digest: one threaded reply under the parent published today (FR-062). */
+  const postDigest = async ({ digest, parentTs }) => {
+    const posted = await post({
+      text: digest.text, blocks: digest.blocks, thread_ts: parentTs, metadata: digest.metadata,
+    });
+    logger.info('slack.digest_posted', { ts: posted.ts, acknowledged: (digest.acknowledged || []).length });
+    return { channel_id: posted.channel || channel, ts: posted.ts, permalink: await permalinkOf(posted.ts) };
+  };
+
+  /**
+   * One "seen" reaction per acknowledged note (research.md R-13). Never throws: already_reacted counts as
+   * success and any other failure is logged, because the digest is the record and the reaction a courtesy.
+   */
+  const reactToNotes = async ({ records, name = 'eyes' }) => {
+    const results = [];
+    for (const record of records || []) {
+      await pace();
+      try {
+        await client.reactions.add({ channel, timestamp: record.source_ts, name });
+        results.push({ source_ts: record.source_ts, name, ok: true });
+      } catch (error) {
+        const code = error && error.data && error.data.error;
+        if (code === 'already_reacted') {
+          results.push({ source_ts: record.source_ts, name, ok: true });
+          continue;
+        }
+        const message = error && error.message ? error.message : String(error);
+        logger.warn('slack.reaction_failed', { source_ts: record.source_ts, name, error: message });
+        results.push({ source_ts: record.source_ts, name, ok: false, error: message });
+      }
+    }
+    return results;
+  };
+
   const postFailureNotice = async ({ text, traceUrl = null, runId = null, date = null }) => {
     const message = traceUrl ? `${text} <${traceUrl}|trace>` : text;
     const metadata = { event_type: BRIEF_EVENT, event_payload: { run_id: runId, date, kind: 'failure' } };
     return postTextOnly({ parent: { text: message, metadata } });
   };
 
-  return { publish, postHeartbeat, postFailureNotice, postTextOnly };
+  return { publish, postHeartbeat, postFailureNotice, postTextOnly, postDigest, reactToNotes };
 };
 
 module.exports = { createSlackPublisher, retryDelayMs, fileIdOf };

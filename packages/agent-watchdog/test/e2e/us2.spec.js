@@ -152,8 +152,10 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     expect(unmatched.note).to.include('the other one');
     expect(ingested.unmatched).to.have.length(1);
     const payload2 = day2.read('rollup/payload.json');
-    const surfaced = payload2.replies.some((reply) => reply.text.includes('the other one'));
-    expect(surfaced, 'unmatched note surfaced in the thread').to.equal(true);
+    // Since User Story 7 the unmatched note is listed in the feedback digest, the one acknowledgement reply per run.
+    expect(payload2.replies.some((reply) => reply.kind === 'unmatched_notes')).to.equal(false);
+    expect(payload2.digest, 'feedback digest present').to.not.equal(null);
+    expect(payload2.digest.text, 'unmatched note surfaced in the digest').to.include('the other one');
 
     // Scenario 5: confirmed and dismissed items are appended to the corpus as run outcomes.
     const outcomes = readJsonl(path.join(dataDir, 'corpus', 'outcomes', `${DAY2}.jsonl`));

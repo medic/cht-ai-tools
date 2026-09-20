@@ -1,11 +1,11 @@
 'use strict';
 // Retention (FR-040): raw files go after AGENT_WATCHDOG_RETENTION_RAW_DAYS, kept files after
-// AGENT_WATCHDOG_RETENTION_DAYS, durable files never.
+// AGENT_WATCHDOG_RETENTION_DAYS, durable files never. feedback.jsonl is durable (FR-059): every reaction and
+// note is kept permanently; only its influence on ranking is bounded, by the window applied at ingestion.
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const { dataPaths, RUN_ID_PATTERN } = require('./run-dir');
-const atomic = require('./atomic');
 
 const DAY_MS = 86400000;
 const RAW_PATTERNS = [/\/inputs\/windows\.json\.gz$/, /\/rollup\/brief\.png$/];
@@ -16,7 +16,7 @@ const classify = (relPath) => {
   if (rel.startsWith('runs/') || rel.startsWith('runs-replay/')) {
     return RAW_PATTERNS.some((p) => p.test(rel)) ? 'raw' : 'kept';
   }
-  if (rel.startsWith('calibration/') || rel === 'feedback.jsonl') {
+  if (rel.startsWith('calibration/')) {
     return 'kept';
   }
   return 'durable';
@@ -53,7 +53,8 @@ const walk = async (dir) => {
 
 /**
  * Apply retention to the data volume.
- * @returns {{ removed: Array<{ path: string, class: string, age_days: number }>, compacted: number }}
+ * @returns {{ removed: Array<{ path: string, class: string, age_days: number }>, compacted: number }} `compacted` is
+ *   always 0 since feedback records became permanent; kept for callers that log it.
  */
 const purge = async (dataDir, { rawDays, keptDays, now = new Date(), dryRun = false }) => {
   const p = dataPaths(dataDir);
@@ -93,23 +94,8 @@ const purge = async (dataDir, { rawDays, keptDays, now = new Date(), dryRun = fa
     }
   }
 
-  let compacted = 0;
-  if (fsSync.existsSync(p.feedbackFile)) {
-    const records = await atomic.readJsonl(p.feedbackFile);
-    const keep = records.filter((record) => {
-      const old = record.date && ageDays(record.date, now) > keptDays;
-      const outcomesAppended = old && fsSync.existsSync(path.join(p.corpusOutcomes, `${record.date}.jsonl`));
-      if (old && outcomesAppended) {
-        compacted += 1;
-        return false;
-      }
-      return true;
-    });
-    if (compacted > 0 && !dryRun) {
-      const text = keep.map((r) => JSON.stringify(r)).join('\n') + (keep.length ? '\n' : '');
-      await atomic.writeFileAtomic(p.feedbackFile, text);
-    }
-  }
+  // feedback.jsonl is never read here: it is permanent (FR-059).
+  const compacted = 0;
 
   return { removed, compacted };
 };

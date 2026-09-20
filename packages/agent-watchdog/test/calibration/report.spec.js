@@ -179,3 +179,38 @@ describe('calibration/report', function () {
     });
   });
 });
+
+describe('calibration/report: open proposals (FR-063)', () => {
+  const { openProposalsFor } = require('../../src/calibration/report');
+  const { writeProposals } = require('../../src/rollup/proposals');
+  const { ensureDataLayout } = require('../../src/store/run-dir');
+  const { tempDir, removeDir } = require('../helpers/fixtures');
+  let dataDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await ensureDataLayout(dataDir);
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('lists every proposal still awaiting review with its age in days, oldest first', async () => {
+    await writeProposals({
+      dataDir, runId: '2026-09-01', date: '2026-09-01', now: () => new Date('2026-09-01T06:30:00Z'),
+      proposals: [{ type: 'skill', title: 'Older lesson', body: 'pattern-level' }],
+    });
+    await writeProposals({
+      dataDir, runId: '2026-09-15', date: '2026-09-15', now: () => new Date('2026-09-15T06:30:00Z'),
+      proposals: [{ type: 'threshold', title: 'Newer suggestion', body: 'pattern-level' }],
+    });
+    // A later proposal with the same type and slug supersedes the older one, which then no longer counts as open.
+    await writeProposals({
+      dataDir, runId: '2026-09-18', date: '2026-09-18', now: () => new Date('2026-09-18T06:30:00Z'),
+      proposals: [{ type: 'skill', title: 'Older lesson', body: 'pattern-level, revised' }],
+    });
+    const open = await openProposalsFor(dataDir, new Date('2026-09-19T00:00:00Z'));
+    expect(open).to.deep.equal([
+      { proposal_id: '2026-09-15-threshold-newer-suggestion', type: 'threshold', age_days: 3 },
+      { proposal_id: '2026-09-18-skill-older-lesson', type: 'skill', age_days: 0 },
+    ]);
+    expect(await openProposalsFor(tempDir(), new Date())).to.deep.equal([]);
+  });
+});

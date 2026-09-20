@@ -3,7 +3,9 @@
 // Smoke test S-8 (research.md): private image upload referenced by slack_file.id, registered metadata,
 // and read-back through conversations.replies with include_all_metadata. Posts to the configured channel
 // only when --yes is given; otherwise it stops after the upload.
-// Usage: node --env-file=.env smoke/slack.js [--yes]
+// Usage: node --env-file=.env smoke/slack.js [--yes] [--react <message ts>]
+// S-13 (research.md R-13): with --react <ts>, add the `eyes` reaction to that message twice; the second call must
+// report already_reacted, and a token without reactions:write must report missing_scope. Nothing else runs.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -23,6 +25,44 @@ const main = async () => {
   const logger = createLogger({ level: 'info', format: 'pretty' });
   const client = new WebClient(config.secrets.slackBotToken);
   const channel = config.endpoints.slackChannelId;
+  const reactAt = process.argv.indexOf('--react');
+  if (reactAt !== -1) {
+    const timestamp = process.argv[reactAt + 1];
+    if (!timestamp) {
+      console.error('FAIL --react needs the ts of a message in the configured channel');
+      process.exitCode = 1;
+      return;
+    }
+    const react = async (label) => {
+      try {
+        await client.reactions.add({ channel, timestamp, name: 'eyes' });
+        console.log(`ok   ${label}: eyes reaction added to ${timestamp}`);
+        return 'added';
+      } catch (error) {
+        const code = error && error.data && error.data.error;
+        if (code === 'already_reacted') {
+          console.log(`ok   ${label}: already_reacted reported, treated as success`);
+          return 'already_reacted';
+        }
+        if (code === 'missing_scope') {
+          console.log(`FAIL ${label}: the bot token lacks the reactions:write scope (S-13 prerequisite)`);
+          process.exitCode = 1;
+          return 'missing_scope';
+        }
+        console.log(`FAIL ${label}: ${error.message}`);
+        process.exitCode = 1;
+        return 'error';
+      }
+    };
+    const first = await react('first reactions.add');
+    if (first === 'added' || first === 'already_reacted') {
+      const second = await react('second reactions.add');
+      if (second !== 'already_reacted') {
+        console.log('WARN the second call did not report already_reacted; check the reaction is on the message');
+      }
+    }
+    return;
+  }
   const runId = `smoke-${Date.now()}`;
   const imagePath = path.join(os.tmpdir(), `${runId}.png`);
   fs.writeFileSync(imagePath, PNG_1X1);
