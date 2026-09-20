@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 12)
+**Status**: Draft (revision 13)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -327,6 +327,66 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
    appear, each at most two lines with at most eight sub-bullets, and the gate rejects a draft that
    exceeds any of these limits.
 
+### User Story 10 - An honest brief with metrics that mean something (Priority: P2, proposed)
+
+*Proposed in revision 13 after the first hosted runs; not yet planned or tasked.* The first
+complete preview run computed 2,058 candidates, lost every model session to a runtime error, and
+published "no metric changes to flag". Its candidate list was also two thirds noise: counters and
+clocks, which only ever rise, tripped the sustained-rise rule on every project, and five panels
+were display duplicates of others.
+
+**Why this priority**: a brief that can say "quiet" when the analysis did not run destroys trust
+faster than a missed item; and a candidate list the model must sift for noise costs money and
+attention every day.
+
+**Independent Test**: replay a recorded day with the model engine failing for every project;
+verify a degraded brief that names the failure and leads with the highest candidates. Replay a
+recorded day and verify that counters produce rate-based candidates only, uptime resets produce a
+restart candidate, clocks produce none, and duplicate display panels collapse into one metric.
+
+**Acceptance Scenarios**:
+
+1. **Given** candidates exist and every model session failed, **When** the brief is composed,
+   **Then** it is the degraded brief from deterministic candidates, its notice names the failure
+   and the number of projects affected, and the operator sees the same in the run record.
+2. **Given** a metric is a monotonically increasing counter, **When** changes are computed,
+   **Then** its candidate rules apply to its rate of increase, never to its level.
+3. **Given** a metric is an uptime or a clock, **When** changes are computed, **Then** it raises no
+   level candidate, and a drop in uptime raises a restart candidate for that project.
+4. **Given** two panels differ only by a display comparison such as `>= 0`, **When** metrics are
+   discovered, **Then** they are one metric in the analysis and the brief.
+
+### User Story 11 - Correlation and consolidation (Priority: P2, proposed)
+
+*Proposed in revision 13; not yet planned or tasked.* The on-call reader wants one message that
+holds what a senior engineer would say after reading the alerts and the dashboards together: what
+changed, on which projects, since when, whether it is one event across a programme, and what is
+old news.
+
+**Why this priority**: without it the brief is an alert roll-up with grouping, which Grafana can
+send by itself.
+
+**Independent Test**: replay a recorded day where the same alert fires on most projects of a
+programme, an alert has fired for months on decommissioned hosts, and a project has both a firing
+alert and a flagged metric; verify one programme-wide line, one housekeeping line, and one project
+line that shows the alert and its metric together.
+
+**Acceptance Scenarios**:
+
+1. **Given** the same alert rule fires on a majority of a programme's projects within two days,
+   **When** the brief is composed, **Then** the body carries one line for the programme naming the
+   rule, the count and the window, and the thread lists the projects; no project is repeated.
+2. **Given** a project has both a firing alert and a flagged metric in the alert's category,
+   **When** its line is written, **Then** the line shows the alert, the metric's current value, its
+   change and how long it has been abnormal.
+3. **Given** alerts have fired for longer than the stale threshold on hosts with no data in any
+   window, **When** the brief is composed, **Then** they appear once in a housekeeping line that
+   suggests removing or silencing them, not in the body's news.
+4. **Given** an alert cleared since the previous run, **When** the brief is composed, **Then** a
+   resolved line names it.
+5. **Given** several projects are flagged, **When** they are ranked, **Then** the number of
+   connected users of each project is a ranking input, so the most-used projects come first.
+
 ### Edge Cases
 
 - Metrics source unreachable or timing out: post a failure notice, exit non-zero, publish no
@@ -335,6 +395,13 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 - Model output invalid or the verification gate fails a third time, after two returns to the
   analysis (FR-017): publish a degraded brief built from deterministic candidates only, with an
   explicit notice.
+- The model session of a project fails before producing anything (the runtime exits, the schema
+  is refused, the network is down): the failure is recorded on the pass with its message, counted
+  as an `error` bound rather than a timeout, and named in the brief. When no project produced an
+  item and candidates exist, the brief is the degraded one built from the candidates, never a
+  "nothing to flag" headline (revision 13).
+- Tracing cannot be flushed at the end of a run (credentials rejected, exporter unreachable): the
+  failure is logged and the run's exit code is unaffected (revision 13).
 - Tool loop, token or cost bound reached: stop, use what was gathered, say so in the post.
 - Second run on the same date: refuse unless explicitly forced; a forced run supersedes and
   links the earlier post.
@@ -934,6 +1001,16 @@ Configuration
   shows, while per-route and per-code changes become a later breakdown story. The API dashboard has
   no aggregate latency panel; adding `histogram_quantile(0.9, sum(rate(…_bucket[$interval])) by (le))`
   to cht-watchdog would give the brief latency at once (revision 12).
+- Q: The first complete hosted run lost all 95 model sessions to a runtime error (the Claude Code
+  binary refused the output schema's 2020-12 dialect), recorded them as timeouts, and published
+  "Alerts only: no metric changes to flag" over 2,058 computed candidates; the run then exited 1
+  because the tracing exporter answered 401. Is the brief what was intended? → A: No. Fixes now
+  (revision 13): the output schema is handed to the runtime without its dialect and identifier
+  keywords and with `definitions`; a failed session is an `error` bound with its message; with no
+  items and candidates present the brief degrades to the deterministic candidates and names the
+  failure; a tracing flush failure never changes the exit code; version strings are not phone
+  numbers to the scan. Proposed for approval: User Story 10 (honest brief, metric semantics) and
+  User Story 11 (correlation and consolidation).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

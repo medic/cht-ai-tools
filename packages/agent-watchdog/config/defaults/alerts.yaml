@@ -13,6 +13,8 @@ rules:                                  # keyed by rule title exactly as provisi
   Users Over Replication Limit: { category: replication,   importance: medium }
   DB Fragmentation:             { category: database,      importance: low }
   Server Time Accurate:         { category: host,          importance: low }
+  Message Delivery (2h):        { category: messaging,     importance: high }
+  Low Disk Space - 80% Full:    { category: capacity,      importance: high }
 categories:                             # metric names related to a category; a metric key that contains one counts
   availability: ['up{job="cht"}']
   backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]
@@ -21,3 +23,4 @@ categories:                             # metric names related to a category; a 
   client_errors: [cht_feedback_total]
   replication: [cht_replication_limit_count]
   host: [cht_date_current_millis]
+  capacity: []                          # node exporter disk metrics are not on the collected dashboards

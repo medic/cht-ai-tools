@@ -66,6 +66,7 @@ const runProjectSession = async ({
   const diffs = [];
   const calls = [];
   const boundsHit = new Set();
+  const errors = [];
   const usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
   let costUsd = 0;
   let sessionId = null;
@@ -143,8 +144,13 @@ const runProjectSession = async ({
       try {
         lastTurn = await takeTurn(pass, attempt, prompt);
       } catch (error) {
+        // The runtime failed before a result (process exit, refused schema, network): an `error` bound, not a
+        // timeout, with the message kept for the pass record and the brief's notice (revision 13).
         logger.warn('agent.turn_failed', { project_url: project.url, pass, attempt, error });
-        boundsHit.add('timeout');
+        const message = String(error && error.message ? error.message : error).slice(0, 500);
+        const timedOut = Boolean(error) && (error.code === 'TIMEOUT' || /timed out/i.test(message));
+        errors.push({ pass, attempt, message, bound: timedOut ? 'timeout' : 'error' });
+        boundsHit.add(timedOut ? 'timeout' : 'error');
         break;
       }
       const subtype = (lastTurn.result && lastTurn.result.subtype) || 'success';
@@ -215,6 +221,7 @@ const runProjectSession = async ({
       diffs,
       converged,
       bounds_hit: [...boundsHit],
+      errors,
       reference_sources_unavailable: referenceUnavailable,
     });
     await runDir.writeJson(`${slug}/session.json`, {
@@ -235,6 +242,7 @@ const runProjectSession = async ({
       cost_usd: 0,
       usage,
       session_id: null,
+      errors,
     };
   }
 
@@ -282,6 +290,7 @@ const runProjectSession = async ({
     cost_usd: Number(costUsd.toFixed(6)),
     usage,
     session_id: sessionId,
+    errors,
   };
 };
 

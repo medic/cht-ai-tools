@@ -445,7 +445,12 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   if (scanFindings.length) {
     log.warn('run.scan_findings', { count: scanFindings.length, findings: scanFindings.slice(0, 20) });
   }
-  await tracer.finish({ output: { status: status || 'stage', cost_usd: ctx.costSoFar } });
+  try {
+    await tracer.finish({ output: { status: status || 'stage', cost_usd: ctx.costSoFar } });
+  } catch (traceError) {
+    // Tracing is observability, not the product: a rejected flush is logged and never changes the exit code.
+    log.warn('trace.finish_failed', { error: traceError });
+  }
   log.info('run.finish', {
     status: status || 'stage', duration_ms: patch.duration_ms, cost_usd: ctx.costSoFar,
     scan_findings: scanFindings.length,

@@ -19,6 +19,11 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
   are code: change by PR with the replay diff attached. A run never writes to them.
 - Everything the model produces is untrusted until `src/verify/` accepts it. The model composes no
   URLs; `src/links/` builds them. Numbers in text must match computed data.
+- The committed schemas under `schema/` are JSON Schema 2020-12; the runtime receives them through
+  `forStructuredOutput` (no `$schema`/`$id`, `definitions` for `$defs`) because its validator knows
+  draft-07 only. A model session that fails before a result is an `error` bound with its message on
+  the pass record, and a run whose sessions all failed publishes the degraded brief naming the
+  failure, never "nothing to flag". A tracing flush failure is logged and never changes the exit code.
 - The model's tools are the enumerated list in `agent/tools.json`. No shell, web or file tools.
 - Secrets never appear in prompts, logs, posts, run records or this repository. `scripts/scan-secrets.js`
   checks the repository in CI and every run scans its own artefacts at the end (SC-010); a deliberate

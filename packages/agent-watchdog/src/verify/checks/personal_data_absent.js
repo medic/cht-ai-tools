@@ -1,5 +1,5 @@
 'use strict';
-const { EMAIL_PATTERN, PHONE_PATTERN, PHONE_MIN_DIGITS, countDigits } = require('../patterns');
+const { EMAIL_PATTERN, phoneMatches } = require('../patterns');
 const { walkStrings } = require('../walk');
 
 const NAME = 'personal_data_absent';
@@ -27,11 +27,8 @@ const check = (ctx) => {
     if (EMAIL_PATTERN.test(text)) {
       reasons.push(`e-mail address at ${path}`);
     }
-    for (const match of text.matchAll(PHONE_PATTERN)) {
-      if (countDigits(match[0]) >= PHONE_MIN_DIGITS) {
-        reasons.push(`phone number at ${path}`);
-        break;
-      }
+    if (phoneMatches(text).length) {
+      reasons.push(`phone number at ${path}`);
     }
   });
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };

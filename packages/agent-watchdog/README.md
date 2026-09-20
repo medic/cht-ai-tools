@@ -63,6 +63,16 @@ run, prints a JSON comparison of items before and after, and is the diff a promp
 PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
 against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.
 
+### When the analysis cannot run
+
+A model session that fails before producing a result, because the runtime exited, refused the
+schema or lost the network, is recorded on the project's `passes.json` with its message as an
+`error` bound, distinct from a timeout. The roll-up counts these: with items from other projects
+the brief carries a notice naming how many sessions failed and why; with no items and candidates
+present it publishes the degraded brief built from the computed candidates, with the failure in its
+notice. A run never says "no metric changes to flag" because the analysis did not run. Tracing
+failures at the end of a run are logged and leave the exit code alone.
+
 ### What a run fetches
 
 Collection is incremental. Every run fetches each metric's current window; the previous-day and

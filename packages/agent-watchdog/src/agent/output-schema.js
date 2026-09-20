@@ -104,4 +104,37 @@ const toJsonSchemas = () => ({
   brief: withId(z.toJSONSchema(briefSchema, { target: 'draft-2020-12' }), 'brief'),
 });
 
-module.exports = { findingsSchema, briefSchema, toJsonSchemas, WindowName, Severity };
+/**
+ * The schema as the Claude Code runtime accepts it (research.md R-2 addendum, S-4): its validator knows the draft-07
+ * dialect only and refused `$schema` 2020-12 on the first hosted run. The copy drops `$schema` and `$id`, renames
+ * `$defs` to `definitions` and rewrites every `$ref`; the committed files stay 2020-12 as the documented contract.
+ */
+const forStructuredOutput = (schema) => {
+  const convert = (node) => {
+    if (Array.isArray(node)) {
+      return node.map(convert);
+    }
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+    const out = {};
+    for (const [key, value] of Object.entries(node)) {
+      if (key === '$schema' || key === '$id') {
+        continue;
+      }
+      if (key === '$ref' && typeof value === 'string') {
+        out.$ref = value.replace(/^#\/\$defs\//, '#/definitions/');
+      } else if (key === '$defs') {
+        out.definitions = { ...(out.definitions || {}), ...convert(value) };
+      } else if (key === 'definitions') {
+        out.definitions = { ...(out.definitions || {}), ...convert(value) };
+      } else {
+        out[key] = convert(value);
+      }
+    }
+    return out;
+  };
+  return convert(schema);
+};
+
+module.exports = { findingsSchema, briefSchema, toJsonSchemas, forStructuredOutput, WindowName, Severity };

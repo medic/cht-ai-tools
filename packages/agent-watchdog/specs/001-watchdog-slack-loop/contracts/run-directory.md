@@ -24,7 +24,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── findings.pass<n>.json      # Pass output after schema validation                [kept]
 │       │   ├── verification.pass<n>.json  # in-analysis gate report for pass n                 [kept]
 │       │   ├── tool-calls.jsonl           # every tool call and result, untrusted, for replay  [kept]
-│       │   ├── passes.json                # per-pass diff and convergence (FR-058)             [kept]
+│       │   ├── passes.json                # per-pass diff, convergence, failed-turn errors (FR-058) [kept]
 │       │   └── session.json               # runtime session id, model, usage per call          [kept]
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]

@@ -4,7 +4,7 @@
 // and a run's artefacts (secrets, e-mail addresses and phone numbers). Findings never include the matched value.
 const fs = require('node:fs');
 const path = require('node:path');
-const { SECRET_PATTERNS, EMAIL_PATTERN, PHONE_PATTERN, PHONE_MIN_DIGITS, countDigits } = require('./patterns');
+const { SECRET_PATTERNS, EMAIL_PATTERN, phoneMatches } = require('./patterns');
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'coverage', '.nyc_output', '.data', 'runs', 'runs-replay', 'knowledge-corpus',
@@ -53,10 +53,9 @@ const personalFindings = (text, { phones = false } = {}) => {
     }
   }
   if (phones) {
-    for (const match of text.matchAll(PHONE_PATTERN)) {
-      const token = match[0];
+    for (const token of phoneMatches(text)) {
       const separated = /[\s()+-]/.test(token);
-      if (separated && !HEX_ID.test(token) && !DECIMAL.test(token) && countDigits(token) >= PHONE_MIN_DIGITS) {
+      if (separated && !HEX_ID.test(token) && !DECIMAL.test(token)) {
         out.push({ pattern: 'phone', excerpt: mask(token) });
       }
     }

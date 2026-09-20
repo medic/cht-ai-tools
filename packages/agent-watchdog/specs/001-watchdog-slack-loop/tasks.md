@@ -385,6 +385,17 @@ the run (FR-072 to FR-074, SC-016, research.md R-16). Tests first.
 
 **Checkpoint**: `npm test`, lint and `npm run replay:eval` pass; the perf spec shows 4 queries per metric on day one and 2 on day two with no trailing query; S-18 on the hosted watchdog.
 
+## Phase 15: First complete hosted run fixes (revision 13, 2026-09-20)
+
+**Purpose**: The first complete run lost every model session to the runtime's schema validator, mislabelled the
+failures as timeouts, published "no metric changes to flag" over 2,058 candidates, and exited 1 on a tracing 401.
+
+- [X] T171 [P] Tests first: `test/agent/structured-output-schema.spec.js` (dialect and identifier keywords removed, `$defs` renamed, refs rewritten, input untouched); engine specs expect the converted schema; `test/agent/session-loop.spec.js` for the `error` bound and the recorded message; `test/rollup/brief.spec.js` for the degraded brief and the notice when sessions failed; `test/cli/run.spec.js` for a failing trace flush; scan and personal-data specs for version strings
+- [X] T172 `forStructuredOutput` in `src/agent/output-schema.js`, applied in `src/agent/engine-sdk.js` and `src/agent/engine-cli.js`
+- [X] T173 `error` bound and `errors` on the pass record in `src/agent/session-loop.js`; the roll-up stage reads them and `composeBrief` degrades with the failure named (`src/cli/stages/rollup.js`, `src/rollup/brief.js`)
+- [X] T174 Guard the success-path trace flush in `src/cli/commands/run.js`; skip phone matches inside tokens with letters in `src/verify/patterns.js`, `src/verify/scan.js`, `src/verify/checks/personal_data_absent.js`; categorise `Message Delivery (2h)` and `Low Disk Space - 80% Full` in `config/defaults/alerts.yaml`
+- [X] T175 Spec revision 13 (edge cases, clarification, proposed User Stories 10 and 11), research R-2 addendum and S-4 result, data model, run-directory contract, README, AGENTS
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -552,4 +563,14 @@ US3 can proceed in parallel, then US4, US5 and US6.
   names the differing labels, with `__name__`, `instance` and `job` never counted as differing; the aggregate
   siblings (request rate, request count, error share) remain, and the missing aggregate latency panel is a
   recommendation to cht-watchdog recorded in R-17.
+- First complete hosted run (2026-09-20, Phase 15, revision 13): the committed schema files stay JSON Schema 2020-12
+  as the documented contract and the engines convert a copy at the boundary, so the schema build and the contracts
+  do not change; a turn that fails with a timeout error (code `TIMEOUT` or "timed out" in the message) stays a
+  `timeout` bound and every other failure is an `error` bound, both with the message on the pass record; the
+  degraded brief is used only when no item came out and candidates exist, otherwise the notice suffices and the
+  alerts-only or heartbeat brief still names the failure; the notice keeps the first error message truncated to
+  160 characters; `Message Delivery (2h)` is categorised as messaging/high and `Low Disk Space - 80% Full` under a
+  new `capacity` category with no related metrics, since node exporter disk metrics are not on the dashboards; the
+  phone pattern skips a match whose surrounding token carries letters, in the scan and in the gate alike; User
+  Stories 10 and 11 are proposed in the spec and await approval before planning.
 

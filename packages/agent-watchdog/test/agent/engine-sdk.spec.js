@@ -1,3 +1,4 @@
+const { forStructuredOutput } = require('../../src/agent/output-schema');
 const { createSdkEngine } = require('../../src/agent/engine-sdk');
 const { loadDefinition } = require('../../src/agent/definition');
 const { PACKAGE_PATHS } = require('../../src/config/schema');
@@ -92,7 +93,10 @@ describe('agent/engine-sdk', () => {
     expect(o.permissionMode).to.equal('dontAsk');
     expect(o.strictMcpConfig).to.equal(true);
     expect(o.persistSession).to.equal(false);
-    expect(o.outputFormat).to.deep.equal({ type: 'json_schema', schema: definition.outputSchemas.findings });
+    expect(o.outputFormat).to.deep.equal({
+      type: 'json_schema', schema: forStructuredOutput(definition.outputSchemas.findings),
+    });
+    expect(o.outputFormat.schema.$schema, 'the runtime refuses the 2020-12 dialect (S-4)').to.equal(undefined);
     expect(o.maxTurns).to.equal(7);
     expect(o.maxBudgetUsd).to.equal(1.5);
     expect(o.model).to.equal('claude-fable-5-1');

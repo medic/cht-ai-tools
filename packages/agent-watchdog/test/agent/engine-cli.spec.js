@@ -1,5 +1,6 @@
 // The `claude` command-line engine against a fake executable (test/helpers/fake-claude.js): argument contract,
 // stdin turns, tool-call recording, harness bounds and mapping parity with the SDK engine.
+const { forStructuredOutput } = require('../../src/agent/output-schema');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Writable } = require('node:stream');
@@ -110,7 +111,7 @@ describe('agent/engine-cli', function () {
       '--permission-mode', 'dontAsk',
       '--mcp-config', mcpFile,
       '--strict-mcp-config',
-      '--json-schema', JSON.stringify(definition.outputSchemas.findings),
+      '--json-schema', JSON.stringify(forStructuredOutput(definition.outputSchemas.findings)),
       '--model', 'claude-fable-5-1', '--effort', 'max', '--max-budget-usd', '1.5',
     ]);
     expect(fs.readFileSync(promptFile, 'utf8')).to.equal('prefix\n__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\nsuffix');
@@ -170,7 +171,7 @@ describe('agent/engine-cli', function () {
     const toolsAt = record.argv.indexOf('--tools');
     expect(record.argv.slice(toolsAt, toolsAt + 2)).to.deep.equal(['--tools', '']);
     expect(record.argv[record.argv.indexOf('--json-schema') + 1])
-      .to.equal(JSON.stringify(definition.outputSchemas.brief));
+      .to.equal(JSON.stringify(forStructuredOutput(definition.outputSchemas.brief)));
     expect(record.argv.slice(-6)).to.deep.equal(['--model', 'm', '--effort', 'high', '--max-budget-usd', '0.5']);
     expect(record.argv[record.argv.indexOf('--system-prompt-file') + 1])
       .to.equal(runDir.path('agent', 'system-prompt.rollup.md'));

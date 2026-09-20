@@ -92,6 +92,9 @@ const run = async (ctx) => {
   const candidates = [];
   const changes = {};
   let referenceSourcesUnavailable = false;
+  // Sessions that failed before a result (revision 13): counted and named so the brief can say so rather than
+  // present an empty analysis as a quiet day.
+  const analysis = { projects: 0, failed: [], errors: [] };
   for (const project of discovery.projects || []) {
     const { slug } = project;
     candidates.push(...await readIfExists(runDir, `${slug}/candidates.json`, []));
@@ -105,6 +108,22 @@ const run = async (ctx) => {
     if (session && session.reference_sources_unavailable) {
       referenceSourcesUnavailable = true;
     }
+    const passes = await readIfExists(runDir, `${slug}/passes.json`, null);
+    if (passes) {
+      analysis.projects += 1;
+      const failed = (passes.errors || []).length > 0 || (passes.bounds_hit || []).includes('error');
+      if (failed) {
+        analysis.failed.push(project.url);
+        for (const failure of passes.errors || []) {
+          analysis.errors.push(failure.message);
+        }
+      }
+    }
+  }
+  if (analysis.failed.length) {
+    logger.warn('rollup.analysis_failures', {
+      failed: analysis.failed.length, projects: analysis.projects, first_error: analysis.errors[0] || null,
+    });
   }
 
   // Merged pattern cards are matched by metric before ranking, so persistence and feedback key on the final id.
@@ -156,6 +175,7 @@ const run = async (ctx) => {
     discovery,
     changes,
     candidates,
+    analysis,
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],
     expectedLoadNotice: expectedLoadNoticeFrom(ctx.activeWindows),

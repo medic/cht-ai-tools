@@ -3,6 +3,7 @@
 // one `claude -p` process per project session fed stream-json user turns over stdin, its stream-json stdout
 // mapped to the same turn objects as the SDK engine by src/agent/turn-mapper.js. Hooks do not fire under
 // --bare, so the harness enforces the turn cap and the wall clock from the event stream itself.
+const { forStructuredOutput } = require('./output-schema');
 const childProcess = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -43,7 +44,7 @@ const buildArgs = ({ systemPromptFile, tools, mcpConfigFile, outputSchema, model
   if (mcpConfigFile) {
     args.push('--mcp-config', mcpConfigFile);
   }
-  args.push('--strict-mcp-config', '--json-schema', JSON.stringify(outputSchema));
+  args.push('--strict-mcp-config', '--json-schema', JSON.stringify(forStructuredOutput(outputSchema)));
   args.push('--model', model, '--effort', effort, '--max-budget-usd', String(maxBudgetUsd));
   return args;
 };
@@ -285,7 +286,7 @@ const createCliEngine = ({
         pending = null;
         terminate();
         if (current) {
-          current.reject(new Error(`turn timed out after ${bounds.timeoutMs} ms`));
+          current.reject(Object.assign(new Error(`turn timed out after ${bounds.timeoutMs} ms`), { code: 'TIMEOUT' }));
         }
       }, bounds.timeoutMs);
       pending = {

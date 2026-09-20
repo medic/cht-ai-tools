@@ -33,6 +33,31 @@ const isProjectLikeHost = (token) => {
 
 const countDigits = (text) => (text.match(/\d/g) || []).length;
 
+/**
+ * Phone-like matches in a text that hold enough digits and do not sit inside a token that also carries letters: a
+ * CHT version string such as `5.2.0-10700-photo-capture.29102352761-1783696221314` is an identifier, not a number.
+ */
+const phoneMatches = (text) => {
+  const out = [];
+  for (const match of String(text).matchAll(PHONE_PATTERN)) {
+    if (countDigits(match[0]) < PHONE_MIN_DIGITS) {
+      continue;
+    }
+    let start = match.index;
+    let end = match.index + match[0].length;
+    while (start > 0 && /[^\s"',;|<>[\]{}]/.test(text[start - 1])) {
+      start -= 1;
+    }
+    while (end < text.length && /[^\s"',;|<>[\]{}]/.test(text[end])) {
+      end += 1;
+    }
+    if (!/[A-Za-z]/.test(text.slice(start, end))) {
+      out.push(match[0]);
+    }
+  }
+  return out;
+};
+
 module.exports = {
   SECRET_PATTERNS,
   EMAIL_PATTERN,
@@ -44,4 +69,5 @@ module.exports = {
   TIMESTAMP_PATTERN,
   isProjectLikeHost,
   countDigits,
+  phoneMatches,
 };

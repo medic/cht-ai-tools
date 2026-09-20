@@ -207,6 +207,30 @@ describe('agent/session-loop', () => {
     expect(result.items).to.have.length(1);
   });
 
+  it('records a runtime failure as an error bound with its message, not as a timeout (revision 13)', async () => {
+    const message = 'Claude Code process exited with code 1. stderr: Error: --json-schema is not a valid JSON Schema';
+    const failing = async () => {
+      throw new Error(message);
+    };
+    const engine = { name: 'broken', openSession: async () => ({ turn: failing, close: async () => {} }) };
+    const result = await run(engine);
+    expect(result.bounds_hit).to.deep.equal(['error']);
+    expect(result.items).to.deep.equal([]);
+    expect(result.errors).to.have.length(1);
+    expect(result.errors[0]).to.include({ pass: 1, attempt: 1, bound: 'error' });
+    expect(result.errors[0].message).to.include('--json-schema');
+    const passes = await runDir.readJson(`${project.slug}/passes.json`);
+    expect(passes.bounds_hit).to.deep.equal(['error']);
+    expect(passes.errors[0].message).to.include('--json-schema');
+    const timingOut = async () => {
+      throw Object.assign(new Error('turn timed out after 5 ms'), { code: 'TIMEOUT' });
+    };
+    const timing = { name: 'slow', openSession: async () => ({ turn: timingOut, close: async () => {} }) };
+    const slow = await run(timing);
+    expect(slow.bounds_hit).to.deep.equal(['timeout']);
+    expect(slow.errors[0].bound).to.equal('timeout');
+  });
+
   it('honours the run deadline before opening a new turn', async () => {
     const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
     const result = await run(engine, { deadline: Date.now() - 1 });

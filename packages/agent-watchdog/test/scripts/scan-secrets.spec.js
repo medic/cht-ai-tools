@@ -32,6 +32,10 @@ describe('verify/scan', () => {
     // Identifiers and Slack timestamps are not phone numbers.
     expect(scanText('ts 1758088800.000100 id a1b2c3d4e5f6 hex 0123456789abcdef', { phones: true })).to.deep.equal([]);
     expect(scanText('2026-09-18T06:00:00Z 20260918060000', { phones: true })).to.deep.equal([]);
+    // A CHT version string carries long digit runs with separators; it sits in a token with letters.
+    const version = '"cht_version": "5.2.0-10700-photo-capture.29102352761-1783696221314",';
+    expect(scanText(version, { phones: true })).to.deep.equal([]);
+    expect(scanText('call 0712-345-678 now', { phones: true }).map((f) => f.pattern)).to.deep.equal(['phone']);
   });
 
   describe('scanning trees', () => {

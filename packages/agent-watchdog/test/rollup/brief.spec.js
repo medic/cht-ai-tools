@@ -335,6 +335,44 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     expect(gate.verifyBrief.firstCall.args[0].extraUrls).to.deep.equal(links);
   });
 
+  it('degrades to the deterministic brief and names the failure when the sessions failed (revision 13)', async () => {
+    const engine = { singleTurn: sinon.stub() };
+    const gate = { verifyBrief: sinon.stub() };
+    const analysis = {
+      projects: 2,
+      failed: ['https://alpha.example.org', 'https://beta.example.org'],
+      errors: ['Claude Code process exited with code 1. stderr: Error: --json-schema is not a valid JSON Schema'],
+    };
+    const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
+    expect(engine.singleTurn.called).to.equal(false);
+    expect(out.degraded).to.equal(true);
+    expect(out.brief.kind).to.equal('degraded');
+    expect(out.brief.headline).to.not.include('no metric changes');
+    expect(out.brief.degradation_notice).to.include('model analysis failed on 2 of 2 projects');
+    expect(out.brief.degradation_notice).to.include('--json-schema');
+    const kinds = out.brief.bullets.map((b) => b.kind);
+    expect(kinds, 'alert bullets stay in the degraded layout').to.include('alerts');
+    expect(kinds).to.include('item');
+    const prefix = 'Analysis incomplete: model sessions failed on 2 of 2';
+    const incomplete = out.brief.notices.filter((n) => n.startsWith(prefix));
+    expect(incomplete).to.have.length(1);
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+    // Without candidates there is nothing to show: the alerts-only brief, but still with the notice.
+    const empty = await composeBrief({ ...base(engine, gate), items: [], candidates: [], analysis });
+    expect(empty.brief.kind).to.equal('brief');
+    expect(empty.brief.notices.some((n) => n.startsWith('Analysis incomplete'))).to.equal(true);
+  });
+
+  it('keeps the model brief when only some sessions failed, and says so in the notices', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const analysis = { projects: 3, failed: ['https://gamma.example.org'], errors: ['session ended before a result'] };
+    const out = await composeBrief({ ...base(engine, gate), analysis });
+    expect(out.degraded).to.equal(false);
+    expect(out.brief.notices.some((n) => n === 'Analysis incomplete: model sessions failed on 1 of 3 projects '
+      + '(session ended before a result)')).to.equal(true);
+  });
+
   it('posts alert bullets without any model call when no item was flagged, instead of a heartbeat', async () => {
     const engine = { singleTurn: sinon.stub() };
     const gate = { verifyBrief: sinon.stub() };

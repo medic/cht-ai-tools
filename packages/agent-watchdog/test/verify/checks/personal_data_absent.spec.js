@@ -9,6 +9,12 @@ describe('verify/checks/personal_data_absent', () => {
     expect(check(ctx).status).to.equal('pass');
   });
 
+  it('does not mistake a version string with long digit runs for a phone number', () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].why_now = 'running 5.2.0-10700-photo-capture.29102352761-1783696221314 since Monday';
+    expect(check(ctx).status).to.equal('pass');
+  });
+
   it('fails on e-mail addresses and phone numbers', () => {
     const ctx = baseContext();
     ctx.findings.items[0].why_now = 'ask ops@medic.org'; // scan-secrets:allow

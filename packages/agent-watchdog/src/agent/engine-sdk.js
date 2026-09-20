@@ -2,6 +2,7 @@
 // The Claude Agent SDK engine (research.md R-2): one streaming-input query per project session, isolated
 // from filesystem settings, with no built-in tools and an enumerated MCP allow-list. Messages are mapped to
 // turn objects by src/agent/turn-mapper.js, the same mapper the command-line engine uses.
+const { forStructuredOutput } = require('./output-schema');
 const os = require('node:os');
 const path = require('node:path');
 const { buildHooks } = require('../../agent/hooks');
@@ -124,7 +125,7 @@ const createSdkEngine = ({
       permissionMode: 'dontAsk',
       strictMcpConfig: true,
       persistSession: false,
-      outputFormat: { type: 'json_schema', schema: outputSchema },
+      outputFormat: { type: 'json_schema', schema: forStructuredOutput(outputSchema) },
       maxTurns: bounds.maxTurns,
       maxBudgetUsd: bounds.maxBudgetUsd,
       model,
@@ -186,7 +187,7 @@ const createSdkEngine = ({
         pending = null;
         abortController.abort();
         if (current) {
-          current.reject(new Error(`turn timed out after ${bounds.timeoutMs} ms`));
+          current.reject(Object.assign(new Error(`turn timed out after ${bounds.timeoutMs} ms`), { code: 'TIMEOUT' }));
         }
       }, bounds.timeoutMs);
       pending = {

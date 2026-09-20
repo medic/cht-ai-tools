@@ -142,6 +142,17 @@ describe('cli/commands/run', () => {
     expect(t.args.deps.tracer.finish).to.have.been.calledOnce;
   });
 
+  it('logs a failing trace flush and keeps the exit code (revision 13)', async () => {
+    const { stages } = fakeStages();
+    const tracer = fakeTracer();
+    tracer.finish.rejects(Object.assign(new Error('Unauthorized'), { name: 'OTLPExporterError', code: 401 }));
+    const t = base(dataDir, { deps: { stages, tracer } });
+    const code = await runCommand(t.args);
+    expect(code).to.equal(0);
+    expect(t.err.text()).to.include('trace.finish_failed');
+    expect(readRun(dataDir).status).to.equal('published');
+  });
+
   it('passes a deadline and shared dependencies to every stage', async () => {
     const { stages } = fakeStages();
     const t = base(dataDir, { deps: { stages } });

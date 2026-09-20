@@ -260,6 +260,9 @@ accepted or rejected by the gate.
 | `candidate_ids` | string[] | Non-empty; every id must exist in this run's candidates. |
 | `reference_urls` | string[] | URLs the model cites; each must have appeared in a tool result this run and be on the allow-list (FR-016). |
 | `rank` | integer | Assigned by the roll-up; 1 is highest. |
+
+A Pass record whose turn failed before a result carries `error` (the runtime's message) and the
+session's `bounds_hit` includes `error`, distinct from `timeout` (revision 13).
 | `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a sub-bullet of their Project Group's bullet (FR-069). |
 | `slot` | integer or null | 1 to 5: the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
 | `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |

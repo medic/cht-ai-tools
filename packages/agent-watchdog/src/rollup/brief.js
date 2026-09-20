@@ -226,16 +226,42 @@ const alertsOnlyBrief = ({
  * Compose the brief. Returns { brief, drafts, degraded, memoryUpdate, proposals, calls }.
  * `alertGroups` are placed and written by code (FR-066); `alertLinks` are resolved by the gate with the draft.
  */
+const NOTICE_ERROR_MAX = 160;
+
+/** What the failed sessions amount to, or null when every project's analysis completed (revision 13). */
+const analysisFailure = (analysis) => {
+  if (!analysis || !Array.isArray(analysis.failed) || !analysis.failed.length) {
+    return null;
+  }
+  const message = String((analysis.errors || [])[0] || 'no result from the model runtime')
+    .replace(/\s+/g, ' ').trim().slice(0, NOTICE_ERROR_MAX);
+  return { count: analysis.failed.length, total: analysis.projects || analysis.failed.length, message };
+};
+
 const composeBrief = async ({
   ctx, items, discovery, changes, candidates, memory = null, feedbackUnmatched = [], expectedLoadNotice = null,
-  referenceSourcesUnavailable = false, footer, notices = [], feedback = [], feedbackBrief = null, layout = null,
-  alertGroups = [], alertLinks = [], staleAfterDays = 14,
+  referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [], feedbackBrief = null,
+  layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
 }) => {
+  // Failed model sessions are never silent: a notice on every brief, and the deterministic brief when they left
+  // nothing to publish although candidates exist (revision 13).
+  const failure = analysisFailure(analysis);
+  const notices = failure
+    ? [...givenNotices, `Analysis incomplete: model sessions failed on ${failure.count} of ${failure.total} `
+      + `projects (${failure.message})`]
+    : givenNotices;
   const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices };
   // The stage computes the layout from the ranked items, the projects' groups and the alert groups; a caller
   // without one gets the same rule applied here, so the prompt, the gate and the assembled bullets always agree.
   const bodyLayout = layout || buildLayout(items, { groupOf: groupOfProjects(discovery), alertGroups });
   if (!items.length) {
+    if (failure && candidates.length) {
+      const reason = `model analysis failed on ${failure.count} of ${failure.total} projects (${failure.message})`;
+      return {
+        brief: buildDeterministicBrief({ ...base, candidates, reason, alertGroups, staleAfterDays }),
+        drafts: [], degraded: true, memoryUpdate: null, proposals: [], calls: [],
+      };
+    }
     const brief = alertGroups.length
       ? alertsOnlyBrief({
         ctx, layout: bodyLayout, alertGroups, staleAfterDays, discovery, candidates, footer, expectedLoadNotice,

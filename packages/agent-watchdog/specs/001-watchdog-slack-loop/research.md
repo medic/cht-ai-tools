@@ -99,6 +99,17 @@ present with doc comments in the installed `sdk.d.ts` and are used as stated abo
 files and needs a writable config directory for every pass; streaming input keeps the session in
 memory); calling the Messages API directly (rejected in the Notes).
 
+**Addendum 2026-09-20 (S-4 on the hosted run)**: every session of the first complete run failed
+with `Claude Code process exited with code 1. stderr: Error: --json-schema is not a valid JSON
+Schema: no schema with key or ref "https://json-schema.org/draft/2020-12/schema"`. The runtime
+validates the schema with a validator that knows the draft-07 dialect only, and our files declare
+`$schema` 2020-12 (zod's `target: 'draft-2020-12'`). Decision: the committed schema files stay
+2020-12 as the documented contract; both engines hand the runtime a copy without `$schema` and
+`$id`, with `$defs` renamed to `definitions` and every `$ref` rewritten, which every dialect accepts
+(`forStructuredOutput` in `src/agent/output-schema.js`). The remaining S-4 question, whether the
+runtime's structured-output retries accept `enum` and nullable unions, is confirmed by the next
+hosted run.
+
 ## R-3. The CLI face and the verification-hook adjustment
 
 **Evidence**: `claude --help` of the installed `claude` 2.1.278 (installed), the version the SDK
@@ -544,7 +555,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-1 | With `outputFormat` set, a streaming-input SDK session yields `structured_output` on the `result` message of every turn, not only the last | Multi-turn structured output is not stated in the type definitions |
 | S-2 | The `Stop` hook fires per turn in streaming-input mode and `last_assistant_message` carries the structured JSON | Hook timing in multi-turn sessions is undocumented |
 | S-3 | `claude -p --bare --input-format stream-json --output-format stream-json --json-schema …` accepts several user messages on stdin and emits one `result` event per turn with structured output | CLI multi-turn structured output is undocumented |
-| S-4 | The Anthropic structured-output implementation accepts `findings.schema.json` and `brief.schema.json` as written (`$ref`, `$defs`, `enum`, nullable unions) | The supported JSON Schema subset was not verified this session |
+| S-4 | The Anthropic structured-output implementation accepts `findings.schema.json` and `brief.schema.json` as written (`$ref`, `$defs`, `enum`, nullable unions) | The supported JSON Schema subset was not verified this session. **Result 2026-09-20**: the runtime refused the files as written, `--json-schema is not a valid JSON Schema: no schema with key or ref "https://json-schema.org/draft/2020-12/schema"`; see the R-2 addendum |
 | S-5 | SDK hooks still fire when the subprocess environment sets `CLAUDE_CODE_SIMPLE=1`; if not, bare semantics are obtained from `settingSources: []` and `tools: []` alone | The type documentation says "session hooks still run" under bare mode but does not define session hooks |
 | S-6 | A Viewer service-account token on the hosted watchdog can call the datasource proxy (`query_range`, `targets`), `GET /api/search`, `GET /api/dashboards/uid/:uid`, `GET /api/annotations`, and whether it can call `GET /api/datasources` | Permission behaviour was inferred from source |
 | S-7 | `viewPanel=panel-<id>` opens the panel on Grafana 12.3.3 and the link resolves with `var-cht_instance` | Parameter is undocumented |
