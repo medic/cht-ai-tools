@@ -52,7 +52,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 
 const createFakeGrafana = ({
   fixtureDir, baseUrl = 'https://watchdog.example.org', token = 'glsa_test', datasourceUid = 'PBFA97CFB590B2093',
-  runStart: runStartOverride = null,
+  runStart: runStartOverride = null, historyDays = {},
 }) => {
   const grafanaDir = path.join(fixtureDir, 'grafana');
   const read = (name) => JSON.parse(fs.readFileSync(path.join(grafanaDir, name), 'utf8'));
@@ -126,7 +126,12 @@ const createFakeGrafana = ({
     const result = [];
     for (const host of hostsFor(expr)) {
       const values = [];
+      // A host that joined the watchdog recently has daily points for its last historyDays[host] days only.
+      const since = historyDays[host] ? runStart - historyDays[host] * DAY : null;
       for (let ts = start; ts <= end; ts += step) {
+        if (daily && since !== null && ts <= since) {
+          continue;
+        }
         const v = daily ? dailyAt(host, metric, ts) : sampleAt(host, metric, ts);
         if (v !== null && v !== undefined) {
           values.push([ts, String(Number(v.toFixed(3)))]);

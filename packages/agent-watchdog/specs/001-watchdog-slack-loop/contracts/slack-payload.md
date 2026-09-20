@@ -26,7 +26,8 @@ its bot display name is set in the app configuration, so no per-message identity
    Blocks, at most 50, in order: `header` (headline), one `section` per bullet with `mrkdwn`,
    an `image` block `{ type: 'image', slack_file: { id }, alt_text }` (the bot that uploaded the
    file is the bot posting, which is the documented requirement), a `context` block with the
-   expected-load or degradation notice when present, and a `context` footer with the prompts,
+   expected-load or degradation notice when present, one `context` block per code-added notice
+   (for example a project new since the previous run), and a `context` footer with the prompts,
    configuration and trace links and the cost in currency.
 3. **Post one threaded reply per item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
    text, blocks, metadata: { event_type: 'agent_watchdog.item', event_payload } })`, highest rank

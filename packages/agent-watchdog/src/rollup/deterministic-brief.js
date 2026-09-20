@@ -34,19 +34,22 @@ const checkedCounts = (discovery, candidatesCount) => ({
   candidates: candidatesCount,
 });
 
-const baseBrief = ({ runId, footer, expectedLoadNotice }) => ({
+const baseBrief = ({ runId, footer, expectedLoadNotice, notices = [] }) => ({
   run_id: runId,
   expected_load_notice: expectedLoadNotice || null,
   degradation_notice: null,
+  notices: [...notices],
   image: null,
   footer,
   publication: null,
 });
 
-const buildHeartbeat = ({ runId, discovery, candidatesCount = 0, footer, expectedLoadNotice = null }) => {
+const buildHeartbeat = ({
+  runId, discovery, candidatesCount = 0, footer, expectedLoadNotice = null, notices = [],
+}) => {
   const checked = checkedCounts(discovery, candidatesCount);
   return {
-    ...baseBrief({ runId, footer, expectedLoadNotice }),
+    ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
     kind: 'heartbeat',
     headline: `All quiet: ${checked.projects} projects and ${checked.panels} panels checked, no candidates`,
     bullets: [],
@@ -78,7 +81,9 @@ const candidateBullet = (candidate) => {
 };
 
 /** The deterministic brief: computed candidates only, clearly labelled, never silent (constitution III). */
-const buildDeterministicBrief = ({ runId, candidates, discovery, reason, footer, expectedLoadNotice = null }) => {
+const buildDeterministicBrief = ({
+  runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [],
+}) => {
   const seen = new Set();
   const bullets = [];
   for (const candidate of orderCandidates(candidates)) {
@@ -94,7 +99,7 @@ const buildDeterministicBrief = ({ runId, candidates, discovery, reason, footer,
   }
   const projects = new Set(candidates.map((c) => c.project_url)).size;
   return {
-    ...baseBrief({ runId, footer, expectedLoadNotice }),
+    ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
     kind: 'degraded',
     headline: `Watchdog brief (degraded): ${candidates.length} candidates across ${projects} projects`,
     bullets,

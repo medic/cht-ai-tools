@@ -212,14 +212,14 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ### Tests for User Story 5
 
-- [ ] T091 [P] [US5] Write failing tests `test/collect/new-project.spec.js`: a host present in `up{job="cht"}` with no `projects.yaml` entry is analysed like any other and the brief carries a "new, unconfigured project" note; a project with fewer than 14 daily points has history comparisons marked unavailable and never computed from partial data
-- [ ] T092 [P] [US5] Write failing tests `test/readiness/check.spec.js`: `GET https://<host>/api/v2/monitoring` parsed for `version.app`; below 3.12.0 reports the unmet prerequisite in plain language and exits 1; 4.3.0 (API metrics) and 4.11.0 (CouchDB size metrics) reported as informational; unreachable host exits 69; `https://<host>:8443/metrics` probed only when `projects.yaml` sets `host_metrics: true` (research.md R-6)
+- [X] T091 [P] [US5] Write failing tests `test/collect/new-project.spec.js`: a host present in `up{job="cht"}` with no `projects.yaml` entry is analysed like any other and the brief carries a "new, unconfigured project" note; a project with fewer than 14 daily points has history comparisons marked unavailable and never computed from partial data
+- [X] T092 [P] [US5] Write failing tests `test/readiness/check.spec.js`: `GET https://<host>/api/v2/monitoring` parsed for `version.app`; below 3.12.0 reports the unmet prerequisite in plain language and exits 1; 4.3.0 (API metrics) and 4.11.0 (CouchDB size metrics) reported as informational; unreachable host exits 69; `https://<host>:8443/metrics` probed only when `projects.yaml` sets `host_metrics: true` (research.md R-6)
 
 ### Implementation for User Story 5
 
-- [ ] T093 [US5] Add the new-project note to `src/rollup/brief.js` and `templates/slack/parent.hbs`; confirm `src/collect/discovery.js` and `src/collect/windows.js` satisfy the history rule
-- [ ] T094 [US5] Implement `src/readiness/check.js` and the command `src/cli/commands/check.js`
-- [ ] T095 [US5] Write `test/e2e/us5.spec.js` covering the three US5 acceptance scenarios
+- [X] T093 [US5] Add the new-project note to `src/rollup/brief.js` and `templates/slack/parent.hbs`; confirm `src/collect/discovery.js` and `src/collect/windows.js` satisfy the history rule
+- [X] T094 [US5] Implement `src/readiness/check.js` and the command `src/cli/commands/check.js`
+- [X] T095 [US5] Write `test/e2e/us5.spec.js` covering the three US5 acceptance scenarios
 
 **Checkpoint**: A newly added project appears in the next brief (SC-008) and `agent-watchdog check` reports readiness with the documented exit codes.
 

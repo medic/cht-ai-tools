@@ -259,6 +259,7 @@ const Brief = z.object({
   expected_load_notice: z.string().nullable(),
   checked: z.object({ projects: z.number().int(), panels: z.number().int(), candidates: z.number().int() }).strict(),
   degradation_notice: z.string().nullable(),
+  notices: z.array(z.string()).default([]),
   image: z.object({ path: z.string(), slack_file_id: z.string().nullable() }).strict().nullable(),
   footer: z.object({
     prompts_url: z.string(),

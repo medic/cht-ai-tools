@@ -86,7 +86,7 @@ const reasonsOf = (report) => (report.checks || [])
   .flatMap((check) => check.reasons.map((reason) => `${check.name}: ${reason}`));
 
 const briefFromDraft = ({
-  ctx, draft, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer,
+  ctx, draft, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer, notices = [],
 }) => ({
   run_id: ctx.runId,
   kind: 'brief',
@@ -95,6 +95,7 @@ const briefFromDraft = ({
   expected_load_notice: draft.expected_load_notice || expectedLoadNotice || null,
   checked: checkedCounts(discovery, candidates.length),
   degradation_notice: referenceSourcesUnavailable ? REFERENCE_UNAVAILABLE_NOTICE : null,
+  notices: [...notices],
   image: null,
   footer,
   publication: null,
@@ -105,9 +106,9 @@ const briefFromDraft = ({
  */
 const composeBrief = async ({
   ctx, items, discovery, changes, candidates, memory = null, feedbackUnmatched = [], expectedLoadNotice = null,
-  referenceSourcesUnavailable = false, footer,
+  referenceSourcesUnavailable = false, footer, notices = [],
 }) => {
-  const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice };
+  const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices };
   if (!items.length) {
     const brief = buildHeartbeat({ ...base, candidatesCount: candidates.length });
     return { brief, drafts: [], degraded: false, memoryUpdate: null, proposals: [], calls: [] };
@@ -171,7 +172,7 @@ const composeBrief = async ({
     drafts.push({ attempt, draft, report });
     if (report.outcome === 'accepted') {
       const brief = briefFromDraft({
-        ctx, draft, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer,
+        ctx, draft, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer, notices,
       });
       const validated = schemas.Brief.safeParse(brief);
       if (!validated.success) {

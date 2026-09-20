@@ -47,6 +47,7 @@ agent-watchdog replay --date 2026-09-18 --prompts ./prompts-experiment --label e
 agent-watchdog replay --from 2026-08-20 --to 2026-09-18 --prompts ./prompts-experiment > summary.json
 AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date 2026-09-18 --project cht.example.org
 agent-watchdog calibrate --week 2026-W38 > calibration.json                   # weekly threshold evidence
+agent-watchdog check https://cht.example.org                                  # readiness: 0 met, 1 unmet, 69 unreachable
 ```
 
 The `cli` engine drives the same agent definition through `claude -p --bare` (set

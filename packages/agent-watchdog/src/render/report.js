@@ -77,7 +77,9 @@ const buildView = ({ brief, items, windowsByMetric, runId }) => {
   if (typeof brief.headline !== 'string') {
     throw new Error('brief.headline is required to render the report');
   }
-  const notices = [brief.expected_load_notice, brief.degradation_notice].filter(Boolean).map((text) => ({ text }));
+  const notices = [brief.expected_load_notice, brief.degradation_notice, ...(brief.notices || [])]
+    .filter(Boolean)
+    .map((text) => ({ text }));
   return {
     run_id: runId,
     date: brief.run_id ? brief.run_id.slice(0, 10) : runId,

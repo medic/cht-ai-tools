@@ -212,9 +212,9 @@ const createScriptedEngine = ({
 
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
-  useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null,
+  useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null, historyDays = {},
 }) => {
-  const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart });
+  const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart, historyDays });
   const out = capture();
   const err = capture();
   const browserLauncher = fakeBrowserLauncher();

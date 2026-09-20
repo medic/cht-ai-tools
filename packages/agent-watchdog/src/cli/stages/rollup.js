@@ -6,6 +6,7 @@ const { rankItems } = require('../../rollup/rank');
 const { composeBrief } = require('../../rollup/brief');
 const { applyMemoryUpdate, createModelCondenser } = require('../../rollup/memory');
 const { writeProposals } = require('../../rollup/proposals');
+const { previousHostsFor, newProjectNotices } = require('../../rollup/new-projects');
 const { allowedHosts } = require('../../links/allowlist');
 const { buildFooter, round6 } = require('../../publish/footer');
 
@@ -88,6 +89,13 @@ const run = async (ctx) => {
   await runDir.writeJson('rollup/items.ranked.json', ranked);
 
   const footer = buildFooter({ config: ctx.config, traceUrl: ctx.traceUrl || null, costUsd: ctx.costSoFar || 0 });
+  // Projects that were not in the previous run are named in the brief (SC-008); unconfigured ones are marked.
+  const dataDirForHistory = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;
+  const previousHosts = await previousHostsFor({ dataDir: dataDirForHistory, runId: ctx.runId || runDir.runId });
+  const notices = newProjectNotices({ discovery, previousHosts });
+  if (notices.length) {
+    logger.info('rollup.new_projects', { notices, first_run: previousHosts === null });
+  }
   const composed = await composeBrief({
     ctx,
     items: ranked,
@@ -99,6 +107,7 @@ const run = async (ctx) => {
     expectedLoadNotice: expectedLoadNoticeFrom(ctx.activeWindows),
     referenceSourcesUnavailable,
     footer,
+    notices,
   });
 
   const dataDir = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;

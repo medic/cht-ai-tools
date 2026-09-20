@@ -68,6 +68,9 @@ const parentBlocks = (brief) => {
   if (brief.degradation_notice) {
     blocks.push(context(`_${mrkdwn(brief.degradation_notice)}_`));
   }
+  for (const notice of brief.notices || []) {
+    blocks.push(context(`_${mrkdwn(notice)}_`));
+  }
   blocks.push(context(footerText(brief.footer)));
   return blocks;
 };
@@ -140,6 +143,8 @@ const buildPayload = ({
       expected_load_notice: brief.expected_load_notice || '',
       has_trace: Boolean(brief.footer && brief.footer.trace_url),
       trace_url: brief.footer ? brief.footer.trace_url : null,
+      has_notices: Boolean(brief.notices && brief.notices.length),
+      notices_text: (brief.notices || []).join(' · '),
       cost_text: formatCost(brief.footer ? brief.footer.cost_usd : 0),
     };
     const text = truncate(template(brief.kind)(view).trim(), TEXT_MAX);
@@ -153,6 +158,7 @@ const buildPayload = ({
     expected_load_notice: brief.expected_load_notice || '',
     has_degradation_notice: Boolean(brief.degradation_notice),
     degradation_notice: brief.degradation_notice || '',
+    notices: brief.notices || [],
   }).trim(), TEXT_MAX);
 
   return {

@@ -209,6 +209,7 @@ The published post for a run (FR-019 to FR-025).
 | `expected_load_notice` | string or null | Present when a window was active (FR-007). |
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
+| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008). Empty on most days. |
 | `image` | object | `{ path, slack_file_id }`; rendered from the same report as the text (FR-023). |
 | `footer` | object | `{ prompts_url, config_url, trace_url, cost_usd }` (FR-019). |
 | `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
