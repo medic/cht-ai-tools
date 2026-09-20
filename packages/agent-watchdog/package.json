@@ -19,6 +19,7 @@
     "test:coverage": "nyc mocha 'test/**/*.spec.js'",
     "replay:eval": "node scripts/replay-eval.js",
     "schema:build": "node scripts/build-schema.js",
+    "cards:index": "node scripts/build-card-index.js",
     "smoke:grafana": "node smoke/grafana.js",
     "smoke:slack": "node smoke/slack.js",
     "smoke:agent-sdk": "node smoke/agent-sdk.js",

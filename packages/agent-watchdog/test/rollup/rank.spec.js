@@ -37,3 +37,34 @@ describe('rollup/rank', () => {
     expect(applyFeedbackInfluence(items, new Map())).to.deep.equal(items);
   });
 });
+
+describe('rollup/rank: pattern-card matching (US6 scenario 4)', () => {
+  const { itemId } = require('../../src/model/identity');
+  const card = {
+    card_id: 'sentinel-stall', title: 't', metrics: [{ metric: 'cht_sentinel_backlog_count', shape: 's' }],
+    confirmation_steps: ['Step one.', 'Step two.'], status: 'merged',
+  };
+  const cards = {
+    byMetric: (metric) => (metric === 'cht_sentinel_backlog_count' ? [card] : []),
+    get: (id) => (id === card.card_id ? card : null),
+  };
+
+  it('matches before persistence and feedback, so both are keyed by the recomputed item id', () => {
+    const item = makeItem({ pattern_card: null, confidence: 0.5 });
+    const newId = itemId(item.project_url, item.metric, 'sentinel-stall');
+    const previousItemIds = new Map([[newId, 2]]);
+    const feedbackByItem = new Map([[newId, { verdict: 'confirmed', up: 1, down: 0 }]]);
+    const [ranked] = rankItems({ items: [item], cards, previousItemIds, feedbackByItem });
+    expect(ranked.item_id).to.equal(newId);
+    expect(ranked.pattern_card).to.equal('sentinel-stall');
+    expect(ranked.suggested_check).to.equal('Step one. Step two.');
+    expect(ranked.persisting_days).to.equal(3);
+    expect(ranked.confidence).to.equal(0.6);
+  });
+
+  it('does nothing without cards', () => {
+    const item = makeItem({ pattern_card: null });
+    expect(rankItems({ items: [item] })[0].item_id).to.equal(item.item_id);
+    expect(rankItems({ items: [item], cards: null })[0].pattern_card).to.equal(null);
+  });
+});

@@ -315,3 +315,59 @@ describe('cli/stages/agent (stage inputs)', () => {
     expect(engine.sessions).to.have.length(0);
   });
 });
+
+describe('cli/stages/agent (pattern cards from the skill directory)', () => {
+  const { renderCardFile } = require('../../src/corpus/cards');
+  let dataDir;
+  let runDir;
+  let skillDir;
+  const logger = createLogger({ level: 'error', stream: new Writable({ write(c, e, cb) {
+    cb();
+  } }) });
+  const card = {
+    card_id: 'sentinel-stall', title: 'Sentinel stall',
+    symptom: 'Backlog climbs.', metrics: [{ metric: METRIC, shape: 'rises' }],
+    watchdog_appearance: 'Panel climbs.', root_cause: 'Transition error.', resolution: 'Fix it.',
+    confirmation_steps: ['Read the sentinel log.'], false_positives: [], sources: [], status: 'merged',
+  };
+
+  beforeEach(async () => {
+    dataDir = tempDir();
+    skillDir = tempDir();
+    fs.cpSync(PACKAGE_PATHS.skillDir, skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'pattern-cards', 'sentinel-stall.md'), renderCardFile(card, {}));
+    await ensureDataLayout(dataDir);
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+    await runDir.writeJson('discovery.json', { projects: projects.slice(0, 1), metrics: [METRIC] });
+    await runDir.writeJson('alpha-example-org/changes.json', [{ metric: METRIC, current_value: 1 }]);
+    await runDir.writeJson('alpha-example-org/candidates.json', [
+      { candidate_id: 'c1', project_url: projects[0].url, metric: METRIC, rule: 'monotonic' },
+    ]);
+  });
+  afterEach(() => {
+    removeDir(dataDir);
+    removeDir(skillDir);
+  });
+
+  it('loads the merged cards of config.paths.skillDir for read_pattern_card when none are injected', async () => {
+    const engine = createFakeEngine({ responses: () => ({ structuredOutput: findingsFor(projects[0], METRIC) }) });
+    const context = {
+      config: {
+        model: { name: 'm', effort: 'max' }, storage: { dataDir }, paths: { ...PACKAGE_PATHS, skillDir },
+        secrets: {}, endpoints: {},
+        bounds: {
+          maxTurns: 5, maxBudgetUsdProject: 1, modelTimeoutMs: 1000, verifyMaxRetries: 0, passes: 1,
+          passConvergence: true, projectConcurrency: 1, runTimeoutMs: 60000,
+        },
+      },
+      env, runDir, runId: '2026-09-18', date: '2026-09-18', logger, tracer: null,
+      deps: { engine, gate, definition },
+    };
+    await stage.run(context);
+    const read = engine.sessions[0].options.localTools.find((t) => t.name === 'read_pattern_card');
+    const out = JSON.parse((await read.handler({ card_id: 'sentinel-stall' })).content[0].text);
+    expect(out.text).to.include('Read the sentinel log.');
+    const miss = JSON.parse((await read.handler({ card_id: 'other' })).content[0].text);
+    expect(miss.error).to.include('unknown card');
+  });
+});

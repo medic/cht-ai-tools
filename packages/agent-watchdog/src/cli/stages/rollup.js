@@ -2,7 +2,7 @@
 // Stage: rollup. Reads every project's last pass, ranks, composes and gates the brief, writes rollup/*.
 const fs = require('node:fs');
 const { requireInputs } = require('./index');
-const { rankItems } = require('../../rollup/rank');
+const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { composeBrief } = require('../../rollup/brief');
 const { applyMemoryUpdate, createModelCondenser } = require('../../rollup/memory');
 const { writeProposals } = require('../../rollup/proposals');
@@ -83,8 +83,14 @@ const run = async (ctx) => {
     }
   }
 
+  // Merged pattern cards are matched by metric before ranking, so persistence and feedback key on the final id.
+  const cards = ctx.deps && ctx.deps.patternCards ? ctx.deps.patternCards : null;
+  const matching = matchPatternCards(items, cards);
+  if (matching.matched.length) {
+    logger.info('rollup.pattern_cards', { matched: matching.matched });
+  }
   const ranked = rankItems({
-    items, previousItemIds: ctx.previousItemIds || new Map(), feedbackByItem: ctx.feedbackByItem,
+    items: matching.items, previousItemIds: ctx.previousItemIds || new Map(), feedbackByItem: ctx.feedbackByItem,
   });
   await runDir.writeJson('rollup/items.ranked.json', ranked);
 

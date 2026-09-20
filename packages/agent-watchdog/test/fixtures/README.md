@@ -10,7 +10,9 @@ Recorded or synthesised inputs for the unit, replay and end-to-end tests. No tes
 - `runs/<case>/findings/`: recorded model output per project and pass, used in place of the model
   by replay evaluation and the end-to-end tests.
 - `findings/`: small structured-output documents for schema tests.
-- `slack/`, `corpus/`: recorded Slack payloads and corpus items for later user stories.
+- `slack/`: recorded Slack payloads for the feedback tests.
+- `corpus/`: raw knowledge-corpus items for the index, distillation and User Story 6 tests (see
+  `corpus/README.md`); `node test/fixtures/generate-corpus.js` rewrites its two synthetic files.
 - `feedback-labels.json`: the labelled feedback set that prompt changes must not regress.
 
 Regenerate the synthetic cases with `node test/fixtures/generate.js`. Real, scrubbed recordings are

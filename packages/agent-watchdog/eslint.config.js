@@ -10,6 +10,8 @@ module.exports = [
     ignores: [
       'node_modules/**', 'coverage/**', '.nyc_output/**', '.data/**', 'runs/**', 'runs-replay/**',
       '**/*.json', '**/*.md', '**/*.yaml', '**/*.yml', '**/*.hbs',
+      // Raw corpus fixtures are data (CSV, text, a PNG header), not code.
+      'test/fixtures/corpus/**',
     ],
   },
   ...compat.extends('@medic'),

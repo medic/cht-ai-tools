@@ -12,6 +12,7 @@ const { createRecordedTools } = require('../../agent/tools/recorded-tools');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
 const { normaliseHost } = require('../../config/policy');
 const { runProjectSession } = require('../../agent/session-loop');
+const { loadPatternCards } = require('../../corpus/cards');
 const { RunDir, dataPaths } = require('../../store/run-dir');
 const atomic = require('../../store/atomic');
 
@@ -133,7 +134,9 @@ const run = async (ctx) => {
   const feedbackFile = 'feedback.ingested.json';
   const feedbackAll = ctx.runDir.exists(feedbackFile) ? await ctx.runDir.readJson(feedbackFile) : null;
   const deadline = ctx.deadline || Date.now() + ctx.config.bounds.runTimeoutMs;
-  const patternCards = deps.patternCards || { index: [], read: async () => '' };
+  const skillDir = ctx.config.paths && ctx.config.paths.skillDir;
+  const patternCards = deps.patternCards
+    || (skillDir ? loadPatternCards({ skillDir }) : { index: [], read: async () => '' });
   const concurrency = Math.max(1, ctx.config.bounds.projectConcurrency || 1);
 
   // Every project's inputs are read before any session starts, so a missing file refuses the whole stage

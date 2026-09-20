@@ -469,3 +469,32 @@ describe('cli/commands/replay', function () {
     });
   });
 });
+
+describe('cli/commands/replay: pattern cards', function () {
+  this.timeout(20000);
+  let dataDir;
+  beforeEach(() => {
+    dataDir = tempDir();
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('hands the merged card ids to the gate and the cards to the agent stage', async () => {
+    const stored = await buildStoredRun({ dataDir, hosts: ['alpha.example.org'] });
+    const engine = createFakeEngine({
+      responses: () => ({ structuredOutput: modelFindings(stored.projects[0]) }),
+    });
+    const verifyFindings = sinon.stub().callsFake(async (args) => acceptingGate(args));
+    const patternCards = {
+      index: ['sentinel-stall'], merged: [], get: () => null, byMetric: () => [], read: async () => '',
+    };
+    const r = await invoke({
+      dataDir, flags: { date: '2026-09-18', label: 'cards' },
+      deps: { engine, gate: null, gateModule: { verifyFindings }, patternCards },
+    });
+    expect(r.error, r.error && r.error.stack).to.equal(undefined);
+    expect(r.code).to.equal(0);
+    expect(verifyFindings).to.have.been.called;
+    expect(verifyFindings.firstCall.args[0].knownCards).to.deep.equal(['sentinel-stall']);
+    expect(engine.sessions[0].options.localTools.map((t) => t.name)).to.include('read_pattern_card');
+  });
+});

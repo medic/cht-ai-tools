@@ -344,6 +344,40 @@ describe('cli/commands/run', () => {
     expect(t.slackPublisher.postFailureNotice).to.not.have.been.called;
   });
 
+  it('hands the merged pattern-card ids to the gate and the cards to every stage', async () => {
+    const verifyFindings = sinon.stub().resolves({
+      report: { subject: 'pass', subject_ref: 'alpha-example-org/pass1', attempt: 1, checks: [], outcome: 'accepted' },
+      items: [],
+    });
+    const patternCards = {
+      index: ['sentinel-stall'], merged: [], get: () => null, byMetric: () => [], read: async () => '',
+    };
+    const project = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
+    const { stages } = fakeStages();
+    stages.collect = {
+      name: 'collect', inputs: [],
+      run: sinon.spy(async (ctx) => {
+        await ctx.runDir.writeJson('discovery.json', { projects: [project], dashboards: [], metrics: [] });
+        return { projects: 1 };
+      }),
+    };
+    stages.agent = {
+      name: 'agent', inputs: [],
+      run: sinon.spy(async (ctx) => {
+        await ctx.deps.gate({
+          findings: { items: [] }, pass: 1, project, candidates: [], changes: [], toolResultUrls: [],
+        });
+        return { projects_analysed: [project.url], projects_skipped: [], items: [], cost_usd: 0, bounds_hit: [] };
+      }),
+    };
+    const t = base(dataDir, { deps: { stages, gate: { verifyFindings }, patternCards } });
+    expect(await runCommand(t.args)).to.equal(0);
+    expect(verifyFindings).to.have.been.calledOnce;
+    expect(verifyFindings.firstCall.args[0].knownCards).to.deep.equal(['sentinel-stall']);
+    expect(stages.rollup.run.firstCall.args[0].deps.patternCards).to.equal(patternCards);
+    expect(stages.agent.run.firstCall.args[0].deps.patternCards).to.equal(patternCards);
+  });
+
   it('exits 78 when configuration is invalid and creates no run directory', async () => {
     const t = base(dataDir, { env: { AGENT_WATCHDOG_PASSES: '99' }, deps: { stages: fakeStages().stages } });
     let error;

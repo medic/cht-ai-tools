@@ -48,6 +48,7 @@ agent-watchdog replay --from 2026-08-20 --to 2026-09-18 --prompts ./prompts-expe
 AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date 2026-09-18 --project cht.example.org
 agent-watchdog calibrate --week 2026-W38 > calibration.json                   # weekly threshold evidence
 agent-watchdog check https://cht.example.org                                  # readiness: 0 met, 1 unmet, 69 unreachable
+agent-watchdog distill [--all] [--item <relative-path>]                       # corpus items → proposed pattern cards
 ```
 
 The `cli` engine drives the same agent definition through `claude -p --bare` (set
@@ -65,6 +66,18 @@ under `AGENT_WATCHDOG_DATA_DIR/proposals/` (copied beside the run that produced 
 and personal identifiers are masked in the text and listed under `flags` for the reviewer; nothing about
 the agent changes until a human opens a pull request. Memory is capped and condensed within the cap when
 it overflows, and every memory change is stored as a diff under `memory/history/`.
+
+### Knowledge corpus
+
+Maintainers drop raw material (conversations, data exports, incident write-ups, component explainers)
+under `AGENT_WATCHDOG_CORPUS_RAW_DIR`, outside the repository. `distill` indexes the corpus by content
+hash (`corpus/index.json`, which never holds content), processes only new or changed items, and writes one
+proposed pattern card per distinct pattern under `corpus/cards.proposed/` with sources cited as content
+hashes, identifiers scrubbed or flagged, and no raw text copied. Binary or oversized items are skipped
+with a note in the report. A reviewer merges a card by moving it into `skill/cht-watchdog/pattern-cards/`
+with `status: merged` and running `npm run cards:index`; the daily analysis then sees one index line per
+card, reads a full card only through the `read_pattern_card` tool, and an item on a matching metric names
+the card and uses its confirmation steps as the suggested check.
 
 ## Contracts for deployment
 

@@ -233,16 +233,16 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ### Tests for User Story 6
 
-- [ ] T096 [P] [US6] Write failing tests `test/corpus/index.spec.js`: `corpus/index.json` records `relative_path`, `content_hash` (full SHA-256), `size_bytes`, `kind` in `conversation`, `export`, `incident`, `explainer`, `run_outcome`, `unknown`, `status` in `new`, `distilled`, `skipped`, `skipped_reason` (`binary`, `too_large`), `distilled_at`, `card_ids`; a changed hash resets `status` to `new`; the index never contains content
-- [ ] T097 [P] [US6] Write failing tests `test/corpus/distill.spec.js`: only `new` items processed unless `--all` or `--item`; one card per distinct pattern with `symptom`, `metrics` and shape, `watchdog_appearance`, `root_cause`, `resolution`, `confirmation_steps`, `false_positives`, `sources` (content hashes); identifiers removed or flagged; raw content never copied; cards written under `corpus/cards.proposed/<card_id>.md` with `status: proposed`; enormous or binary items skipped with a note in the distillation report
-- [ ] T098 [P] [US6] Write failing tests `test/agent/pattern-index.spec.js`: only `skill/cht-watchdog/pattern-cards/index.md` is in the static prefix; a full card is read only through `read_pattern_card`; an item matching a merged card names it in `pattern_card` and uses the card's `confirmation_steps` as `suggested_check`
+- [X] T096 [P] [US6] Write failing tests `test/corpus/index.spec.js`: `corpus/index.json` records `relative_path`, `content_hash` (full SHA-256), `size_bytes`, `kind` in `conversation`, `export`, `incident`, `explainer`, `run_outcome`, `unknown`, `status` in `new`, `distilled`, `skipped`, `skipped_reason` (`binary`, `too_large`), `distilled_at`, `card_ids`; a changed hash resets `status` to `new`; the index never contains content
+- [X] T097 [P] [US6] Write failing tests `test/corpus/distill.spec.js`: only `new` items processed unless `--all` or `--item`; one card per distinct pattern with `symptom`, `metrics` and shape, `watchdog_appearance`, `root_cause`, `resolution`, `confirmation_steps`, `false_positives`, `sources` (content hashes); identifiers removed or flagged; raw content never copied; cards written under `corpus/cards.proposed/<card_id>.md` with `status: proposed`; enormous or binary items skipped with a note in the distillation report
+- [X] T098 [P] [US6] Write failing tests `test/agent/pattern-index.spec.js`: only `skill/cht-watchdog/pattern-cards/index.md` is in the static prefix; a full card is read only through `read_pattern_card`; an item matching a merged card names it in `pattern_card` and uses the card's `confirmation_steps` as `suggested_check`
 
 ### Implementation for User Story 6
 
-- [ ] T099 [US6] Implement `src/corpus/index.js`
-- [ ] T100 [US6] Implement `src/corpus/distill.js`, `prompts/distill.md` (with `AGENT_WATCHDOG_MODEL_DISTILL`) and the command `src/cli/commands/distill.js` (`--all`, `--item`), printing the distillation report on stdout
-- [ ] T101 [US6] Implement `scripts/build-card-index.js` generating `skill/cht-watchdog/pattern-cards/index.md` from merged cards, and wire card matching into `src/rollup/rank.js`
-- [ ] T102 [US6] Write `test/e2e/us6.spec.js` covering the five US6 acceptance scenarios on `test/fixtures/corpus/`
+- [X] T099 [US6] Implement `src/corpus/index.js`
+- [X] T100 [US6] Implement `src/corpus/distill.js`, `prompts/distill.md` (with `AGENT_WATCHDOG_MODEL_DISTILL`) and the command `src/cli/commands/distill.js` (`--all`, `--item`), printing the distillation report on stdout
+- [X] T101 [US6] Implement `scripts/build-card-index.js` generating `skill/cht-watchdog/pattern-cards/index.md` from merged cards, and wire card matching into `src/rollup/rank.js`
+- [X] T102 [US6] Write `test/e2e/us6.spec.js` covering the five US6 acceptance scenarios on `test/fixtures/corpus/`
 
 **Checkpoint**: A new corpus item becomes a proposed card in one distillation, and a merged card is named by the next matching item (SC-009).
 

@@ -5,7 +5,6 @@ const path = require('node:path');
 const { Writable } = require('node:stream');
 const runCommand = require('../../src/cli/commands/run');
 const { createLogger } = require('../../src/log/logger');
-const identity = require('../../src/model/identity');
 const { createFakeGrafana } = require('../helpers/fake-grafana');
 const { fixturePath } = require('../helpers/fixtures');
 const scripted = require('../helpers/scripted-findings');
@@ -88,8 +87,6 @@ const createScriptedEngine = ({
   const { formatValue } = require('../../src/verify/format');
   const calls = { sessions: [], turns: [], singleTurns: [] };
 
-  const projects = () => scripted.projectsWithCandidates(scripted.latestRunRoot(dataDir));
-  const { itemsFor } = scripted;
   const result = scripted.resultStub;
 
   const openSession = async (options) => {
@@ -176,27 +173,23 @@ const createScriptedEngine = ({
         referenceUnavailable: false,
       };
     }
-    const ids = [...new Set(options.userPrompt.match(/\b[0-9a-f]{12}\b/g) || [])];
-    const all = [];
-    for (const project of projects().filter((p) => p.candidates.length > 0)) {
-      const { items } = await itemsFor(project);
-      const url = project.candidates[0].project_url;
-      for (const item of items) {
-        all.push({ ...item, id: identity.itemId(url, item.item_key.metric, null), host: new URL(url).host });
-      }
-    }
-    const ordered = ids.map((id) => all.find((i) => i.id === id)).filter(Boolean);
+    // Like a real model, write the brief from the ranked items the prompt carries (ids, hosts, evidence), so
+    // whatever code did to identities before ranking (pattern-card matching, feedback) is respected.
+    const rankedMatch = /<untrusted source="ranked-items">\n([\s\S]*?)\n<\/untrusted>/.exec(options.userPrompt);
+    const ranked = rankedMatch ? JSON.parse(rankedMatch[1]) : [];
+    const ordered = [...ranked].sort((a, b) => (a.rank || 0) - (b.rank || 0));
     const bullets = ordered.slice(0, 3).map((item) => {
-      const [cur, prev] = item.evidence;
+      const cur = item.evidence.find((e) => e.window === 'current') || item.evidence[0];
+      const prev = item.evidence.find((e) => e.window === 'previous_day');
       const now = briefMode === 'bad' ? '999999' : formatValue(cur.value, cur.unit);
       const before = prev ? ` vs ${formatValue(prev.value, prev.unit)} yesterday` : '';
-      return { item_id: item.id, text: `${item.host} \`${item.item_key.metric}\`: ${now} now${before}` };
+      return { item_id: item.item_id, text: `${item.host} \`${item.metric}\`: ${now} now${before}` };
     });
     return {
       structuredOutput: {
         headline: `Watchdog brief: ${ordered.length} item${ordered.length === 1 ? '' : 's'} to look at`,
         bullets,
-        thread_order: ordered.map((i) => i.id),
+        thread_order: ordered.map((i) => i.item_id),
         expected_load_notice: null,
         memory_update: { replace_with: memoryText === undefined ? memoryFromFeedback() : memoryText },
         proposals,
@@ -213,6 +206,7 @@ const createScriptedEngine = ({
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
   useTools = false, engine = undefined, proposals = [], memoryText = undefined, condense = null, historyDays = {},
+  patternCards = undefined, definition = undefined,
 }) => {
   const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart, historyDays });
   const out = capture();
@@ -239,6 +233,9 @@ const runCase = async ({
       tracer: fakeTracer(),
       gitSha: 'e2e',
       now: () => new Date(`${date}T06:05:00Z`),
+      // Pattern cards and a definition built from another skill directory (User Story 6).
+      ...(patternCards ? { patternCards } : {}),
+      ...(definition ? { definition } : {}),
     },
   };
   let code;

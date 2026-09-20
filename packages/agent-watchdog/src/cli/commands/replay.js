@@ -19,6 +19,7 @@ const { createReplayLookup } = require('../../agent/tools/replay-shim');
 const { diffItems } = require('../../agent/session-loop');
 const { lastFindingsFile } = require('../stages/rollup');
 const { selectProjects } = require('../stages/agent');
+const { loadPatternCards } = require('../../corpus/cards');
 const pkg = require('../../../package.json');
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -245,10 +246,13 @@ const replayOne = async ({
   };
   const createEngine = deps.createEngine || defaultCreateEngine;
   const engine = deps.engine || createEngine(engineOptions);
+  // Merged cards come from the skill directory under test, so a replay with --skill sees that skill's cards.
+  const patternCards = deps.patternCards || loadPatternCards({ skillDir });
   const gate = typeof deps.gate === 'function'
     ? deps.gate
     : createFindingsGate({
       gateModule: deps.gateModule || require('../../verify/gate'), runDir: replayDir, config, offline: true,
+      knownCards: patternCards.index,
     });
 
   const lookups = new Map();
@@ -260,7 +264,7 @@ const replayOne = async ({
   const ctx = createContext({
     config, effective, policy, logger: log, runDir: replayDir, runId, date, mode: 'replay', tracer, engine, flags,
   });
-  ctx.deps = { ...deps, gate, engine, definition };
+  ctx.deps = { ...deps, gate, engine, definition, patternCards };
   ctx.definition = definition;
   ctx.env = env;
   ctx.deadline = Date.now() + config.bounds.runTimeoutMs;

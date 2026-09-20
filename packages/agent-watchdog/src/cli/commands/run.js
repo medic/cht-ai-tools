@@ -14,6 +14,7 @@ const { createQueryWindow } = require('../../collect/query-window');
 const { appendOutcomes } = require('../../corpus/outcomes');
 const { readMemory } = require('../../rollup/memory');
 const { previousItemCounts } = require('../../rollup/history');
+const { loadPatternCards } = require('../../corpus/cards');
 const pkg = require('../../../package.json');
 
 const todayUtc = (now) => now.toISOString().slice(0, 10);
@@ -61,14 +62,25 @@ const createEngineSafely = ({ config, definition, env, logger, runDir = null }) 
   }
 };
 
-const resolveFindingsGate = ({ deps, gateModule, runDir, config }) => {
+const resolveFindingsGate = ({ deps, gateModule, runDir, config, knownCards = [] }) => {
   if (typeof deps.gate === 'function') {
     return deps.gate;
   }
   if (!gateModule) {
     return null;
   }
-  return createFindingsGate({ gateModule, runDir, config, fetch: deps.fetch || globalThis.fetch });
+  return createFindingsGate({ gateModule, runDir, config, fetch: deps.fetch || globalThis.fetch, knownCards });
+};
+
+// Merged pattern cards (FR-038): their ids are what the gate accepts in `pattern_card`, and the agent stage
+// serves their text through read_pattern_card. A malformed card file is logged and treated as no cards.
+const loadPatternCardsSafely = (config, logger) => {
+  try {
+    return loadPatternCards({ skillDir: config.paths.skillDir });
+  } catch (error) {
+    logger.warn('agent.pattern_cards_unavailable', { error: error.message });
+    return { all: [], merged: [], index: [], get: () => null, byMetric: () => [], read: async () => '' };
+  }
 };
 
 const createGrafanaSafely = (config, fetch, logger) => {
@@ -273,14 +285,17 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   const engine = deps.engine || createEngineSafely({ config, definition, env, logger: log, runDir });
   const runStart = new Date(`${date}T06:00:00Z`);
   const grafana = deps.grafana || createGrafanaSafely(config, deps.fetch, log);
-  const findingsGate = resolveFindingsGate({ deps, gateModule, runDir, config });
+  const patternCards = deps.patternCards || loadPatternCardsSafely(config, log);
+  const findingsGate = resolveFindingsGate({ deps, gateModule, runDir, config, knownCards: patternCards.index });
   const queryWindow = deps.queryWindow || (grafana ? createQueryWindow({ grafana, runStart }) : null);
   const ctx = createContext({
     config, effective, policy, logger: log, runDir, runId, date, mode, tracer, engine, flags,
   });
   // Stages read shared dependencies from ctx.deps; tests inject fakes, production gets the real modules.
   // The agent stage calls ctx.deps.gate as a function; the roll-up uses ctx.gate.verifyBrief on the module.
-  ctx.deps = { ...deps, gate: findingsGate, gateModule, links, engine, definition, grafana, queryWindow };
+  ctx.deps = {
+    ...deps, gate: findingsGate, gateModule, links, engine, definition, grafana, queryWindow, patternCards,
+  };
   ctx.gate = gateModule;
   ctx.links = links;
   ctx.definition = definition;
