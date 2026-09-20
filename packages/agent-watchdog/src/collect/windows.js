@@ -97,7 +97,7 @@ const metricSpecs = (discovery) => {
   const specs = new Map();
   for (const dashboard of discovery.dashboards) {
     for (const panel of dashboard.panels) {
-      if (panel.per_project && !specs.has(panel.metric)) {
+      if (panel.per_project && !panel.breakdown && !specs.has(panel.metric)) {
         specs.set(panel.metric, {
           metric: panel.metric,
           expr: panel.expr,
@@ -132,10 +132,35 @@ const queryFor = (spec, host) => {
   return { query, unresolved: [...new Set([...(spec.unresolved || []), ...unresolved])] };
 };
 
-const pickSeries = (result, host) => result.find((series) => {
+/** The series a scoped query returned for the project: those with the project's instance label, or none at all. */
+const seriesFor = (result, host) => result.filter((series) => {
   const instance = series.metric && series.metric.instance;
   return !instance || normaliseHost(instance) === host;
-}) || result[0] || null;
+});
+
+const IDENTITY_LABELS = new Set(['__name__', 'instance', 'job']);
+
+/** The labels whose values differ across series: what a breakdown is by. */
+const varyingLabels = (series) => {
+  const values = new Map();
+  for (const s of series) {
+    for (const [label, value] of Object.entries(s.metric || {})) {
+      if (!IDENTITY_LABELS.has(label)) {
+        values.set(label, (values.get(label) || new Set()).add(value));
+      }
+    }
+  }
+  return [...values.entries()].filter(([, set]) => set.size > 1).map(([label]) => label).sort();
+};
+
+class ManySeriesError extends Error {
+  constructor(series) {
+    const labels = varyingLabels(series);
+    const which = labels.length ? labels.join(', ') : 'none differ';
+    super(`${series.length} series, not one per project (labels: ${which})`);
+    this.name = 'ManySeriesError';
+  }
+}
 
 /** What the data volume holds for a comparison or trailing window (FR-072); the current window is always fetched. */
 const reusable = async (history, metric, bound) => {
@@ -189,7 +214,13 @@ const collectWindows = async ({
             end: seconds(bound.end),
             step: bound.step_s,
           });
-          const series = pickSeries(result, project.host);
+          const matching = seriesFor(result, project.host);
+          if (matching.length > 1) {
+            // A metric that is one series per project (FR-075): several series mean the panel is a breakdown the
+            // discovery could not see in the expression, and no series is picked over the others.
+            throw new ManySeriesError(matching);
+          }
+          const series = matching[0] || result[0] || null;
           values = series ? series.values.filter(([, value]) => Number.isFinite(value)) : [];
           if (history && values.length && bound.window === 'current') {
             history.recordCurrent(spec.metric, values);
@@ -209,7 +240,7 @@ const collectWindows = async ({
           throw error;
         }
         available = false;
-        if (error instanceof UnresolvedVariableError) {
+        if (error instanceof UnresolvedVariableError || error instanceof ManySeriesError) {
           reason = error.message;
         } else {
           reason = `query failed: ${error.message}`;

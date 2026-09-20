@@ -1,5 +1,7 @@
 const path = require('node:path');
-const { discover, metricKey, flattenPanels, panelRecords, dashboardVariables } = require('../../src/collect/discovery');
+const {
+  discover, metricKey, flattenPanels, panelRecords, dashboardVariables, breakdownOf,
+} = require('../../src/collect/discovery');
 const { createGrafanaClient } = require('../../src/collect/grafana');
 const { loadPolicy } = require('../../src/config/policy');
 const { schemas } = require('../../src/model/schemas');
@@ -122,6 +124,57 @@ describe('collect/discovery', () => {
         [3, ['__rate_interval'], []],
       ]);
       expect(records.every((r) => r.per_project)).to.equal(true);
+    });
+  });
+
+  describe('breakdown panels (FR-075)', () => {
+    it('recognises expressions that yield one series per label value or a ranked set', () => {
+      expect(breakdownOf('sum(rate(c{instance=~"$cht_instance"}[$interval])) by (code)'))
+        .to.deep.equal({ kind: 'by', labels: ['code'] });
+      expect(breakdownOf('histogram_quantile(0.90, sum(rate(b[$interval])) by (le,route))'))
+        .to.deep.equal({ kind: 'by', labels: ['route'] });
+      expect(breakdownOf('histogram_quantile(0.95, sum(rate(b[5m])) by (le))'), 'le is consumed by the quantile')
+        .to.equal(null);
+      expect(breakdownOf('topk(5, sum by (route)(cht_api_http_request_duration_seconds_sum))'))
+        .to.deep.equal({ kind: 'by', labels: ['route'] });
+      expect(breakdownOf('sum without (instance) (x)')).to.deep.equal({ kind: 'without', labels: ['instance'] });
+      expect(breakdownOf('topk(5, x{code=~"^[45]..$"})')).to.deep.equal({ kind: 'topk', labels: [] });
+      expect(breakdownOf('bottomk(3, x)')).to.deep.equal({ kind: 'bottomk', labels: [] });
+      expect(breakdownOf('sum(rate(x[5m])) * 60')).to.equal(null);
+      expect(breakdownOf('cht_couchdb_doc_total{instance=~"$cht_instance", db="medic"}')).to.equal(null);
+    });
+
+    it('records the breakdown on the panel and leaves such panels out of the metric list', async () => {
+      const doc = {
+        meta: { slug: 'b', url: '/d/b/b' },
+        dashboard: {
+          uid: 'b', title: 'B',
+          panels: [
+            {
+              id: 1,
+              title: 'By code',
+              targets: [{ refId: 'A', expr: 'sum(rate(c{instance=~"$cht_instance"}[5m])) by (code)' }],
+            },
+            { id: 2, title: 'Total', targets: [{ refId: 'A', expr: 'sum(rate(c{instance=~"$cht_instance"}[5m]))' }] },
+          ],
+        },
+      };
+      const records = panelRecords(doc, []);
+      expect(records.map((r) => [r.panel_id, r.breakdown])).to.deep.equal([
+        [1, { kind: 'by', labels: ['code'] }],
+        [2, null],
+      ]);
+      const logger = { debug() {}, info: sinon.spy(), warn() {}, error() {} };
+      const discovery = await discover({
+        grafana, policy: policyWith({}), config: {}, runStart: RUN_START, logger,
+        // The second priority entry lists every panel; the first restricts panel ids.
+        docs: policyWith({}).dashboards.dashboards
+          .map((entry, i) => (i === 1 ? { ...doc, dashboard: { ...doc.dashboard, uid: entry.uid } } : null)),
+      });
+      expect(discovery.metrics).to.not.include('sum(rate(c[5m])) by (code)');
+      expect(discovery.metrics).to.include('sum(rate(c[5m]))');
+      const logged = logger.info.getCalls().find((c) => c.args[0] === 'discovery.breakdown_panels');
+      expect(logged.args[1].panels).to.deep.equal([{ panel_id: 1, title: 'By code', kind: 'by', labels: ['code'] }]);
     });
   });
 

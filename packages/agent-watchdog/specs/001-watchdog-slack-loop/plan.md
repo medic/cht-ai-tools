@@ -306,3 +306,21 @@ Re-checked on 2026-09-20 after the first hosted run: 95 projects, 364 range quer
 - **Complexity**: reuse adds one module (`src/collect/history.js`) and one field (`source`) to the
   Metric Window; it removes the trailing subqueries from the daily path, which were the slow and
   fragile part. Result: PASS.
+
+### Revision 12 delta: one series per project (FR-075)
+
+Re-checked on 2026-09-20 after the second hosted run: the per-route p90 panel timed out and hit
+Prometheus's sample limit as a trailing subquery, and ten API panels group by route or code
+(research.md R-17).
+
+- **I**: no new dependency; a regular expression over the panel expression and a series count at
+  collection.
+- **II**: unit tests for the grouping forms (`by`, `without`, `topk`, `bottomk`, `by (le)` alone) and
+  for a query answering several series; no fixture changes, since the fixture dashboards group by
+  `le` only.
+- **III**: what is analysed is decided from the expression and the result, never by picking one
+  series; the reason names the differing labels.
+- **IV** and **V**: fewer queries, no new stage; the skipped panels are named once per dashboard in
+  the log and in `discovery.json`.
+- **VI to VIII**: unchanged. The breakdown story is recorded as Out of Scope rather than half-built.
+  Result: PASS.

@@ -119,12 +119,17 @@ A metric's values over one named period for one project (FR-004).
 | `unavailable_reason` | string or null | Required when `available` is false: `no data`, `insufficient history: N days`, `query failed: <detail>`, or `unresolved variable $name` when the panel expression depends on a dashboard variable with no single value (FR-071); the last is decided before any query is sent. |
 | `source` | string | `fetched` (queried this run), `stored:<run_id>` (the current window of that earlier run, reused because its bounds, step and metric match exactly) or `ledger` (built from the Daily Maxima Ledger); default `fetched` (FR-072). |
 
+A window is also unavailable with `N series, not one per project (labels: …)` when the query answered
+several series for the project (FR-075); no series is chosen over the others.
+
 Raw windows are the only artefact under the short retention period (FR-040).
 
 Each dashboard in `discovery.json` carries `variables`, what its templating variables resolve to
 (a literal or null), and each panel record `variables` (the names its expression uses) and
 `unresolved` (those with no single value), so a window's `unresolved variable` reason is traceable
-to the dashboard document (FR-071).
+to the dashboard document (FR-071). A panel record's `breakdown` is null for one series per project,
+or `{ kind: by | without | topk | bottomk, labels }` for a panel that yields one series per label value
+or a ranked set; such panels are left out of `metrics` and never queried (FR-075).
 
 ### Daily Maxima Ledger
 

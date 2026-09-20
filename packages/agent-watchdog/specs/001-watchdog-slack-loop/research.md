@@ -800,3 +800,45 @@ cht-watchdog and would make even the fallback cheap); a longer client timeout al
 proxy cuts at 30 seconds); skipping the trailing baseline for derived metrics (rejected: the
 deviation rule would stay blind on them).
 
+## R-17. Breakdown panels: one series per project (FR-075)
+
+**Evidence**: hosted run `2026-09-19-f3` on 2026-09-20: `collect.query_failed` for
+`histogram_quantile(0.90, sum(rate(cht_api_http_request_duration_seconds_bucket[$interval])) by (le,route))`
+in `trailing_14d` on the eCHIS Kenya hosts (timeout after two 30-second attempts) and on the Mali host
+(HTTP 422, "query processing would load too many samples into memory in query execution", Prometheus's
+`--query.max-samples` guard); the run's `discovery.json` (101 per-project panels, ten grouping by
+`route` or `code`: requests per second by code, p90 latency by route, code count, response size by
+route, request count by route, four "Top 5" `topk` panels, replication rate by code);
+`grafana/provisioning/dashboards/CHT/cht_coredev_api_express.json` (no aggregate latency panel: every
+`histogram_quantile` groups by `route`); `grafana/grafana.example.ini` (no `[dataproxy]` section, so the
+proxy timeout is Grafana's 30-second default) (run record, repo).
+
+**Findings**:
+- A `by (route)` or `by (code)` expression returns one series per label value; `topk(5, …)` returns up
+  to five. `pickSeries` kept the first series with the project's instance label, so the "metric" the
+  analysis saw for these panels was an arbitrary route or code. A plain selector without the label
+  pinned (`cht_couchdb_fragmentation{instance=~"$cht_instance"}`, one series per database) has the same
+  shape and the same defect.
+- The per-route p90 as a twenty-day subquery evaluates a per-route histogram quantile about six
+  thousand times per host; it exceeds the proxy timeout on hosts with many routes and Prometheus's
+  sample limit on the busiest. No client setting can make it pass: the proxy caps at 30 seconds and the
+  sample limit is Prometheus's own.
+- The aggregate panels stay: request rate (`QPS`), request count, the error share
+  `(4xx+5xx)/all`, garbage collection, CPU and memory. Latency has no aggregate panel on the dashboard.
+
+**Decision**: `breakdownOf(expr)` at discovery marks `by`/`without` groupings (minus `le`) and
+`topk`/`bottomk` as breakdowns; such panels are recorded in `discovery.json` with kind and labels,
+logged once per dashboard as `discovery.breakdown_panels`, and excluded from the metric list and from
+collection. At collection, a query answering several series for the project makes the window
+unavailable with `N series, not one per project (labels: …)`, naming the labels whose values differ.
+Breakdown analysis is recorded as Out of Scope: a later story would collect grouped panels per series
+under a cardinality bound and raise items that name the route or code. Recommended to cht-watchdog: an
+aggregate latency panel, `histogram_quantile(0.9, sum(rate(…_bucket[$interval])) by (le))`, which the
+watchdog would pick up unchanged.
+
+**Alternatives considered**: keeping the first series (rejected: arbitrary and misleading); the
+maximum across series (rejected: mixes routes into one number nobody can act on); a coarser trailing
+resolution for heavy expressions (rejected: the value would still be a single route's, and the
+current windows would disagree with the baseline); recording rules for the per-route quantile
+(deferred: cht-watchdog change, and the breakdown story would need them anyway).
+

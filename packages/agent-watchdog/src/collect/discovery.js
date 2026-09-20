@@ -29,6 +29,37 @@ const metricKey = (expr) => String(expr)
 
 const hasTargets = (panel) => Array.isArray(panel.targets) && panel.targets.some((t) => t && t.expr);
 
+const GROUPING = /\b(by|without)\s*\(([^)]*)\)/g;
+const RANKING = /\b(topk|bottomk)\s*\(/;
+
+/**
+ * A panel whose expression yields one series per label value (`by`/`without` on anything but the histogram bucket)
+ * or a ranked set (`topk`, `bottomk`) is a breakdown, not one per-project series (FR-075). Returns
+ * `{ kind, labels }` or null for a single series.
+ */
+const breakdownOf = (expr) => {
+  const labels = [];
+  let without = false;
+  for (const match of String(expr).matchAll(GROUPING)) {
+    if (match[1] === 'without') {
+      without = true;
+    }
+    for (const label of match[2].split(',').map((l) => l.trim()).filter(Boolean)) {
+      if (label !== 'le' && !labels.includes(label)) {
+        labels.push(label);
+      }
+    }
+  }
+  if (without) {
+    return { kind: 'without', labels };
+  }
+  if (labels.length) {
+    return { kind: 'by', labels };
+  }
+  const ranked = RANKING.exec(String(expr));
+  return ranked ? { kind: ranked[1], labels: [] } : null;
+};
+
 /** Every panel with a query, including panels nested inside `row` panels. */
 const flattenPanels = (dashboard) => {
   const out = [];
@@ -71,6 +102,7 @@ const panelRecords = (doc, allowedIds = []) => {
         per_project: target.expr.includes('$cht_instance'),
         variables: used,
         unresolved: used.filter((name) => !isBuiltin(name) && (variables[name] ?? null) === null),
+        breakdown: breakdownOf(target.expr),
       };
     }));
 };
@@ -120,6 +152,16 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
       variables,
       duplicate_panel_ids: duplicatePanelIds(doc, entry.panels || []),
     });
+    const breakdowns = panels.filter((p) => p.per_project && p.breakdown);
+    if (breakdowns.length) {
+      // One series per route, code or database is not a per-project metric: shown on the dashboard, not analysed.
+      logger.info('discovery.breakdown_panels', {
+        uid: entry.uid,
+        panels: breakdowns.map((p) => ({
+          panel_id: p.panel_id, title: p.title, kind: p.breakdown.kind, labels: p.breakdown.labels,
+        })),
+      });
+    }
     const unresolved = panels.filter((p) => p.unresolved.length);
     if (unresolved.length) {
       logger.warn('discovery.unresolved_variables', {
@@ -193,7 +235,8 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
   const groups = [...groupPolicy.map((g) => g.label), UNGROUPED]
     .map((label) => ({ label, hosts: projects.filter((p) => p.group === label).map((p) => p.host) }));
 
-  const perProject = dashboards.flatMap((d) => d.panels.filter((p) => p.per_project).map((p) => p.metric));
+  const isAnalysable = (p) => p.per_project && !p.breakdown;
+  const perProject = dashboards.flatMap((d) => d.panels.filter(isAnalysable).map((p) => p.metric));
   const metrics = [...new Set([...perProject, scrapeTargetMetric])].sort();
 
   return {
@@ -211,4 +254,5 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
 
 module.exports = {
   discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf, groupFor, ignoredBy, dashboardVariables,
+  breakdownOf,
 };

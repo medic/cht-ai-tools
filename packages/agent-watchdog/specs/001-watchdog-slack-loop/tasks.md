@@ -381,6 +381,8 @@ the run (FR-072 to FR-074, SC-016, research.md R-16). Tests first.
 - [X] T168 Worker pool `src/collect/concurrency.js`; concurrent projects, per-project `fetched`/`reused`/`queries` and a `collect.done` total in `src/cli/stages/collect.js`; ledger compaction in `src/store/retention.js`
 - [X] T169 Smoke S-18 note in `smoke/grafana.js` output; README, AGENTS, quickstart step 3; spec revision 11, plan delta, research R-16 and S-18, data model, run-directory and environment contracts
 
+- [X] T170 One series per project (FR-075, revision 12): `breakdownOf` and `panel.breakdown` in `src/collect/discovery.js` with the `discovery.breakdown_panels` log, breakdown panels left out of `metricSpecs` and several series refused with the differing labels named in `src/collect/windows.js`; tests in `test/collect/discovery.spec.js` and `test/collect/windows.spec.js`; spec FR-075, edge cases, Out of Scope and clarification; plan delta; research R-17; data model; quickstart
+
 **Checkpoint**: `npm test`, lint and `npm run replay:eval` pass; the perf spec shows 4 queries per metric on day one and 2 on day two with no trailing query; S-18 on the hosted watchdog.
 
 ## Dependencies & Execution Order
@@ -543,4 +545,11 @@ US3 can proceed in parallel, then US4, US5 and US6.
   records the maximum of jittered samples, a small upward bias accepted for the second-day tests since no
   expectation compares exact trailing numbers across days; `purge --dry-run` reports ledger entries it would compact
   in `compacted`.
+- One series per project (2026-09-20, revision 12): grouping by `le` alone is not a breakdown, since the histogram
+  quantile consumes it; `without` is always a breakdown; `topk`/`bottomk` are breakdowns even without `by`; a
+  breakdown panel is left out of the metric list rather than collected and discarded, so it costs no query; a
+  query that still answers several series (a plain selector with an unpinned label) fails only that window and
+  names the differing labels, with `__name__`, `instance` and `job` never counted as differing; the aggregate
+  siblings (request rate, request count, error share) remain, and the missing aggregate latency panel is a
+  recommendation to cht-watchdog recorded in R-17.
 

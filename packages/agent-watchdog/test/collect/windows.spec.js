@@ -1,5 +1,7 @@
 const path = require('node:path');
-const { windowBounds, collectWindows, withInstance, trailingQuery } = require('../../src/collect/windows');
+const {
+  windowBounds, collectWindows, withInstance, trailingQuery, metricSpecs,
+} = require('../../src/collect/windows');
 const { discover } = require('../../src/collect/discovery');
 const { createGrafanaClient } = require('../../src/collect/grafana');
 const { loadPolicy } = require('../../src/config/policy');
@@ -163,6 +165,67 @@ describe('collect/windows', () => {
       const stored = schemas.MetricWindow.parse({ ...window, source: 'stored:2026-09-17-f2' });
       expect(stored.source).to.equal('stored:2026-09-17-f2');
       expect(() => schemas.MetricWindow.parse({ ...window, source: 'guessed' })).to.throw();
+    });
+  });
+
+  describe('one series per project (FR-075)', () => {
+    const alpha = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
+    const panelOf = (id, expr, metric, breakdown) => ({
+      panel_id: id, title: `P${id}`, ref_id: 'A', expr, metric, unit: 'count', per_project: true, variables: [],
+      unresolved: [], breakdown,
+    });
+    const discovery = {
+      run_start: RUN_START.toISOString(),
+      dashboards: [{
+        uid: 'd1', title: 'D', slug: 'd', url: '/d/d1/d', variables: {}, duplicate_panel_ids: [],
+        panels: [
+          panelOf(
+            1,
+            'sum(rate(c{instance=~"$cht_instance"}[5m])) by (code)',
+            'sum(rate(c[5m])) by (code)',
+            { kind: 'by', labels: ['code'] },
+          ),
+          panelOf(2, 'cht_couchdb_fragmentation{instance=~"$cht_instance"}', 'cht_couchdb_fragmentation', null),
+          panelOf(3, 'sum(rate(c{instance=~"$cht_instance"}[5m]))', 'sum(rate(c[5m]))', null),
+        ],
+      }],
+      scrape_target_metric: 'up{job="cht"}',
+      projects: [alpha],
+    };
+
+    it('never queries a breakdown panel', () => {
+      expect(metricSpecs(discovery).map((s) => s.metric)).to.deep.equal([
+        'cht_couchdb_fragmentation', 'sum(rate(c[5m]))', 'up{job="cht"}',
+      ]);
+    });
+
+    it('marks a window unavailable when the query returns several series for the project', async () => {
+      const grafana = {
+        queryRange: async ({ query, step }) => {
+          const point = step === DAY
+            ? Array.from({ length: 21 }, (_, i) => [seconds(RUN_START) - (20 - i) * DAY, 1])
+            : [[seconds(RUN_START), 1]];
+          if (query.startsWith('cht_couchdb_fragmentation') || query.includes('(cht_couchdb_fragmentation')) {
+            return ['medic', 'sentinel', '_users'].map((db) => ({
+              metric: { __name__: 'cht_couchdb_fragmentation', instance: 'alpha.example.org', job: 'cht', db },
+              values: point,
+            }));
+          }
+          return [{ metric: { instance: 'alpha.example.org' }, values: point }];
+        },
+      };
+      const history = {
+        storedWindow: async () => null, ledgerWindow: () => null, recordCurrent: sinon.spy(), backfill() {},
+      };
+      const result = await collectWindows({
+        grafana, project: alpha, discovery, runStart: RUN_START, logger: quiet, history,
+      });
+      const fragmentation = result.windows.filter((w) => w.metric === 'cht_couchdb_fragmentation');
+      expect(fragmentation).to.have.length(4);
+      expect(fragmentation.every((w) => w.available === false)).to.equal(true);
+      expect(fragmentation[0].unavailable_reason).to.equal('3 series, not one per project (labels: db)');
+      expect(history.recordCurrent.calledWith('cht_couchdb_fragmentation')).to.equal(false);
+      expect(result.windows.filter((w) => w.metric === 'sum(rate(c[5m]))').every((w) => w.available)).to.equal(true);
     });
   });
 

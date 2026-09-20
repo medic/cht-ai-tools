@@ -62,7 +62,8 @@ dashboard variable resolved to. Each `collect.project` line reports `fetched`, `
 `queries`: on the first run everything is fetched; run the same command for the next date and the
 previous-day and trailing windows are reused, so `queries` drops to two per metric, and to one from
 the eighth consecutive day (FR-072). A single slow query shows as one `collect.query_failed` line
-with the metric and window, and the run continues (FR-073).
+with the metric and window, and the run continues (FR-073). `discovery.breakdown_panels` names the
+panels grouped by route or code that are shown on the dashboard but not analysed (FR-075).
 
 ## 4. One stage at a time (User Story 3, scenario 6)
 

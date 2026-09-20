@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 11)
+**Status**: Draft (revision 12)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -382,6 +382,12 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
   run already builds its baseline locally (FR-072).
 - A forced re-run of a date: its current window replaces that day's ledger entry; the comparison
   windows come from the latest run of each earlier date (FR-072).
+- A panel groups by route or code, or ranks the top five: it is a breakdown, listed in discovery and
+  left out of the metrics; its aggregate siblings (request rate, error share) are still analysed
+  (FR-075).
+- A plain selector returns several series for one project (a per-database gauge without the
+  database pinned): every window of that metric is unavailable with the differing labels named;
+  a sibling panel that pins the label is analysed as usual (FR-075).
 
 ## Requirements *(mandatory)*
 
@@ -592,6 +598,12 @@ Alerts and groups
 - **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
   bound, log per project what was fetched and what was reused, and complete within its share of
   the run budget at the scale assumption of one hundred projects. Added in revision 11.
+- **FR-075**: A per-project metric is one series per project. A panel whose expression yields one
+  series per label value (grouped by anything but the histogram bucket) or a ranked set MUST be
+  recorded in discovery with its grouping and MUST NOT be collected or analysed; a query that
+  returns several series for a project MUST make that window unavailable, naming the labels that
+  differ, rather than have one series chosen over the others. Breakdown analysis per route, code or
+  database is a later feature (Out of Scope). Added in revision 12.
 
 Memory, proposals and the knowledge corpus
 
@@ -803,6 +815,9 @@ Configuration
 - Paging or alerting; the existing monitoring stack keeps that responsibility.
 - Any remediation action against a deployment.
 - Posting to more than one Slack channel.
+- Breakdown analysis: per-route, per-code or per-database series from grouped panels, with a
+  cardinality bound and items that name the route or code. A later user story; today such panels
+  are listed in discovery and not analysed (FR-075).
 - A hosted or multi-tenant service for community members; they run the agent themselves.
 
 ## Clarifications
@@ -911,6 +926,14 @@ Configuration
   or consecutive query failures; range queries get their own timeout. Collect projects concurrently
   within the existing concurrency bound. Scale assumption raised to one hundred projects (FR-072 to
   FR-074, SC-016, revision 11).
+- Q: The per-route p90 latency panel times out (30 s) and trips Prometheus's sample limit (HTTP 422)
+  as a twenty-day subquery, and ten API panels group by route or code, of which the collector kept
+  an arbitrary first series; should they be skipped, and does that lose insight? → A: Skip grouped
+  and ranked panels at discovery and refuse several series at collection (FR-075); the aggregate
+  request rate, request count and error-share panels remain, so a project-wide degradation still
+  shows, while per-route and per-code changes become a later breakdown story. The API dashboard has
+  no aggregate latency panel; adding `histogram_quantile(0.9, sum(rate(…_bucket[$interval])) by (le))`
+  to cht-watchdog would give the brief latency at once (revision 12).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

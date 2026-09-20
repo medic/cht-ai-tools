@@ -100,7 +100,9 @@ exactly, the trailing baseline from `history/<slug>.json` (one daily maximum per
 days; every window carries its `source`. Range queries have their own timeout
 (`AGENT_WATCHDOG_QUERY_TIMEOUT_MS`), one retry, and fail only their window; three consecutive failures or a
 connection failure make the source unreachable (exit 69). Projects are collected concurrently within
-`AGENT_WATCHDOG_PROJECT_CONCURRENCY`.
+`AGENT_WATCHDOG_PROJECT_CONCURRENCY`. A per-project metric is one series per project: panels grouped by route,
+code or database, or ranked with `topk`, are listed in `discovery.json` (`breakdown`) and never queried, and a
+query that answers several series fails only its window, naming the labels that differ (FR-075).
 
 Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
 failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert

@@ -74,7 +74,10 @@ consecutive day one. Each `collect.project` log line reports `fetched`, `reused`
 every stored window carries its `source`. A slow or failed query is retried once and then makes only
 its window unavailable; the source counts as unreachable, and the run fails, only on a connection
 failure or three consecutive failed queries. Projects are collected concurrently within
-`AGENT_WATCHDOG_PROJECT_CONCURRENCY`.
+`AGENT_WATCHDOG_PROJECT_CONCURRENCY`. Panels that break a metric down by route, code or database, or
+rank a top five, are one series per label value rather than one per project: they stay on the
+dashboard, are listed in `discovery.json` and are not analysed. Their aggregate siblings, such as the
+request rate and the error share, are.
 
 ### Learning under review
 
