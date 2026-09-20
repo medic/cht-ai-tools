@@ -78,6 +78,7 @@ describe('agent/session-loop', () => {
     config: config(overrides.bounds), gate: overrides.gate || acceptingGate, runDir, logger,
     tracer: overrides.tracer || null, now: () => new Date('2026-09-18T06:00:00Z'), deadline: overrides.deadline,
     localTools: [],
+    localServers: overrides.localServers || {},
   });
 
   it('runs two passes in one session, converges when nothing changes, and writes every artefact', async () => {
@@ -118,6 +119,14 @@ describe('agent/session-loop', () => {
     expect(sessionRecord.session_id).to.equal('fake-session');
     expect(sessionRecord.calls).to.have.length(2);
     expect(sessionRecord.reference_sources_unavailable).to.equal(false);
+  });
+
+  it('passes in-process tool servers through to the engine session (replay serves recordings this way)', async () => {
+    const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
+    const docsTools = [{ name: 'search_docs', description: 'd', schema: {}, handler: async () => ({ content: [] }) }];
+    await run(engine, { bounds: { passes: 1 }, localServers: { 'cht-docs': docsTools } });
+    expect(engine.sessions[0].options.localServers).to.deep.equal({ 'cht-docs': docsTools });
+    expect(engine.sessions[0].options.localTools).to.deep.equal([]);
   });
 
   it('sends a revision turn with the gate reasons and stops revising after the retry cap', async () => {

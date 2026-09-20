@@ -11,8 +11,12 @@ const { createResolver } = require('../links/resolve');
  * @param {object} options.config
  * @param {Function} [options.fetch] fetch used to resolve non-Grafana links
  * @param {string[]} [options.knownCards] merged pattern card ids
+ * @param {boolean} [options.offline] replay: never resolve links over the network (links_resolve then reports
+ *   "not resolved (offline)" and passes), so nothing outside the model API is contacted (FR-041)
  */
-const createFindingsGate = ({ gateModule, runDir, config, fetch = globalThis.fetch, knownCards = [] }) => {
+const createFindingsGate = ({
+  gateModule, runDir, config, fetch = globalThis.fetch, knownCards = [], offline = false,
+}) => {
   const attempts = new Map();
   const windowsCache = new Map();
   let discoveryPromise = null;
@@ -38,7 +42,7 @@ const createFindingsGate = ({ gateModule, runDir, config, fetch = globalThis.fet
 
   return async ({ findings, pass, project, candidates = [], changes = [], toolResultUrls = [] }) => {
     const disc = await discovery();
-    if (!resolver) {
+    if (!offline && !resolver) {
       resolver = createResolver({
         fetch, timeoutMs: config.bounds.httpTimeoutMs, discovery: disc, grafanaUrl, allowlist,
       });
@@ -58,7 +62,7 @@ const createFindingsGate = ({ gateModule, runDir, config, fetch = globalThis.fet
       knownCards,
       allowlist,
       attempt,
-      resolveLinks: resolver,
+      resolveLinks: offline ? null : resolver,
       grafanaUrl,
     });
   };

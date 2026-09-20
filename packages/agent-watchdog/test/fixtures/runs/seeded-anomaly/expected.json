@@ -1,0 +1,41 @@
+{
+  "description": "alpha's sentinel backlog climbs steadily for seven hours to three times yesterday's level; gamma's scrape target is down.",
+  "quiet": false,
+  "candidates": [
+    {
+      "host": "alpha.example.org",
+      "metric_contains": "cht_sentinel_backlog_count",
+      "rules": [
+        "pct_change",
+        "deviation",
+        "monotonic"
+      ],
+      "severity_floor": "high"
+    },
+    {
+      "host": "gamma.example.org",
+      "metric_contains": "up",
+      "rules": [
+        "deviation",
+        "target_down"
+      ],
+      "severity_floor": "high"
+    }
+  ],
+  "gate": {
+    "alpha-example-org": "accepted",
+    "gamma-example-org": "accepted"
+  },
+  "items": [
+    {
+      "host": "alpha.example.org",
+      "metric": "cht_sentinel_backlog_count",
+      "severity": "high"
+    },
+    {
+      "host": "gamma.example.org",
+      "metric": "up{job=\"cht\"}",
+      "severity": "high"
+    }
+  ]
+}

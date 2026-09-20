@@ -159,23 +159,23 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ### Tests for User Story 3
 
-- [ ] T072 [P] [US3] Write failing tests `test/publish/footer.spec.js` and `test/collect/priority.spec.js`: footer carries `AGENT_WATCHDOG_PROMPTS_URL`, `AGENT_WATCHDOG_CONFIG_URL`, the trace URL and `cost_usd` in currency; reordering `dashboards.yaml` changes analysis order and adding a dashboard adds its panels; `query_metric` still reaches metrics beyond the list
-- [ ] T073 [P] [US3] Write failing tests `test/store/versions.spec.js`: `run.json.versions` holds `package`, `git_sha`, `prompts_hash`, `skill_hash`, `schema_hash`, `config_hash`
-- [ ] T074 [P] [US3] Write failing tests `test/cli/replay.spec.js`: reads a stored run, writes `runs-replay/<run_id>/<label>/` with the same layout, honours `--prompts` and `--skill`, serves recorded tool results through the replay shim, never calls the Grafana or Slack hosts (the `fetch` guard fails the test otherwise), prints the items comparison JSON on stdout
-- [ ] T075 [P] [US3] Write failing tests `test/cli/dry-run.spec.js` and `test/cli/stage.spec.js`: preview writes every artefact and `payload.json`, prints the payload on stdout, posts nothing and sets `status: previewed`; `--stage <name>` reads only the previous stage's files, exits 65 naming a missing input, overwrites its outputs atomically
-- [ ] T076 [P] [US3] Write failing tests `test/agent/engine-cli.spec.js` with a fake `claude` script: arguments `-p --bare --no-session-persistence --input-format stream-json --output-format stream-json --system-prompt-file … --tools "" --allowed-tools … --permission-mode dontAsk --mcp-config … --strict-mcp-config --json-schema … --model … --effort … --max-budget-usd …`; user turns written to stdin after each `result` event; `tool_use` and `tool_result` events recorded to `tool-calls.jsonl`; harness turn cap closes stdin and terminates; timeout kill; result mapping identical to the SDK engine (research.md R-3)
+- [X] T072 [P] [US3] Write failing tests `test/publish/footer.spec.js` and `test/collect/priority.spec.js`: footer carries `AGENT_WATCHDOG_PROMPTS_URL`, `AGENT_WATCHDOG_CONFIG_URL`, the trace URL and `cost_usd` in currency; reordering `dashboards.yaml` changes analysis order and adding a dashboard adds its panels; `query_metric` still reaches metrics beyond the list
+- [X] T073 [P] [US3] Write failing tests `test/store/versions.spec.js`: `run.json.versions` holds `package`, `git_sha`, `prompts_hash`, `skill_hash`, `schema_hash`, `config_hash`
+- [X] T074 [P] [US3] Write failing tests `test/cli/replay.spec.js`: reads a stored run, writes `runs-replay/<run_id>/<label>/` with the same layout, honours `--prompts` and `--skill`, serves recorded tool results through the replay shim, never calls the Grafana or Slack hosts (the `fetch` guard fails the test otherwise), prints the items comparison JSON on stdout
+- [X] T075 [P] [US3] Write failing tests `test/cli/dry-run.spec.js` and `test/cli/stage.spec.js`: preview writes every artefact and `payload.json`, prints the payload on stdout, posts nothing and sets `status: previewed`; `--stage <name>` reads only the previous stage's files, exits 65 naming a missing input, overwrites its outputs atomically
+- [X] T076 [P] [US3] Write failing tests `test/agent/engine-cli.spec.js` with a fake `claude` script: arguments `-p --bare --no-session-persistence --input-format stream-json --output-format stream-json --system-prompt-file … --tools "" --allowed-tools … --permission-mode dontAsk --mcp-config … --strict-mcp-config --json-schema … --model … --effort … --max-budget-usd …`; user turns written to stdin after each `result` event; `tool_use` and `tool_result` events recorded to `tool-calls.jsonl`; harness turn cap closes stdin and terminates; timeout kill; result mapping identical to the SDK engine (research.md R-3)
 
 ### Implementation for User Story 3
 
-- [ ] T077 [US3] Implement `src/store/versions.js` and stamp versions in `src/cli/commands/run.js`; add the footer to `src/publish/payload.js`
-- [ ] T078 [US3] Implement `src/cli/commands/replay.js`
-- [ ] T079 [US3] Implement preview mode (`--dry-run`, `AGENT_WATCHDOG_DRY_RUN`) and `--stage` handling in `src/cli/commands/run.js` and `src/cli/stages/index.js`
-- [ ] T080 [US3] Implement `src/agent/engine-cli.js` and `src/agent/tools/stdio-server.js` with the `tools-server` command in `src/cli/commands/tools-server.js`
-- [ ] T081 [US3] Implement `scripts/replay-eval.js` (`npm run replay:eval`): runs the fixture runs through analysis, gate and recorded findings, compares with `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`, exits non-zero on regression
-- [ ] T082 [US3] Write `smoke/agent-parity.js` (S-3, S-10) diffing both engines' `findings.pass<n>.json` and gate verdicts for one recorded project
-- [ ] T083 [US3] Write `test/e2e/us3.spec.js` covering the seven US3 acceptance scenarios
-- [ ] T114 [P] [US3] Write failing tests `test/cli/replay-range.spec.js` and `test/perf/replay-thirty-days.spec.js`: `replay --from <date> --to <date>` replays every stored run in the inclusive range with concurrency bounded by `AGENT_WATCHDOG_PROJECT_CONCURRENCY`, writes one comparison per run and a summary on stdout, and thirty fixture runs with recorded model outputs complete in under ten minutes (SC-006)
-- [ ] T115 [US3] Implement the range flags and summary in `src/cli/commands/replay.js`
+- [X] T077 [US3] Implement `src/store/versions.js` and stamp versions in `src/cli/commands/run.js`; add the footer to `src/publish/payload.js`
+- [X] T078 [US3] Implement `src/cli/commands/replay.js`
+- [X] T079 [US3] Implement preview mode (`--dry-run`, `AGENT_WATCHDOG_DRY_RUN`) and `--stage` handling in `src/cli/commands/run.js` and `src/cli/stages/index.js`
+- [X] T080 [US3] Implement `src/agent/engine-cli.js` and `src/agent/tools/stdio-server.js` with the `tools-server` command in `src/cli/commands/tools-server.js`
+- [X] T081 [US3] Implement `scripts/replay-eval.js` (`npm run replay:eval`): runs the fixture runs through analysis, gate and recorded findings, compares with `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`, exits non-zero on regression
+- [X] T082 [US3] Write `smoke/agent-parity.js` (S-3, S-10) diffing both engines' `findings.pass<n>.json` and gate verdicts for one recorded project
+- [X] T083 [US3] Write `test/e2e/us3.spec.js` covering the seven US3 acceptance scenarios
+- [X] T114 [P] [US3] Write failing tests `test/cli/replay-range.spec.js` and `test/perf/replay-thirty-days.spec.js`: `replay --from <date> --to <date>` replays every stored run in the inclusive range with concurrency bounded by `AGENT_WATCHDOG_PROJECT_CONCURRENCY`, writes one comparison per run and a summary on stdout, and thirty fixture runs with recorded model outputs complete in under ten minutes (SC-006)
+- [X] T115 [US3] Implement the range flags and summary in `src/cli/commands/replay.js`
 
 **Checkpoint**: A contributor can run every stage, the full pipeline in preview, and the analysis through `claude -p`, obtaining the same artefacts (SC-006, SC-007, SC-011).
 

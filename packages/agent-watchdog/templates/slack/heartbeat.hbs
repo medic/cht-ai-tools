@@ -1,4 +1,1 @@
-{{mrkdwn headline}}
-{{#if has_expected_load_notice}}
-_{{mrkdwn expected_load_notice}}_
-{{/if}}
+{{mrkdwn headline}}{{#if has_trace}} · {{link trace_url 'trace'}}{{/if}} · cost {{mrkdwn cost_text}}

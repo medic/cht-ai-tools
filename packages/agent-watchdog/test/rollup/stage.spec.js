@@ -83,11 +83,51 @@ describe('cli/stages/rollup', () => {
     expect(runDir.exists('rollup/brief.draft1.json')).to.equal(true);
     expect(runDir.exists('rollup/verification.draft1.json')).to.equal(true);
     const brief = await runDir.readJson('rollup/brief.json');
-    expect(brief.footer).to.include({ trace_url: 'https://langfuse.example.org/trace/t1', cost_usd: 0.05 });
+    // agent cost so far (0.05) plus the roll-up's own draft call (0.01)
+    expect(brief.footer).to.include({ trace_url: 'https://langfuse.example.org/trace/t1', cost_usd: 0.06 });
     expect(brief.checked.candidates).to.equal(1);
     const output = await runDir.readJson('rollup/rollup-output.json');
     expect(output).to.have.keys(['memory_update', 'proposals', 'memory']);
     expect(output.memory).to.include({ applied: false, reason: 'no change' });
+  });
+
+  it('folds every roll-up draft call into the footer cost so the post and run.json agree', async () => {
+    const item = makeItem();
+    const draft = {
+      headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+      expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+    };
+    const turn = (cost) => ({
+      structuredOutput: draft,
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: cost, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    const ctx = ctxWith(null);
+    ctx.engine.singleTurn = sinon.stub().onFirstCall().resolves(turn(0.02)).onSecondCall().resolves(turn(0.03));
+    const rejected = {
+      subject: 'brief', subject_ref: 'rollup/draft1', attempt: 1, outcome: 'rejected',
+      checks: [{ name: 'numbers_match', status: 'fail', reasons: ['bullets[0] contains 913'] }],
+    };
+    const accepted = { subject: 'brief', subject_ref: 'rollup/draft2', attempt: 2, checks: [], outcome: 'accepted' };
+    ctx.gate.verifyBrief = sinon.stub()
+      .onFirstCall().resolves({ report: rejected })
+      .onSecondCall().resolves({ report: accepted });
+    const out = await stage.run(ctx);
+    expect(out.calls.map((c) => c.cost_usd)).to.deep.equal([0.02, 0.03]);
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.footer.cost_usd).to.equal(0.1);
+  });
+
+  it('leaves the heartbeat footer at the agent cost because a heartbeat makes no draft call', async () => {
+    fs.rmSync(path.join(runDir.root, 'alpha-example-org'), { recursive: true, force: true });
+    const ctx = ctxWith(null);
+    await stage.run(ctx);
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.footer.cost_usd).to.equal(0.05);
   });
 
   it('writes a heartbeat without calling the engine when no project produced items', async () => {

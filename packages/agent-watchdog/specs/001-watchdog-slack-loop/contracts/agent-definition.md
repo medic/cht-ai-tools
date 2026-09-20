@@ -11,8 +11,8 @@ installed SDK 0.3.278 type definitions and the `claude` 2.1.278 help text on 202
 
 | File | Content | SDK (`engine=sdk`) | CLI (`engine=cli`) |
 |---|---|---|---|
-| `prompts/system.md`, `skill/cht-watchdog/SKILL.md`, `skill/cht-watchdog/pattern-cards/index.md` | Static prefix, concatenated in this order by the harness into `runs/<id>/agent/system-prompt.md`, followed by the runtime's dynamic-boundary marker line, then the per-run dynamic suffix (date, memory, active expected-load windows). | `systemPrompt: [staticPrefix, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, dynamicSuffix]` | `--system-prompt-file runs/<id>/agent/system-prompt.md` (the marker line splits the same way) |
-| `agent/mcp.template.json` | MCP servers with `${ENV}` placeholders, rendered to `runs/<id>/agent/mcp.json` with secrets resolved at run time. | `mcpServers` object; the local tool server is attached in-process through `createSdkMcpServer` | `--mcp-config runs/<id>/agent/mcp.json --strict-mcp-config`; the local tool server runs as a stdio child (`agent-watchdog tools-server`) |
+| `prompts/system.md`, `skill/cht-watchdog/SKILL.md`, `skill/cht-watchdog/pattern-cards/index.md` | Static prefix, concatenated in this order by the harness into `runs/<id>/agent/system-prompt.<project_slug>.md` (one file per project session, so concurrent sessions do not overwrite each other; `system-prompt.md` for a session without a project), followed by the runtime's dynamic-boundary marker line, then the per-run dynamic suffix (date, memory, active expected-load windows). | `systemPrompt: [staticPrefix, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, dynamicSuffix]` | `--system-prompt-file runs/<id>/agent/system-prompt.<project_slug>.md` (the marker line splits the same way) |
+| `agent/mcp.template.json` | MCP servers with `${ENV}` placeholders. The CLI engine renders it with secrets resolved into a private temporary file (mode 0600, deleted when the session closes) and writes a redacted copy (`Bearer [redacted]`) to `runs/<id>/agent/mcp.<project_slug>.json`, so the run record never carries the documentation-service token (constitution IV). | `mcpServers` object; the local tool server is attached in-process through `createSdkMcpServer` | `--mcp-config <private rendered file> --strict-mcp-config`; the local tool server runs as a stdio child (`agent-watchdog tools-server --run-dir … --data-dir … --project <slug>`), and under replay every local server is answered from `recorded-tool-calls.jsonl` (`--replay`, `--server cht-docs` for the documentation tools) |
 | `agent/tools.json` | The enumerated allow-list of tool names and the empty built-in set. | `tools: []`, `allowedTools: [...]` | `--tools "" --allowed-tools <names>` |
 | `schema/findings.schema.json`, `schema/brief.schema.json` | Structured-output schemas ([findings](./findings.schema.json), [brief](./brief.schema.json)). | `outputFormat: { type: 'json_schema', schema }` | `--json-schema "$(cat schema/findings.schema.json)"` |
 | `agent/hooks.js` | In-process hook callbacks: `PreToolUse` guard, `PostToolUse` recorder, `Stop` gate. | `hooks: { PreToolUse: [...], PostToolUse: [...], Stop: [...] }` | Not loaded: `--bare` skips hook surfaces (verified). The harness performs the same three functions from the `stream-json` event stream and the result event; see Parity below. |
@@ -82,8 +82,9 @@ record: findings.pass<n>.json, verification.pass<n>.json, passes.json, session.j
   earlier tool results stay in context (FR-057). The `Stop` hook also runs the gate and returns
   `{ decision: 'block', reason }` when it fails, which is a second line of defence; the harness
   decision is authoritative because it also sees `structured_output` on the result message.
-- CLI: one `claude -p --bare --input-format stream-json --output-format stream-json` process per
-  project; the harness writes user messages to stdin after each `result` event, so the session is
+- CLI: one `claude -p --bare --verbose --input-format stream-json --output-format stream-json`
+  process per project (print mode refuses stream-json output without `--verbose`, verified against
+  2.1.278); the harness writes user messages to stdin after each `result` event, so the session is
   likewise shared without persisting anything to disk.
 - Both: `tool_use` and `tool_result` events are appended to `tool-calls.jsonl` (SDK: `PostToolUse`
   hook plus the message stream; CLI: the `stream-json` events). `PreToolUse` (SDK) denies any tool

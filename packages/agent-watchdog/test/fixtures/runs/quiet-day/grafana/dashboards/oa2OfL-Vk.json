@@ -1,0 +1,499 @@
+{
+  "meta": {
+    "slug": "cht-admin-overview",
+    "url": "/d/oa2OfL-Vk/cht-admin-overview",
+    "folderTitle": "CHT"
+  },
+  "dashboard": {
+    "uid": "oa2OfL-Vk",
+    "title": "CHT Admin Overview",
+    "timezone": "utc",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "cht_instance",
+          "type": "query",
+          "label": "CHT Instance",
+          "query": "query_result(up{job=~\"cht\"})",
+          "regex": "/.*instance=\"([^\"]+).*/",
+          "multi": false,
+          "includeAll": false,
+          "current": {
+            "text": "alpha.example.org",
+            "value": "alpha.example.org"
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 12,
+        "title": "CHT Version Info",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_version{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Outbound Push Backlog",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_outbound_push_backlog_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Sentinel Backlog",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_sentinel_backlog_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 21,
+        "title": "Users Over Replication Limit",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_replication_limit_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "DB Conflicts Rate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_conflict_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "docs/day"
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Client Feedback/Error Rate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "increase(cht_feedback_total{instance=~\"$cht_instance\"}[1d])",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "docs/day"
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "CHT Uptime",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_date_uptime_seconds{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 19,
+        "title": "Server Time Accurate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "abs(cht_date_current_millis{instance=~\"$cht_instance\"} - time() * 1000)",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "id": 13,
+        "title": "DB Fragmentation",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_couchdb_fragmentation{instance=~\"$cht_instance\", db=\"medic\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "DB Growth Rate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "increase(cht_couchdb_doc_total{instance=~\"$cht_instance\", db=\"medic\"}[1d])",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "docs/day"
+          }
+        }
+      },
+      {
+        "id": 23,
+        "title": "Monthly Active Users",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_connected_users_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 27,
+        "title": "Message Delivery Rate [24h]",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_messaging_outgoing_total{instance=~\"$cht_instance\", status=\"delivered\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 50,
+        "title": "CHT Sync Backlog",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "couch2pg_progress_pending{target=\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 31,
+        "title": "Monitoring Stack",
+        "type": "row",
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "panels": [
+          {
+            "id": 34,
+            "title": "Prometheus Up",
+            "type": "timeseries",
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            },
+            "targets": [
+              {
+                "refId": "A",
+                "expr": "up{job=\"prometheus\"}",
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "PBFA97CFB590B2093"
+                }
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 35,
+            "title": "JSON Exporter Up",
+            "type": "timeseries",
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            },
+            "targets": [
+              {
+                "refId": "A",
+                "expr": "up{job=\"json_exporter\"}",
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "PBFA97CFB590B2093"
+                }
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

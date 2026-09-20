@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { RunDir, RunExistsError, dataPaths, ensureDataLayout } = require('../../src/store/run-dir');
+const { RunDir, RunExistsError, ReplayExistsError, dataPaths, ensureDataLayout } = require('../../src/store/run-dir');
 const atomic = require('../../src/store/atomic');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 
@@ -46,7 +46,8 @@ describe('store/run-dir', () => {
     await ensureDataLayout(dataDir);
     const p = dataPaths(dataDir);
     const dirs = [
-      p.runs, p.memory, p.memoryHistory, p.proposals, p.corpus, p.corpusOutcomes, p.corpusCardsProposed, p.calibration,
+      p.runs, p.replay, p.memory, p.memoryHistory, p.proposals, p.corpus, p.corpusOutcomes, p.corpusCardsProposed,
+      p.calibration,
     ];
     for (const d of dirs) {
       expect(fs.statSync(d).isDirectory(), d).to.equal(true);
@@ -102,6 +103,48 @@ describe('store/run-dir', () => {
     expect(record.stages[0].started_at).to.match(/^\d{4}-/);
     expect(record.stages[0].duration_ms).to.be.a('number');
     expect(record.updated_at).to.be.a('string');
+  });
+
+  it('creates, opens and lists replay directories under runs-replay/<run_id>/<label>', async () => {
+    const run = await RunDir.create(dataDir, '2026-09-18');
+    expect(run.kind).to.equal('run');
+    expect(run.label).to.equal(null);
+    const replay = await RunDir.createReplay(dataDir, '2026-09-18', 'experiment');
+    expect(replay.root).to.equal(path.join(dataDir, 'runs-replay', '2026-09-18', 'experiment'));
+    expect(replay).to.include({ kind: 'replay', runId: '2026-09-18', replayOf: '2026-09-18', label: 'experiment' });
+    await replay.writeJson('alpha-example-org/findings.pass1.json', { pass: 1 });
+    await replay.stageStart('agent');
+    await replay.stageEnd('agent', 'completed');
+    const opened = RunDir.openReplay(dataDir, '2026-09-18', 'experiment');
+    expect(await opened.readJson('alpha-example-org/findings.pass1.json')).to.deep.equal({ pass: 1 });
+    expect((await opened.readRun()).stages[0]).to.include({ name: 'agent', status: 'completed' });
+    await RunDir.createReplay(dataDir, '2026-09-18', 'another');
+    expect(await RunDir.listReplays(dataDir, '2026-09-18')).to.deep.equal(['another', 'experiment']);
+    expect(await RunDir.listReplays(dataDir, '2026-09-17')).to.deep.equal([]);
+    expect(await RunDir.list(dataDir)).to.deep.equal(['2026-09-18']);
+    expect(() => RunDir.openReplay(dataDir, '2026-09-18', 'missing')).to.throw(/not found/);
+  });
+
+  it('refuses a duplicate replay label with exit 75 and rejects labels that could escape the directory', async () => {
+    await RunDir.createReplay(dataDir, '2026-09-18', 'experiment');
+    let error;
+    try {
+      await RunDir.createReplay(dataDir, '2026-09-18', 'experiment');
+    } catch (e) {
+      error = e;
+    }
+    expect(error).to.be.instanceOf(ReplayExistsError);
+    expect(error.code).to.equal(75);
+    expect(error.message).to.include('experiment');
+    for (const bad of ['../up', 'a/b', '', '.hidden']) {
+      let badError;
+      try {
+        await RunDir.createReplay(dataDir, '2026-09-18', bad);
+      } catch (e) {
+        badError = e;
+      }
+      expect(badError && badError.code, bad).to.equal(64);
+    }
   });
 
   it('lists existing run ids sorted', async () => {

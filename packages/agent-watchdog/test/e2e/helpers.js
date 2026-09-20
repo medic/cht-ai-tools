@@ -6,9 +6,9 @@ const { Writable } = require('node:stream');
 const runCommand = require('../../src/cli/commands/run');
 const { createLogger } = require('../../src/log/logger');
 const identity = require('../../src/model/identity');
-const atomic = require('../../src/store/atomic');
 const { createFakeGrafana } = require('../helpers/fake-grafana');
 const { fixturePath } = require('../helpers/fixtures');
+const scripted = require('../helpers/scripted-findings');
 
 const DEFAULTS_DIR = path.join(__dirname, '..', '..', 'config', 'defaults');
 const DATE = '2026-09-18';
@@ -25,6 +25,7 @@ const capture = () => {
 };
 
 const envFor = (dataDir, extra = {}) => ({
+  PATH: process.env.PATH,
   ANTHROPIC_API_KEY: 'sk-ant-test',
   SLACK_BOT_TOKEN: 'xoxb-test',
   AGENT_WATCHDOG_GRAFANA_TOKEN: 'glsa_test',
@@ -77,85 +78,15 @@ const fakeBrowserLauncher = () => {
 };
 
 // Reads the run directory to answer like a careful model would: one item per metric with evidence
-// equal to the computed values, and a brief whose numbers come from the same evidence.
-const createScriptedEngine = ({ dataDir, briefMode = 'good' }) => {
+// equal to the computed values (test/helpers/scripted-findings.js), and a brief whose numbers come from the
+// same evidence.
+const createScriptedEngine = ({ dataDir, briefMode = 'good', useTools = false }) => {
   const { formatValue } = require('../../src/verify/format');
   const calls = { sessions: [], turns: [], singleTurns: [] };
 
-  const projects = () => {
-    const runsDir = path.join(dataDir, 'runs');
-    const runId = fs.readdirSync(runsDir).sort().pop();
-    const root = path.join(runsDir, runId);
-    return fs.readdirSync(root, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, d.name, 'candidates.json')))
-      .map((d) => {
-        const slug = d.name;
-        const candidates = JSON.parse(fs.readFileSync(path.join(root, slug, 'candidates.json'), 'utf8'));
-        const changes = JSON.parse(fs.readFileSync(path.join(root, slug, 'changes.json'), 'utf8'));
-        return { slug, root, candidates, changes };
-      });
-  };
-
-  // Scrape-target candidates carry a pseudo panel reference ('targets'); point the item at a real panel
-  // on the first priority dashboard instead, as the prompt instructs the model to do.
-  const dashboardRefFor = (root, cands) => {
-    const discovery = JSON.parse(fs.readFileSync(path.join(root, 'discovery.json'), 'utf8'));
-    const known = new Set(discovery.dashboards.map((d) => d.uid));
-    const real = cands.find((c) => known.has(c.panel_ref.dashboard_uid));
-    if (real) {
-      return { dashboard_uid: real.panel_ref.dashboard_uid, panel_id: real.panel_ref.panel_id };
-    }
-    const first = discovery.dashboards[0];
-    const uptime = first.panels.find((p) => /uptime/i.test(p.title)) || first.panels[0];
-    return { dashboard_uid: first.uid, panel_id: uptime.panel_id };
-  };
-
-  const itemsFor = async (project) => {
-    const byMetric = new Map();
-    for (const c of project.candidates) {
-      if (!byMetric.has(c.metric)) {
-        byMetric.set(c.metric, []);
-      }
-      byMetric.get(c.metric).push(c);
-    }
-    const windows = await atomic.readGzipJson(path.join(project.root, project.slug, 'inputs', 'windows.json.gz'));
-    const items = [];
-    for (const [metric, cands] of byMetric) {
-      const change = project.changes.find((ch) => ch.metric === metric);
-      const current = windows.windows.find((w) => w.metric === metric && w.window === 'current');
-      const unit = cands[0].evidence[0] ? cands[0].evidence[0].unit : 'count';
-      const evidence = [{ window: 'current', value: change.current_value, unit }];
-      if (change.previous_day_value !== null) {
-        evidence.push({ window: 'previous_day', value: change.previous_day_value, unit });
-      }
-      const severity = cands.some((c) => c.severity_floor === 'high') ? 'high' : 'low';
-      items.push({
-        item_key: { metric, pattern_card: null },
-        severity,
-        evidence,
-        why_now: cands.some((c) => c.rule === 'target_down')
-          ? 'The scrape target is down, so the watchdog has no fresh data for this project.'
-          : 'The backlog has climbed steadily for hours and is now well above yesterday.',
-        suggested_check: 'Open the dashboard panel and confirm the trend before paging anyone.',
-        dashboard_ref: { ...dashboardRefFor(project.root, cands), from: current.start, to: current.end },
-        confidence: 0.85,
-        candidate_ids: cands.map((c) => c.candidate_id),
-        reference_urls: [],
-      });
-    }
-    return { items, unitOf: (metric) => (byMetric.get(metric)[0].evidence[0] || {}).unit || 'count' };
-  };
-
-  const result = () => ({
-    subtype: 'success',
-    usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 800, cache_creation_input_tokens: 0 },
-    total_cost_usd: 0.01,
-    num_turns: 2,
-    duration_ms: 120,
-    session_id: 'sess-1',
-    permission_denials: [],
-    errors: [],
-  });
+  const projects = () => scripted.projectsWithCandidates(scripted.latestRunRoot(dataDir));
+  const { itemsFor } = scripted;
+  const result = scripted.resultStub;
 
   const openSession = async (options) => {
     calls.sessions.push(options);
@@ -165,21 +96,22 @@ const createScriptedEngine = ({ dataDir, briefMode = 'good' }) => {
       async turn(userText) {
         pass += 1;
         calls.turns.push({ pass, userText });
-        const ids = [...new Set(userText.match(/\b[0-9a-f]{12}\b/g) || [])];
         // A revision turn may carry only reasons; the session stays bound to the project of its first turn.
-        const matched = projects().find((p) => p.candidates.some((c) => ids.includes(c.candidate_id)));
+        const matched = scripted.projectForPrompt(scripted.latestRunRoot(dataDir), userText);
         sessionProject = matched || sessionProject;
-        const project = sessionProject;
-        const { items } = await itemsFor(project);
-        const projectUrl = project.candidates[0].project_url;
-        return {
-          structuredOutput: {
-            project_url: projectUrl, pass, items, not_selected: [], changes: [], converged: pass > 1, notes: '',
-          },
-          result: result(),
-          toolCalls: [],
-          referenceUnavailable: false,
-        };
+        const findings = await scripted.findingsFor(sessionProject, pass);
+        // With useTools the session really calls get_windows through the engine's local tools, so the session
+        // loop records the call and a replay can answer it from the recording.
+        const toolCalls = [];
+        const getWindows = useTools ? (options.localTools || []).find((t) => t.name === 'get_windows') : null;
+        if (getWindows && sessionProject.candidates.length) {
+          const toolInput = { metric: sessionProject.candidates[0].metric };
+          const out = await getWindows.handler(toolInput);
+          toolCalls.push({
+            tool_name: 'mcp__watchdog__get_windows', tool_input: toolInput, tool_response: out.content[0].text,
+          });
+        }
+        return { structuredOutput: findings, result: result(), toolCalls, referenceUnavailable: false };
       },
       async close() {},
     };
@@ -247,12 +179,17 @@ const createScriptedEngine = ({ dataDir, briefMode = 'good' }) => {
 
 const runCase = async ({
   caseName, dataDir, envExtra = {}, flags = {}, briefMode = 'good', date = DATE, runStart = null, slack = fakeSlack(),
+  useTools = false, engine = undefined,
 }) => {
   const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', caseName), runStart });
   const out = capture();
   const err = capture();
   const browserLauncher = fakeBrowserLauncher();
-  const engine = createScriptedEngine({ dataDir, briefMode });
+  // engine: undefined → the scripted model; false → none injected, so the run command builds the configured
+  // engine itself (used to drive the real CLI engine against the fake claude executable).
+  const scriptedEngine = engine === false
+    ? undefined
+    : (engine || createScriptedEngine({ dataDir, briefMode, useTools }));
   const args = {
     command: 'run',
     flags: { date, ...flags },
@@ -265,7 +202,7 @@ const runCase = async ({
       fetch: fake.fetch,
       slack,
       browserLauncher,
-      engine,
+      engine: scriptedEngine,
       tracer: fakeTracer(),
       gitSha: 'e2e',
       now: () => new Date(`${date}T06:05:00Z`),
@@ -284,7 +221,7 @@ const runCase = async ({
     fs.writeFileSync(path.join(root, 'stderr.log'), err.text());
   }
   const read = (rel) => JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
-  return { code, error, out, err, slack, browserLauncher, engine, fake, root, read, runId };
+  return { code, error, out, err, slack, browserLauncher, engine: scriptedEngine, fake, root, read, runId };
 };
 
 module.exports = {

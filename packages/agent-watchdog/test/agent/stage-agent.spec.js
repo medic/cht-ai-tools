@@ -8,6 +8,7 @@ const { RunDir, ensureDataLayout, dataPaths } = require('../../src/store/run-dir
 const { createFakeEngine } = require('../helpers/fake-engine');
 const { createLogger } = require('../../src/log/logger');
 const { tempDir, removeDir } = require('../helpers/fixtures');
+const { createReplayLookup } = require('../../src/agent/tools/replay-shim');
 
 const env = { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://d/mcp' };
 const definition = loadDefinition({ paths: PACKAGE_PATHS, env });
@@ -164,5 +165,153 @@ describe('cli/stages/agent', () => {
     const result = await stage.run(ctx(engine));
     expect(result.reference_sources_unavailable).to.equal(true);
     expect(result.bounds_hit).to.deep.equal(['budget']);
+  });
+
+  it('restricts the sessions to --project hosts when the flag is given', async () => {
+    const engine = createFakeEngine({
+      responses: (userText) => ({ structuredOutput: findingsFor(projectFor(userText), METRIC) }),
+    });
+    const result = await stage.run(ctx(engine, { flags: { project: ['https://gamma.example.org/'] } }));
+    expect(result.projects_analysed).to.deep.equal(['https://gamma.example.org']);
+    expect(engine.sessions).to.have.length(1);
+    expect(result.projects_skipped).to.deep.equal([]);
+  });
+
+  describe('replay mode', () => {
+    const recordings = [
+      {
+        pass: 1, attempt: 1, ts: '2026-09-18T06:01:00Z', tool_name: 'mcp__watchdog__get_windows',
+        tool_input: { metric: METRIC },
+        tool_response: JSON.stringify({
+          windows: [{ window: 'current', values: [[1, 7]] }], change: { current_value: 7 },
+        }),
+      },
+      {
+        pass: 1, attempt: 1, ts: '2026-09-18T06:01:01Z', tool_name: 'mcp__cht-docs__search_docs',
+        tool_input: { query: 'sentinel' },
+        tool_response: '**Sentinel**\nSource: https://docs.communityhealthtoolkit.org/sentinel',
+      },
+    ];
+    const text = (out) => out.content[0].text;
+
+    // A fake engine whose turn exercises the in-process tools the stage attached to the session.
+    const toolCallingEngine = () => {
+      const engine = createFakeEngine({ responses: [] });
+      const base = engine.openSession;
+      engine.openSession = async (options) => {
+        const session = await base(options);
+        session.turn = async (userText) => {
+          const windows = options.localTools.find((t) => t.name === 'get_windows');
+          const query = options.localTools.find((t) => t.name === 'query_metric');
+          // Live sessions have no in-process documentation server; replay serves it from recordings.
+          const search = (options.localServers['cht-docs'] || []).find((t) => t.name === 'search_docs') || null;
+          session.replayed = {
+            windows: JSON.parse(text(await windows.handler({ metric: METRIC }))),
+            query: JSON.parse(text(await query.handler({ metric: METRIC, window: 'previous_week' }))),
+            doc: search ? text(await search.handler({ query: 'sentinel' })) : null,
+            miss: search ? JSON.parse(text(await search.handler({ query: 'never asked before' }))) : null,
+          };
+          return {
+            structuredOutput: findingsFor(projectFor(userText), METRIC), result: plainResult, toolCalls: [],
+            referenceUnavailable: false,
+          };
+        };
+        return session;
+      };
+      return engine;
+    };
+
+    it('serves recorded results in-process, attaches no remote server and reports what was not recorded', async () => {
+      const unavailable = [];
+      const queryWindow = sinon.stub().resolves({ live: true });
+      const engine = toolCallingEngine();
+      const context = ctx(engine, {
+        deps: { engine, gate, definition, queryWindow },
+        replay: {
+          recordedFor: (slug) => (slug === 'alpha-example-org' ? createReplayLookup(recordings) : null),
+          onUnavailable: (slug, call) => unavailable.push({ slug, tool: call.tool }),
+        },
+      });
+      const result = await stage.run(context);
+      expect(result.projects_analysed).to.deep.equal(['https://alpha.example.org', 'https://gamma.example.org']);
+      const bySlug = Object.fromEntries(engine.sessions.map((s) => [s.options.sessionName, s]));
+      const alpha = bySlug['alpha-example-org'];
+      const gamma = bySlug['gamma-example-org'];
+      for (const session of [alpha, gamma]) {
+        expect(session.options.mcpConfig).to.deep.equal({ mcpServers: {} });
+        expect(session.options.localServers['cht-docs'].map((t) => t.name))
+          .to.deep.equal(['search_docs', 'get_sources']);
+        expect(session.replayed.miss).to.deep.equal({ unavailable: true, reason: 'not recorded' });
+      }
+      expect(alpha.replayed.windows).to.deep.equal({
+        windows: [{ window: 'current', values: [[1, 7]] }], change: { current_value: 7 },
+      });
+      expect(alpha.replayed.doc).to.include('Source: https://docs.communityhealthtoolkit.org/sentinel');
+      expect(alpha.replayed.query).to.deep.equal({ unavailable: true, reason: 'not recorded' });
+      // gamma has no recordings at all: every call is unavailable and nothing is fetched live
+      expect(gamma.replayed.windows).to.deep.equal({ unavailable: true, reason: 'not recorded' });
+      expect(gamma.replayed.doc).to.equal(JSON.stringify({ unavailable: true, reason: 'not recorded' }));
+      expect(queryWindow).to.not.have.been.called;
+      const counts = unavailable.reduce((acc, u) => ({ ...acc, [u.slug]: (acc[u.slug] || 0) + 1 }), {});
+      expect(counts).to.deep.equal({ 'alpha-example-org': 2, 'gamma-example-org': 4 });
+      expect(unavailable.filter((u) => u.slug === 'alpha-example-org').map((u) => u.tool).sort())
+        .to.deep.equal(['query_metric', 'search_docs']);
+    });
+
+    it('keeps the live wiring when no replay context is present', async () => {
+      const engine = toolCallingEngine();
+      const queryWindow = sinon.stub().resolves({ live: true });
+      const result = await stage.run(ctx(engine, { deps: { engine, gate, definition, queryWindow } }));
+      expect(result.projects_analysed).to.have.length(2);
+      const session = engine.sessions[0];
+      expect(session.options.mcpConfig.mcpServers).to.have.property('cht-docs');
+      expect(session.options.localServers).to.deep.equal({});
+      expect(session.replayed.query).to.deep.equal({ live: true });
+      expect(session.replayed.windows.windows).to.deep.equal([]);
+    });
+  });
+});
+
+describe('cli/stages/agent (stage inputs)', () => {
+  let dataDir;
+  let runDir;
+  const logger = createLogger({ level: 'error', stream: new Writable({ write(c, e, cb) {
+    cb();
+  } }) });
+
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await ensureDataLayout(dataDir);
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+    await runDir.writeJson('discovery.json', { projects: projects.slice(0, 1), metrics: [METRIC] });
+    await runDir.writeJson('alpha-example-org/candidates.json', [
+      { candidate_id: 'c1', project_url: projects[0].url, metric: METRIC, rule: 'monotonic' },
+    ]);
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('exits 65 naming <slug>/changes.json when candidates exist but the computed changes are missing', async () => {
+    const engine = createFakeEngine({ responses: [] });
+    const context = {
+      config: {
+        model: { name: 'm', effort: 'max' }, storage: { dataDir }, paths: PACKAGE_PATHS, secrets: {}, endpoints: {},
+        bounds: {
+          maxTurns: 5, maxBudgetUsdProject: 1, modelTimeoutMs: 1000, verifyMaxRetries: 0, passes: 1,
+          passConvergence: true, projectConcurrency: 1, runTimeoutMs: 60000,
+        },
+      },
+      env, runDir, runId: '2026-09-18', date: '2026-09-18', logger, tracer: null,
+      deps: { engine, gate, definition },
+    };
+    let error;
+    try {
+      await stage.run(context);
+    } catch (e) {
+      error = e;
+    }
+    expect(error, 'expected the stage to refuse').to.be.instanceOf(Error);
+    expect(error.code).to.equal(65);
+    expect(error.message).to.include('alpha-example-org/changes.json');
+    expect(engine.sessions).to.have.length(0);
   });
 });

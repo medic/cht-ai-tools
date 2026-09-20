@@ -27,6 +27,8 @@ const OPTIONS = {
   from: { type: 'string' },
   to: { type: 'string' },
   'run-dir': { type: 'string' },
+  replay: { type: 'boolean' },
+  server: { type: 'string' },
   'config-dir': { type: 'string' },
   'data-dir': { type: 'string' },
   'log-level': { type: 'string' },
@@ -44,7 +46,8 @@ Commands:
   calibrate     weekly calibration report and threshold proposals (--week --project)
   check <url>   readiness check for a CHT deployment
   purge         apply retention (--dry-run)
-  tools-server  serve the read-only tools over stdio for the CLI engine (--run-dir)
+  tools-server  serve the read-only tools over stdio for the CLI engine
+                (--run-dir --data-dir --project --server --replay)
 
 Global flags: --config-dir --data-dir --log-level --log-format --help --version
 Logs are JSON lines on stderr; results go to stdout. Exit codes: see contracts/exit-codes.md.

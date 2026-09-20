@@ -325,6 +325,25 @@ describe('cli/commands/run', () => {
     expect(stage.run).to.not.have.been.called;
   });
 
+  it('marks only the stage failed on a --stage failure, keeps the run status and posts no notice', async () => {
+    const full = base(dataDir, { deps: { stages: fakeStages().stages } });
+    await runCommand(full.args);
+    const missing = new codes.ExitError(codes.DATAERR, 'missing stage input: x/changes.json');
+    const { stages } = fakeStages({ analyze: missing });
+    const t = base(dataDir, { flags: { stage: 'analyze' }, deps: { stages } });
+    let error;
+    try {
+      await runCommand(t.args);
+    } catch (e) {
+      error = e;
+    }
+    expect(error.code).to.equal(codes.DATAERR);
+    const run = readRun(dataDir);
+    expect(run.status).to.equal('published');
+    expect(run.stages.find((s) => s.name === 'analyze').status).to.equal('failed');
+    expect(t.slackPublisher.postFailureNotice).to.not.have.been.called;
+  });
+
   it('exits 78 when configuration is invalid and creates no run directory', async () => {
     const t = base(dataDir, { env: { AGENT_WATCHDOG_PASSES: '99' }, deps: { stages: fakeStages().stages } });
     let error;

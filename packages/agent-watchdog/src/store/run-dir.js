@@ -6,7 +6,10 @@ const path = require('node:path');
 const atomic = require('./atomic');
 
 const TEMPFAIL = 75;
+const USAGE = 64;
 const RUN_ID_PATTERN = /^\d{4}-\d{2}-\d{2}(-f\d+)?$/;
+// A replay label names one directory level; nothing that could leave runs-replay/<run_id>/.
+const REPLAY_LABEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 class RunExistsError extends Error {
   constructor(runId) {
@@ -14,6 +17,25 @@ class RunExistsError extends Error {
     this.name = 'RunExistsError';
     this.code = TEMPFAIL;
     this.runId = runId;
+  }
+}
+
+class ReplayExistsError extends Error {
+  constructor(runId, label) {
+    super(`a replay labelled "${label}" already exists for ${runId}; choose another --label`);
+    this.name = 'ReplayExistsError';
+    this.code = TEMPFAIL;
+    this.runId = runId;
+    this.label = label;
+  }
+}
+
+class ReplayLabelError extends Error {
+  constructor(label) {
+    super(`invalid replay label "${label}": use letters, digits, dot, underscore or dash, not starting with a dot`);
+    this.name = 'ReplayLabelError';
+    this.code = USAGE;
+    this.label = label;
   }
 }
 
@@ -37,7 +59,8 @@ const dataPaths = (dataDir) => ({
 const ensureDataLayout = async (dataDir) => {
   const p = dataPaths(dataDir);
   const dirs = [
-    p.runs, p.memory, p.memoryHistory, p.proposals, p.corpus, p.corpusOutcomes, p.corpusCardsProposed, p.calibration,
+    p.runs, p.replay, p.memory, p.memoryHistory, p.proposals, p.corpus, p.corpusOutcomes, p.corpusCardsProposed,
+    p.calibration,
   ];
   for (const dir of dirs) {
     await fs.mkdir(dir, { recursive: true });
@@ -46,11 +69,61 @@ const ensureDataLayout = async (dataDir) => {
 };
 
 class RunDir {
-  constructor(dataDir, runId) {
+  /**
+   * @param {string} dataDir the data volume
+   * @param {string} runId the run (for a replay: the run being replayed)
+   * @param {object} [options] `label` marks a replay directory under runs-replay/<runId>/<label>
+   */
+  constructor(dataDir, runId, { label = null } = {}) {
     this.dataDir = dataDir;
     this.runId = runId;
-    this.root = path.join(dataDir, 'runs', runId);
+    this.kind = label === null ? 'run' : 'replay';
+    this.label = label;
+    this.replayOf = label === null ? null : runId;
+    this.root = label === null ? path.join(dataDir, 'runs', runId) : RunDir.replayRoot(dataDir, runId, label);
     this._stageStarts = new Map();
+  }
+
+  static replayRoot(dataDir, runId, label) {
+    return path.join(dataDir, 'runs-replay', runId, label);
+  }
+
+  /**
+   * Create a replay directory with the run's layout (contracts/run-directory.md "Replay"). The label is one
+   * directory level; a duplicate label is refused so two replays never share artefacts.
+   */
+  static async createReplay(dataDir, runId, label) {
+    if (typeof label !== 'string' || !REPLAY_LABEL_PATTERN.test(label)) {
+      throw new ReplayLabelError(label);
+    }
+    await fs.mkdir(path.join(dataDir, 'runs-replay', runId), { recursive: true });
+    const replay = new RunDir(dataDir, runId, { label });
+    try {
+      await fs.mkdir(replay.root);
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        throw new ReplayExistsError(runId, label);
+      }
+      throw error;
+    }
+    return replay;
+  }
+
+  static openReplay(dataDir, runId, label) {
+    const replay = new RunDir(dataDir, runId, { label });
+    if (!fsSync.existsSync(replay.root)) {
+      throw new Error(`replay ${runId}/${label} not found under ${dataDir}`);
+    }
+    return replay;
+  }
+
+  static async listReplays(dataDir, runId) {
+    const dir = path.join(dataDir, 'runs-replay', runId);
+    if (!fsSync.existsSync(dir)) {
+      return [];
+    }
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
   }
 
   /**
@@ -181,4 +254,7 @@ class RunDir {
   }
 }
 
-module.exports = { RunDir, RunExistsError, dataPaths, ensureDataLayout, RUN_ID_PATTERN };
+module.exports = {
+  RunDir, RunExistsError, ReplayExistsError, ReplayLabelError, dataPaths, ensureDataLayout, RUN_ID_PATTERN,
+  REPLAY_LABEL_PATTERN,
+};

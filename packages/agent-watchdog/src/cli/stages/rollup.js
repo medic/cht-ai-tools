@@ -5,6 +5,7 @@ const { requireInputs } = require('./index');
 const { rankItems } = require('../../rollup/rank');
 const { composeBrief } = require('../../rollup/brief');
 const { applyMemoryUpdate } = require('../../rollup/memory');
+const { buildFooter, round6 } = require('../../publish/footer');
 
 const name = 'rollup';
 const inputs = ['discovery.json'];
@@ -64,12 +65,7 @@ const run = async (ctx) => {
   });
   await runDir.writeJson('rollup/items.ranked.json', ranked);
 
-  const footer = {
-    prompts_url: ctx.config.endpoints.promptsUrl,
-    config_url: ctx.config.endpoints.configUrl,
-    trace_url: ctx.traceUrl || null,
-    cost_usd: ctx.costSoFar || 0,
-  };
+  const footer = buildFooter({ config: ctx.config, traceUrl: ctx.traceUrl || null, costUsd: ctx.costSoFar || 0 });
   const composed = await composeBrief({
     ctx,
     items: ranked,
@@ -82,6 +78,10 @@ const run = async (ctx) => {
     referenceSourcesUnavailable,
     footer,
   });
+
+  // The footer was built before the roll-up's own model calls; fold their cost in so the post and run.json agree.
+  const draftCost = (composed.calls || []).reduce((sum, call) => sum + (call.cost_usd || 0), 0);
+  composed.brief.footer.cost_usd = round6((ctx.costSoFar || 0) + draftCost);
 
   for (const { attempt, draft, report } of composed.drafts) {
     await runDir.writeJson(`rollup/brief.draft${attempt}.json`, draft);
@@ -118,4 +118,4 @@ const run = async (ctx) => {
   };
 };
 
-module.exports = { name, inputs, run };
+module.exports = { name, inputs, run, lastFindingsFile };

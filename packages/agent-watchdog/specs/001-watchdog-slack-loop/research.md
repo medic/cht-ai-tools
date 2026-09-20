@@ -121,7 +121,7 @@ ignores user, project and local settings files while `--settings` still applies)
 **Absent**: `--max-turns` does not exist in 2.1.278.
 
 **Decision**: the CLI engine runs
-`claude -p --bare --no-session-persistence --input-format stream-json --output-format stream-json
+`claude -p --bare --verbose --no-session-persistence --input-format stream-json --output-format stream-json
 --system-prompt-file … --tools "" --allowed-tools … --permission-mode dontAsk --mcp-config …
 --strict-mcp-config --json-schema … --model … --effort … --max-budget-usd …`, feeding pass and
 revision turns over stdin so one process holds one session. The verification gate is called by
@@ -139,6 +139,14 @@ hook surfaces altogether, which satisfies FR-018 and constitution V (one engine)
 `--settings` (viable: `--settings` still applies in restricted mode; rejected because it needs a
 shell command hook per event and keeps a second, engine-specific gate path); dropping the CLI face
 (rejected: FR-050 and US3 scenario 7).
+
+**Correction recorded during implementation (2026-09-19)**: a live probe of the installed CLI 2.1.278
+(`printf '' | claude -p --bare --no-session-persistence --input-format stream-json --output-format stream-json
+--tools "" --permission-mode dontAsk --strict-mcp-config`) exited with "Error: When using --print,
+--output-format=stream-json requires --verbose", a rule the help text does not state. The CLI engine
+(`src/agent/engine-cli.js`) therefore always passes `--verbose`; the test fake (`test/helpers/fake-claude.js`)
+enforces the same rule so the argument contract cannot regress. `--verbose` only widens what the stream
+carries; the harness ignores everything but the message types the SDK engine already handles.
 
 **Where documentation and artefacts disagreed**: the research agent reported `--disallowed-tools`,
 `--setting-sources` and `--strict-mcp-config` as not found and `--no-session-persistence` as

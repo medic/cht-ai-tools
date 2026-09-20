@@ -26,7 +26,7 @@ The daily pipeline: `purge`, `feedback`, `collect`, `analyze`, `agent`, `rollup`
 | `--date` | `YYYY-MM-DD` | today, UTC | Date to analyse; also the run directory name. |
 | `--project` | URL, repeatable | all discovered | Restrict analysis to these projects; discovery still runs. |
 | `--stage` | stage name | none | Run only this stage from the previous stage's files (FR-043). Exit 65 when inputs are missing. |
-| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | Which face of the same agent definition runs the passes (FR-050). |
+| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | Which face of the same agent definition runs the passes (FR-050). `cli` runs `claude -p --bare --verbose … --input-format stream-json --output-format stream-json` (print mode requires `--verbose` for stream-json output) and serves the local tools through `tools-server`. |
 | `--dry-run` | flag | `AGENT_WATCHDOG_DRY_RUN` | Preview mode: every artefact, `payload.json`, nothing posted (FR-025). |
 | `--force` | flag | off | Allow a second run for the same date; the new run supersedes and links the earlier post (FR-042). |
 | `--since` | `YYYY-MM-DD` | derived from `AGENT_WATCHDOG_FEEDBACK_LOOKBACK_RUNS` | Read feedback from posts on or after this date instead of the last N runs (FR-026). |
@@ -78,6 +78,22 @@ Readiness check for a CHT deployment (FR-048). Reports each unmet prerequisite i
 on stdout and exits 1 when any is unmet, 0 when all are met, 69 when the URL is unreachable.
 Prerequisites: reachable monitoring endpoint, CHT version at or above the minimum the watchdog
 supports, host-metrics exporter present when the project has opted in.
+
+### `tools-server`
+
+Serves the enumerated read-only tools over stdio to the `claude` command-line engine; launched by the
+engine itself from the MCP configuration it writes, not by operators.
+
+| Flag | Value | Default | Effect |
+|---|---|---|---|
+| `--run-dir` | path | required | The run directory whose `discovery.json`, changes and windows the tools read. |
+| `--data-dir` | path | `AGENT_WATCHDOG_DATA_DIR` | The data volume, for item history. |
+| `--project` | slug | required | The project session the tools serve. |
+| `--server` | `watchdog` \| `cht-docs` | `watchdog` | Which server to serve; `cht-docs` only exists under `--replay`. |
+| `--replay` | flag | off | Answer from `<run-dir>/<slug>/recorded-tool-calls.jsonl`; anything unrecorded is `unavailable`. |
+
+Logs go to stderr; stdout belongs to the MCP transport. Exits 0 when the client closes the transport,
+64 on a bad flag, 65 when the run or project directory is missing.
 
 ### `purge`
 

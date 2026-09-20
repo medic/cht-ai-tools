@@ -77,3 +77,25 @@ Rules:
   live documentation service, so nothing external is contacted except the model API.
 - Preview mode (`--dry-run`) writes the full layout and stops before `publish` writes
   `publication.json`; `payload.json` is the deliverable (FR-025).
+
+## Replay directories
+
+`runs-replay/<run_id>/<label>/` mirrors the run layout for the files replay reads and writes: the copied
+`discovery.json`, `feedback.ingested.json` and per-project `changes.json`, `candidates.json`, `suppressed.json`
+and `inputs/windows.json.gz` (when the raw file has not yet been purged), then everything the agent stage
+writes (`prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `passes.json`,
+`session.json`, `agent.summary.json`). Two files are specific to replay:
+
+- `<project_slug>/recorded-tool-calls.jsonl` — the source run's `tool-calls.jsonl`, copied before the session;
+  every local tool and the documentation service answer from it, and a call it does not cover returns
+  `{ "unavailable": true, "reason": "not recorded" }`. The replay's own `tool-calls.jsonl` records the new
+  session's calls beside it.
+- `comparison.json` — the items before (the source run's highest-numbered pass, the file the roll-up used)
+  and after (the replay's), per project: `added`, `removed`, `changed` (identity, severity or evidence within
+  display rounding) and `unavailable_tool_calls`, with totals, the prompts and skill hashes under test, cost,
+  usage and duration. The same object is printed on stdout; a `--from/--to` range prints one per run plus a
+  summary.
+
+`run.json` in a replay directory has `mode: replay`, `replay_of`, `label`, the `versions` of the code and of
+the prompts and skill under test, `source_versions` copied from the source run, and `prompts_dir`/`skill_dir`.
+Replay directories are `kept` for retention purposes (FR-040) and are never written by a scheduled run.

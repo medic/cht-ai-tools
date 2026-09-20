@@ -143,4 +143,14 @@ describe('config/load', () => {
     expect(effective.secrets.docsMcpToken).to.equal(null);
     expect(effective.model.name).to.equal('claude-fable-5-1');
   });
+
+  it('reads the optional claude executable path for the cli engine', () => {
+    const unset = loadConfig({ env: baseEnv(), command: 'run' });
+    expect(unset.config.runtime.claudePath).to.equal(null);
+    const env = { ...baseEnv(), AGENT_WATCHDOG_CLAUDE_PATH: '/opt/claude/bin/claude' };
+    const { config, sources } = loadConfig({ env, command: 'run' });
+    expect(config.runtime.claudePath).to.equal('/opt/claude/bin/claude');
+    expect(sources.AGENT_WATCHDOG_CLAUDE_PATH).to.equal('env');
+    expect(() => loadConfig({ env: { ...baseEnv(), AGENT_WATCHDOG_CLAUDE_PATH: '' }, command: 'run' })).to.not.throw();
+  });
 });

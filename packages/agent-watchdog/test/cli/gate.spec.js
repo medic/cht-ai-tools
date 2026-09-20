@@ -50,4 +50,30 @@ describe('cli/gate adapter', () => {
     await gate({ findings: {}, pass: 1, project: { slug: 'nobody', url: 'https://n', host: 'n' } });
     expect(verifyFindings.firstCall.args[0].windows).to.deep.equal([]);
   });
+
+  it('offline (replay) never builds a resolver and passes resolveLinks null so links report unresolved', async () => {
+    const verifyFindings = sinon.stub().resolves({ report: {}, items: [] });
+    const fetch = sinon.stub().rejects(new Error('fetch must not be called offline'));
+    const gate = createFindingsGate({ gateModule: { verifyFindings }, runDir, config, fetch, offline: true });
+    const project = { slug: 'alpha-example-org', url: 'https://alpha.example.org', host: 'alpha.example.org' };
+    await gate({ findings: { pass: 1 }, pass: 1, project, candidates: [], changes: [], toolResultUrls: [] });
+    const args = verifyFindings.firstCall.args[0];
+    expect(args.resolveLinks).to.equal(null);
+    expect(args.grafanaUrl).to.equal('https://watchdog.example.org');
+    expect(args.allowlist).to.be.an('array').that.is.not.empty;
+    expect(fetch).to.not.have.been.called;
+  });
+
+  it('offline mode with the real gate module reports links as not resolved instead of failing', async () => {
+    const gateModule = require('../../src/verify/gate');
+    const gate = createFindingsGate({ gateModule, runDir, config, fetch: sinon.stub(), offline: true });
+    const project = { slug: 'alpha-example-org', url: 'https://alpha.example.org', host: 'alpha.example.org' };
+    const findings = {
+      project_url: project.url, pass: 1, items: [], not_selected: [], changes: [], converged: true, notes: '',
+    };
+    const { report } = await gate({ findings, pass: 1, project, candidates: [], changes: [], toolResultUrls: [] });
+    const resolve = report.checks.find((c) => c.name === 'links_resolve');
+    expect(resolve.status).to.equal('pass');
+    expect(resolve.reasons).to.deep.equal(['not resolved (offline)']);
+  });
 });

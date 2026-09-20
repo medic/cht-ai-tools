@@ -1,9 +1,10 @@
 node_modules/
 coverage/
 .nyc_output/
-.data/
-runs/
-runs-replay/
-knowledge-corpus/raw/
+# Local data volume and run directories at the package root only; test/fixtures/runs/ is committed.
+/.data/
+/runs/
+/runs-replay/
+/knowledge-corpus/raw/
 .env
 *.log

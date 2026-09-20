@@ -1,10 +1,10 @@
 'use strict';
 // The daily pipeline: purge, feedback, collect, analyze, agent, rollup, render, publish (contracts/cli.md).
 // Owns the run's state machine (data-model.md "Run") and the loud-failure rules (constitution V).
-const { execFileSync } = require('node:child_process');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
 const { RunDir, RunExistsError, ensureDataLayout } = require('../../store/run-dir');
+const { collectVersions } = require('../../store/versions');
 const { createContext } = require('../context');
 const { STAGE_ORDER, loadStage, requireInputs } = require('../stages');
 const { writeResult } = require('../streams');
@@ -19,30 +19,6 @@ const pkg = require('../../../package.json');
 const todayUtc = (now) => now.toISOString().slice(0, 10);
 
 const STATUS_AFTER_STAGE = { collect: 'collected', analyze: 'analysed', agent: 'drafted', render: 'rendered' };
-
-const resolveGitSha = (deps) => {
-  if (deps.gitSha) {
-    return deps.gitSha;
-  }
-  try {
-    const out = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.toString().trim();
-  } catch {
-    return null;
-  }
-};
-
-const definitionHashes = (config, env, deps) => {
-  if (deps.definitionHashes) {
-    return deps.definitionHashes;
-  }
-  try {
-    const { loadDefinition } = require('../../agent/definition');
-    return loadDefinition({ paths: config.paths, env, config }).hashes;
-  } catch {
-    return { prompts_hash: null, skill_hash: null, schema_hash: null };
-  }
-};
 
 const lazy = (deps, key, modulePath) => {
   if (deps[key]) {
@@ -65,13 +41,19 @@ const loadDefinitionSafely = (config, env, logger) => {
   }
 };
 
-const createEngineSafely = ({ config, definition, env, logger }) => {
+// One agent definition, two faces (FR-050): the SDK engine in production, `claude -p` when
+// AGENT_WATCHDOG_ENGINE=cli or --engine cli is given. Both take the same definition and MCP configuration.
+const createEngineSafely = ({ config, definition, env, logger, runDir = null }) => {
   if (!definition) {
     return null;
   }
   try {
-    const { createSdkEngine } = require('../../agent/engine-sdk');
     const mcpConfig = definition.renderMcpConfig ? definition.renderMcpConfig(env) : { mcpServers: {} };
+    if (config.model.engine === 'cli') {
+      const { createCliEngine } = require('../../agent/engine-cli');
+      return createCliEngine({ config, definition, mcpConfig, env, logger, runDir });
+    }
+    const { createSdkEngine } = require('../../agent/engine-sdk');
     return createSdkEngine({ config, definition, mcpConfig, env, logger });
   } catch (error) {
     logger.warn('agent.engine_unavailable', { error: error.message });
@@ -175,16 +157,20 @@ const failureNotifier = (config, logger, deps) => {
   }
 };
 
+/**
+ * Open or create the run directory. A single stage reuses the latest run of the date and, when none exists yet,
+ * creates it, so a contributor can start with `--stage collect` on an empty volume (FR-043, quickstart step 4).
+ */
 const openRunDir = async ({ dataDir, date, flags, stageOnly }) => {
   if (stageOnly) {
     const ids = (await RunDir.list(dataDir)).filter((id) => id.startsWith(date));
-    if (!ids.length) {
-      throw new codes.ExitError(codes.DATAERR, `no run for ${date} exists to run stage "${stageOnly}" on`);
+    if (ids.length) {
+      return { runDir: RunDir.open(dataDir, ids[ids.length - 1]), supersedes: null, created: false };
     }
-    return { runDir: RunDir.open(dataDir, ids[ids.length - 1]), supersedes: null };
+    return { runDir: await RunDir.create(dataDir, date), supersedes: null, created: true };
   }
   try {
-    return { runDir: await RunDir.create(dataDir, date), supersedes: null };
+    return { runDir: await RunDir.create(dataDir, date), supersedes: null, created: true };
   } catch (error) {
     if (!(error instanceof RunExistsError) || !flags.force) {
       throw error;
@@ -194,7 +180,7 @@ const openRunDir = async ({ dataDir, date, flags, stageOnly }) => {
     const forcedId = await RunDir.nextForcedId(dataDir, date);
     const runDir = await RunDir.create(dataDir, forcedId);
     await RunDir.open(dataDir, supersedes).updateRun({ superseded_by: forcedId });
-    return { runDir, supersedes };
+    return { runDir, supersedes, created: true };
   }
 };
 
@@ -232,7 +218,7 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   const startHr = process.hrtime.bigint();
 
   await ensureDataLayout(dataDir);
-  const { runDir, supersedes } = await openRunDir({ dataDir, date, flags, stageOnly });
+  const { runDir, supersedes, created } = await openRunDir({ dataDir, date, flags, stageOnly });
   const runId = runDir.runId;
   const log = logger.child({ run_id: runId });
 
@@ -240,7 +226,7 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   await tracer.start({ runId, date, mode });
   const traceUrl = await tracer.traceUrl();
 
-  if (!stageOnly) {
+  if (created) {
     await runDir.writeJson('config.effective.json', effective);
     await runDir.updateRun({
       run_id: runId,
@@ -250,12 +236,7 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       started_at: startedAt,
       finished_at: null,
       duration_ms: null,
-      versions: {
-        package: pkg.version,
-        git_sha: resolveGitSha(deps),
-        ...definitionHashes(config, env, deps),
-        config_hash: policy.hash,
-      },
+      versions: collectVersions({ pkg, config, env, policy, deps }),
       config_effective_path: 'config.effective.json',
       stages: [],
       projects: [],
@@ -268,7 +249,8 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       superseded_by: null,
       bounds_hit: [],
     });
-  } else {
+  }
+  if (stageOnly) {
     const existing = await runDir.readRun();
     await runDir.updateRun({ stage_runs: [...(existing.stage_runs || []), { stage: stageOnly, mode, at: startedAt }] });
   }
@@ -276,7 +258,7 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   const gateModule = typeof deps.gate === 'object' && deps.gate ? deps.gate : lazy({}, 'gate', '../../verify/gate');
   const links = lazy(deps, 'links', '../../links/build');
   const definition = deps.definition || loadDefinitionSafely(config, env, log);
-  const engine = deps.engine || createEngineSafely({ config, definition, env, logger: log });
+  const engine = deps.engine || createEngineSafely({ config, definition, env, logger: log, runDir });
   const runStart = new Date(`${date}T06:00:00Z`);
   const grafana = deps.grafana || createGrafanaSafely(config, deps.fetch, log);
   const findingsGate = resolveFindingsGate({ deps, gateModule, runDir, config });
@@ -364,13 +346,18 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
     }
     const unposted = error.code === codes.IOERR;
     const status = unposted ? 'unposted' : 'failed';
-    await runDir.updateRun({
-      status,
+    // A single-stage run marks only its stage: the run's status belongs to the full pipeline (FR-043), and a
+    // contributor re-running one stage sees the exit code and the log rather than a channel notice.
+    const failurePatch = {
       finished_at: new Date().toISOString(),
       duration_ms: Number(process.hrtime.bigint() - startHr) / 1e6,
-    });
-    log.error('run.failed', { stage: currentStage, status, error });
-    if (!unposted && mode !== 'preview') {
+    };
+    if (!stageOnly) {
+      failurePatch.status = status;
+    }
+    await runDir.updateRun(failurePatch);
+    log.error('run.failed', { stage: currentStage, status: stageOnly ? 'stage' : status, error });
+    if (!unposted && mode !== 'preview' && !stageOnly) {
       const notifier = failureNotifier(config, log, deps);
       if (notifier) {
         try {

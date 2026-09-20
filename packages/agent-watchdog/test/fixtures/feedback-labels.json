@@ -1,0 +1,19 @@
+{
+  "description": "The labelled feedback set (constitution II): a prompt, skill or analysis change must keep every confirmed label among the accepted items of its case and every dismissed label out of them. Labels name items by host and metric; verdicts mirror the Slack reactions they stand for.",
+  "labels": [
+    {
+      "case": "seeded-anomaly",
+      "host": "alpha.example.org",
+      "metric": "cht_sentinel_backlog_count",
+      "verdict": "confirmed",
+      "note": "A seven-hour monotonic climb to three times yesterday is exactly what the on-call engineer wants flagged."
+    },
+    {
+      "case": "seeded-anomaly",
+      "host": "beta.example.org",
+      "metric": "cht_conflict_count",
+      "verdict": "dismissed",
+      "note": "Conflicts on beta sit within normal noise that day; flagging them would be a false positive."
+    }
+  ]
+}

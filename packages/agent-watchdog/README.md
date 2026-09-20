@@ -31,6 +31,28 @@ node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18 > pay
 Flags, streams and exit codes: [`contracts/cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md),
 [`contracts/exit-codes.md`](specs/001-watchdog-slack-loop/contracts/exit-codes.md).
 
+### Running it yourself
+
+Every stage reads the previous stage's files under `AGENT_WATCHDOG_DATA_DIR/runs/<date>/` and writes
+its own, so a contributor can run the pipeline in preview, one stage at a time, or replay a stored run
+against changed prompts without posting anything or contacting Grafana or Slack
+([`contracts/run-directory.md`](specs/001-watchdog-slack-loop/contracts/run-directory.md)):
+
+```sh
+agent-watchdog run --dry-run --date 2026-09-18 > payload.json     # every artefact, exact payload, nothing posted
+agent-watchdog run --date 2026-09-18 --stage collect              # then analyze, agent, rollup, render, publish
+agent-watchdog replay --date 2026-09-18 --prompts ./prompts-experiment --label experiment > diff.json
+agent-watchdog replay --from 2026-08-20 --to 2026-09-18 --prompts ./prompts-experiment > summary.json
+AGENT_WATCHDOG_ENGINE=cli agent-watchdog run --dry-run --date 2026-09-18 --project cht.example.org
+```
+
+The `cli` engine drives the same agent definition through `claude -p --bare` (set
+`AGENT_WATCHDOG_CLAUDE_PATH` when `claude` is not on your PATH) and serves the read-only tools to it
+through `agent-watchdog tools-server` over stdio. Replay serves recorded tool results from the stored
+run, prints a JSON comparison of items before and after, and is the diff a prompt change attaches to its
+PR. `npm run replay:eval` runs the fixture runs through analysis and the gate and fails on a regression
+against `test/fixtures/runs/*/expected.json` and `test/fixtures/feedback-labels.json`.
+
 ## Contracts for deployment
 
 Deployment manifests live in `medic-infrastructure`. This package exposes:
@@ -57,6 +79,8 @@ Every runtime dependency carries a one-line justification (constitution V):
 ## Smoke tests
 
 Scripts under `smoke/` need real credentials and are not part of `npm test`; see the quickstart.
+`smoke/agent-parity.js --date <date> --project <host>` replays one stored project through both engines
+and fails on any difference in items or gate verdicts.
 
 ## Releasing
 

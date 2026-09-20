@@ -196,4 +196,33 @@ describe('agent/engine-sdk', () => {
     await expect(session.turn('x')).to.be.rejectedWith(/timed out/);
     await session.close();
   });
+
+  it('attaches extra in-process servers from localServers and replaces the remote docs server', async () => {
+    const { sdk, captured } = fakeSdk({ turns: [{ result: success({ a: 1 }) }] });
+    const docsTools = [{ name: 'search_docs', description: 'd', schema: {}, handler: async () => ({ content: [] }) }];
+    const session = await bareSession(makeEngine(sdk), {
+      tools: definition.tools.allowed, localTools, localServers: { 'cht-docs': docsTools },
+    });
+    await session.turn('x');
+    await session.close();
+    const o = captured.options;
+    expect(o.mcpServers['cht-docs']).to.include({ type: 'sdk', name: 'cht-docs' });
+    expect(o.mcpServers.watchdog).to.include({ type: 'sdk', name: 'watchdog' });
+    expect(captured.servers.map((s) => s.name).sort()).to.deep.equal(['cht-docs', 'watchdog']);
+    expect(captured.servers.find((s) => s.name === 'cht-docs').tools[0].name).to.equal('search_docs');
+  });
+
+  it('exposes cumulative cost and reports each turn cost as a delta', async () => {
+    const { sdk } = fakeSdk({ turns: [
+      { result: success({ a: 1 }) }, { result: { ...success({ a: 2 }), total_cost_usd: 0.05 } },
+    ] });
+    const session = await bareSession(makeEngine(sdk));
+    const first = await session.turn('x');
+    const second = await session.turn('y');
+    await session.close();
+    expect(first.result.total_cost_usd).to.be.closeTo(0.02, 1e-9);
+    expect(first.result.cumulative_cost_usd).to.be.closeTo(0.02, 1e-9);
+    expect(second.result.total_cost_usd).to.be.closeTo(0.03, 1e-9);
+    expect(second.result.cumulative_cost_usd).to.be.closeTo(0.05, 1e-9);
+  });
 });

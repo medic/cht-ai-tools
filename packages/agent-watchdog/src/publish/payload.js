@@ -6,6 +6,7 @@ const path = require('node:path');
 const Handlebars = require('handlebars');
 const { assertAudience } = require('./audience');
 const { hostOf } = require('../rollup/deterministic-brief');
+const { formatCost } = require('./footer');
 
 const TEMPLATES = path.join(__dirname, '..', '..', 'templates', 'slack');
 const HEADER_MAX = 150;
@@ -44,7 +45,7 @@ const footerText = (footer) => {
   if (footer.trace_url) {
     parts.push(link(footer.trace_url, 'trace'));
   }
-  parts.push(`cost $${Number(footer.cost_usd || 0).toFixed(2)}`);
+  parts.push(`cost ${formatCost(footer.cost_usd)}`);
   return parts.join(' · ');
 };
 
@@ -139,6 +140,7 @@ const buildPayload = ({
       expected_load_notice: brief.expected_load_notice || '',
       has_trace: Boolean(brief.footer && brief.footer.trace_url),
       trace_url: brief.footer ? brief.footer.trace_url : null,
+      cost_text: formatCost(brief.footer ? brief.footer.cost_usd : 0),
     };
     const text = truncate(template(brief.kind)(view).trim(), TEXT_MAX);
     return { run_id: runId, kind: brief.kind, parent: { channel, text, metadata }, image: null, replies: [] };

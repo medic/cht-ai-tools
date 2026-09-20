@@ -50,11 +50,14 @@ const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budg
 
 /**
  * Run the analysis passes for one project inside one engine session.
+ * `localTools` are served in-process as the `watchdog` server; `localServers` maps further server names to
+ * tool lists (replay serves the documentation service from recordings this way).
  * @returns {Promise<object>} passes, items, converged, bounds_hit, reference_sources_unavailable, cost_usd, usage
  */
 const runProjectSession = async ({
   engine, definition, project, candidates, changes, feedback = [], memory = '', activeWindow = null, config, gate,
-  runDir, logger, tracer = null, now = () => new Date(), deadline = null, localTools = [], mcpConfig = null,
+  runDir, logger, tracer = null, now = () => new Date(), deadline = null, localTools = [], localServers = {},
+  mcpConfig = null,
 }) => {
   const slug = project.slug;
   const date = now().toISOString().slice(0, 10);
@@ -242,6 +245,7 @@ const runProjectSession = async ({
     outputSchema: definition.outputSchemas.findings,
     tools: definition.tools.allowed,
     localTools,
+    localServers,
     mcpConfig: mcpConfig || engine.mcpConfig || null,
     bounds: { maxTurns: bounds.maxTurns, maxBudgetUsd: bounds.maxBudgetUsdProject, timeoutMs: bounds.modelTimeoutMs },
     model: config.model.name,

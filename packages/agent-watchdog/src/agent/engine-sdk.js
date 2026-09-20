@@ -1,30 +1,16 @@
 'use strict';
 // The Claude Agent SDK engine (research.md R-2): one streaming-input query per project session, isolated
-// from filesystem settings, with no built-in tools and an enumerated MCP allow-list.
+// from filesystem settings, with no built-in tools and an enumerated MCP allow-list. Messages are mapped to
+// turn objects by src/agent/turn-mapper.js, the same mapper the command-line engine uses.
 const os = require('node:os');
 const path = require('node:path');
 const { buildHooks } = require('../../agent/hooks');
 const { createSdkToolServer } = require('./tools/sdk-server');
+const { createTurnMapper, normaliseUsage, blockText } = require('./turn-mapper');
 
 const DOCS_PREFIX = 'mcp__cht-docs__';
 const DOCS_SERVER = 'cht-docs';
-
-const normaliseUsage = (usage = {}) => ({
-  input_tokens: usage.input_tokens || 0,
-  output_tokens: usage.output_tokens || 0,
-  cache_read_tokens: usage.cache_read_input_tokens ?? usage.cache_read_tokens ?? 0,
-  cache_creation_tokens: usage.cache_creation_input_tokens ?? usage.cache_creation_tokens ?? 0,
-});
-
-const blockText = (content) => {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content.map((block) => (typeof block === 'string' ? block : block.text || '')).join('');
-  }
-  return content === undefined || content === null ? '' : JSON.stringify(content);
-};
+const WATCHDOG_SERVER = 'watchdog';
 
 /** A push-based async iterable of user messages: the SDK's streaming-input prompt. */
 const createQueue = () => {
@@ -94,29 +80,41 @@ const createSdkEngine = ({
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   });
 
+  /**
+   * The MCP servers of one session: the remote documentation server when a docs tool is allowed, plus one
+   * in-process server per entry of localServers (localTools is the shorthand for the watchdog server). A local
+   * `cht-docs` server, as replay supplies, replaces the remote one.
+   */
+  const mcpServersFor = ({ sdk, tools, localTools, localServers, sessionMcp }) => {
+    const local = { ...localServers };
+    if (localTools.length && !local[WATCHDOG_SERVER]) {
+      local[WATCHDOG_SERVER] = localTools;
+    }
+    const mcpServers = {};
+    const docs = sessionMcp && sessionMcp.mcpServers ? sessionMcp.mcpServers[DOCS_SERVER] : null;
+    if (docs && !local[DOCS_SERVER] && tools.some((t) => t.startsWith(DOCS_PREFIX))) {
+      mcpServers[DOCS_SERVER] = docs;
+    }
+    for (const [name, toolDefs] of Object.entries(local)) {
+      if (toolDefs && toolDefs.length) {
+        mcpServers[name] = createSdkToolServer(sdk, toolDefs, { name });
+      }
+    }
+    return mcpServers;
+  };
+
   const openSession = async (request) => {
     const {
-      systemPrompt, outputSchema, tools = definition.tools.allowed, localTools = [],
+      systemPrompt, outputSchema, tools = definition.tools.allowed, localTools = [], localServers = {},
       mcpConfig: sessionMcp = mcpConfig, bounds, model = config.model.name, effort = config.model.effort,
       sessionName = null,
     } = request;
     const sdk = await loadSdk();
     const abortController = new AbortController();
     const queue = createQueue();
-    const toolUses = new Map();
+    const mapper = createTurnMapper({ docsServer: DOCS_SERVER });
     let pending = null;
-    let initUnavailable = false;
-    let sessionId = null;
     let ended = false;
-
-    const mcpServers = {};
-    const docs = sessionMcp && sessionMcp.mcpServers ? sessionMcp.mcpServers[DOCS_SERVER] : null;
-    if (docs && tools.some((t) => t.startsWith(DOCS_PREFIX))) {
-      mcpServers[DOCS_SERVER] = docs;
-    }
-    if (localTools.length) {
-      mcpServers.watchdog = createSdkToolServer(sdk, localTools);
-    }
 
     const options = {
       systemPrompt,
@@ -131,7 +129,7 @@ const createSdkEngine = ({
       maxBudgetUsd: bounds.maxBudgetUsd,
       model,
       effort,
-      mcpServers,
+      mcpServers: mcpServersFor({ sdk, tools, localTools, localServers, sessionMcp }),
       hooks: hooksFactory({ allowed: tools, recorder: () => {}, logger }),
       env: subprocessEnv(),
       abortController,
@@ -142,63 +140,18 @@ const createSdkEngine = ({
       },
     };
 
-    const handle = (message) => {
-      if (!message || typeof message !== 'object') {
-        return;
-      }
-      if (message.type === 'system' && message.subtype === 'init') {
-        sessionId = message.session_id || sessionId;
-        const servers = message.mcp_servers || [];
-        if (servers.some((s) => s.name === DOCS_SERVER && s.status !== 'connected')) {
-          initUnavailable = true;
-        }
-        return;
-      }
-      const blocks = message.message && Array.isArray(message.message.content) ? message.message.content : [];
-      if (message.type === 'assistant') {
-        for (const block of blocks) {
-          if (block.type === 'tool_use') {
-            toolUses.set(block.id, { name: block.name, input: block.input });
-          }
-        }
-        return;
-      }
-      if (message.type === 'user' && pending) {
-        for (const block of blocks) {
-          if (block.type === 'tool_result') {
-            const use = toolUses.get(block.tool_use_id) || { name: 'unknown', input: null };
-            pending.toolCalls.push({
-              tool_name: use.name, tool_input: use.input, tool_response: blockText(block.content),
-            });
-            if (block.is_error && use.name.startsWith(DOCS_PREFIX)) {
-              pending.referenceUnavailable = true;
-            }
-          }
-        }
-        return;
-      }
-      if (message.type === 'result' && pending) {
-        const denials = message.permission_denials || [];
-        const deniedDocs = denials.some((d) => String(d.tool_name || '').startsWith(DOCS_PREFIX));
-        const turn = {
-          structuredOutput: message.structured_output === undefined ? null : message.structured_output,
-          result: {
-            subtype: message.subtype,
-            usage: normaliseUsage(message.usage),
-            total_cost_usd: message.total_cost_usd || 0,
-            num_turns: message.num_turns ?? null,
-            duration_ms: message.duration_ms ?? null,
-            session_id: message.session_id || sessionId,
-            permission_denials: denials,
-            errors: message.errors || [],
-            stop_reason: message.stop_reason || null,
-          },
-          toolCalls: pending.toolCalls,
-          referenceUnavailable: initUnavailable || pending.referenceUnavailable || deniedDocs,
-        };
+    const settle = (turn) => {
+      if (pending) {
         const { resolve } = pending;
         pending = null;
         resolve(turn);
+      }
+    };
+    const fail = (error) => {
+      if (pending) {
+        const { reject } = pending;
+        pending = null;
+        reject(error);
       }
     };
 
@@ -206,21 +159,16 @@ const createSdkEngine = ({
     const pump = (async () => {
       try {
         for await (const message of stream) {
-          handle(message);
+          const turn = mapper.handle(message);
+          if (turn) {
+            settle(turn);
+          }
         }
       } catch (error) {
-        if (pending) {
-          const { reject } = pending;
-          pending = null;
-          reject(error);
-        }
+        fail(error);
       } finally {
         ended = true;
-        if (pending) {
-          const { reject } = pending;
-          pending = null;
-          reject(new Error('session ended before a result message arrived'));
-        }
+        fail(new Error('session ended before a result message arrived'));
       }
     })();
 
@@ -242,8 +190,6 @@ const createSdkEngine = ({
         }
       }, bounds.timeoutMs);
       pending = {
-        toolCalls: [],
-        referenceUnavailable: false,
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -253,6 +199,7 @@ const createSdkEngine = ({
           reject(error);
         },
       };
+      mapper.beginTurn();
       queue.push({ type: 'user', message: { role: 'user', content: userText }, parent_tool_use_id: null });
     });
 
@@ -265,15 +212,20 @@ const createSdkEngine = ({
       }
     };
 
-    return { turn, close, get sessionId() {
-      return sessionId; 
-    } };
+    return {
+      turn,
+      close,
+      get sessionId() {
+        return mapper.sessionId;
+      },
+    };
   };
 
   const singleTurn = async (request) => {
     const { systemPrompt, userPrompt, outputSchema, bounds, model, effort, name = 'single-turn' } = request;
     const session = await openSession({
-      systemPrompt, outputSchema, tools: [], localTools: [], mcpConfig: null, bounds, model, effort, sessionName: name,
+      systemPrompt, outputSchema, tools: [], localTools: [], localServers: {}, mcpConfig: null, bounds, model, effort,
+      sessionName: name,
     });
     try {
       return await session.turn(userPrompt);

@@ -317,6 +317,11 @@ const VARIABLES = [
     path: 'runtime.chromiumPath',
     schema: text,
   },
+  {
+    env: 'AGENT_WATCHDOG_CLAUDE_PATH',
+    path: 'runtime.claudePath',
+    schema: text,
+  },
 ];
 
 // Paths inside the package that the run reads but never writes (constitution VII).

@@ -83,6 +83,7 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_LOG_FORMAT` | enum `json\|pretty` | `json` | JSON lines on stderr. |
 | `MCP_TIMEOUT` | integer ms | 30000 | Read by the agent runtime: MCP server startup wait. |
 | `AGENT_WATCHDOG_CHROMIUM_PATH` | path | unset | Explicit Chromium executable for rendering; when unset the image's Playwright browser registry resolves it. |
+| `AGENT_WATCHDOG_CLAUDE_PATH` | path | unset | Explicit `claude` executable for `AGENT_WATCHDOG_ENGINE=cli`; when unset, `claude` is resolved on PATH. |
 
 ## Set by the container image, not by the deployment
 

@@ -48,5 +48,13 @@ defaults in `config/defaults/`. Safety rails and hard caps are code.
 
 ```sh
 npm ci && npm run lint && npm test
-node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18
+node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18            # preview, posts nothing
+node --env-file=.env bin/agent-watchdog.js run --date 2026-09-18 --stage collect      # one stage at a time
+node --env-file=.env bin/agent-watchdog.js replay --date 2026-09-18 --prompts ./p2    # offline, prints the diff
+AGENT_WATCHDOG_ENGINE=cli node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18
+npm run replay:eval                                                                  # fixture regression gate
 ```
+
+A prompt, skill or schema change attaches the `replay` comparison to its PR and must keep `npm run
+replay:eval` green. Replay never contacts Grafana or Slack: tool results come from the stored run's
+`tool-calls.jsonl`, and anything unrecorded is answered `unavailable` and counted in the comparison.

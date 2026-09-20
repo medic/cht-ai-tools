@@ -25,6 +25,20 @@ describe('cli/parse', () => {
     expect(parsed.flags.project).to.deep.equal(['a.org', 'b.org']);
   });
 
+
+
+  it('parses the tools-server flags for the CLI engine', () => {
+    const parsed = parseCommandLine([
+      'tools-server', '--run-dir', '/data/runs/2026-09-18', '--data-dir', '/data', '--project', 'alpha-example-org',
+      '--server', 'cht-docs', '--replay',
+    ]);
+    expect(parsed.command).to.equal('tools-server');
+    expect(parsed.flags).to.include({
+      'run-dir': '/data/runs/2026-09-18', 'data-dir': '/data', server: 'cht-docs', replay: true,
+    });
+    expect(parsed.flags.project).to.deep.equal(['alpha-example-org']);
+  });
+
   it('rejects unknown flags with a usage error', () => {
     expect(() => parseCommandLine(['run', '--bogus'])).to.throw(codes.ExitError).with.property('code', codes.USAGE);
   });
