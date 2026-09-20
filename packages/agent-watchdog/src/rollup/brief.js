@@ -238,25 +238,61 @@ const analysisFailure = (analysis) => {
   return { count: analysis.failed.length, total: analysis.projects || analysis.failed.length, message };
 };
 
+const BOUND_NAMES = { budget: 'session budget', turns: 'turn cap' };
+const dollars = (n) => `$${Number(n).toFixed(2)}`;
+
+/** Sessions a bound stopped before any result (revision 16), or null. */
+const analysisCutOff = (analysis) => {
+  const stopped = analysis && Array.isArray(analysis.incomplete) ? analysis.incomplete : [];
+  if (!stopped.length) {
+    return null;
+  }
+  const bounds = ['budget', 'turns'].filter((b) => stopped.some((s) => (s.bounds || []).includes(b)));
+  const spent = stopped.reduce((sum, s) => sum + (s.cost_usd || 0), 0);
+  return {
+    count: stopped.length,
+    total: analysis.projects || stopped.length,
+    bound: (bounds.length ? bounds : ['budget']).map((b) => BOUND_NAMES[b]).join(' or '),
+    spent,
+  };
+};
+
+/**
+ * How the analysis fell short: `notice` goes on every brief after "Analysis incomplete: ", `reason` into the
+ * degraded brief's notice. Failures keep their revision-13 wording.
+ */
+const shortfalls = (analysis) => {
+  const found = [];
+  const failure = analysisFailure(analysis);
+  if (failure) {
+    const where = `on ${failure.count} of ${failure.total} projects (${failure.message})`;
+    found.push({ notice: `model sessions failed ${where}`, reason: `model analysis failed ${where}` });
+  }
+  const cutOff = analysisCutOff(analysis);
+  if (cutOff) {
+    const text = `model sessions were stopped by the ${cutOff.bound} on ${cutOff.count} of ${cutOff.total} `
+      + `projects before a result (${dollars(cutOff.spent)} spent)`;
+    found.push({ notice: text, reason: text });
+  }
+  return found;
+};
+
 const composeBrief = async ({
   ctx, items, discovery, changes, candidates, memory = null, feedbackUnmatched = [], expectedLoadNotice = null,
   referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [], feedbackBrief = null,
   layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
 }) => {
-  // Failed model sessions are never silent: a notice on every brief, and the deterministic brief when they left
-  // nothing to publish although candidates exist (revision 13).
-  const failure = analysisFailure(analysis);
-  const notices = failure
-    ? [...givenNotices, `Analysis incomplete: model sessions failed on ${failure.count} of ${failure.total} `
-      + `projects (${failure.message})`]
-    : givenNotices;
+  // Failed or bound-stopped model sessions are never silent: a notice on every brief, and the deterministic brief
+  // when they left nothing to publish although candidates exist (revision 13, 16).
+  const short = shortfalls(analysis);
+  const notices = [...givenNotices, ...short.map((s) => `Analysis incomplete: ${s.notice}`)];
   const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices };
   // The stage computes the layout from the ranked items, the projects' groups and the alert groups; a caller
   // without one gets the same rule applied here, so the prompt, the gate and the assembled bullets always agree.
   const bodyLayout = layout || buildLayout(items, { groupOf: groupOfProjects(discovery), alertGroups });
   if (!items.length) {
-    if (failure && candidates.length) {
-      const reason = `model analysis failed on ${failure.count} of ${failure.total} projects (${failure.message})`;
+    if (short.length && candidates.length) {
+      const reason = short.map((s) => s.reason).join('; ');
       return {
         brief: buildDeterministicBrief({ ...base, candidates, reason, alertGroups, staleAfterDays }),
         drafts: [], degraded: true, memoryUpdate: null, proposals: [], calls: [],

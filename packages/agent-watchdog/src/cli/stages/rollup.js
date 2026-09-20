@@ -6,6 +6,7 @@ const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
 const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
+const { analysisRecord } = require('../../rollup/analysis');
 const { readEpisodeEvents } = require('../../alerts/episodes');
 const { bareKey } = require('../../analyze/kinds');
 const { updateEpisodes } = require('../../alerts/episodes');
@@ -97,7 +98,7 @@ const run = async (ctx) => {
   let referenceSourcesUnavailable = false;
   // Sessions that failed before a result (revision 13): counted and named so the brief can say so rather than
   // present an empty analysis as a quiet day.
-  const analysis = { projects: 0, failed: [], errors: [] };
+  const passesByProject = [];
   for (const project of discovery.projects || []) {
     const { slug } = project;
     candidates.push(...await readIfExists(runDir, `${slug}/candidates.json`, []));
@@ -111,21 +112,22 @@ const run = async (ctx) => {
     if (session && session.reference_sources_unavailable) {
       referenceSourcesUnavailable = true;
     }
-    const passes = await readIfExists(runDir, `${slug}/passes.json`, null);
-    if (passes) {
-      analysis.projects += 1;
-      const failed = (passes.errors || []).length > 0 || (passes.bounds_hit || []).includes('error');
-      if (failed) {
-        analysis.failed.push(project.url);
-        for (const failure of passes.errors || []) {
-          analysis.errors.push(failure.message);
-        }
-      }
-    }
+    passesByProject.push({ url: project.url, passes: await readIfExists(runDir, `${slug}/passes.json`, null) });
   }
+  // Failed sessions and sessions stopped by a bound before a result are both named in the brief (revision 13, 16).
+  const analysis = analysisRecord(passesByProject);
   if (analysis.failed.length) {
     logger.warn('rollup.analysis_failures', {
       failed: analysis.failed.length, projects: analysis.projects, first_error: analysis.errors[0] || null,
+    });
+  }
+  if (analysis.incomplete.length) {
+    logger.warn('rollup.analysis_incomplete', {
+      incomplete: analysis.incomplete.length,
+      projects: analysis.projects,
+      bounds: [...new Set(analysis.incomplete.flatMap((i) => i.bounds))],
+      spent_usd: round6(analysis.incomplete.reduce((sum, i) => sum + (i.cost_usd || 0), 0)),
+      hint: 'measure one project with a higher AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT, or lower AGENT_WATCHDOG_EFFORT',
     });
   }
 
@@ -139,6 +141,8 @@ const run = async (ctx) => {
   // alerting API is a notice on the brief, never a failure.
   const classified = await readIfExists(runDir, 'alerts.classified.json', null);
   const alertsAvailable = Boolean(classified && classified.available);
+  // When the alerts were read: the classification's time, else this run's clock (revision 16).
+  const alertsObservedAt = (classified && classified.observed_at) || ctx.now || null;
   const alertGroups = alertsAvailable ? (classified.groups || []) : [];
   const staleAfterDays = (classified && classified.stale_after_days) || 14;
   const grafanaUrl = ctx.config.endpoints && ctx.config.endpoints.grafanaUrl;
@@ -196,7 +200,7 @@ const run = async (ctx) => {
       .map((i) => i.instance_id));
     const cleared = clearedEpisodes({
       events: await readEpisodeEvents(dataDirForHistory), firingIds,
-      runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
+      runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`), observedAt: alertsObservedAt,
     });
     const resolved = resolvedNotice(cleared);
     if (resolved) {
@@ -278,6 +282,7 @@ const run = async (ctx) => {
       runId,
       date: ctx.date,
       runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
+      observedAt: alertsObservedAt,
       classified,
       items: ranked,
       candidatesByProject,

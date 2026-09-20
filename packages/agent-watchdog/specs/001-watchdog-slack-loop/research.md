@@ -605,6 +605,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-17 | `smoke/grafana.js --project <host>` collects every window of every per-project panel of the hosted dashboards without one `query failed` window: derived expressions in the trailing subquery form and `$interval` resolved to the dashboard's value | The first preview run showed the fake accepted queries Prometheus rejects; only the hosted proxy proves the resolved forms |
 | S-18 | On the hosted watchdog, from the eighth consecutive daily run, `collect.project` reports `fetched` equal to the metric count, `reused` three times that, no trailing query, and the collect stage under fifteen minutes in `run.json` | Reuse depends on the real run cadence, retention and proxy timings |
 | S-19 | With `AGENT_WATCHDOG_ENGINE=cli` and `ANTHROPIC_API_KEY` blank on a machine where `claude` is logged in, the first pass completes with no authentication error, `agent.cli_auth` reports `mode: login`, and the run leaves no new directory under `~/.claude/projects/` | Whether print mode accepts the subscription login with `--setting-sources ""`, and whether the auto-memory switch holds there, only a live run shows |
+| S-20 | A forced re-run of the previous date (`--force --date <yesterday>`) completes the roll-up, its `alerts.classified.json` carries `observed_at` at the clock time, and every cleared episode has a duration of zero or more | Only the hosted alert state has instances that started after the analysed date |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -991,3 +992,33 @@ brief's `Analysis incomplete` notice. Measure before tuning: with the tool appro
 gives the first real per-project cost; until then a lower per-project budget and a cheaper model
 for the per-project passes are the safe settings.
 
+## R-21. Live alert snapshots on a backdated re-run, and a session stopped before a result
+
+**Evidence** (live, 2026-09-20, the first single-project run on the operator's `claude` login,
+`run --dry-run --force --date 2026-09-19 --project <host>` at 17:56 UTC): the roll-up failed with
+`ZodError … "path": ["duration_hours"] … "Too small: expected number to be >=0"` from
+`updateEpisodes`; before that, `agent.session_done` reported `passes: 1, items: 0, converged: false,
+bounds_hit: ["budget"], cost_usd: 0.84874` against `budget_usd: 0.75` for 22 candidates, and the
+layout held only alert slots.
+
+**Cause**: the run's reference time was the analysed date at 06:00 UTC, while alerts are read live.
+Earlier forced runs of the same date had opened episodes for alerts that started after that time;
+when one stopped firing, its duration measured to 06:00 of the previous day was negative.
+`classifyAlerts` already clamped `days_firing` at zero, which is why the analyze stage passed. The
+budget stop is not a defect: it is the first measurement of a real per-project cost, and it says the
+first pass of a project with 22 candidates costs more than $0.75 at the configured model and effort.
+The defect is that the brief would have presented the day as "Alerts only: … no metric changes to
+flag" with 22 computed candidates unassessed (User Story 10).
+
+**Decision**: alerts are measured from when they were read. The run's clock (`deps.now`, injectable)
+reaches the stages as `ctx.now`; the collect stage stamps `alerts.json` `fetched_at` with it; the
+classification measures `days_firing` from `fetched_at` (an explicit `observedAt` first, the run start
+last) and records `observed_at`; episodes take `observedAt` for `at`, `cleared_at` and
+`duration_hours`, clamp a negative duration to zero and log `alerts.episode_duration_clamped`; the
+resolved notice uses the same time. The roll-up derives an analysis record from every `passes.json`
+(`src/rollup/analysis.js`): sessions with errors or the error bound are failed (revision 13); sessions
+stopped by the budget or the turn cap with no accepted items are incomplete, and the brief carries
+`Analysis incomplete: model sessions were stopped by the session budget on N of M projects before a
+result ($X spent)` and degrades to the candidates when nothing else exists. The log line
+`rollup.analysis_incomplete` carries the operator hint. Budget tuning waits for one complete session
+measured with a higher per-project budget (constitution: measurement before tuning).

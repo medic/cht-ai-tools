@@ -29,9 +29,11 @@ const housekeepingNotice = (housekeeping) => {
     + `watchdog or silence the rule${one ? '' : 's'}`;
 };
 
-/** Open episodes whose instance no longer fires, with how long they fired, oldest first. */
-const clearedEpisodes = ({ events, firingIds, runStart }) => {
-  const start = runStart instanceof Date ? runStart.getTime() : Date.parse(runStart);
+/** Open episodes whose instance no longer fires, with how long they fired, oldest first (`observedAt`, else
+ * `runStart`, is when the alerts were read). */
+const clearedEpisodes = ({ events, firingIds, runStart, observedAt = null }) => {
+  const reference = observedAt || runStart;
+  const start = reference instanceof Date ? reference.getTime() : Date.parse(reference);
   return [...openEpisodes(events).values()]
     .filter((episode) => !firingIds.has(episode.instance_id))
     .map((episode) => ({

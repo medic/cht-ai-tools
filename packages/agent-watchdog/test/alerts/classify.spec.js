@@ -41,6 +41,34 @@ describe('alerts/classify classifyAlerts', () => {
     runStart, ...overrides,
   });
 
+  it('measures days firing from the time the alerts were read, not the run start, and records it', () => {
+    // A forced re-run of 2026-09-18 the next evening: the snapshot is live, so ages count from the snapshot.
+    const late = instance('sentinel', 'north-a.example.org', { active_at: '2026-09-18T15:00:00Z' });
+    const old = instance('outbound', 'north-b.example.org', { active_at: '2026-09-05T18:00:00Z' });
+    const out = classifyAlerts({
+      collected: { ...collectedWith([late, old]), fetched_at: '2026-09-19T17:56:00Z' },
+      alertsPolicy: alertsPolicy(), projectGroups: PROJECT_GROUPS, previous: null, runStart,
+    });
+    expect(out.observed_at).to.equal('2026-09-19T17:56:00.000Z');
+    const byHost = Object.fromEntries(out.instances.map((i) => [i.host, i]));
+    expect(byHost['north-a.example.org']).to.include({ days_firing: 1, new: true, stale: false });
+    expect(byHost['north-b.example.org']).to.include({ days_firing: 13, stale: false });
+    // An explicit observation time wins over the file's, and the run start stands in when the file has none.
+    const explicit = classifyAlerts({
+      collected: collectedWith([old]), alertsPolicy: alertsPolicy(), projectGroups: PROJECT_GROUPS, runStart,
+      observedAt: '2026-09-20T06:00:00Z',
+    });
+    expect(explicit.observed_at).to.equal('2026-09-20T06:00:00.000Z');
+    expect(explicit.instances[0]).to.include({ days_firing: 14, stale: true });
+    const { fetched_at: ignored, ...withoutTime } = collectedWith([old]);
+    void ignored;
+    const fallback = classifyAlerts({
+      collected: withoutTime, alertsPolicy: alertsPolicy(), projectGroups: PROJECT_GROUPS, runStart,
+    });
+    expect(fallback.observed_at).to.equal(runStart.toISOString());
+    expect(fallback.instances[0].days_firing).to.equal(12);
+  });
+
   it('classifies every instance with category, importance, known, group, started_at, days_firing and stale', () => {
     const out = classify();
     expect(out.available).to.equal(true);

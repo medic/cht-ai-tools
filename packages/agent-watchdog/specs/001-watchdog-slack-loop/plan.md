@@ -365,3 +365,23 @@ API key exited 78: `claude` was logged in on a Team plan, and `--bare` never rea
 - **VII**: no settings file, rule or instruction file of the operator's reaches the prompt in either
   mode; managed settings still apply, as the runtime documents.
 - **VIII**: unchanged. Result: PASS.
+
+### Revision 16 delta: live alert snapshots on a re-run, and sessions stopped before a result
+
+Re-checked on 2026-09-20 after the first single-project run on the operator's login: the roll-up
+threw on a negative episode duration, and the only session was stopped by its budget before a first
+result while the brief would have read "alerts only" (research.md R-21).
+
+- **I**: no new dependency; the run's clock reaches the stages as `ctx.now` and one pure module,
+  `src/rollup/analysis.js`, derives the analysis record from the pass files.
+- **II**: tests first: episode times from the observation time and the clamp, `days_firing` from
+  `fetched_at`, the analysis record, the cut-off notice and the degraded brief; the e2e alert day
+  now expects the clock time on the cleared episode.
+- **III**: what counts as "stopped before a result" is decided by code from the pass file's bounds
+  and items; the brief text is fixed wording with counts and the spend.
+- **IV**: `alerts.classified.json` gains `observed_at`; nothing else is stored.
+- **V**: no new stage; the roll-up reads the same files.
+- **VI**: unchanged.
+- **VII**: unchanged.
+- **VIII**: one audience; the log carries the operator hint (which variable to raise), the brief only
+  the fact and the spend. Result: PASS.

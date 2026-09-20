@@ -363,6 +363,54 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     expect(empty.brief.notices.some((n) => n.startsWith('Analysis incomplete'))).to.equal(true);
   });
 
+  it('degrades and names the bound when every session was stopped before a result (revision 16)', async () => {
+    const engine = { singleTurn: sinon.stub() };
+    const gate = { verifyBrief: sinon.stub() };
+    const analysis = {
+      projects: 1, failed: [], errors: [],
+      incomplete: [{ project_url: 'https://alpha.example.org', bounds: ['budget'], cost_usd: 0.84874 }],
+    };
+    const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
+    expect(engine.singleTurn.called).to.equal(false);
+    expect(out.degraded).to.equal(true);
+    expect(out.brief.kind).to.equal('degraded');
+    expect(out.brief.degradation_notice)
+      .to.include('model sessions were stopped by the session budget on 1 of 1 projects before a result ($0.85 spent)');
+    const notice = 'Analysis incomplete: model sessions were stopped by the session budget on 1 of 1 projects '
+      + 'before a result ($0.85 spent)';
+    expect(out.brief.notices.filter((n) => n === notice)).to.have.length(1);
+    expect(out.brief.bullets.map((b) => b.kind)).to.include('item');
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+    // Both failures and cut-offs: one notice each, and the degradation names both.
+    const both = {
+      projects: 3, failed: ['https://beta.example.org'], errors: ['session ended before a result'],
+      incomplete: [
+        { project_url: 'https://alpha.example.org', bounds: ['budget'], cost_usd: 0.5 },
+        { project_url: 'https://gamma.example.org', bounds: ['turns'], cost_usd: 0.25 },
+      ],
+    };
+    const mixed = await composeBrief({
+      ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis: both,
+    });
+    expect(mixed.brief.degradation_notice).to.include('model analysis failed on 1 of 3 projects (session ended before '
+      + 'a result); model sessions were stopped by the session budget or turn cap on 2 of 3 projects before a result '
+      + '($0.75 spent)');
+    expect(mixed.brief.notices.filter((n) => n.startsWith('Analysis incomplete'))).to.have.length(2);
+  });
+
+  it('keeps the model brief when only some sessions were stopped before a result, and says so', async () => {
+    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const analysis = {
+      projects: 3, failed: [], errors: [],
+      incomplete: [{ project_url: 'https://gamma.example.org', bounds: ['turns'], cost_usd: 1.2 }],
+    };
+    const out = await composeBrief({ ...base(engine, gate), analysis });
+    expect(out.degraded).to.equal(false);
+    expect(out.brief.notices).to.include('Analysis incomplete: model sessions were stopped by the turn cap on 1 of 3 '
+      + 'projects before a result ($1.20 spent)');
+  });
+
   it('keeps the model brief when only some sessions failed, and says so in the notices', async () => {
     const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };

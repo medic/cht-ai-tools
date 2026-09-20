@@ -226,8 +226,8 @@ One evaluation of a rule for one label set, as reported at run time (FR-064, FR-
 | `labels`, `annotations` | object | As collected; untrusted data. |
 | `state` | enum | `firing` \| `pending` \| `nodata` \| `error`, normalised by code from Grafana's state names (research.md R-14). Only `firing` instances are counted, grouped and posted; the others are stored for the record. |
 | `active_at` | timestamp or null | Grafana's `activeAt` when reported. |
-| `started_at` | timestamp | `active_at`, else the run start of the first run that observed the instance firing (Edge Cases: no state history). |
-| `days_firing` | integer | Whole days from `started_at` to the run start. |
+| `started_at` | timestamp | `active_at`, else the time the first run that observed the instance firing read the alerts (Edge Cases: no state history). |
+| `days_firing` | integer | Whole days from `started_at` to the time the alerts were read (`observed_at` on the classified file: the run start within seconds for the scheduled run, the re-run's clock for a forced re-run; a stored file without a time falls back to the run start). Never negative. |
 | `stale` | boolean | `days_firing >= stale_after_days` from `alerts.yaml` (default 14; FR-065). |
 | `new` | boolean | True when the previous run's `alerts.classified.json` did not hold this `instance_id` firing. |
 | `value` | string or null | The evaluated value as Grafana reports it; untrusted, never rendered into bullet text. |
@@ -248,10 +248,10 @@ in `alerts/episodes.jsonl`.
 |---|---|---|
 | `episode_id` | string | Hash of `instance_id` and the date of `started_at`. |
 | `event` | enum | `opened` (first run to see it firing) \| `observed` (each later run while firing) \| `cleared` (first run that no longer sees it firing). |
-| `run_id`, `at` | string, timestamp | The run that wrote the event and its start. |
+| `run_id`, `at` | string, timestamp | The run that wrote the event and the time it read the alerts (its start within seconds for the scheduled run; a forced re-run's own clock). |
 | `instance_id`, `rule_uid`, `title`, `host`, `project_url`, `group`, `category`, `importance` | | Copied from the instance. |
 | `started_at`, `cleared_at` | timestamp, timestamp or null | `cleared_at` only on `cleared`. |
-| `duration_hours` | number or null | On `cleared`. |
+| `duration_hours` | number or null | On `cleared`; never negative (clock skew between the source and the run is recorded as zero and logged). |
 | `correlations` | object | Built by code at `opened` and refreshed on every event: `{ expected_load_window_id, version_change: { from, to, observed } or null, related_candidates: candidate_id[], related_items: item_id[] }`; a version change counts when the project's `cht_version` differs between the runs on either side of `started_at`; candidates and items are related when they are on the same project and their metric is listed under the category in `alerts.yaml`, within one day of `started_at`. |
 | `explanation` | object or null | `{ item_id, why_now }` when an accepted Item of the same project and category exists; model prose, gate-accepted, copied by code. |
 

@@ -70,14 +70,16 @@ const hoursBetween = (from, to) => Math.round(((to - Date.parse(from)) / 3600000
 /**
  * Append this run's episode events. Firing instances open or observe an episode; open episodes whose instance no
  * longer fires are cleared and appended to the corpus outcomes. Callers skip this when the alerting API was
- * unavailable, since an absent instance then means nothing.
+ * unavailable, since an absent instance then means nothing. Times are the observation time (when the alerts were
+ * read), else the run start; a duration is never negative: clock skew between the source and this host is
+ * recorded as zero and logged (revision 16).
  * @returns {Promise<{ opened: object[], observed: object[], cleared: object[] }>}
  */
 const updateEpisodes = async ({
-  dataDir, runId, date, runStart, classified, items = [], candidatesByProject = {}, discovery = null,
-  previousDiscovery = null, categories = {}, logger = noop,
+  dataDir, runId, date, runStart, observedAt = null, classified, items = [], candidatesByProject = {},
+  discovery = null, previousDiscovery = null, categories = {}, logger = noop,
 }) => {
-  const start = runStart instanceof Date ? runStart : new Date(runStart);
+  const start = new Date(observedAt || runStart);
   const at = start.toISOString();
   const events = await readEpisodeEvents(dataDir);
   const open = openEpisodes(events);
@@ -121,13 +123,19 @@ const updateEpisodes = async ({
     if (firingIds.has(instanceId)) {
       continue;
     }
+    const hours = hoursBetween(episode.started_at, start.getTime());
+    if (hours < 0) {
+      logger.warn('alerts.episode_duration_clamped', {
+        instance_id: instanceId, started_at: episode.started_at, at, hours,
+      });
+    }
     cleared.push({
       ...episode,
       event: 'cleared',
       run_id: runId,
       at,
       cleared_at: at,
-      duration_hours: hoursBetween(episode.started_at, start.getTime()),
+      duration_hours: Math.max(0, hours),
     });
   }
 

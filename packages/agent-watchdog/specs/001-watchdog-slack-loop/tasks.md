@@ -443,6 +443,15 @@ was logged in; bare mode never reads a login (research.md R-3, login mode).
 - [X] T190 `forSdkModel` and the hint on `ANTHROPIC_API_KEY` in `src/config/schema.js`; `engine` in the loader context and the hint in the message in `src/config/load.js`
 - [X] T191 Login mode in `src/agent/engine-cli.js` (`buildArgs` `login`, `subprocessEnv` `apiKey`, `claudeConfigDir`, the auth log lines); environment, agent-definition and cli contracts; `.env.example`; README; AGENTS; quickstart; spec FR-050, edge case and clarification; plan revision 15 delta; research R-3 login mode and smoke S-19
 
+## Phase 20: Live alert snapshots and sessions stopped before a result (revision 16, 2026-09-20)
+
+**Purpose**: The first single-project run on the operator's login crashed the roll-up on a negative episode duration
+and would have read "alerts only" while its one session was stopped by the budget before a result (research.md R-21).
+
+- [X] T192 [P] Tests first: `test/alerts/episodes.spec.js` (observation time, clamp and warning), `test/alerts/classify.spec.js` (`days_firing` from `fetched_at`, `observed_at`), `test/rollup/analysis.spec.js` (the analysis record), `test/rollup/brief.spec.js` (cut-off notice and degraded brief), `test/e2e/us8.spec.js` (clock time on the cleared episode)
+- [X] T193 `ctx.now` in `src/cli/commands/run.js`; the clock on the alert snapshot in `src/cli/stages/collect.js`; `observedAt` and `observed_at` in `src/alerts/classify.js`; `observedAt`, the clamp and `alerts.episode_duration_clamped` in `src/alerts/episodes.js`; `observedAt` on `clearedEpisodes` in `src/rollup/notices.js`
+- [X] T194 `src/rollup/analysis.js` (`analysisRecord`, `INCOMPLETE_BOUNDS`) used by `src/cli/stages/rollup.js` with `rollup.analysis_incomplete`; the cut-off notice and reason in `src/rollup/brief.js`; spec edge cases, FR-067 and clarification (revision 16); data-model Alert Instance and Alert Episode rows; run-directory contract; plan revision 16 delta; research R-21 and smoke S-20
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

@@ -112,6 +112,54 @@ describe('alerts/episodes', () => {
       .to.include({ kind: 'alert_episode', episode_id: day2.cleared[0].episode_id, duration_hours: 48 });
   });
 
+  it('measures episode times from when the alerts were observed, never from a backdated run start', async () => {
+    // A forced re-run of 2026-09-19 at 17:56 the next day reads the live alert state: an alert that started after
+    // the run date is opened at the observation time, and its clearing later is a positive duration.
+    const logs = [];
+    const logger = { debug() {}, info() {}, error() {}, warn: (event, fields) => logs.push({ event, ...fields }) };
+    const late = classified('sentinel', 'north-a.example.org', { started_at: '2026-09-19T15:00:00Z' });
+    const opened = await updateEpisodes({
+      dataDir, runId: '2026-09-19-f6', date: '2026-09-19', runStart: new Date(DAY2),
+      observedAt: '2026-09-20T17:56:00Z', classified: { instances: [late] }, discovery: { projects: [project] },
+    });
+    expect(opened.opened[0]).to.include({ at: '2026-09-20T17:56:00.000Z', started_at: '2026-09-19T15:00:00Z' });
+    const cleared = await updateEpisodes({
+      dataDir, runId: '2026-09-19-f7', date: '2026-09-19', runStart: new Date(DAY2),
+      observedAt: new Date('2026-09-20T18:30:00Z'), classified: { instances: [] }, discovery: { projects: [project] },
+      logger,
+    });
+    expect(cleared.cleared[0]).to.include({
+      at: '2026-09-20T18:30:00.000Z', cleared_at: '2026-09-20T18:30:00.000Z', duration_hours: 27.5,
+    });
+    expect(logs).to.deep.equal([]);
+    // Without an observation time the run start stands in, as before.
+    const fallback = await updateEpisodes({
+      dataDir, runId: '2026-09-19-f8', date: '2026-09-19', runStart: new Date(DAY2),
+      classified: { instances: [classified('outbound', 'north-a.example.org')] }, discovery: { projects: [project] },
+    });
+    expect(fallback.opened[0].at).to.equal('2026-09-19T06:00:00.000Z');
+  });
+
+  it('records a duration of zero and warns when an episode started after the observation time (clock skew)',
+    async () => {
+      const logs = [];
+      const logger = { debug() {}, info() {}, error() {}, warn: (event, fields) => logs.push({ event, ...fields }) };
+      const skewed = classified('sentinel', 'north-a.example.org', { started_at: '2026-09-20T19:00:00Z' });
+      await updateEpisodes({
+        dataDir, runId: '2026-09-20', date: '2026-09-20', runStart: new Date('2026-09-20T06:00:00Z'),
+        observedAt: '2026-09-20T18:30:00Z', classified: { instances: [skewed] }, discovery: { projects: [project] },
+      });
+      const out = await updateEpisodes({
+        dataDir, runId: '2026-09-20-f1', date: '2026-09-20', runStart: new Date('2026-09-20T06:00:00Z'),
+        observedAt: '2026-09-20T18:40:00Z', classified: { instances: [] }, discovery: { projects: [project] }, logger,
+      });
+      expect(out.cleared[0].duration_hours).to.equal(0);
+      expect(logs.map((l) => l.event)).to.deep.equal(['alerts.episode_duration_clamped']);
+      expect(logs[0]).to.include({ instance_id: skewed.instance_id, started_at: '2026-09-20T19:00:00Z' });
+      const events = await readEpisodeEvents(dataDir);
+      expect(events.every((e) => e.duration_hours === null || e.duration_hours >= 0)).to.equal(true);
+    });
+
   it('is durable for retention and empty on a fresh volume', async () => {
     const { classify } = require('../../src/store/retention');
     expect(classify('alerts/episodes.jsonl')).to.equal('durable');

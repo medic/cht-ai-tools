@@ -182,7 +182,9 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       const cleared = events2.filter((e) => e.event === 'cleared');
       expect(cleared).to.have.length(1);
       expect(cleared[0]).to.include({
-        title: 'Sentinel Backlog', host: 'north-c.example.org', cleared_at: `${DAY2}T06:00:00.000Z`, duration_hours: 27,
+        // Episode times are the clock when the alerts were read (the e2e clock runs at 06:05), not the run start.
+        title: 'Sentinel Backlog', host: 'north-c.example.org', cleared_at: `${DAY2}T06:05:00.000Z`,
+        duration_hours: 27.08,
       });
       const outcomes = readJsonl(path.join(dataDir, 'corpus', 'outcomes', `${DAY2}.jsonl`));
       expect(outcomes.filter((o) => o.kind === 'alert_episode').map((o) => o.episode_id))

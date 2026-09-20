@@ -43,8 +43,9 @@ const run = async (ctx) => {
     dashboards: discovery.dashboards.length, metrics: discovery.metrics.length, targets: discovery.targets_summary,
   });
 
-  // Grafana-managed alerts (FR-064): recorded as collected; unavailable is a fact in the file, not a failure.
-  const alerts = await collectAlerts({ grafana, policy, logger, now: runStart });
+  // Grafana-managed alerts (FR-064): recorded as collected; unavailable is a fact in the file, not a failure. The
+  // snapshot is stamped with the clock, not the analysed date: a forced re-run reads today's alert state.
+  const alerts = await collectAlerts({ grafana, policy, logger, now: ctx.now ? new Date(ctx.now) : runStart });
   await runDir.writeJson('alerts.json', alerts);
   logger.info('collect.alerts', {
     available: alerts.available, source: alerts.source, reason: alerts.reason, rules: alerts.rules.length,

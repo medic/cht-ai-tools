@@ -28,6 +28,8 @@ const emptyCounts = () => ({
  * @param {object[]} [options.projectGroups] projects.yaml groups (label, host_patterns)
  * @param {object|null} [options.previous] the previous run's alerts.classified.json, for newness and start dates
  * @param {Date|string} options.runStart
+ * @param {Date|string} [options.observedAt] when the alerts were read; defaults to the file's `fetched_at`, then
+ *   the run start
  * @param {Map|object|null} [options.changesByProject] Computed Changes per project url, for the metric shown next to
  *   an alert (FR-079)
  * @param {object} [options.categories] alerts.yaml categories: metric names per category
@@ -71,15 +73,18 @@ const compactHousekeeping = (instance) => ({
 });
 
 const classifyAlerts = ({
-  collected, alertsPolicy, projectGroups = [], previous = null, runStart, changesByProject = null, categories = {},
-  deadHosts = null, groupSizes = {},
+  collected, alertsPolicy, projectGroups = [], previous = null, runStart, observedAt = null, changesByProject = null,
+  categories = {}, deadHosts = null, groupSizes = {},
 }) => {
   const staleAfterDays = (alertsPolicy && alertsPolicy.stale_after_days) || DEFAULT_STALE_AFTER_DAYS;
-  const start = runStart instanceof Date ? runStart : new Date(runStart);
+  // Ages count from when the alerts were read (the snapshot is live), else from the run start: a forced re-run of
+  // a past date otherwise sees alerts that started after its date (revision 16).
+  const start = new Date(observedAt || (collected && collected.fetched_at) || runStart);
   if (!collected || !collected.available) {
     return {
       available: false,
       reason: collected && collected.reason ? collected.reason : 'no alert data was collected',
+      observed_at: start.toISOString(),
       stale_after_days: staleAfterDays,
       rules: [],
       instances: [],
@@ -116,6 +121,7 @@ const classifyAlerts = ({
   return {
     available: true,
     reason: null,
+    observed_at: start.toISOString(),
     stale_after_days: staleAfterDays,
     rules,
     instances,

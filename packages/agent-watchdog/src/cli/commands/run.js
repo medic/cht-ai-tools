@@ -310,6 +310,9 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   ctx.links = links;
   ctx.definition = definition;
   ctx.runStart = runStart;
+  // The wall clock (injectable): alerts are a live snapshot, so their ages and episodes are measured from it, not
+  // from the analysed date, which lags it on a forced re-run (revision 16).
+  ctx.now = now;
   ctx.allowlist = buildAllowlistSafely(config);
   ctx.resolveLinks = null;
   ctx.supersededPermalink = await supersededPermalinkFor(dataDir, supersedes);

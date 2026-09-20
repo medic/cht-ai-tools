@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 15)
+**Status**: Draft (revision 16)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -466,6 +466,14 @@ line that shows the alert and its metric together.
   in: the run uses that login and loads none of the operator's settings, rules, instruction files or
   memory; a blank key left by an environment file counts as unset; with the SDK engine the missing
   key remains a configuration error that names the alternative (FR-050).
+- A forced re-run of a past date reads the alert state of the moment it runs: alert ages, episode
+  events and durations are measured from the time the alerts were read, never from the re-run's
+  date, so an alert that started after that date is simply new; a duration that would still be
+  negative (clock skew between the source and the run) is recorded as zero and logged (FR-067).
+- A model session is stopped by its budget or turn cap before any pass produced a result: the brief
+  says so, with the count of projects and what was spent, and degrades to the computed candidates
+  when nothing else was produced, instead of reading as a day with no metric changes (FR-067 for
+  alerts, FR-012 for the bound, revision 16).
 
 ## Requirements *(mandatory)*
 
@@ -643,7 +651,9 @@ Alerts and groups
   window active at the start, a CHT version change within a day of the start, flagged items on the
   same project and a related metric in the same window). The analysis pass receives the project's
   firing alerts as context; an item that explains an alert is linked to the episode as its
-  explanation. Episodes are appended to the knowledge corpus as run outcomes are.
+  explanation. Episodes are appended to the knowledge corpus as run outcomes are. Episode times and
+  alert ages are measured from the time the alerts were read, and a duration is never negative
+  (revision 16).
 - **FR-068**: `projects.yaml` MUST support project groups (a label and host patterns) and an
   ignore list of host patterns. Ignored hosts are discovered and counted but MUST NOT be analysed,
   incur model usage or be named in any post. Hosts matching no group belong to "Other".
@@ -1062,6 +1072,16 @@ Configuration
   operator's login, without bare mode (which never reads a login) and isolated by flags instead: no
   settings sources, no built-in tools, strict MCP configuration, no session persistence, auto memory
   off. The scheduled run keeps the key (FR-050, revision 15).
+- Q: The first single-project run on that login crashed the roll-up with a negative alert episode
+  duration (a forced re-run of the previous day measured the live alert snapshot from that day's
+  06:00 start), and its only session was stopped by the $0.75 budget before a first result, so the
+  brief would have read "alerts only" over 22 computed candidates. What should hold? → A: Alert ages,
+  episode events and durations are measured from the time the alerts were read (the run's clock,
+  recorded as `observed_at`), never from the analysed date; a duration is clamped at zero and
+  logged. A session stopped by its budget or turn cap before a result is named in the brief with the
+  spend, and the brief degrades to the candidates when nothing else exists. The measured first-pass
+  cost of one project with 22 candidates exceeded $0.75 at the configured model and effort; the
+  per-project budget is tuned after measuring one complete session, not guessed (revision 16).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

@@ -15,7 +15,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── feedback.ingested.json         # feedback read at start, matched and unmatched      [kept]
 │       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels, variables [kept]
 │       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
-│       ├── alerts.classified.json         # category, importance, staleness, groups, patterns, evidence, housekeeping [kept]
+│       ├── alerts.classified.json         # observed_at, category, importance, staleness, groups, patterns, evidence, housekeeping [kept]
 │       ├── <project_slug>/
 │       │   ├── inputs/windows.json.gz     # Metric Windows, raw series, each with its source   [raw]
 │       │   ├── changes.json               # Computed Changes                                   [kept]
