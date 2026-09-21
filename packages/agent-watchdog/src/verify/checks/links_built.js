@@ -8,11 +8,17 @@ const check = (ctx) => {
   const reasons = [];
   const dashboards = new Map((ctx.discovery.dashboards || []).map((d) => [d.uid, d]));
   (ctx.items || []).forEach((item, i) => {
-    const ref = item.dashboard_ref || {};
+    if (!item.dashboard_ref) {
+      // Built by code from the metric's collected windows (FR-009); absent means the metric has none.
+      reasons.push(`items[${i}] has no dashboard reference: metric ${item.metric} has no collected window`);
+      return;
+    }
+    const ref = item.dashboard_ref;
     const dashboard = dashboards.get(ref.dashboard_uid);
     if (!dashboard) {
       reasons.push(`items[${i}] dashboard ${ref.dashboard_uid} is not in the priority list`);
-    } else if (!flatPanels(dashboard).some((p) => (p.panel_id === undefined ? p.id : p.panel_id) === ref.panel_id)) {
+    } else if (ref.panel_id !== null
+      && !flatPanels(dashboard).some((p) => (p.panel_id === undefined ? p.id : p.panel_id) === ref.panel_id)) {
       reasons.push(`items[${i}] panel ${ref.panel_id} does not exist on dashboard ${ref.dashboard_uid}`);
     }
     if (!TIMESTAMP_PATTERN.test(ref.from || '') || !TIMESTAMP_PATTERN.test(ref.to || '')) {

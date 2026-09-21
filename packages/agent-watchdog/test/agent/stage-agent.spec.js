@@ -36,7 +36,7 @@ const findingsFor = (project, metric) => ({
   items: [{
     item_key: { metric, pattern_card: null }, severity: 'high',
     evidence: [{ window: 'current', value: 1, unit: 'count' }],
-    why_now: 'w', suggested_check: 's', dashboard_ref: { dashboard_uid: 'd', panel_id: 1, ...WINDOW },
+    why_now: 'w', suggested_check: 's',
     confidence: 0.5, candidate_ids: ['c1'], reference_urls: [],
   }],
 });

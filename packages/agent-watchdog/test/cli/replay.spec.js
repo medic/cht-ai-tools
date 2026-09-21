@@ -75,7 +75,9 @@ const acceptingGate = async ({ findings, project, pass }) => ({
     evidence: item.evidence,
     why_now: item.why_now,
     suggested_check: item.suggested_check,
-    dashboard_ref: { ...item.dashboard_ref, project_url: project.url },
+    // The real gate builds this from the run's windows (FR-009, revision 18).
+    dashboard_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 3, project_url: project.url,
+      from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z' },
     confidence: item.confidence,
     persisting_days: 1,
     pattern_card: item.item_key.pattern_card,
@@ -98,9 +100,6 @@ const modelFindings = (project, { severity = 'high', value = 912 } = {}) => ({
     evidence: [{ window: 'current', value, unit: 'count' }, { window: 'previous_day', value: 300, unit: 'count' }],
     why_now: 'Sentinel backlog has climbed steadily for seven hours to three times yesterday.',
     suggested_check: 'Check sentinel logs for a stuck transition.',
-    dashboard_ref: {
-      dashboard_uid: 'oa2OfL-Vk', panel_id: 3, from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z',
-    },
     confidence: 0.85,
     candidate_ids: [project.candidate.candidate_id],
     reference_urls: [],

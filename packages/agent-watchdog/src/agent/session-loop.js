@@ -177,7 +177,9 @@ const runProjectSession = async ({
         report = { ...verdict.report, attempt, subject: 'pass', subject_ref: `${slug}/pass${pass}` };
         accepted = verdict.report.outcome === 'accepted';
         items = accepted ? verdict.items : [];
-        reasons = accepted ? [] : verdict.report.checks.flatMap((c) => c.reasons || []);
+        // Only the checks that failed (FR-018): a passing check's informational text is not a defect to fix.
+        reasons = accepted ? [] : verdict.report.checks.filter((c) => c.status === 'fail')
+          .flatMap((c) => c.reasons || []);
       } else {
         reasons = [`structured output missing or invalid (${subtype})`];
         report = {

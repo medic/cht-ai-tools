@@ -3,6 +3,7 @@
 // code spans are exempt, but each span must be a collected expression or metric (data-model.md "Number matching").
 const { formatValue, extractNumbers, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS } = require('../format');
 const { sameMetric, keyForms, flatPanels } = require('../metric-key');
+const { enums } = require('../../model/schemas');
 
 const NAME = 'numbers_match';
 
@@ -98,8 +99,16 @@ const knownSpanForms = (ctx) => {
   return forms;
 };
 
+// A window is named, not measured: `trailing_14d` and the `14d` inside it are the run's own identifiers for a
+// window, so a numeral that spells one is not a figure the model invented (revision 18).
+const WINDOW_NAME_TOKENS = new Set(enums.WindowName.options
+  .flatMap((name) => extractNumbers(name.replace(/_/g, ' ')).concat(extractNumbers(name))));
+
 const checkText = (where, text, allowed, spanForms, reasons) => {
   for (const token of extractNumbers(text)) {
+    if (WINDOW_NAME_TOKENS.has(token)) {
+      continue;
+    }
     if (!matches(token, allowed)) {
       reasons.push(`${where} contains ${token}, which matches no computed value`);
     }
@@ -135,4 +144,4 @@ const check = (ctx) => {
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
-module.exports = { name: NAME, check, allowedValues, matches };
+module.exports = { name: NAME, check, allowedValues, matches, WINDOW_NAME_TOKENS };

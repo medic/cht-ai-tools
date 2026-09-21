@@ -407,3 +407,24 @@ hosts not treated as housekeeping in a preview.
 - **VII**: the model id is configuration, validated where the rest is; no prompt changes.
 - **VIII**: one audience; the reply keeps its links whole because they are what the reader clicks.
   Result: PASS.
+
+### Revision 18 delta: the gate must not ask the model for what the run computed (FR-009, FR-018)
+
+Re-checked on 2026-09-20 after the first complete single-project run: it cost $2.28, of which $2.00
+bought nothing. Four of five model turns were rejected, every one of them on `dates_match` against
+`dashboard_ref`, and pass 1 was never accepted so its items were discarded (research.md R-23).
+
+- **I**: no new dependency. One new pure module, `src/links/dashboard-ref.js`, beside the builder
+  that already turns a reference into a URL.
+- **II**: tests first for each of the three: the reference built from the collected windows and its
+  fallbacks; the revision request carrying only failing reasons; the two gate false positives. The
+  recorded findings fixtures lose the field with them, so replay proves the contract.
+- **III**: the correction itself. The dashboard, the panel and the window bounds are all recorded by
+  collection; asking the model to restate them was asking it to compute what code holds. The model
+  keeps what it is for: which window matters, named through the evidence it cites.
+- **IV**: nothing new is stored. `dashboard_ref` keeps its shape on the Item, so the run record, the
+  payload and the link builder are unchanged.
+- **V**: no new stage; the gate's own output is what changed.
+- **VI**: unchanged.
+- **VII**: the model-facing output schema is code, changed here by pull request with its prompt.
+- **VIII**: unchanged. Result: PASS.

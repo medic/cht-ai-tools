@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { buildAllowlist } = require('../../../src/links/allowlist');
+const { dashboardRefFor } = require('../../../src/links/dashboard-ref');
 
 const HOST = 'cht.example.org';
 const URL = 'https://cht.example.org';
@@ -112,7 +113,10 @@ const baseContext = () => {
     evidence: item.evidence,
     why_now: item.why_now,
     suggested_check: item.suggested_check,
-    dashboard_ref: { ...item.dashboard_ref, project_url: URL },
+    // Built by code from the collected windows, exactly as the gate builds it (FR-009, revision 18).
+    dashboard_ref: dashboardRefFor({
+      windows, projectUrl: URL, metric: item.item_key.metric, evidence: item.evidence,
+    }),
     confidence: item.confidence,
     persisting_days: 1,
     pattern_card: item.item_key.pattern_card,

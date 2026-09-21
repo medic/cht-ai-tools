@@ -12,6 +12,9 @@ const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 // Digits with phone-style separators; a match counts only when it holds nine or more digits.
 const PHONE_PATTERN = /(?<!\w)\+?\d[\d\s().-]{7,}\d(?!\w)/g;
 const PHONE_MIN_DIGITS = 9;
+// Digits, one decimal point, digits: a computed value, whatever its length. A bare run of digits is not
+// exempt, because that is also what an unformatted phone number looks like.
+const DECIMAL_PATTERN = /^\d+\.\d+$/;
 
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/g;
 
@@ -43,6 +46,11 @@ const phoneMatches = (text) => {
     if (countDigits(match[0]) < PHONE_MIN_DIGITS) {
       continue;
     }
+    // A decimal is a computed value, not a phone number: an unrounded trailing mean such as
+    // `26.263157894736842` has one decimal point and more digits than any phone number (revision 18).
+    if (DECIMAL_PATTERN.test(match[0])) {
+      continue;
+    }
     let start = match.index;
     let end = match.index + match[0].length;
     while (start > 0 && /[^\s"',;|<>[\]{}]/.test(text[start - 1])) {
@@ -63,6 +71,7 @@ module.exports = {
   EMAIL_PATTERN,
   PHONE_PATTERN,
   PHONE_MIN_DIGITS,
+  DECIMAL_PATTERN,
   URL_PATTERN,
   HOST_LIKE_PATTERN,
   KNOWN_HOST_SUFFIXES,

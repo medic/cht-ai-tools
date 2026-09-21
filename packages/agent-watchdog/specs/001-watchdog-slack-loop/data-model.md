@@ -272,7 +272,7 @@ accepted or rejected by the gate.
 | `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
 | `why_now` | string | Prose; escaped on render. |
 | `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
-| `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`; the link is built by code from it (FR-009, FR-016). |
+| `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
 | `persisting_days` | integer | Consecutive prior runs whose accepted items contained this `item_id`, plus one. Set by code (Edge Cases). |
 | `pattern_card` | string or null | Card id from the merged index; unknown ids are rejected. |

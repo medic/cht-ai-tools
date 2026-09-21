@@ -22,12 +22,6 @@
       ],
       "why_now": "The backlog has climbed steadily for hours and is now well above yesterday.",
       "suggested_check": "Open the dashboard panel and confirm the trend before paging anyone.",
-      "dashboard_ref": {
-        "dashboard_uid": "oa2OfL-Vk",
-        "panel_id": 3,
-        "from": "2026-09-17T06:00:00.000Z",
-        "to": "2026-09-18T06:00:00.000Z"
-      },
       "confidence": 0.85,
       "candidate_ids": [
         "a3effa6da9db",

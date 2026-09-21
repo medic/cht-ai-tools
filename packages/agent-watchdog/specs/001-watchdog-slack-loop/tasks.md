@@ -463,6 +463,15 @@ ignored host and missed housekeeping in a preview (research.md R-22).
 - [X] T197 Reply fitting in `src/publish/payload.js` (`INSTANCE_STEPS`, `MAX_PATTERN_HOSTS`, `hostList`); `short` links in `src/links/build.js`; `hostOfLabels` port strip in `src/collect/alerts.js`
 - [X] T198 `ignored_hosts` and `deadHostsFromDiscovery` in `src/alerts/classify.js`; `ignoredHosts` on `src/alerts/episodes.js` and `src/rollup/notices.js`, threaded by `src/cli/stages/rollup.js`; discovery dead hosts in `src/cli/stages/analyze.js`; spec edge cases, FR-066 and clarification (revision 17); data-model; environment, slack-payload and run-directory contracts; `.env.example`; plan revision 17 delta; research R-22 and smoke S-21
 
+## Phase 22: The gate must not ask the model for what the run computed (revision 18, 2026-09-20)
+
+**Purpose**: The first complete single-project run spent $2.00 of $2.28 on four rejected turns, all on the dashboard
+reference window, and pass 1 was never accepted so its items were discarded (research.md R-23).
+
+- [X] T199 [P] Tests first: `test/links/dashboard-ref.spec.js` (panel from the metric's windows, bounds from the leading evidence window, `current` and full-span fallbacks, null when the metric has no window), `test/verify/gate.spec.js` (`normaliseItems` builds the reference and ignores anything the model sent), `test/agent/session-loop.spec.js` (a revision request carries only failing checks' reasons), `test/verify/checks/numbers_match.spec.js` (a window identifier is not an invented number), `test/verify/patterns.spec.js` (a plain decimal is not a phone number)
+- [X] T200 `src/links/dashboard-ref.js` (`dashboardRefFor`); `normaliseItems` in `src/verify/gate.js` takes the run's windows; `dashboard_ref` removed from `src/agent/output-schema.js`, regenerated into `schema/` by `scripts/build-schema.js` and copied to `contracts/findings.schema.json`; the instruction dropped from `prompts/pass-first.md` and `prompts/system.md`; recorded findings fixtures updated. A metric whose recorded panel is on no priority dashboard (scrape-target health) links the first priority dashboard with `panel_id: null` rather than an unrelated panel, so `DashboardRef.panel_id` is nullable and `links_built` skips the panel check for it
+- [X] T201 Failing checks only in `src/agent/session-loop.js`; the plain-decimal exemption in `src/verify/patterns.js`; the window-name exemption in `src/verify/checks/numbers_match.js`; spec US1 scenario 6, FR-009, FR-018, FR-058, edge cases and clarification (revision 18); data-model Item row; agent-definition contract; plan revision 18 delta; research R-23 and smoke S-22
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

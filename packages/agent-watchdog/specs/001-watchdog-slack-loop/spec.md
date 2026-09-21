@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 17)
+**Status**: Draft (revision 18)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -44,6 +44,10 @@ quiet day and verify the one-line post.
    not flagged and the post notes that the window is active.
 5. **Given** a scrape target for a project is down, **When** the run executes, **Then** the
    outage is itself a flagged item rather than being treated as missing data.
+6. **Given** the analysis passes run, **When** the verification gate rejects a draft, **Then** the
+   revision the model is asked for names only the checks that failed, and no rejection is caused by
+   a value the run already computed, so a pass is not spent re-deriving a fact the harness holds
+   (revision 18).
 6. **Given** a draft brief contains a number that does not match the computed data, a project
    name that is not a monitored project, or a link that does not resolve, **When** the run
    reaches publication, **Then** the draft is rejected, the reasons are returned for revision,
@@ -490,6 +494,17 @@ line that shows the alert and its metric together.
   reported as resolved, because the run stopped watching it (FR-067, FR-068, revision 17).
 - A run analyses only some projects (a project filter): a host whose scrape target discovery found
   down still counts as dead for housekeeping (FR-080, revision 17).
+- A metric's collected windows are all unavailable but the metric is known: the dashboard reference
+  is still built from the panel and window bounds recorded at discovery, because those are facts of
+  the run, not of the data (FR-009, revision 18).
+- An item's leading evidence names a window the run did not collect: the dashboard reference falls
+  back to the current window, and the item is judged on its evidence as usual (FR-009, revision 18).
+- The model's prose carries an unrounded computed value such as a trailing mean with many decimal
+  places: it is a number, not personal data, and MUST NOT be reported as a phone number (FR-016,
+  revision 18).
+- The model's prose names a window by its identifier (`trailing_14d`, `14d`): it is the run's own
+  name for a window, not an invented figure, and MUST NOT be reported as a number that matches no
+  computed value (FR-016, revision 18).
 
 ## Requirements *(mandatory)*
 
@@ -522,7 +537,11 @@ Analysis
 - **FR-009**: Every flagged item MUST include: a stable identity, the project, a severity, metric
   evidence (values and windows), why it matters now, a suggested check, a structured reference to
   the dashboard view (dashboard, panel, project, window) from which the link is built, a
-  confidence, the number of days it has persisted, and the pattern card it matches if any.
+  confidence, the number of days it has persisted, and the pattern card it matches if any. The
+  dashboard reference MUST be built by code from the item's metric and the window its leading
+  evidence cites, never emitted by the model: the dashboard, the panel and the window bounds are
+  all recorded by collection, so asking the model for them is asking it to compute what code
+  already holds (constitution III, revision 18).
 - **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
   bullet is one item or, when a project group has several flagged projects or several alerts, one
   group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
@@ -561,7 +580,9 @@ Analysis passes
   MUST stop regardless when the run's cost or turn bound is reached.
 - **FR-058**: The run record MUST store each pass's items and the differences between passes,
   and the weekly calibration report MUST state how often later passes changed the outcome, so
-  the pass count can be tuned on evidence.
+  the pass count can be tuned on evidence. The record MUST also make a pass that the gate never
+  accepted visible as such, since its items are discarded and the pass contributes nothing
+  (revision 18).
 
 Verification gate
 
@@ -574,7 +595,9 @@ Verification gate
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
 - **FR-018**: The same verification MUST run both inside the analysis (so the model can correct
-  itself) and again immediately before publication, using the same code.
+  itself) and again immediately before publication, using the same code. A revision request MUST
+  carry only the reasons of checks that failed; a check that passed MUST NOT contribute text to it,
+  so every line the model is asked to act on is a real defect (revision 18).
 
 Publishing
 
@@ -1110,6 +1133,17 @@ Configuration
   a resolved line named an ignored training host (episodes on ignored hosts are left alone); and
   stale API-down alerts on dead hosts were not housekeeping in a preview (discovery's target health
   stands in for projects not analysed) (revision 17).
+- Q: The first complete single-project run cost $2.28, of which $2.00 bought nothing: four of five
+  model turns were rejected, all on the same check, and pass 1 was never accepted so its items were
+  discarded. Should the prompt be improved, or more revision attempts allowed? → A: Neither. Every
+  rejection was the dashboard reference window, which the prompt never gave the model the bounds
+  for and which the run already holds exactly (panel and window start and end per metric). The
+  reference is now built by code and removed from what the model emits, which is what constitution
+  III required all along. Two smaller defects came from the same turns: the revision request
+  repeated the informational text of checks that had passed, and the gate called an unrounded
+  trailing mean a phone number and a window identifier an invented number. Cost work at ninety
+  projects a day is a separate story, to be measured after these land, not guessed now
+  (FR-009, FR-016, FR-018, FR-058, revision 18).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

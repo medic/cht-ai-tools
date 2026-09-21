@@ -115,9 +115,6 @@
         "suggested_check": {
           "type": "string"
         },
-        "dashboard_ref": {
-          "$ref": "#/$defs/dashboard_ref"
-        },
         "confidence": {
           "type": "number",
           "description": "0 to 1; range checked by the gate, not the schema."
@@ -142,7 +139,6 @@
         "evidence",
         "why_now",
         "suggested_check",
-        "dashboard_ref",
         "confidence",
         "candidate_ids",
         "reference_urls"
@@ -198,34 +194,6 @@
         "window",
         "value",
         "unit"
-      ],
-      "additionalProperties": false
-    },
-    "dashboard_ref": {
-      "type": "object",
-      "properties": {
-        "dashboard_uid": {
-          "type": "string"
-        },
-        "panel_id": {
-          "type": "integer",
-          "minimum": -9007199254740991,
-          "maximum": 9007199254740991
-        },
-        "from": {
-          "type": "string",
-          "description": "ISO-8601 UTC start of the window to link."
-        },
-        "to": {
-          "type": "string",
-          "description": "ISO-8601 UTC end of the window to link."
-        }
-      },
-      "required": [
-        "dashboard_uid",
-        "panel_id",
-        "from",
-        "to"
       ],
       "additionalProperties": false
     }

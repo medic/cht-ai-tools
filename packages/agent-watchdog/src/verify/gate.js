@@ -3,6 +3,7 @@
 const { findingsSchema } = require('../agent/output-schema');
 const { itemId } = require('../model/identity');
 const { buildItemLinks } = require('../links/build');
+const { dashboardRefFor } = require('../links/dashboard-ref');
 
 const CHECK_NAMES = [
   'schema', 'projects_known', 'metrics_known', 'candidates_known', 'numbers_match', 'dates_match', 'links_built',
@@ -25,8 +26,12 @@ const validateAttempt = (attempt) => {
   }
 };
 
-/** Turn the model's items into schemas.Item records; identity, links and persistence are derived by code. */
-const normaliseItems = (findings, project) => (findings.items || []).map((item) => ({
+/**
+ * Turn the model's items into schemas.Item records; identity, links, the dashboard reference and persistence are
+ * all derived by code (FR-009). `windows` are the run's collected windows: the reference comes from them, never
+ * from the model, which no longer emits one (revision 18).
+ */
+const normaliseItems = (findings, project, windows = [], discovery = null) => (findings.items || []).map((item) => ({
   item_id: itemId(project.url, item.item_key.metric, item.item_key.pattern_card),
   project_url: project.url,
   metric: item.item_key.metric,
@@ -34,7 +39,9 @@ const normaliseItems = (findings, project) => (findings.items || []).map((item) 
   evidence: item.evidence,
   why_now: item.why_now,
   suggested_check: item.suggested_check,
-  dashboard_ref: { ...item.dashboard_ref, project_url: project.url },
+  dashboard_ref: dashboardRefFor({
+    windows, discovery, projectUrl: project.url, metric: item.item_key.metric, evidence: item.evidence,
+  }),
   confidence: item.confidence,
   persisting_days: 1,
   pattern_card: item.item_key.pattern_card,
@@ -83,7 +90,7 @@ const verifyFindings = async ({
     const checks = [CHECKS.schema.check(base)];
     return { report: { subject: 'pass', subject_ref: subjectRef, attempt, checks, outcome: 'rejected' }, items: [] };
   }
-  const items = normaliseItems(findings, project);
+  const items = normaliseItems(findings, project, windows, discovery);
   const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl });
   const builtLinks = grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null;
   const ctx = { ...base, items, linkResults, builtLinks };

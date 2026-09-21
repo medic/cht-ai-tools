@@ -15,6 +15,24 @@ describe('verify/checks/personal_data_absent', () => {
     expect(check(ctx).status).to.equal('pass');
   });
 
+  it('does not mistake an unrounded computed value for a phone number (revision 18)', () => {
+    const ctx = baseContext();
+    // The trailing daily mean as the run computes it: seventeen digits and a decimal point.
+    ctx.findings.items[0].why_now = 'far above the trailing daily mean of 26.263157894736842 docs';
+    expect(check(ctx).status).to.equal('pass');
+    const ctx2 = baseContext();
+    ctx2.findings.items[0].suggested_check = 'compare 1234567890.5 with 0.000123456789';
+    expect(check(ctx2).status).to.equal('pass');
+    // A phone number written with a dot separator has more than one group, so it is still caught, and so is
+    // a bare run of digits, which is what an unformatted number looks like.
+    const ctx3 = baseContext();
+    ctx3.findings.items[0].why_now = 'call 254.712.345.678 for the on-call rota';
+    expect(check(ctx3).reasons[0]).to.include('phone');
+    const ctx4 = baseContext();
+    ctx4.findings.items[0].why_now = 'call 254712345678 for the on-call rota';
+    expect(check(ctx4).reasons[0]).to.include('phone');
+  });
+
   it('fails on e-mail addresses and phone numbers', () => {
     const ctx = baseContext();
     ctx.findings.items[0].why_now = 'ask ops@medic.org'; // scan-secrets:allow

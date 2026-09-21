@@ -16,6 +16,19 @@ describe('verify/checks/numbers_match', () => {
     expect(check(ctx).status).to.equal('pass');
   });
 
+  it('accepts the run\'s own window names, which are identifiers and not figures (revision 18)', () => {
+    const ctx = baseContext();
+    ctx.items[0].why_now = 'Backlog is 912, far above the trailing_14d baseline.';
+    expect(check(ctx).status).to.equal('pass');
+    const short = baseContext();
+    short.items[0].why_now = 'Backlog is 912, far above the 14d trailing mean.';
+    expect(check(short).status).to.equal('pass');
+    // A figure that merely ends in the same letter is still checked.
+    const other = baseContext();
+    other.items[0].why_now = 'Backlog is 912 after 9d of climbing.';
+    expect(check(other).reasons.join(' ')).to.include('9d');
+  });
+
   it('fails on a number that matches nothing computed', () => {
     const ctx = baseContext();
     ctx.items[0].why_now = 'Backlog is 999 today.';

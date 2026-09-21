@@ -27,6 +27,41 @@ describe('verify/gate', () => {
     ]);
   });
 
+  it('builds each item\'s dashboard reference from the run\'s windows, never from the model (revision 18)',
+    async () => {
+      const ctx = baseContext();
+      // The model sends no dashboard reference at all; the run's own windows supply every part of it.
+      expect(ctx.findings.items[0]).to.not.have.property('dashboard_ref');
+      const { report, items } = await verifyFindings(args(ctx));
+      const current = ctx.windows.find((w) => w.window === 'current');
+      expect(items[0].dashboard_ref).to.deep.equal({
+        dashboard_uid: current.panel_ref.dashboard_uid,
+        panel_id: current.panel_ref.panel_id,
+        project_url: URL,
+        from: current.start,
+        to: current.end,
+      });
+      expect(report.checks.find((c) => c.name === 'dates_match').status).to.equal('pass');
+      expect(report.outcome).to.equal('accepted');
+
+      // A model that sends one anyway is rejected by the schema rather than quietly obeyed.
+      const stray = baseContext();
+      stray.findings.items[0].dashboard_ref = {
+        dashboard_uid: 'made-up', panel_id: 999, from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z',
+      };
+      const strayReport = (await verifyFindings(args(stray))).report;
+      expect(strayReport.outcome).to.equal('rejected');
+      expect(strayReport.checks.find((c) => c.name === 'schema').reasons.join(' ')).to.include('dashboard_ref');
+    });
+
+  it('rejects an item whose metric has no collected window, naming the item', async () => {
+    const ctx = baseContext();
+    const { report } = await verifyFindings(args(ctx, { windows: [] }));
+    expect(report.outcome).to.equal('rejected');
+    const reasons = report.checks.flatMap((c) => (c.status === 'fail' ? c.reasons : []));
+    expect(reasons.some((r) => /items\[0\].*no collected window/.test(r))).to.equal(true);
+  });
+
   it('accepts a valid findings document and returns normalised items with code-derived identity', async () => {
     const ctx = baseContext();
     const { report, items } = await verifyFindings(args(ctx));

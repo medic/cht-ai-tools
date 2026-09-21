@@ -31,7 +31,9 @@ const gate = async ({ findings, project, pass }) => ({
     item_id: itemId(project.url, item.item_key.metric, item.item_key.pattern_card),
     project_url: project.url, metric: item.item_key.metric, severity: item.severity, evidence: item.evidence,
     why_now: item.why_now, suggested_check: item.suggested_check,
-    dashboard_ref: { ...item.dashboard_ref, project_url: project.url }, confidence: item.confidence,
+    // The real gate builds this from the run's windows (FR-009, revision 18).
+    dashboard_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 3, project_url: project.url,
+      from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z' }, confidence: item.confidence,
     persisting_days: 1, pattern_card: item.item_key.pattern_card, candidate_ids: item.candidate_ids,
     reference_urls: item.reference_urls, rank: null, placement: null, pass_history: [],
   })),
@@ -49,9 +51,6 @@ const recordedEngine = () => createFakeEngine({
           item_key: { metric: METRIC, pattern_card: null }, severity: 'high',
           evidence: [{ window: 'current', value: 912, unit: 'count' }],
           why_now: 'Sentinel backlog has climbed steadily.', suggested_check: 'Check sentinel logs.',
-          dashboard_ref: {
-            dashboard_uid: 'oa2OfL-Vk', panel_id: 3, from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z',
-          },
           confidence: 0.85, candidate_ids: ids, reference_urls: [],
         }],
       },

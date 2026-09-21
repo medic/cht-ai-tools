@@ -607,6 +607,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-19 | With `AGENT_WATCHDOG_ENGINE=cli` and `ANTHROPIC_API_KEY` blank on a machine where `claude` is logged in, the first pass completes with no authentication error, `agent.cli_auth` reports `mode: login`, and the run leaves no new directory under `~/.claude/projects/` | Whether print mode accepts the subscription login with `--setting-sources ""`, and whether the auto-memory switch holds there, only a live run shows |
 | S-20 | A forced re-run of the previous date (`--force --date <yesterday>`) completes the roll-up, its `alerts.classified.json` carries `observed_at` at the clock time, and every cleared episode has a duration of zero or more | Only the hosted alert state has instances that started after the analysed date |
 | S-21 | With a valid model id, a single-project preview on the operator's login completes at least one session with `cost_usd` above zero and either accepted items or a converged empty result, and `agent.turn_error` never appears | Only the hosted runtime shows whether the model is available to the plan |
+| S-22 | With the dashboard reference built by code, a single-project run accepts pass 1 on its first attempt (`verification.pass1.json` outcome `accepted`, attempt 1) and the project's cost falls to roughly the two first attempts | Only a hosted run shows what the model does when it is no longer asked to guess the bounds |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1058,3 +1059,63 @@ resolved notice skips them. Dead hosts for housekeeping are the union of the ana
 metric at zero and discovery's `scrape_targets` health `down` for the policy's scrape job. The correct
 ids for the models discussed are `claude-opus-4-8` and `claude-opus-5`; the measured cost of a complete
 session is still to be taken (S-21).
+
+## R-23. Four of five turns rejected on a value the run already held
+
+**Evidence** (live, 2026-09-20, run `2026-09-19-f8`, one project, 22 candidates, Opus 4.8 at high
+effort on the operator's login). Per-turn, from `session.json`:
+
+| turn | cost | turns | outcome |
+|---|---|---|---|
+| pass 1, attempt 1 | $0.829 | 7 | rejected |
+| pass 1, attempt 2 | $0.235 | 2 | rejected |
+| pass 1, attempt 3 | $0.326 | 2 | rejected, pass 1 discarded |
+| pass 2, attempt 1 | $0.614 | 2 | rejected |
+| pass 2, attempt 2 | $0.275 | 2 | accepted |
+
+`verification.pass1.json` records `outcome: rejected` on the last attempt with every check passing
+except `dates_match`; `verification.pass2.json` records `accepted` on attempt 2. `passes.json` holds
+`converged: false` and `diffs: []`, because a diff is only recorded once a pass has been accepted:
+the two-pass design silently degraded to one pass. The rejection reasons, from the Langfuse traces of
+the same turns, were `items[0..2].dashboard_ref 2026-09-19T00:00:00Z to 2026-09-20T00:00:00Z is
+outside the run's windows` on pass 1 and `... 2026-09-20T00:00:00Z to 2026-09-20T12:00:00Z ...` on
+pass 2. The collected windows for those metrics run `2026-09-18T06:00:00.000Z` to
+`2026-09-19T06:00:00.000Z` (`inputs/windows.json.gz`), and each window already carries
+`panel_ref: { dashboard_uid, panel_id, panel_title, ref_id }`. `prompts/pass-first.md` says only "Set
+`dashboard_ref` to the dashboard uid and panel id the metric came from, with the window you want the
+reader to see" and states no bounds anywhere, so the model was guessing. It passed on the fifth turn
+by reverse-engineering the bound from tool results, and says so in its own `notes`: "the dashboard
+link window was corrected to sit within the run's collected data, which ends near the current server
+timestamp ~2026-09-19T05:57Z".
+
+Two further defects surfaced in the same traces. The revision request carried the lines `not
+applicable to findings` twice, because `src/agent/session-loop.js` builds the reasons as
+`verdict.report.checks.flatMap((c) => c.reasons || [])` over every check, and the brief-only checks
+`bullet_count` and `bullet_length` pass while emitting that informational reason. And pass 1 attempt
+1 was told `phone number at $.items[0].why_now`: the prose carried the unrounded trailing daily mean
+`26.263157894736842`, which holds 17 digits and a dot, so `PHONE_PATTERN` matched it at
+`PHONE_MIN_DIGITS`. Separately the roll-up's first draft was rejected for `bullets[0] contains 14d,
+which matches no computed value`; `14d` is the run's own name for the `trailing_14d` window.
+
+**Decision**: the model no longer emits `dashboard_ref`; it is removed from the findings output
+schema and from the prompt. `src/links/dashboard-ref.js` builds it from the item's metric and the
+collected windows: the panel reference of any window for that metric, and the bounds of the window
+the item's leading evidence cites, falling back to `current` and then to the full collected span.
+The gate's `normaliseItems` applies it, so the Item keeps its shape and nothing downstream changes. Two details the
+run exposed: `sameMetric` also matches on the base metric name, so `cht_couchdb_doc_total{db="medic"}` answers to
+twenty windows of its family and the item's own key has to decide which panel it came from; and scrape-target health
+is collected under a pseudo panel reference (`{ dashboard_uid: 'targets', panel_id: 0 }`) that no dashboard holds,
+which the old prompt worked around by telling the model to point at some real panel instead. Code links the first
+priority dashboard with no panel there, so `DashboardRef.panel_id` is nullable and `src/links/build.js` renders a
+dashboard-level link scoped to the project and window. Checked against the run itself: the reference built from
+`2026-09-19-f8`'s own windows lands on the same three panels the model reached on its fifth turn, with the run's
+bounds.
+The revision request carries only the reasons of checks whose status is `fail`. `phoneMatches` skips
+a match that is a plain decimal number. `numbers_match` exempts tokens that appear in the run's own
+window names.
+
+**Alternatives considered**: raising the retry cap (rejected: it multiplies a cost that buys nothing,
+and the check was unpassable by design); stating the bounds in the prompt (rejected: it still spends
+model tokens restating a computed fact, and drifts the moment the window policy changes); keeping
+`dashboard_ref` in the schema as optional and overwriting it (rejected: it leaves a field a reader
+would believe the model sets).

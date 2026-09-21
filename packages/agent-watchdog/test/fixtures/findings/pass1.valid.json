@@ -11,7 +11,6 @@
       ],
       "why_now": "Sentinel backlog has climbed steadily for six hours to three times yesterday's level.",
       "suggested_check": "Check sentinel logs for a stuck transition and confirm CouchDB is responsive.",
-      "dashboard_ref": { "dashboard_uid": "oa2OfL-Vk", "panel_id": 3, "from": "2026-09-17T06:00:00Z", "to": "2026-09-18T06:00:00Z" },
       "confidence": 0.85,
       "candidate_ids": ["0123456789ab", "ba9876543210"],
       "reference_urls": []

@@ -37,20 +37,12 @@ const evidence = z.object({
   note: z.string().optional(),
 }).strict().meta({ id: 'evidence' });
 
-const dashboardRef = z.object({
-  dashboard_uid: z.string(),
-  panel_id: z.number().int(),
-  from: z.string().describe('ISO-8601 UTC start of the window to link.'),
-  to: z.string().describe('ISO-8601 UTC end of the window to link.'),
-}).strict().meta({ id: 'dashboard_ref' });
-
 const item = z.object({
   item_key: itemKey,
   severity: Severity,
   evidence: z.array(evidence),
   why_now: z.string(),
   suggested_check: z.string(),
-  dashboard_ref: dashboardRef,
   confidence: z.number().describe('0 to 1; range checked by the gate, not the schema.'),
   candidate_ids: z.array(z.string()),
   reference_urls: z.array(z.string()).describe(TEXT.referenceUrls),

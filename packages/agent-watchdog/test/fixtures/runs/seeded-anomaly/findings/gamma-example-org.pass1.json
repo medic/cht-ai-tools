@@ -22,12 +22,6 @@
       ],
       "why_now": "The scrape target is down, so the watchdog has no fresh data for this project.",
       "suggested_check": "Open the dashboard panel and confirm the trend before paging anyone.",
-      "dashboard_ref": {
-        "dashboard_uid": "oa2OfL-Vk",
-        "panel_id": 16,
-        "from": "2026-09-17T06:00:00.000Z",
-        "to": "2026-09-18T06:00:00.000Z"
-      },
       "confidence": 0.85,
       "candidate_ids": [
         "1665351b28a5",

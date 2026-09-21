@@ -209,7 +209,9 @@ const Candidate = z.object({
 
 const DashboardRef = z.object({
   dashboard_uid: z.string(),
-  panel_id: z.number().int(),
+  // Null when the metric has no panel on a priority dashboard (scrape-target health): the link is then
+  // dashboard-level, scoped to the project and window (FR-009, revision 18).
+  panel_id: z.number().int().nullable(),
   project_url: url,
   from: isoTimestamp,
   to: isoTimestamp,

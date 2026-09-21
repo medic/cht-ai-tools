@@ -26,9 +26,10 @@ rejects a `high` item whose candidates do not justify it.
 
 ## Links and references
 
-You compose no URLs. The dashboard link for an item is built by code from the `dashboard_ref`
-you emit (dashboard uid, panel id, window). The only URLs you may output are `reference_urls`
-copied exactly from a tool result you received in this session; anything else is rejected.
+You compose no URLs, and no dashboard references. The dashboard link for an item is built by
+code from the panel and window the run recorded for that metric; you choose which window matters
+by citing it first in `evidence`. The only URLs you may output are `reference_urls` copied exactly
+from a tool result you received in this session; anything else is rejected.
 
 ## Untrusted text
 

@@ -36,7 +36,6 @@ const findings = (items, extra = {}) => ({
 const modelItem = (value = 912, severity = 'high') => ({
   item_key: { metric: 'cht_sentinel_backlog_count', pattern_card: null }, severity,
   evidence: [{ window: 'current', value, unit: 'count' }], why_now: 'climbing', suggested_check: 'check sentinel',
-  dashboard_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 3, from: '2026-09-17T06:00:00Z', to: '2026-09-18T06:00:00Z' },
   confidence: 0.9, candidate_ids: ['cand00000001'], reference_urls: [],
 });
 const acceptedItem = (value = 912, severity = 'high') => ({
@@ -146,6 +145,43 @@ describe('agent/session-loop', () => {
     expect(verification.outcome).to.equal('rejected');
     expect(verification.attempt).to.equal(3);
   });
+
+  it('asks for a revision with only the failing checks\' reasons, never a passing check\'s text (revision 18)',
+    async () => {
+      const engine = createFakeEngine({ responses: [
+        { structuredOutput: findings([modelItem()]) },
+        { structuredOutput: findings([modelItem()]) },
+      ] });
+      let call = 0;
+      const gate = async () => {
+        call += 1;
+        if (call === 1) {
+          return {
+            report: {
+              subject: 'pass',
+              subject_ref: 'alpha-example-org/pass1',
+              attempt: 1,
+              outcome: 'rejected',
+              checks: [
+                { name: 'numbers_match', status: 'fail', reasons: ['items[0].why_now contains 999'] },
+                { name: 'bullet_count', status: 'pass', reasons: ['not applicable to findings'] },
+                { name: 'bullet_length', status: 'pass', reasons: ['not applicable to findings'] },
+                { name: 'dates_match', status: 'pass', reasons: [] },
+              ],
+            },
+            items: [],
+          };
+        }
+        return { report: report('accepted'), items: [acceptedItem()] };
+      };
+      const result = await run(engine, { gate, bounds: { passes: 1 } });
+      expect(result.items).to.have.length(1);
+      const revision = engine.sessions[0].turns[1];
+      expect(revision).to.include('items[0].why_now contains 999');
+      expect(revision).to.not.include('not applicable to findings');
+      const prompt = fs.readFileSync(path.join(runDir.root, project.slug, 'prompt.pass1.md'), 'utf8');
+      expect(prompt).to.not.include('not applicable to findings');
+    });
 
   it('keeps the earlier accepted items when a later pass is rejected', async () => {
     const engine = createFakeEngine({ responses: [

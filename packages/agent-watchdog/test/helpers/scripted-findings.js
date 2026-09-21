@@ -4,7 +4,6 @@
 // and the fake `claude` executable (test/helpers/fake-claude.js) so both engines answer identically.
 const fs = require('node:fs');
 const path = require('node:path');
-const atomic = require('../../src/store/atomic');
 
 const ID_PATTERN = /\b[0-9a-f]{12}\b/g;
 
@@ -33,20 +32,6 @@ const projectForPrompt = (root, promptText) => {
   return projectsWithCandidates(root).find((p) => p.candidates.some((c) => ids.includes(c.candidate_id))) || null;
 };
 
-// Scrape-target candidates carry a pseudo panel reference ('targets'); point the item at a real panel
-// on the first priority dashboard instead, as the prompt instructs the model to do.
-const dashboardRefFor = (root, cands) => {
-  const discovery = readJson(path.join(root, 'discovery.json'));
-  const known = new Set(discovery.dashboards.map((d) => d.uid));
-  const real = cands.find((c) => known.has(c.panel_ref.dashboard_uid));
-  if (real) {
-    return { dashboard_uid: real.panel_ref.dashboard_uid, panel_id: real.panel_ref.panel_id };
-  }
-  const first = discovery.dashboards[0];
-  const uptime = first.panels.find((p) => /uptime/i.test(p.title)) || first.panels[0];
-  return { dashboard_uid: first.uid, panel_id: uptime.panel_id };
-};
-
 /** One model item per metric of the project, with evidence equal to the computed values. */
 const itemsFor = async (project) => {
   const byMetric = new Map();
@@ -56,11 +41,9 @@ const itemsFor = async (project) => {
     }
     byMetric.get(c.metric).push(c);
   }
-  const windows = await atomic.readGzipJson(path.join(project.root, project.slug, 'inputs', 'windows.json.gz'));
   const items = [];
   for (const [metric, cands] of byMetric) {
     const change = project.changes.find((ch) => ch.metric === metric);
-    const current = windows.windows.find((w) => w.metric === metric && w.window === 'current');
     const unit = cands[0].evidence[0] ? cands[0].evidence[0].unit : 'count';
     const evidence = [{ window: 'current', value: change.current_value, unit }];
     if (change.previous_day_value !== null) {
@@ -77,7 +60,6 @@ const itemsFor = async (project) => {
         ? 'The scrape target is down, so the watchdog has no fresh data for this project.'
         : 'The backlog has climbed steadily for hours and is now well above yesterday.',
       suggested_check: 'Open the dashboard panel and confirm the trend before paging anyone.',
-      dashboard_ref: { ...dashboardRefFor(project.root, cands), from: current.start, to: current.end },
       confidence: 0.85,
       candidate_ids: cands.map((c) => c.candidate_id),
       reference_urls: [],
@@ -113,6 +95,6 @@ const resultStub = () => ({
 });
 
 module.exports = {
-  ID_PATTERN, latestRunRoot, projectsWithCandidates, projectForPrompt, dashboardRefFor, itemsFor, findingsFor,
+  ID_PATTERN, latestRunRoot, projectsWithCandidates, projectForPrompt, itemsFor, findingsFor,
   resultStub,
 };
