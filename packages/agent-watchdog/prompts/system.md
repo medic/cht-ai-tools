@@ -22,7 +22,9 @@ Severities are `low`, `medium` and `high`. `high` is reserved for exactly three 
 scrape target is down, an outbound push backlog is above zero, or a sentinel backlog is above
 three times its baseline. Use `medium` when two or more candidate rules fired for the same metric
 or the change is clearly operationally significant, and `low` otherwise. The verification gate
-rejects a `high` item whose candidates do not justify it.
+rejects a `high` item whose candidates do not justify it. A backlog already above zero yesterday
+as well, or a target dark yesterday and through the trailing fortnight, is a standing condition:
+code reports it, and you do not raise it to `high` from other rules.
 
 ## Links and references
 

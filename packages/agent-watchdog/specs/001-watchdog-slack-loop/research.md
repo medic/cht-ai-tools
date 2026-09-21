@@ -638,6 +638,12 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-34 | On a full hosted run the sessions that retry are at most a quarter of those that ran, no revision prompt names a numeral present in that project's `prompt.pass1.md` or `tool-calls.jsonl` as unmatched, and no revision names two decimals side by side as a phone number | The given-text rule only shows against the volume of prose the model writes at scale |
 | S-35 | On the hosted watchdog a run opens no session for a project whose only candidates are standing conditions, names them in one notice per rule with the programme counts, folds the dark hosts into the housekeeping line, and lists them per host in `report.html` | Only the hosted volume has programme-wide chronic conditions |
 | S-36 | On the hosted dashboards `discovery.json` records the six reference-line targets with `reference_line.subject` and `source`, `metrics` shrinks accordingly, and `Sentinel Backlog >50` is classified `backlog` at medium | The stock dashboards' second targets are only seen against the live Grafana documents |
+| S-37 | The report shared into a hosted brief's thread opens for a channel member and its item, standing and alert links open the hosted dashboard panels and alert lists; with `AGENT_WATCHDOG_REPORT_LINKS=none` the same report carries no `href` at all | Slack's rendering of a shared HTML file and Grafana's acceptance of the built URLs are only seen live |
+| S-38 | A hosted run with `--group <programme>` collects, analyses and briefs only that programme's projects, the standing and housekeeping lines cover only them, and the classified alert record and episodes stay whole | Only the hosted volume has programmes of several projects |
+| S-39 | On the hosted watchdog the high items of a run are no longer the chronic outbound-push backlog: the standing line names it once, the metric's `monotonic` candidates are withheld, and a chronic backlog that jumped 50% in a day reaches the model at medium | Only the hosted data has 45 chronic backlogs in one programme |
+| S-40 | On the hosted watchdog the current windows fetched equal `discovery.metrics` (69, not 74) and the candidate count falls by the reference-line candidates (about 140 of 1,189) | The leak only shows against the live dashboards' second targets |
+| S-41 | On a full hosted run the sessions that retry are at most a quarter of those that ran, no revision prompt refuses a numeral that is a difference, ratio or percent change of two computed values, no revision names a signed decimal as a phone number, and no pass is rejected for a `relates_to` naming its own metric | The derived values the model writes only show at scale |
+| S-42 | A hosted brief posts without an image block and without a private file upload before the parent, and the thread's first reply is the report share | The absence of the upload is only observed against the Slack app |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1542,3 +1548,121 @@ every numeral of the items JSON for the brief (see above); changing the five-slo
 items (revision 20 decided it does not); reclassifying the clock skew (above); storing a rejected draft's
 text beyond `brief.draft<n>.json`, which already holds it; and the 22 reference-URL refusals, which are
 the gate doing its job on URLs the model did not retrieve.
+
+## R-29. The first run on one pass with a readable thread, and what still leaked through
+
+**Evidence** (the run record of 2026-09-20-f6, the first run on revision 23: Sonnet 5 at high effort on the
+command-line engine, one pass, concurrency 5, preview mode, read on 2026-09-21). Cost $35.57 (sessions
+$34.93, roll-up $0.65) against $39.41 the day before; 63 minutes (collection 659 s, sessions 2,882 s,
+roll-up 225 s against 615 s). 143 items (43 high, 60 medium, 40 low) from 83 sessions; 7 projects opened
+no session as standing conditions only.
+
+**What revision 23 delivered, measured.** The payload carried 20 thread replies (12 body items, 8 alert
+groups) where the previous day had 159, a `report` entry of 143 items with "12 with a reply … e.g. #9",
+and a footer counting 131 items only in the report. The roll-up's first draft was rejected on
+`bullets[5] contains 19` and `bullets[8]` at 152 characters; the second turn changed exactly bullets 5
+and 8, kept the headline, cost $0.085 and read 100,250 cached tokens, exactly the first turn's cache
+creation (S-33 confirmed). `rollup/standing.json` held 49 backlog and 7 dark-host records; the standing
+line and the housekeeping line with the dark hosts folded in both rendered. `Sentinel Backlog >50` was
+classified `backlog` on all 82 instances and no uncategorised group remained. Three projects rejected on
+every attempt were named in the incomplete-analysis notice.
+
+**Defect 1: the standing rule leaked through the metric's other candidates.** 42 of the 43 high items
+were still `cht_outbound_push_backlog_count`. `computeCandidates` gives every rule that fired on a metric
+the metric's floor, and the floor is high when `backlog_absolute` fired, so withholding that one candidate
+left the `monotonic` (42) and `deviation` (5) candidates on the same metric carrying `severity_floor:
+high`; the model wrote the same item from them and cited "the fixed high-severity rule" the system prompt
+states. The body became eight backlog sub-bullets and one backlog item, the standing line said the same
+thing under them, and the alert group said it a third time, while a scrape target flapping all day (rank 9)
+and a ten-million-document daily increase sat in the thread. **Decision:** a standing rule does not set
+the metric's floor; on a standing metric the `monotonic` candidate is withheld too, since a queue that
+never drains rises by definition, and `deviation` and `pct_change` keep candidates at the floor they earn
+without the standing rule (medium for two rules, low for one), so a chronic backlog that jumps 7% in a
+day still reaches the model at medium. The system prompt's severity sentence says that a backlog or a
+dark host that already stood yesterday is reported by code, not raised as high.
+
+**Defect 2: reference lines left discovery but not collection.** `discovery.metrics` fell from 74 to 69
+and nine panel records carry `reference_line`, but `metricSpecs` in `src/collect/windows.js` builds the
+query list from panel records with `per_project && !breakdown` and never looked at `reference_line`, so
+all 74 current windows were fetched, candidates stayed at 1,189 (140 on the five lines) and one
+reference-line item survived, which explained the backlog alert by the fall of its own threshold line.
+**Decision:** the query list skips `reference_line` records, and the analysis computes changes only for
+`discovery.metrics`, so a reused stored window for a metric no longer collected cannot re-enter.
+
+**Defect 3: a signed decimal is a phone number.** All three fully rejected projects failed only on
+`personal_data_absent`; the surviving text shows `+0.2748442279996993`, and `DECIMAL_PATTERN` allows no
+leading sign. 27 phone reasons in the revisions, about $1.40 of sessions that produced nothing, and the
+same string was both of the run's own `run.scan_findings`. **Decision:** a decimal may carry a sign; the
+parts rule likewise.
+
+**Defect 4: the retries are now the model's own arithmetic.** 67 of 83 sessions retried ($6.48, 19% of
+the sessions' cost). The revisions carry 145 `numbers_match` reasons; of the 127 refused numerals that
+parse, **127** equal a difference, a ratio or a percent change between two computed values of that
+project, within display rounding ("+27 jump" is 845 − 818). The given-text rule of revision 23 removed the
+identifiers; what remains is correct subtraction. The other reasons: 22 reference URLs the tools never
+returned, 21 `relates_to` naming the item's own metric (the sentence added to the prompt in revision 23
+changed nothing), 8 code spans, one high item without a qualifying candidate. **Decision:** `numbers_match`
+accepts a **derived value**: a numeral equal, within display rounding, to `a − b`, `a / b` or
+`(a − b) / b × 100` for two values the item may quote; code verifies the arithmetic instead of asking the
+model not to do it. A `relates_to` that names the item's own metric is dropped by code when the items are
+normalised, since the relation is empty rather than wrong, and the gate keeps rejecting a relation to a
+metric that is not another item. The reference URLs stay refused: FR-016 wants a link the run built or
+retrieved, and a URL recalled from training is neither.
+
+**The image.** The brief image is a screenshot of the report's summary, rendered by a headless browser
+and uploaded privately so the parent can show it as an image block: a picture of the message it sits
+under. Since revision 23 the report itself is shared into the thread, readable and searchable, so the
+image adds a Chromium render, an upload and 600 KB a day for nothing a reader uses. **Decision:** the
+image is retired: the render stage writes `report.html` only, the payload carries `image: null`, the
+publisher uploads nothing before the parent, and the Slack sequence loses its first step. Dashboard or
+panel captures, which is what the image was once imagined to be, remain a later story (Clarifications);
+`src/render/browser.js`, `AGENT_WATCHDOG_CHROMIUM_PATH` and the container's Chromium stay in place for it
+and can be removed if that story is declined, which would also lower the container's memory ceiling.
+
+**The report as the document.** With the report the artefact people open, three things follow. (1)
+Every reference in it becomes a link when the reader can follow it: each item links its dashboard panel
+(the same code-built link the thread reply carries), each standing host links its panel, each alert group
+its filtered alert list, and the footer links the prompts, the configuration and the trace, beside the
+cost and the line that says how to cite an item. Whether links appear is a setting,
+`AGENT_WATCHDOG_REPORT_LINKS` (`internal`, the default, or `none`), because the next story after this one
+is a per-project or per-programme report sent to people who have no credentials for the hosted watchdog:
+a link they cannot open is worse than a name. Links to the hosted Grafana are built by code from the same
+structured references as today (FR-009, FR-016), never by the model. (2) Numbers the report renders are
+rounded for reading: values with more than three decimals show three, values below one show three
+significant figures, and the same rounding is applied at render time to long decimals inside an item's
+prose, which the stored item keeps in full and the gate verified in full. (3) The template is redesigned
+under the design skill the plan already names (`design-taste-frontend`, here its minimalist and redesign
+variants, read on 2026-09-21): a document-style editorial layout at a data density of about 6 of 10, a
+warm monochrome canvas with 1 px `#EAEAEA` rules instead of boxed cards, a system sans-serif stack with
+character and a monospace with tabular figures for metrics, identities and numbers, colour only for
+severity as muted pastels, sentence case, and an item header in two rows: rank, severity, host and metric
+first; persistence, confidence and identity as a labelled muted line under it, which is the confusion the
+operator reported ("confidence, new today, id number" in one run of text). The skill bans emoji; FR-082
+places status markers by code on the headline, bullets and notices and is kept, since the markers are
+semantic and the same in Slack and the report. The wording of items is the model's and is not touched.
+
+**One programme at a time.** `--project` already restricts a run to named hosts and FR-066 (revision 19)
+makes the brief cover only what was analysed, so a tailored brief for one programme is possible today by
+listing its hosts. **Decision:** a `--group` flag, repeatable, selects every discovered project of a
+programme label, resolved by the one helper every stage and the presentation scope use, so collect,
+analyze, agent and the roll-up agree on the set. The post still goes to the one configured channel
+(Out of Scope), which is the second half of the per-programme story.
+
+**Rejected or deferred here**: the backlog rule's threshold taken from the panel's own reference line,
+which would make the rule agree with the tuned Grafana alert (1 firing of 82 instances) but needs the
+reference line collected as a threshold rather than a signal, a design of its own once the standing rule
+has shown its effect; removing Chromium from the container (above); posting a programme's brief to a
+channel or recipient of its own (Out of Scope, the next story); rounding numbers inside Slack replies
+(the reply quotes the model's text as the gate verified it); and dropping FR-082's markers from the report
+for the skill's emoji ban.
+
+**Implementation notes (2026-09-21).** Three things the tests decided while the code was written. (1) The
+derived values pair counts only: with every allowed value paired, a level against a ratio (300 / 3.04)
+produced 98.7 and the revision-22 test that "panel 99" is refused failed, so a ratio, a percentage or a
+duration derives nothing; with counts alone the seeded fixture yields 60 derived values and the test
+holds. (2) A code-built URL in the report goes through an `href` helper that escapes the five characters
+that could break out of a quoted attribute and admits `http(s)` URLs only: Handlebars' default escaping
+also turns `=` into `&#x3D;`, which browsers accept but which hides the query a reader may want to copy,
+and the URLs come from configuration and the run's structured references, never from model text. (3) A
+renderer given no link setting links nothing; the stage always passes the configured mode, so the default
+of `internal` lives in the configuration alone and the older tests that expect no `href` stay true.

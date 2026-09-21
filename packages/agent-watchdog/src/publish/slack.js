@@ -1,10 +1,10 @@
 'use strict';
-// Posting to the one configured channel (contracts/slack-payload.md): private image upload referenced by
-// id, one parent, one threaded reply per item, permalinks recorded, retries on rate limits, loud failure
-// (FR-019 to FR-024).
+// Posting to the one configured channel (contracts/slack-payload.md): one parent, the report shared into its
+// thread, one threaded reply per body item and alert group, permalinks recorded, retries on rate limits, loud
+// failure (FR-019 to FR-024). The brief image and its private upload were retired in revision 24.
 const fs = require('node:fs');
 const codes = require('../cli/exit-codes');
-const { withImageBlock, BRIEF_EVENT } = require('./payload');
+const { BRIEF_EVENT } = require('./payload');
 
 const DEFAULT_ATTEMPTS = 3;
 const defaultSleep = (ms) => new Promise((resolve) => {
@@ -76,24 +76,9 @@ const createSlackPublisher = ({
 
   const post = async (message) => call('chat.postMessage', () => client.chat.postMessage({ channel, ...message }));
 
-  const uploadImage = async (image, imagePath) => {
-    const result = await call('files.uploadV2', () => client.files.uploadV2({
-      file: fs.createReadStream(imagePath),
-      filename: image.filename,
-      title: image.alt_text,
-      alt_text: image.alt_text,
-    }));
-    const fileId = fileIdOf(result);
-    if (!fileId) {
-      throw new codes.ExitError(codes.IOERR, 'Slack files.uploadV2 returned no file id', { label: 'files.uploadV2' });
-    }
-    return fileId;
-  };
-
   /**
    * Share the report into the thread (FR-022, revision 23): an upload given the channel and the parent's `ts` posts
-   * the file as the thread's first reply, readable by every member, where the image's private upload is readable by
-   * the bot alone. The comment tells the reader how to cite an item.
+   * the file as the thread's first reply, readable by every member. The comment tells the reader how to cite an item.
    */
   const shareReport = async (report, reportPath, parentTs) => {
     const result = await call('files.uploadV2', () => client.files.uploadV2({
@@ -118,14 +103,8 @@ const createSlackPublisher = ({
     elements: [{ type: 'mrkdwn', text: `Supersedes an earlier post for this date: <${permalink}|earlier brief>` }],
   });
 
-  const publish = async ({ payload, imagePath, reportPath = null, superseded = null }) => {
-    let post_ = payload;
-    let fileId = null;
-    if (payload.image && imagePath) {
-      fileId = await uploadImage(payload.image, imagePath);
-      post_ = withImageBlock(payload, fileId);
-      logger.info('slack.image_uploaded', { file_id: fileId });
-    }
+  const publish = async ({ payload, reportPath = null, superseded = null }) => {
+    const post_ = payload;
     let blocks = post_.parent.blocks;
     if (superseded) {
       blocks = [supersededBlock(superseded), ...blocks];
@@ -162,7 +141,7 @@ const createSlackPublisher = ({
       ts: parent.ts,
       permalink: await permalinkOf(parent.ts),
       replies,
-      slack_file_id: fileId,
+      slack_file_id: null,
       report,
     };
   };

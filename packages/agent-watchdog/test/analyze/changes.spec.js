@@ -166,3 +166,17 @@ describe('analyze/changes', () => {
     expect(changes.map((c) => c.metric)).to.deep.equal(['cht_sentinel_backlog_count', 'up{job="cht"}']);
   });
 });
+
+describe('analyze/changes: only the metrics discovery marked analysable (FR-075, revision 24)', () => {
+  it('ignores a stored window whose metric is not in the given metric list', () => {
+    const windows = [
+      window('current', [[RUN_START - 300, 300], [RUN_START, 312]]),
+      window('current', [[RUN_START - 300, 30], [RUN_START, 31]], { metric: 'cht_connected_users_count / 10' }),
+    ];
+    const all = computeChanges({ windows, project, activeWindow: null });
+    expect(all.map((c) => c.metric).sort())
+      .to.deep.equal(['cht_connected_users_count / 10', 'cht_sentinel_backlog_count']);
+    const only = computeChanges({ windows, project, activeWindow: null, metrics: ['cht_sentinel_backlog_count'] });
+    expect(only.map((c) => c.metric)).to.deep.equal(['cht_sentinel_backlog_count']);
+  });
+});

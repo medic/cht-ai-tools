@@ -12,6 +12,7 @@ const COMMANDS = ['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'to
 const OPTIONS = {
   date: { type: 'string' },
   project: { type: 'string', multiple: true },
+  group: { type: 'string', multiple: true },
   stage: { type: 'string' },
   engine: { type: 'string' },
   'dry-run': { type: 'boolean' },
@@ -40,7 +41,8 @@ const OPTIONS = {
 const USAGE = `agent-watchdog <command> [flags]
 
 Commands:
-  run           the daily pipeline (--date --project --stage --engine --dry-run --force --since)
+  run           the daily pipeline (--date --project --group --stage --engine --dry-run --force --since)
+                --group <label> analyses one programme's projects (repeatable, combines with --project)
   replay        regenerate findings for a stored run offline (--date --project --prompts --skill --label --from --to)
   distill       turn new corpus items into proposed pattern cards (--all --item)
   calibrate     weekly calibration report and threshold proposals (--week --project)

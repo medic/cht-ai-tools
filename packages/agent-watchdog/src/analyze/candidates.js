@@ -77,7 +77,20 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
         }]),
       });
     }
-    if (change.monotonic_rise_hours > 0 && change.monotonic_rise_hours >= rules.monotonic_rise_hours) {
+    // Standing conditions (FR-014, revision 24): a backlog above zero yesterday as well, or a target dark yesterday
+    // and through the trailing fortnight, is routine that code reports once (src/analyze/standing.js). Its rule is
+    // still recorded, but it sets no floor for the metric's other rules, and a standing backlog's monotonic rise
+    // (the backlog was there all day) is no candidate at all.
+    const isTarget = roleMatches(roles.scrape_target, change.metric);
+    const isOutbound = roleMatches(roles.outbound_push_backlog, change.metric);
+    const standingBacklog = isOutbound && change.current_value !== null && change.current_value > 0
+      && change.previous_day_value !== null && change.previous_day_value > 0;
+    const standingTarget = isTarget && change.current_value === 0 && change.previous_day_value === 0
+      && change.trailing_mean === 0;
+    const standing = standingBacklog || standingTarget;
+
+    if (!standingBacklog && change.monotonic_rise_hours > 0
+      && change.monotonic_rise_hours >= rules.monotonic_rise_hours) {
       fired.push({
         rule: 'monotonic',
         observed: change.monotonic_rise_hours,
@@ -85,13 +98,11 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
         evidence: evidence(),
       });
     }
-    const isTarget = roleMatches(roles.scrape_target, change.metric);
     if (isTarget && change.current_value === 0) {
       fired.push({
         rule: 'target_down', observed: 0, threshold: { source: 'default', value: 0 }, evidence: evidence(),
       });
     }
-    const isOutbound = roleMatches(roles.outbound_push_backlog, change.metric);
     if (isOutbound && change.current_value !== null && change.current_value > 0) {
       fired.push({
         rule: 'backlog_absolute',
@@ -107,11 +118,14 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
     const isSentinel = roleMatches(roles.sentinel_backlog, change.metric);
     const sentinelHigh = isSentinel && baselineValue !== null && change.current_value !== null
       && change.current_value > 3 * baselineValue;
+    const isStandingRule = (f) => standing && (f.rule === 'target_down' || f.rule === 'backlog_absolute');
+    // The floor of the metric's other rules counts only the rules that are news today.
+    const counted = fired.filter((f) => !isStandingRule(f));
     let floor = 'low';
-    const highRule = fired.some((f) => f.rule === 'target_down' || f.rule === 'backlog_absolute');
+    const highRule = counted.some((f) => f.rule === 'target_down' || f.rule === 'backlog_absolute');
     if (highRule || sentinelHigh) {
       floor = 'high';
-    } else if (fired.length >= 2 || fired.some((f) => f.rule === 'restart')) {
+    } else if (counted.length >= 2 || counted.some((f) => f.rule === 'restart')) {
       floor = 'medium';
     }
 
@@ -124,7 +138,8 @@ const computeCandidates = ({ changes, project, thresholds, policy, date, windows
         rule: f.rule,
         threshold: f.threshold,
         observed: f.observed,
-        severity_floor: floor,
+        // The standing candidate itself keeps the floor its rule always had; code, not the model, reports it.
+        severity_floor: isStandingRule(f) ? 'high' : floor,
         evidence: f.evidence,
         expected_load_window_id: change.expected_load_window_id,
       }));

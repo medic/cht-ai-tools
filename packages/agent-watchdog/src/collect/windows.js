@@ -97,7 +97,8 @@ const metricSpecs = (discovery) => {
   const specs = new Map();
   for (const dashboard of discovery.dashboards) {
     for (const panel of dashboard.panels) {
-      if (panel.per_project && !panel.breakdown && !specs.has(panel.metric)) {
+      // A reference line is a comparison drawn beside another metric, not a metric of its own (FR-075, revision 24).
+      if (panel.per_project && !panel.breakdown && !panel.reference_line && !specs.has(panel.metric)) {
         specs.set(panel.metric, {
           metric: panel.metric,
           expr: panel.expr,

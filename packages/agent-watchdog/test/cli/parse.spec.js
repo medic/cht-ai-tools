@@ -13,6 +13,17 @@ describe('cli/parse', () => {
     expect(COMMANDS).to.include.members(['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'tools-server']);
   });
 
+  it('parses a repeatable --group beside --project and documents it in the usage text (revision 24)', async () => {
+    const parsed = parseCommandLine([
+      'run', '--group', 'North Programme', '--group', 'South Programme', '--project', 'a.org',
+    ]);
+    expect(parsed.flags.group).to.deep.equal(['North Programme', 'South Programme']);
+    expect(parsed.flags.project).to.deep.equal(['a.org']);
+    const out = capture();
+    expect(await main(['--help'], { env: {}, stdout: out.stream, stderr: capture().stream })).to.equal(0);
+    expect(out.text()).to.include('--group');
+  });
+
   it('parses run flags including repeatable --project', () => {
     const parsed = parseCommandLine([
       'run', '--date', '2026-09-18', '--project', 'a.org', '--project', 'b.org', '--stage', 'collect',

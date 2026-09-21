@@ -30,11 +30,11 @@ describe('verify/checks/relates_to', () => {
     expect(check(baseContext()).status).to.equal('pass');
   });
 
-  it('fails an item that names its own metric: nothing explains itself', () => {
+  it('passes an item that names its own metric: code drops the empty relation instead (revision 24)', () => {
     const ctx = withItems({ metric: 'cht_sentinel_backlog_count', relation: 'level_of' });
     const result = check(ctx);
-    expect(result.status).to.equal('fail');
-    expect(result.reasons[0]).to.include('itself');
+    expect(result.status).to.equal('pass');
+    expect(result.reasons.join(' ')).to.not.include('itself');
   });
 
   it('fails a metric that is not another item of the same findings', () => {

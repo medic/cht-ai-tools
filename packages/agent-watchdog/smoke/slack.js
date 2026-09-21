@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 'use strict';
-// Smoke test S-8 (research.md): private image upload referenced by slack_file.id, registered metadata,
-// and read-back through conversations.replies with include_all_metadata. Posts to the configured channel
-// only when --yes is given; otherwise it stops after the upload.
+// Smoke test S-8 (research.md): a private file upload through files.uploadV2, registered metadata, and read-back
+// through conversations.replies with include_all_metadata. Posts to the configured channel only when --yes is given;
+// otherwise it stops after the upload. A run uploads no image since revision 24; the report share into the thread is
+// smoke test S-31 and is exercised by a hosted dry run turned live, not here.
 // Usage: node --env-file=.env smoke/slack.js [--yes] [--react <message ts>]
 // S-16 (research.md R-14): the posted brief carries a group bullet whose sub-bullets are indented `◦` lines inside
 // the section; check that they render legibly on Slack desktop and mobile.
 // S-13 (research.md R-13): with --react <ts>, add the `eyes` reaction to that message twice; the second call must
 // report already_reacted, and a token without reactions:write must report missing_scope. Nothing else runs.
-const fs = require('node:fs');
-const path = require('node:path');
-const os = require('node:os');
 const { WebClient } = require('@slack/web-api');
 const { loadConfig } = require('../src/config/load');
 const { createLogger } = require('../src/log/logger');
@@ -66,8 +64,6 @@ const main = async () => {
     return;
   }
   const runId = `smoke-${Date.now()}`;
-  const imagePath = path.join(os.tmpdir(), `${runId}.png`);
-  fs.writeFileSync(imagePath, PNG_1X1);
 
   const upload = await client.files.uploadV2({
     file: PNG_1X1,
@@ -100,7 +96,7 @@ const main = async () => {
     expected_load_notice: null,
     checked: { projects: 1, panels: 1, candidates: 1 },
     degradation_notice: null,
-    image: { path: imagePath, slack_file_id: fileId },
+    image: null,
     footer: {
       prompts_url: config.endpoints.promptsUrl,
       config_url: config.endpoints.configUrl,
@@ -135,7 +131,7 @@ const main = async () => {
   ];
   const payload = buildPayload({ brief, items, links: new Map(), runId, date: runId, audience: 'internal' });
   const publisher = createSlackPublisher({ client, channel, logger });
-  const publication = await publisher.publish({ payload, imagePath });
+  const publication = await publisher.publish({ payload });
   console.log(`ok   posted ${publication.permalink} with ${publication.replies.length} replies`);
   console.log('S-16: open the post and confirm the two indented sub-bullets under "Smoke programme" read well');
 

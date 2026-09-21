@@ -1,8 +1,9 @@
 'use strict';
 // FR-009 (revision 20): an item may say it relates to another item of the same findings, naming that item by its
 // metric because code derives item identities and the analysis cannot know them. This check is the guard: the
-// metric must belong to another item of the same findings, never to the item itself, and the relation must be one
-// of the four the schema allows.
+// metric must belong to another item of the same findings, and the relation must be one of the four the schema
+// allows. A relation to the item's own metric explains nothing and is dropped by the gate's normalisation instead of
+// costing a retry (revision 24).
 const { sameMetric } = require('../metric-key');
 
 const NAME = 'relates_to';
@@ -23,9 +24,8 @@ const check = (ctx) => {
       return;
     }
     const own = (item.item_key || {}).metric;
-    if (sameMetric(own, relation.metric)) {
-      reasons.push(`items[${i}].relates_to names the item's own metric ${relation.metric}: nothing explains itself`);
-    } else if (!metrics.some((metric, j) => j !== i && sameMetric(metric, relation.metric))) {
+    const other = metrics.some((metric, j) => j !== i && sameMetric(metric, relation.metric));
+    if (!sameMetric(own, relation.metric) && !other) {
       reasons.push(`items[${i}].relates_to names ${relation.metric}, which is not another item of these findings`);
     }
     if (!RELATIONS.includes(relation.relation)) {

@@ -240,7 +240,7 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
     const payload = JSON.parse(preview.out.text());
     expect(payload).to.deep.equal(preview.read('rollup/payload.json'));
     expect(payload.replies.length).to.equal(posted.read('rollup/payload.json').replies.length);
-    expect(payload.image.slack_file_id).to.equal(null);
+    expect(payload.image).to.equal(null);
     expect(payload.parent.text).to.equal(posted.read('rollup/payload.json').parent.text);
     expect(preview.slack.chat.postMessage).to.not.have.been.called;
     expect(preview.slack.files.uploadV2).to.not.have.been.called;
@@ -297,7 +297,8 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
     expect(rollup.read('rollup/brief.json').kind).to.equal('brief');
     const render = await stage('render');
     expect(render.error, render.error && render.error.stack).to.equal(undefined);
-    expect(fs.existsSync(path.join(render.root, 'rollup', 'brief.png'))).to.equal(true);
+    expect(fs.existsSync(path.join(render.root, 'rollup', 'report.html'))).to.equal(true);
+    expect(fs.existsSync(path.join(render.root, 'rollup', 'brief.png'))).to.equal(false);
     const publish = await stage('publish', { 'dry-run': true });
     expect(publish.error, publish.error && publish.error.stack).to.equal(undefined);
     expect(JSON.parse(publish.out.text())).to.deep.equal(publish.read('rollup/payload.json'));

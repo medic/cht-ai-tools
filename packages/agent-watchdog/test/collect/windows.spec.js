@@ -199,6 +199,30 @@ describe('collect/windows', () => {
       ]);
     });
 
+    it('never queries a reference line either (revision 24)', () => {
+      const withReference = {
+        ...discovery,
+        dashboards: [{
+          ...discovery.dashboards[0],
+          panels: [
+            ...discovery.dashboards[0].panels,
+            {
+              ...panelOf(
+                4, 'cht_connected_users_count{instance=~"$cht_instance"} / 10', 'cht_connected_users_count / 10', null,
+              ),
+              ref_id: 'B',
+              reference_line: {
+                subject: 'rate(cht_feedback_total[24h]) * 60 * 60 * 24', source: 'cht_connected_users_count',
+              },
+            },
+          ],
+        }],
+      };
+      expect(metricSpecs(withReference).map((s) => s.metric)).to.deep.equal([
+        'cht_couchdb_fragmentation', 'sum(rate(c[5m]))', 'up{job="cht"}',
+      ]);
+    });
+
     it('marks a window unavailable when the query returns several series for the project', async () => {
       const grafana = {
         queryRange: async ({ query, step }) => {

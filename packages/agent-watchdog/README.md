@@ -102,7 +102,7 @@ firing alert its metric explains. Stale alerts on hosts with no data are old new
 housekeeping notice that suggests removing the host or silencing the rule; alerts that cleared since
 the previous run get a resolved notice. Items of the most-used projects, by connected users, rank
 first within a severity. A small fixed set of emoji, placed by code and never by the model, marks
-status and severity in Slack and in the image.
+status and severity in Slack and in the report.
 
 ### What a run fetches
 
@@ -211,7 +211,7 @@ Every runtime dependency carries a one-line justification (constitution V):
 | `zod` | Startup validation of configuration, entity schemas, and the source of the structured-output JSON schemas. |
 | `yaml` | The three policy files are YAML; Node has no parser. |
 | `handlebars` | Escaping templates for the report and Slack text; untrusted text is never concatenated. |
-| `playwright-core` | Renders the brief image from the same report as the text, with network and scripting disabled. |
+| `playwright-core` | Retained for the container's browser and the `--png` check of `smoke/render.js`; a run renders no image since revision 24 (the brief image was a capture of the Slack message). |
 | `@langfuse/tracing`, `@langfuse/otel`, `@langfuse/client`, `@opentelemetry/sdk-node` | One trace per run with a span per stage and usage per model call; the classic `langfuse` package describes itself as a deprecated v3 client. |
 
 ## Smoke tests
@@ -222,11 +222,11 @@ Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour onl
 
 | Script | Needs | Confirms |
 |---|---|---|
-| `render.js [--out <png>]` | a browser: Playwright's, or `AGENT_WATCHDOG_CHROMIUM_PATH` | S-11: the report and its image render, writing under `TMPDIR` only |
+| `render.js [--out <html>] [--png]` | nothing; `--png` needs a browser: Playwright's, or `AGENT_WATCHDOG_CHROMIUM_PATH` | S-11: the report renders with its links, writing under `TMPDIR` only |
 | `container.js [--no-build] [--image <tag>]` | Docker | `contracts/container.md`: the image builds, `--version` prints the package version, `check` of an unreachable host exits 69, the report renders with `--read-only --tmpfs /tmp` |
 | `langfuse.js` | Langfuse credentials | S-9: one trace with a stage span and a generation, `getTraceUrl`, `forceFlush` completing before exit |
 | `grafana.js [--project <host>] [--hosts] [--alerts]` | a Viewer token for the hosted watchdog | S-6, S-7: datasource proxy queries and dashboards; `--hosts` host discovery, `--alerts` the alert rules endpoint |
-| `slack.js [--yes]` | the Slack app | S-8: private image upload referenced by `slack_file.id`, metadata and read-back; `--yes` posts a brief with a group bullet and its sub-bullets (S-16) |
+| `slack.js [--yes]` | the Slack app | S-8: a private file upload, metadata and read-back; `--yes` posts a brief with a group bullet and its sub-bullets (S-16) |
 | `agent-sdk.js` | model credentials | S-1, S-2, S-4, S-5: structured output on every turn, the Stop hook per turn, the committed schemas, hooks |
 | `agent-parity.js --date <date> --project <host>` | a stored run and model credentials | S-3, S-10: both engines agree on items and gate verdicts |
 

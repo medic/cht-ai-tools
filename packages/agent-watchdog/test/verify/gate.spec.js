@@ -211,3 +211,24 @@ describe('verify/gate', () => {
     expect(failed).to.include.members(['bullet_count', 'thread_order']);
   });
 });
+
+describe('verify/gate: a relation to the item\'s own metric is dropped, not rejected (FR-009, revision 24)', () => {
+  const { baseContext, URL } = require('./helpers/context');
+  const { verifyFindings } = require('../../src/verify/gate');
+  const args = (ctx) => ({
+    findings: ctx.findings, pass: 1, project: ctx.project, discovery: ctx.discovery, changes: ctx.changes,
+    candidates: ctx.candidates, windows: ctx.windows, knownCards: ctx.knownCards, allowlist: ctx.allowlist,
+    toolResultUrls: ctx.toolResultUrls, resolveLinks: null, grafanaUrl: null,
+  });
+
+  it('normalises a self-reference to null and accepts the pass', async () => {
+    const ctx = baseContext();
+    const [first] = ctx.findings.items;
+    ctx.findings.items = [{ ...first, relates_to: { metric: first.item_key.metric, relation: 'same_cause' } }];
+    const { report, items } = await verifyFindings(args(ctx));
+    expect(items[0].relates_to).to.equal(null);
+    expect(items[0].project_url).to.equal(URL);
+    const relates = report.checks.find((c) => c.name === 'relates_to');
+    expect(relates.status).to.equal('pass');
+  });
+});

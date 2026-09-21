@@ -14,7 +14,8 @@ const PHONE_PATTERN = /(?<!\w)\+?\d[\d\s().-]{7,}\d(?!\w)/g;
 const PHONE_MIN_DIGITS = 9;
 // Digits, one decimal point, digits: a computed value, whatever its length. A bare run of digits is not
 // exempt, because that is also what an unformatted phone number looks like.
-const DECIMAL_PATTERN = /^\d+\.\d+$/;
+// A signed decimal (`+0.2748442279996993`) is a computed change, not a phone number (revision 24).
+const DECIMAL_PATTERN = /^[+-]?\d+\.\d+$/;
 // A date, or a date with a time after it: the separators are the phone pattern's own, but no phone number begins
 // with a four-digit year and a month (revision 19).
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[\s.T-]\d{1,2}(?::\d{2}){0,2})?$/;

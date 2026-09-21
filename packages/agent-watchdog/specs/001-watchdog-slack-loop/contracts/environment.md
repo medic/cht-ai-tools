@@ -58,6 +58,7 @@ type, requiredness and consumer.
 | `LANGFUSE_BASE_URL` | URL | Tracing backend. The Langfuse v5 SDK reads this name; the earlier `LANGFUSE_HOST` was never read by any Langfuse SDK (research.md R-8). |
 | `AGENT_WATCHDOG_PROMPTS_URL` | URL | Footer link to prompts in `cht-ai-tools`. |
 | `AGENT_WATCHDOG_CONFIG_URL` | URL | Footer link to deployment configuration in `medic-infrastructure`. |
+| `AGENT_WATCHDOG_REPORT_LINKS` | enum `internal\|none` | Default `internal` (revision 24, FR-022): whether the one-page report links its dashboard panels, alert lists, prompts, configuration and trace (`internal`) or names them alone (`none`, for readers without access to the hosted watchdog). Links are built by code from structured references; the model never writes one. |
 
 ## Storage and retention
 

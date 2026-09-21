@@ -152,3 +152,20 @@ describe('rollup/scope onAnalysedHosts', () => {
     expect(onAnalysedHosts(records, new Set(['nothing.example.org']))).to.deep.equal([]);
   });
 });
+
+describe('rollup/scope: a programme filter (FR-066, revision 24)', () => {
+  const grouped = {
+    ...discovery,
+    projects: discovery.projects.map((p) => ({
+      ...p, group: p.host.startsWith('north') ? 'North Programme' : 'South Programme',
+    })),
+  };
+
+  it('narrows the analysed hosts to a programme named with --group, and to nothing when the label is unknown', () => {
+    expect([...analysedHosts({ discovery: grouped, flags: { group: ['North Programme'] } })].sort())
+      .to.deep.equal(['north-a.example.org', 'north-b.example.org']);
+    expect(analysedHosts({ discovery: grouped, flags: { group: ['North Programme', 'South Programme'] } }))
+      .to.equal(null);
+    expect([...analysedHosts({ discovery: grouped, flags: { group: ['Nowhere'] } })]).to.deep.equal([]);
+  });
+});

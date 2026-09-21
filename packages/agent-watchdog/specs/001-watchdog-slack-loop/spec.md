@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 23)
+**Status**: Draft (revision 24)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -16,7 +16,9 @@ A Medic engineer responsible for hosted CHT projects opens Slack in the morning 
 post from agent-watchdog: a headline, at most five bullets across all monitored projects (a
 bullet may carry sub-bullets for a programme's projects or alerts, User Stories 8 and 9), each
 with the metric evidence, why it matters now, a suggested check and a link straight to the
-relevant dashboard view for that project and time window, plus a rendered image of the brief.
+relevant dashboard view for that project and time window, plus the full report shared into the
+thread (until revision 24 also a rendered image of the brief, retired as a picture of the message it
+sat under).
 On a day with nothing worth flagging, the post is a single line saying so and what was checked.
 
 **Why this priority**: the whole system exists to produce this post. Every other story
@@ -126,7 +128,7 @@ run the full pipeline in preview mode to obtain the would-be post as structured 
 5. **Given** a contributor with a watchdog installation and their own model credentials,
    **When** they run the agent in preview mode from their machine, **Then** it produces the
    same stored artefacts as a production run and prints the exact message payload (post,
-   thread replies, image) as structured data, and posts nothing.
+   thread replies, report share) as structured data, and posts nothing.
 6. **Given** a contributor runs one stage at a time, **When** each stage completes, **Then** its
    output is a readable file the next stage consumes, so any stage can be re-run in isolation.
 7. **Given** a contributor runs the analysis stage through the agent runtime's own command-line
@@ -402,7 +404,7 @@ line that shows the alert and its metric together.
    resolved line names it.
 5. **Given** several projects are flagged, **When** they are ranked, **Then** the number of
    connected users of each project is a ranking input, so the most-used projects come first.
-6. **Given** a brief is rendered for Slack or as an image, **When** it is read, **Then** a small
+6. **Given** a brief is rendered for Slack or in the report, **When** it is read, **Then** a small
    fixed set of emoji placed by code marks status and severity: the headline by kind, each item or
    programme line by its worst severity, alert lines with an alarm, and the resolved, housekeeping
    and new-project notices with their own marker; the model writes none of them.
@@ -504,8 +506,9 @@ line that shows the alert and its metric together.
   of the host, so the instance joins its project and programme (FR-068, revision 17).
 - An episode is open on a host the run now ignores: it is neither observed nor cleared, and never
   reported as resolved, because the run stopped watching it (FR-067, FR-068, revision 17).
-- A run analyses only some projects (a project filter): a host whose scrape target discovery found
-  down still counts as dead for housekeeping (FR-080, revision 17).
+- A run analyses only some projects (a `--project` or `--group` filter): a host whose scrape target
+  discovery found down still counts as dead for housekeeping (FR-080, revision 17); the same helper
+  resolves the filter in every stage (revision 24).
 - A metric's collected windows are all unavailable but the metric is known: the dashboard reference
   is still built from the panel and window bounds recorded at discovery, because those are facts of
   the run, not of the data (FR-009, revision 18).
@@ -537,6 +540,20 @@ line that shows the alert and its metric together.
   FR-014, revision 23).
 - A note cites `#7` under a forced re-run's post: the rank is resolved against that run's own
   ranked items, never against another run of the same date (FR-027, revision 23).
+- The model writes "+27 jump" for a value that rose from 818 to 845, "roughly 3x" for 912 against
+  300, or "-56%" for a fall it computed: each is a derived value of two numbers it may quote, and is
+  not unmatched (FR-016, revision 24). A numeral that no pair of quotable values produces still is.
+- The model writes a signed decimal ("+0.2748442279996993"): it is a value, not a phone number
+  (FR-016, revision 24).
+- A chronic outbound push backlog rose every scrape for 24 hours, as it does every day: the
+  `monotonic` rule raises no candidate on a standing metric, and a `deviation` or `pct_change`
+  candidate on it carries the floor those rules earn alone (FR-014, revision 24).
+- A window kept from a stored run belongs to a metric discovery no longer marks analysable (a
+  reference line): the analysis leaves it out, so yesterday's collection cannot bring today's
+  excluded metric back (FR-075, revision 24).
+- The report is opened by a reader who cannot reach the hosted watchdog: with
+  `AGENT_WATCHDOG_REPORT_LINKS=none` it names panels, alerts and the trace and links nothing
+  (FR-022, revision 24).
 - A run analyses one project of ninety: the brief names that project's alerts and nothing else, the
   housekeeping and resolved lines cover only hosts it analysed, and the durable episode record is
   still updated for every project so the next full run is unaffected (FR-066, revision 19).
@@ -609,7 +626,10 @@ Analysis
   verification rejects a metric that is not another item of the same findings (revision 20). An
   item related to a higher-ranked item of the same run and project is presented under that item:
   the report nests it, the higher item's thread reply names it with the relation and its rank,
-  and, unless it is a body item itself, it takes no thread reply of its own (revision 23).
+  and, unless it is a body item itself, it takes no thread reply of its own (revision 23). A relation
+  that names the item's own metric is empty rather than wrong: code drops it when the items are
+  normalised and the pass is not rejected for it (revision 24; one run's revisions carried 21 such
+  reasons after a prompt sentence against it changed nothing).
 - **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
   bullet is one item or, when a project group has several flagged projects or several alerts, one
   group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
@@ -640,13 +660,20 @@ Analysis
   recorded, but it is not handed to the model; code names standing conditions once per rule in the
   brief, grouped by programme with the count out of the programme's size and the largest value,
   and lists them per host in the report (revision 23, research.md R-28). A condition new today keeps
-  its high floor and goes to the model as before.
+  its high floor and goes to the model as before. A standing rule MUST NOT set the floor of the other
+  candidates on its metric, and the `monotonic` rule MUST raise no candidate on a standing metric,
+  since a queue that never drains rises by definition; `deviation` and `pct_change` on a standing
+  metric keep their candidates at the floor they earn without the standing rule (revision 24, after a
+  run in which 42 of 43 high items were the chronic backlog through its `monotonic` candidates).
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
   they appear in the watchdog, PromQL where it helps the reader confirm. Emoji are permitted as
   status and severity markers. At most five bullets of at most two lines each, each bullet with at
   most eight sub-bullets of one line each; these structural limits are checked by the verification
-  gate. No separate writing or voice skill is applied.
+  gate. No separate writing or voice skill is applied. Numbers the report renders are rounded for
+  reading: at most three decimals, and three significant figures below one, applied by code at render
+  time to the values it formats and to long decimals inside an item's prose; the stored item keeps
+  the full value the gate verified (revision 24).
 
 Analysis passes
 
@@ -698,7 +725,11 @@ Verification gate
   numeral found in neither the given text nor the computed values still is. A phone-shaped run
   whose parts are each a decimal number, a date or a time is a list of values, not a phone number.
   A host written as the leading labels of a discovered host, two labels or more, names that
-  project and is not an undiscovered one (revision 23).
+  project and is not an undiscovered one (revision 23). A numeral equal, within display rounding, to
+  the difference, the ratio or the percent change of two values the item may quote is a **derived
+  value** the model computed correctly and MUST NOT be reported as unmatched: code verifies the
+  arithmetic rather than forbidding it (revision 24; every one of one run's 127 refused numerals was
+  such a value). A decimal with a leading sign is a value, not a phone number (revision 24).
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -720,8 +751,11 @@ Verification gate
 Publishing
 
 - **FR-019**: The system MUST post one message per run to the configured Slack channel containing
-  a headline, at most five bullets (FR-010), the brief image, and a footer with a link to the prompts, a
-  link to the deployment configuration, a link to the run's trace, and the run's cost in currency.
+  a headline, at most five bullets (FR-010), and a footer with a link to the prompts, a link to the
+  deployment configuration, a link to the run's trace, the run's cost in currency, and the count of
+  items only in the report. The brief image (a screenshot of the report's summary, uploaded privately
+  and shown as an image block) was retired in revision 24: the report shared into the thread is the
+  artefact a reader opens, and the image was a picture of the message it sat under.
 - **FR-020**: The system MUST post each **body** item, a bullet or a sub-bullet of the five-slot
   layout, as its own threaded reply so it can receive reactions independently, highest rank first
   and at most twenty-five, after the run's report (FR-022) and before the alert-group replies
@@ -735,13 +769,23 @@ Publishing
   nest related items under the item they relate to (FR-009), and MUST be shared into the post's
   thread as its first reply with a code-built comment that states how many items it holds, how
   many have replies, and how to cite an item in a note (`#<rank>`, or its host and metric) with a
-  thumbs as the verdict (revision 23).
-- **FR-023**: The brief image MUST be rendered from that same report so image and text never
-  diverge.
+  thumbs as the verdict (revision 23). The report is the document a reader opens (revision 24): it
+  MUST list the alert groups the brief covered, and every reference in it to a dashboard panel, an
+  alert list, the prompts, the configuration or the trace MUST be a link built by code from the same
+  structured references as the thread replies, or a name alone, according to one setting
+  (`AGENT_WATCHDOG_REPORT_LINKS`, `internal` by default, `none` for readers without access to the
+  hosted watchdog, which a later story of per-project or per-programme reports will need); the model
+  never writes a link. Its footer MUST carry the prompts, configuration and trace links, the cost and
+  the citation line. Its layout MUST be designed once under the design skill the plan names, with the
+  design read recorded in the template header: an item's header names rank, severity, host and metric,
+  and its persistence, confidence and identity follow on a labelled line of their own; the wording of
+  items is the model's and is not restyled.
+- **FR-023**: Retired in revision 24 (the brief image; see FR-019). Until then: the brief image MUST
+  be rendered from that same report so image and text never diverge.
 - **FR-024**: On failure the system MUST post a one-line failure notice with the trace link and
   exit non-zero.
 - **FR-025**: In preview mode the system MUST produce every artefact of a real run and emit the
-  exact message payload (post, thread replies, image reference) as structured data instead of
+  exact message payload (post, thread replies, report share) as structured data instead of
   posting.
 
 Feedback
@@ -823,7 +867,10 @@ Alerts and groups
   the classified alert record and the durable episodes stay whole regardless, so the next full run
   still sees the same newness and no episode appears to have cleared. A thread reply MUST describe
   the same alerts as the bullet above it, so what the brief covered is recorded for the publish step
-  rather than derived a second time (revision 19).
+  rather than derived a second time (revision 19). A run MAY be restricted by project (`--project`)
+  or by programme (`--group`, every discovered project of a group label), and every stage and the
+  presentation scope MUST resolve the restriction through one helper so they agree on the set
+  (revision 24); the post still goes to the one configured channel.
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -874,7 +921,10 @@ Alerts and groups
   by constant arithmetic (a threshold drawn from the connected-user count, an expected rate drawn
   from the write rate), MUST likewise be recorded in discovery with its subject and source and MUST
   NOT be collected or analysed: it repeats a series the run already holds, scaled (revision 23; six
-  such targets produced 161 of one day's 1,189 candidates and two low items, research.md R-28).
+  such targets produced 161 of one day's 1,189 candidates and two low items, research.md R-28). The
+  collection's query list and the analysis MUST both take their metrics from what discovery marked
+  analysable, so a window kept from a stored run cannot bring an excluded metric back (revision 24,
+  after the exclusion held in discovery and not in collection).
 - **FR-076**: Each metric MUST be analysed according to its kind, declared in the reviewed
   thresholds policy (`metric_kinds`) by metric name, with the stock CHT metrics as the default: a
   gauge as a level; a counter as its increase over each window, its trailing baseline as daily
@@ -906,7 +956,7 @@ Alerts and groups
   within a severity, an item on a project with ten times the users ranks first; confidence and
   persistence order items within the same order of magnitude. Added in revision 14.
 - **FR-082**: Emoji MUST be placed by code alone, from a fixed vocabulary, when the brief is rendered
-  for Slack or as an image: the headline by kind, item and programme lines by worst severity, alert
+  for Slack or in the report: the headline by kind, item and programme lines by worst severity, alert
   lines with an alarm, the notices by what they say. Stored texts and the model's output carry none.
   Added in revision 14.
 
@@ -941,7 +991,8 @@ Persistence and reproducibility
   period, because the hosted watchdog is the source of record; computed changes, candidates,
   items, feedback and memory — the inputs the model saw — MUST be retained for the long period.
   Feedback records are exempt from retention and kept permanently (FR-059). Defaults: 14 days
-  for raw series and rendered images, 30 days for everything else.
+  for raw series, 30 days for everything else (rendered images, retired in revision 24, shared the
+  short period).
 - **FR-041**: The system MUST support offline replay of any stored run from its retained inputs;
   replay MUST NOT contact the metrics source or Slack.
 - **FR-042**: Runs MUST be idempotent per date; a second run on the same date MUST require an
@@ -1013,7 +1064,7 @@ Configuration
 - **Verification Report**: the result of the gate for one draft — each check, pass or fail, with
   reasons.
 - **Brief**: the published post for a run: headline, up to five bullets each with optional
-  sub-bullets, image, footer.
+  sub-bullets, the report shared into its thread, footer.
 - **Thread Reply**: the per-item message that carries reactions; alert groups have one too.
 - **Project Group**: a programme such as North Programme or South Programme, declared by host patterns in
   the project annotations, plus "Other" for unmatched hosts and "Watchdog" for alerts without a
@@ -1125,7 +1176,9 @@ Configuration
 - Automatic merging of any change to prompts, skill, thresholds or configuration.
 - Paging or alerting; the existing monitoring stack keeps that responsibility.
 - Any remediation action against a deployment.
-- Posting to more than one Slack channel.
+- Posting to more than one Slack channel, or sending a programme's report to its own channel or
+  recipients (people without credentials for the hosted watchdog); the report's link setting and the
+  `--group` filter prepare for that story (revision 24).
 - Breakdown analysis: per-route, per-code or per-database series from grouped panels, with a
   cardinality bound and items that name the route or code. A later user story; today such panels
   are listed in discovery and not analysed (FR-075).
@@ -1145,8 +1198,9 @@ Configuration
 - Q: Are partner emails part of this feature? → A: No; separate feature with its own privacy
   requirements.
 - Q: Are dashboard panel images embedded? → A: No. Items carry structured dashboard references
-  from which links are built; charts in the brief are drawn from the data the analysis used, so
-  image and text agree.
+  from which links are built; charts in the report are drawn from the data the analysis used. The
+  brief's own image, a screenshot of its summary, was retired in revision 24; captures of dashboard
+  panels remain a possible later story.
 - Q: Does the agent edit its own prompts, skill or thresholds? → A: No. It writes bounded memory
   and proposals; humans change prompts, skill and thresholds by PR.
 - Q: What is the data source? → A: Medic's hosted CHT Watchdog, read-only, one metrics store
@@ -1183,8 +1237,8 @@ Configuration
   trailing fourteen days, or a monotonic rise lasting six hours or more; severities are low,
   medium and high, with high reserved for a scrape target down, an outbound push backlog above
   zero, or a sentinel backlog above three times its baseline.
-- Q: What are the default retention periods? → A: 14 days for raw series and rendered images,
-  30 days for everything else.
+- Q: What are the default retention periods? → A: 14 days for raw series, 30 days for everything
+  else (rendered images shared the short period until they were retired in revision 24).
 - Q: When and where is the daily brief posted? → A: 06:00 UTC, to the `#agents` Slack channel,
   as the bot named `agent-watchdog`.
 - Q: Where is the SC-002 thumbs-down rate measured from, given 30-day retention of items and
@@ -1356,10 +1410,11 @@ Decisions already taken during design that belong in the plan, listed so they ar
   default so provenance stays first-hand.
 - Metrics are read through the hosted Grafana's datasource proxy rather than an exposed metrics
   store.
-- Rendering: the brief image is a screenshot of the report's summary element rendered in a
-  headless browser with network disabled; the report template is filled, never generated per run;
-  the template is designed once with the design-taste-frontend skill (design read recorded in the
-  template header), and that skill plays no part in the daily run or in the wording of the brief.
+- Rendering: the report template is filled, never generated per run, with no external asset,
+  script or network dependency; it was designed once with the design-taste-frontend skill and
+  redesigned in revision 24 under its minimalist and redesign variants (design read recorded in the
+  template header), and that skill plays no part in the daily run or in the wording of the brief. The
+  brief image, a screenshot of the report's summary in a headless browser, was retired in revision 24.
 - Storage: run artefacts on a 10 Gi persistent volume under `runs/<date>/<project>/` with memory,
   feedback, proposals and the corpus index beside them; raw corpus material outside the public
   repository; retention split as in FR-040.

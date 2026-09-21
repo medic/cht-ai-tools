@@ -136,3 +136,14 @@ describe('verify/checks/personal_data_absent: decimals side by side (FR-016, rev
     expect(check(bare).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/personal_data_absent: signed decimals (FR-016, revision 24)', () => {
+  it('reads a decimal with a leading sign as a value, and a bare digit run as a phone number still', () => {
+    const signed = baseContext();
+    signed.findings.items[0].why_now = 'CPU rate moved +0.2748442279996993 and memory -12.3456789012 against the mean';
+    expect(check(signed).status).to.equal('pass');
+    const phone = baseContext();
+    phone.findings.items[0].why_now = 'reach +254712345678 for help';
+    expect(check(phone).status).to.equal('fail');
+  });
+});

@@ -5,8 +5,10 @@ const {
 } = require('../../src/analyze/standing');
 
 const project = { url: 'https://north-a.example.org', host: 'north-a.example.org' };
+const PANEL_REF = { dashboard_uid: 'oa2OfL-Vk', panel_id: 2, panel_title: 'Outbound Push Backlog', ref_id: 'A' };
 const backlog = (previous, current = 1234) => ({
   candidate_id: 'b'.repeat(12), project_url: project.url, metric: 'cht_outbound_push_backlog_count',
+  panel_ref: PANEL_REF,
   rule: 'backlog_absolute', observed: current, severity_floor: 'high', threshold: { source: 'default', value: 0 },
   evidence: [
     { window: 'current', value: current, unit: 'count' },
@@ -62,11 +64,11 @@ describe('analyze/standing', () => {
     expect(records).to.deep.equal([
       {
         rule: 'backlog_absolute', project_url: project.url, host: 'north-a.example.org', group: 'North Programme',
-        metric: 'cht_outbound_push_backlog_count', value: 1234, previous_day_value: 1200,
+        metric: 'cht_outbound_push_backlog_count', value: 1234, previous_day_value: 1200, panel_ref: PANEL_REF,
       },
       {
         rule: 'target_down', project_url: project.url, host: 'north-a.example.org', group: 'North Programme',
-        metric: 'up{job="cht"}', value: 0, previous_day_value: 0,
+        metric: 'up{job="cht"}', value: 0, previous_day_value: 0, panel_ref: null,
       },
     ]);
     expect(darkHostsOf(records)).to.deep.equal(['north-a.example.org']);

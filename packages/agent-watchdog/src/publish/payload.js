@@ -1,6 +1,6 @@
 'use strict';
 // The exact Slack payload (contracts/slack-payload.md): built by code, escaped through templates, and the
-// same object whether previewed or posted (FR-019, FR-020, FR-025).
+// same object whether previewed or posted (FR-019, FR-020, FR-025). No image since revision 24 (FR-023 retired).
 const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
@@ -67,8 +67,6 @@ const footerText = (footer, { furtherItems = 0 } = {}) => {
 
 const context = (text) => ({ type: 'context', elements: [{ type: 'mrkdwn', text }] });
 
-const imageBlock = (fileId, altText) => ({ type: 'image', slack_file: { id: fileId }, alt_text: altText });
-
 // Slack mrkdwn has no nested lists: sub-bullets are indented lines inside their bullet's section (smoke S-16).
 const SUB_BULLET_PREFIX = '   ◦ ';
 
@@ -87,9 +85,6 @@ const parentBlocks = (brief, severityOf, { furtherItems = 0 } = {}) => {
   const blocks = [{ type: 'header', text: headerText }];
   for (const bullet of brief.bullets) {
     blocks.push({ type: 'section', text: { type: 'mrkdwn', text: bulletText(bullet, severityOf) } });
-  }
-  if (brief.image && brief.image.slack_file_id) {
-    blocks.push(imageBlock(brief.image.slack_file_id, brief.headline));
   }
   if (brief.expected_load_notice) {
     blocks.push(context(`_${mrkdwn(withMarker(MARKERS.expectedLoad, brief.expected_load_notice))}_`));
@@ -389,12 +384,9 @@ const buildPayload = ({
       unfurl_media: false,
       metadata,
     },
-    image: {
-      filename: `brief-${runId}.png`,
-      alt_text: truncate(brief.headline, HEADER_MAX),
-      path: brief.image ? brief.image.path : null,
-      slack_file_id: brief.image ? brief.image.slack_file_id : null,
-    },
+    // The brief image was a capture of the message itself and is retired (revision 24); the field stays null so a
+    // stored payload keeps its shape. The report, shared into the thread, is the document a reader opens.
+    image: null,
     report: reportEntry({ brief, runId, ranked, replied }),
     replies: [
       ...replied.map((item) => replyFor({
@@ -409,20 +401,7 @@ const buildPayload = ({
   };
 };
 
-/** Return a copy of the payload with the uploaded file referenced by an image block after the bullets. */
-const withImageBlock = (payload, fileId) => {
-  const blocks = payload.parent.blocks.filter((block) => block.type !== 'image');
-  const lastSection = blocks.map((block) => block.type).lastIndexOf('section');
-  const insertAt = lastSection === -1 ? 1 : lastSection + 1;
-  blocks.splice(insertAt, 0, imageBlock(fileId, payload.image ? payload.image.alt_text : ''));
-  return {
-    ...payload,
-    parent: { ...payload.parent, blocks },
-    image: payload.image ? { ...payload.image, slack_file_id: fileId } : null,
-  };
-};
-
 module.exports = {
-  buildPayload, withImageBlock, alertReplyFor, reportComment, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT,
+  buildPayload, alertReplyFor, reportComment, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT,
   ALERTS_EVENT, HEADER_MAX, TEXT_MAX, SUB_BULLET_PREFIX, MAX_ALERT_INSTANCES, MAX_ITEM_REPLIES,
 };

@@ -51,6 +51,14 @@ describe('agent/prompt-assembly', () => {
       expect(parts[2]).to.include('month-end');
     });
 
+    it('says a standing backlog or dark host is reported by code, never raised as high (revision 24)', () => {
+      const parts = assembly.assembleSystemPrompt({
+        definition, date: '2026-09-18', memory: '', activeWindows: [],
+      });
+      expect(parts[0]).to.match(/standing condition/i);
+      expect(parts[0]).to.match(/already above zero yesterday/i);
+    });
+
     it('states when memory is empty and no window is active', () => {
       const parts = assembly.assembleSystemPrompt({ definition, date: '2026-09-18', memory: '', activeWindows: [] });
       expect(parts[2]).to.match(/no memory/i);

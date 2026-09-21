@@ -24,9 +24,7 @@ describe('cli/stages/publish', () => {
     await runDir.writeJson('rollup/items.ranked.json', [item]);
     await runDir.writeJson('rollup/brief.json', makeBrief({
       bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
-      image: { path: 'rollup/brief.png', slack_file_id: null },
     }));
-    await runDir.writeText('rollup/brief.png', 'PNG');
   });
   afterEach(() => removeDir(dataDir));
 
@@ -46,7 +44,7 @@ describe('cli/stages/publish', () => {
     expect(client.chat.postMessage.called).to.equal(false);
     expect(client.files.uploadV2.called).to.equal(false);
     const payload = await runDir.readJson('rollup/payload.json');
-    expect(payload.image.slack_file_id).to.equal(null);
+    expect(payload.image).to.equal(null);
   });
 
   it('publishes for real, records the publication and updates the brief', async () => {
@@ -54,11 +52,12 @@ describe('cli/stages/publish', () => {
     const out = await stage.run(ctx('scheduled', client));
     expect(out).to.include({ posted: true, ts: '1.000' });
     const publication = await runDir.readJson('rollup/publication.json');
-    expect(publication).to.include({ channel_id: 'C123', ts: '1.000', slack_file_id: 'F1' });
+    expect(publication).to.include({ channel_id: 'C123', ts: '1.000', slack_file_id: null });
+    expect(client.files.uploadV2.called, 'no image upload since revision 24').to.equal(false);
     expect(publication.replies).to.have.length(1);
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.publication).to.deep.equal({ channel_id: 'C123', ts: '1.000', permalink: 'https://slack/p1.000' });
-    expect(brief.image.slack_file_id).to.equal('F1');
+    expect(brief.image).to.equal(null);
   });
 
   it('refuses to run without the brief', async () => {
@@ -109,9 +108,7 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     await runDir.writeJson('rollup/items.ranked.json', [item]);
     await runDir.writeJson('rollup/brief.json', makeBrief({
       bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
-      image: { path: 'rollup/brief.png', slack_file_id: null },
     }));
-    await runDir.writeText('rollup/brief.png', 'PNG');
     await runDir.writeJson('alpha-example-org/suppressed.json', []);
     await appendRecords(dataDir, [record(), noteRecord]);
     await runDir.writeJson('feedback.ingested.json', {
@@ -247,10 +244,8 @@ describe('cli/stages/publish: the report shared into the thread (revision 23)', 
     });
     await runDir.writeJson('rollup/brief.json', makeBrief({
       bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
-      image: { path: 'rollup/brief.png', slack_file_id: null },
       report: { path: 'rollup/report.html', slack_file_id: null, ts: null },
     }));
-    await runDir.writeText('rollup/brief.png', 'PNG');
     await runDir.writeText('rollup/report.html', '<html></html>');
   });
   afterEach(() => removeDir(dataDir));
@@ -274,6 +269,7 @@ describe('cli/stages/publish: the report shared into the thread (revision 23)', 
     expect(publication.report).to.deep.equal({ file_id: 'F2', ts: '1.0009', permalink: 'https://slack/files/F2' });
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.report).to.deep.equal({ path: 'rollup/report.html', slack_file_id: 'F2', ts: '1.0009' });
-    expect(brief.image.slack_file_id).to.equal('F1');
+    expect(brief.image).to.equal(null);
+    expect(client.files.uploadV2).to.have.been.calledOnce;
   });
 });

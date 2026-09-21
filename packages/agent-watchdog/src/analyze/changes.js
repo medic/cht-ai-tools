@@ -51,13 +51,20 @@ const trailingIncreases = (trailing, current) => {
 const AGGREGATE_BY_KIND = { gauge: 'level', counter: 'increase', uptime: 'restarts', clock: 'excluded' };
 
 /**
- * @param {object} options windows, project, activeWindow, and `kinds` (thresholds.yaml `metric_kinds`) deciding how
- *   each metric is compared (FR-076): gauges and clocks as levels, counters as increases, uptimes as restarts.
+ * @param {object} options windows, project, activeWindow, `kinds` (thresholds.yaml `metric_kinds`) deciding how
+ *   each metric is compared (FR-076): gauges and clocks as levels, counters as increases, uptimes as restarts; and
+ *   `metrics`, the analysable metric keys of the run's discovery (null compares every stored metric).
  * @returns {object[]} one Computed Change per metric key present in the windows
  */
-const computeChanges = ({ windows, project, activeWindow = null, kinds = {} }) => {
+const computeChanges = ({ windows, project, activeWindow = null, kinds = {}, metrics = null }) => {
   const changes = [];
+  // Only the metrics discovery marked analysable (FR-075, revision 24): a stored window of a reference line, or of
+  // a metric a later discovery dropped, is not compared. Without a list every stored metric is.
+  const analysable = Array.isArray(metrics) ? new Set(metrics) : null;
   for (const [metric, group] of groupByMetric(windows)) {
+    if (analysable && !analysable.has(metric)) {
+      continue;
+    }
     const byName = (name) => group.find((w) => w.window === name) || null;
     const kind = metricKind(metric, kinds);
     const valueOf = kind === 'counter' ? increaseValue : lastValue;

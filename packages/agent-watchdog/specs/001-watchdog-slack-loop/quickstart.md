@@ -52,9 +52,9 @@ labelled feedback set shows no regression; exit 0.
 agent-watchdog run --dry-run --date "$(date -u -d yesterday +%F)" > payload.json
 ```
 
-Expected: exit 0; `payload.json` is the exact Slack payload (parent, replies, image reference)
+Expected: exit 0; `payload.json` is the exact Slack payload (parent, replies, report share)
 with `slack_file_id: null`; under `.data/runs/<date>/` every artefact of a real run exists,
-including `rollup/report.html`, `rollup/brief.png` and `run.json` with `status: previewed`; the
+including `rollup/report.html` and `run.json` with `status: previewed` (no image since revision 24); the
 footer contains the trace link and the cost in USD; nothing was posted. The log carries no
 `collect.query_failed` warning: derived expressions use the trailing subquery form and the
 dashboards' `$interval` is resolved (FR-071); a `collect.unresolved_variable` warning names any
@@ -220,3 +220,15 @@ twenty-five) and one per alert group, `report` names `rollup/report.html` with a
 relate to, and standing conditions are listed per host. Then run the feedback stage against the Slack
 fixtures: a note "#2 :-1: expected until 1 October" is recorded on the item ranked 2 with verdict `down`
 and the horizon, and a note that is only a thumbs is recorded as unmatched.
+
+## 15. One programme, links and rounding (revision 24)
+
+Preview one programme: `agent-watchdog run --dry-run --group "North Programme"` (a `projects.yaml` group
+label; `--project` still names single hosts). `discovery.json` still lists every project, but only the
+programme's projects have a directory, the brief's bullets, standing and housekeeping lines cover only
+them, and `alerts.classified.json` stays whole. Open `rollup/report.html`: items are numbered by rank
+with the host and metric first and persistence, confidence and identity on a labelled line under them;
+each item, standing host and alert group links its hosted panel or alert list; the footer links the
+prompts, the configuration and the trace and repeats the citation line; evidence shows at most three
+decimals. Run the same preview with `AGENT_WATCHDOG_REPORT_LINKS=none` and the report carries no
+link. `rollup/brief.png` is no longer written and the payload's `image` is null.

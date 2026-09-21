@@ -39,6 +39,10 @@ const resolveRelation = (item, findings, project) => {
   if (!relation || !relation.metric) {
     return null;
   }
+  // Nothing explains itself: a relation to the item's own metric is dropped, not rejected (revision 24).
+  if (sameMetric(relation.metric, (item.item_key || {}).metric)) {
+    return null;
+  }
   const sibling = (findings.items || [])
     .find((other) => other !== item && sameMetric((other.item_key || {}).metric, relation.metric));
   if (!sibling) {

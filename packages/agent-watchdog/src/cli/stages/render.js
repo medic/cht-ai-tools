@@ -1,13 +1,14 @@
 'use strict';
-// Stage: render. Writes the one-page report and the brief image from the same brief (FR-022, FR-023).
+// Stage: render. Writes the report from the brief, the ranked items, the standing conditions and the alert groups
+// (FR-022). No image since revision 24: the brief image was a capture of the Slack message itself (FR-023 retired).
 const { requireInputs } = require('./index');
 const { renderReport, windowKey } = require('../../render/report');
-const { renderImage } = require('../../render/browser');
 const { projectSlug } = require('../../model/identity');
 
 const name = 'render';
 const inputs = ['rollup/brief.json'];
-const NO_IMAGE_KINDS = new Set(['heartbeat', 'failure']);
+// A heartbeat or a failure notice is one line in Slack; the report is written for the record but not shared.
+const NO_REPORT_KINDS = new Set(['heartbeat', 'failure']);
 
 const slugFor = (discovery, projectUrl) => {
   const project = (discovery.projects || []).find((p) => p.url === projectUrl);
@@ -40,38 +41,38 @@ const loadCurrentWindows = async (runDir, discovery, items) => {
   return byMetric;
 };
 
+const readIfPresent = async (runDir, rel, fallback) => (runDir.exists(rel) ? runDir.readJson(rel) : fallback);
+
 const run = async (ctx) => {
   const { runDir, logger } = ctx;
   requireInputs(runDir, inputs);
   const brief = await runDir.readJson('rollup/brief.json');
-  const items = runDir.exists('rollup/items.ranked.json') ? await runDir.readJson('rollup/items.ranked.json') : [];
-  const discovery = runDir.exists('discovery.json')
-    ? await runDir.readJson('discovery.json')
-    : { projects: [], dashboards: [] };
+  const items = await readIfPresent(runDir, 'rollup/items.ranked.json', []);
+  const discovery = await readIfPresent(runDir, 'discovery.json', { projects: [], dashboards: [] });
   const windowsByMetric = await loadCurrentWindows(runDir, discovery, items);
-  // Standing conditions the roll-up handed to no session (FR-014, revision 23), listed per host in the report.
-  const standing = runDir.exists('rollup/standing.json') ? await runDir.readJson('rollup/standing.json') : [];
+  // Standing conditions the roll-up handed to no session (FR-014, revision 23) and the alert groups it briefed.
+  const standing = await readIfPresent(runDir, 'rollup/standing.json', []);
+  const alertGroups = await readIfPresent(runDir, 'rollup/alert-groups.json', []);
+  // Where the report's references point (FR-022, revision 24): the hosted watchdog, or nowhere.
+  const links = {
+    mode: (ctx.config.publish && ctx.config.publish.reportLinks) || 'internal',
+    grafanaUrl: (ctx.config.endpoints && ctx.config.endpoints.grafanaUrl) || null,
+    runStart: ctx.runStart || discovery.run_start || `${ctx.date}T06:00:00Z`,
+  };
 
-  const html = renderReport({ brief, items, windowsByMetric, discovery, runId: ctx.runId, standing });
-  await runDir.writeText('rollup/report.html', html);
-
-  if (NO_IMAGE_KINDS.has(brief.kind)) {
-    logger.info('render.image_skipped', { kind: brief.kind });
-    return { report: 'rollup/report.html', image: null };
-  }
-
-  await renderImage({
-    html,
-    browserLauncher: ctx.deps && ctx.deps.browserLauncher ? ctx.deps.browserLauncher : null,
-    executablePath: ctx.config.runtime && ctx.config.runtime.chromiumPath ? ctx.config.runtime.chromiumPath : null,
-    outputPath: runDir.path('rollup/brief.png'),
-    logger,
+  const html = renderReport({
+    brief, items, windowsByMetric, discovery, runId: ctx.runId, standing, alertGroups, links,
   });
-  brief.image = { path: 'rollup/brief.png', slack_file_id: null };
-  // The report is shared into the thread by the publish stage (FR-022, revision 23).
-  brief.report = { path: 'rollup/report.html', slack_file_id: null, ts: null };
+  await runDir.writeText('rollup/report.html', html);
+  logger.info('render.report', {
+    kind: brief.kind, items: items.length, standing: standing.length, alerts: alertGroups.length, links: links.mode,
+  });
+
+  brief.image = null;
+  // The report is shared into the thread by the publish stage (FR-022, revision 23), never for a one-line post.
+  brief.report = NO_REPORT_KINDS.has(brief.kind) ? null : { path: 'rollup/report.html', slack_file_id: null, ts: null };
   await runDir.writeJson('rollup/brief.json', brief);
-  return { report: 'rollup/report.html', image: 'rollup/brief.png' };
+  return { report: 'rollup/report.html', image: null };
 };
 
 module.exports = { name, inputs, run };

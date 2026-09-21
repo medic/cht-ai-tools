@@ -10,7 +10,7 @@ contract states what the image needs from the platform and what it guarantees.
 |---|---|
 | Base | `node:22-bookworm-slim` (Node 22 LTS; the official Playwright images default to Node 24 and are not used) |
 | Runtime | the package with production dependencies only (`npm ci --omit=dev`), including the Agent SDK's `linux-x64` runtime package (about 224 MB) |
-| Browser | Chromium headless shell installed at build time with `npx playwright-core install --with-deps chromium-headless-shell` into `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, so browser and library versions move together |
+| Browser | Chromium headless shell installed at build time with `npx playwright-core install --with-deps chromium-headless-shell` into `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, so browser and library versions move together. Since revision 24 the daily run renders no image (FR-019); the browser is kept for a possible panel-capture story and can be dropped, with its memory, if that story is declined (research.md R-29) |
 | User | non-root, fixed UID and GID (`10001:10001`), home `/home/watchdog` |
 | Entrypoint | `node bin/agent-watchdog.js`; the CronJob passes the command, for example `run` or `calibrate` |
 | Baked environment | `NODE_ENV=production`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, `TMPDIR=/tmp` |

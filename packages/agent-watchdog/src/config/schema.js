@@ -33,6 +33,7 @@ const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ENGINES = ['sdk', 'cli'];
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error'];
 const LOG_FORMATS = ['json', 'pretty'];
+const REPORT_LINK_MODES = ['internal', 'none'];
 
 const TRUE_WORDS = ['true', '1', 'yes', 'on'];
 const FALSE_WORDS = ['false', '0', 'no', 'off'];
@@ -237,6 +238,14 @@ const VARIABLES = [
     required: forPosting,
   },
   {
+    // Where the report's references point (FR-022, revision 24): `internal` links every alert, dashboard and panel
+    // to the hosted watchdog; `none` names them without a link, for a reader who has no credentials there.
+    env: 'AGENT_WATCHDOG_REPORT_LINKS',
+    path: 'publish.reportLinks',
+    schema: z.enum(REPORT_LINK_MODES),
+    default: 'internal',
+  },
+  {
     env: 'AGENT_WATCHDOG_DOCS_MCP_URL',
     path: 'endpoints.docsMcpUrl',
     schema: url,
@@ -360,4 +369,6 @@ const PACKAGE_PATHS = Object.freeze({
   agentDir: path.join(PACKAGE_ROOT, 'agent'),
 });
 
-module.exports = { HARD_CAPS, SECRET_KEYS, VARIABLES, PACKAGE_PATHS, EFFORT_LEVELS, ENGINES, LOG_LEVELS, LOG_FORMATS };
+module.exports = {
+  HARD_CAPS, SECRET_KEYS, VARIABLES, PACKAGE_PATHS, EFFORT_LEVELS, ENGINES, LOG_LEVELS, LOG_FORMATS, REPORT_LINK_MODES,
+};

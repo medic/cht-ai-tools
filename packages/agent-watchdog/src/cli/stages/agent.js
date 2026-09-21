@@ -10,13 +10,14 @@ const { createSdkEngine } = require('../../agent/engine-sdk');
 const { createWatchdogTools } = require('../../agent/tools/watchdog-tools');
 const { createRecordedTools } = require('../../agent/tools/recorded-tools');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
-const { normaliseHost } = require('../../config/policy');
 const { runProjectSession } = require('../../agent/session-loop');
 const { loadPatternCards } = require('../../corpus/cards');
 const { RunDir, dataPaths } = require('../../store/run-dir');
 const { analysedDatesBefore, runDate } = require('../../rollup/history');
 const { splitStanding } = require('../../analyze/standing');
 const atomic = require('../../store/atomic');
+// `--project` and `--group` select the projects a run analyses (FR-066, revision 24); one helper for every stage.
+const { selectProjects } = require('../../config/filter');
 
 const name = 'agent';
 const inputs = ['discovery.json'];
@@ -131,10 +132,6 @@ const planFor = ({ candidates, changes }) => {
   return { forModel, standing, skipReason: forModel.length ? null : 'standing conditions only' };
 };
 
-const selectProjects = (projects, flags) => {
-  const wanted = ((flags && flags.project) || []).map(normaliseHost);
-  return wanted.length ? projects.filter((p) => wanted.includes(p.host)) : projects;
-};
 
 const run = async (ctx) => {
   requireInputs(ctx.runDir, inputs);

@@ -79,7 +79,7 @@ describe('cli/commands/run in preview mode (--dry-run)', () => {
     expect(payload.kind).to.equal('brief');
     expect(payload.parent.channel).to.equal('C123');
     expect(payload.replies).to.have.length(1);
-    expect(payload.image.slack_file_id).to.equal(null);
+    expect(payload.image).to.equal(null);
     expect(fs.existsSync(path.join(root, 'rollup', 'publication.json'))).to.equal(false);
     expect(slack.chat.postMessage).to.not.have.been.called;
     expect(slack.files.uploadV2).to.not.have.been.called;

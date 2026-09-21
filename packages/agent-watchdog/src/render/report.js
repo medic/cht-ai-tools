@@ -1,13 +1,19 @@
 'use strict';
-// The one-page report (FR-022): a filled template, never generated per run; every value escaped.
+// The report (FR-022): the document a reader opens from the thread. A filled template, never generated per run;
+// every value escaped; each reference to an alert, dashboard or panel linked or merely named by the run's link
+// setting, and every decimal rounded for reading (revision 24).
 const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
 const { hostOf } = require('../rollup/deterministic-brief');
 const { headlineMarker, bulletMarker, noticeMarker, withMarker } = require('../rollup/markers');
+const { buildItemLinks, buildDashboardLink, buildAlertGroupLinks } = require('../links/build');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', '..', 'templates', 'report.hbs');
 const KIND_LABELS = { brief: 'brief', heartbeat: 'all quiet', degraded: 'degraded', failure: 'failed' };
+// `internal` links every reference to the hosted watchdog; `none` names it, for a reader without credentials there.
+const LINK_MODES = Object.freeze(['internal', 'none']);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Triple-stash would bypass escaping, so it is forbidden in every template (constitution IV). */
 const assertNoTripleStash = (templateText) => {
@@ -37,16 +43,34 @@ const sparklineSvg = (samples, width = 240, height = 40) => {
   }).join(' ');
   const svg = `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" `
     + `role="img" aria-label="trend of ${values.length} samples">`
-    + `<polyline fill="none" stroke="#1f2937" stroke-width="2" points="${points}"/></svg>`;
+    + `<polyline fill="none" stroke="#37352F" stroke-width="1.5" points="${points}"/></svg>`;
   return new Handlebars.SafeString(svg);
 };
 
-const formatValue = (value) => {
+const grouped = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 }).format(value);
+
+/**
+ * A number as a reader wants it (revision 24): an integer with its thousands grouped; a value of one or more to at
+ * most three decimals; a value below one to three significant figures, so `0.0008130081300813008` reads `0.000813`
+ * and not `0`. Only the report rounds; the stored items and the gate keep the exact values.
+ */
+const roundForReading = (value) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return 'n/a';
   }
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  if (Number.isInteger(value)) {
+    return grouped(value);
+  }
+  const rounded = Math.abs(value) >= 1 ? Number(value.toFixed(3)) : Number(value.toPrecision(3));
+  return grouped(rounded);
 };
+
+// A decimal written with four or more fractional digits in prose, outside a longer token such as a version string.
+const LONG_DECIMAL = /(?<![\w.])([+-]?\d+\.\d{4,})(?![\w.])/g;
+
+/** The model's prose with each unrounded decimal rounded for reading; nothing else in the text changes. */
+const roundProse = (text) => String(text === undefined || text === null ? '' : text)
+  .replace(LONG_DECIMAL, (token) => roundForReading(Number(token)));
 
 const windowKey = (projectUrl, metric) => `${projectUrl}|${metric}`;
 
@@ -62,6 +86,8 @@ const samplesFor = (windowsByMetric, item) => {
 const rankOf = (item) => (item.rank === null || item.rank === undefined ? Number.MAX_SAFE_INTEGER : item.rank);
 
 const relationText = (relation) => String(relation || '').replace(/_/g, ' ');
+
+const windowLabel = (window) => String(window || '').replace(/_/g, ' ');
 
 /**
  * Items nested under the higher-ranked item they relate to (FR-009, revision 23), by that item's id; an item whose
@@ -82,22 +108,64 @@ const nestedByParent = (items) => {
   return nested;
 };
 
-const itemView = (item, windowsByMetric, related = []) => ({
+const toDate = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * The links the report may carry, by the run's link setting. Without a setting nothing is linked: a renderer that
+ * was not told where its reader may go names every reference instead.
+ */
+const linkBuilder = ({ links, items, discovery }) => {
+  const mode = links && LINK_MODES.includes(links.mode) ? links.mode : 'none';
+  const internal = mode === 'internal';
+  const grafanaUrl = internal && links.grafanaUrl ? String(links.grafanaUrl) : null;
+  const dashboards = new Map(((discovery && discovery.dashboards) || []).map((d) => [d.uid, d]));
+  const itemLinks = grafanaUrl && discovery ? buildItemLinks(items, discovery, grafanaUrl) : new Map();
+  const runStart = toDate(links && links.runStart) || toDate(discovery && discovery.run_start) || new Date();
+  return {
+    mode,
+    internal,
+    item: (item) => itemLinks.get(item.item_id) || null,
+    // A standing host's panel over the day the run compared: the run's start and the twenty-four hours before it.
+    standing: (record) => {
+      const ref = record.panel_ref;
+      const dashboard = ref && dashboards.get(ref.dashboard_uid);
+      if (!grafanaUrl || !dashboard || !record.host) {
+        return null;
+      }
+      return buildDashboardLink({
+        grafanaUrl, dashboard, panelId: ref.panel_id, host: record.host,
+        from: runStart.getTime() - DAY_MS, to: runStart.getTime(),
+      });
+    },
+    alertGroup: (group) => (grafanaUrl ? buildAlertGroupLinks({ grafanaUrl, group }) : null),
+  };
+};
+
+const itemView = (item, windowsByMetric, linker, related = []) => ({
   item_id: item.item_id,
   host: hostOf(item.project_url),
   metric: item.metric,
+  link: linker.item(item),
   severity: item.severity,
   severity_label: item.severity.toUpperCase(),
   rank: item.rank === null || item.rank === undefined ? '-' : item.rank,
   rank_text: item.rank === null || item.rank === undefined ? '' : `#${item.rank}`,
   relation_text: item.relates_to ? relationText(item.relates_to.relation) : '',
   has_related: related.length > 0,
-  related: related.map((other) => itemView(other, windowsByMetric)),
+  related: related.map((other) => itemView(other, windowsByMetric, linker)),
   persisting_text: item.persisting_days > 1 ? `persisting ${item.persisting_days} days` : 'new today',
   confidence_pct: Math.round((item.confidence || 0) * 100),
-  why_now: item.why_now,
-  suggested_check: item.suggested_check,
-  evidence: (item.evidence || []).map((e) => ({ window: e.window, value: formatValue(e.value), unit: e.unit })),
+  why_now: roundProse(item.why_now),
+  suggested_check: roundProse(item.suggested_check),
+  evidence: (item.evidence || []).map((e) => ({
+    window: windowLabel(e.window), value: roundForReading(e.value), unit: e.unit || '', note: e.note || '',
+  })),
   samples: samplesFor(windowsByMetric, item),
 });
 
@@ -107,7 +175,7 @@ const STANDING_RULE_TEXT = {
 };
 
 /** Standing conditions grouped by rule, hosts sorted by value, largest first (FR-014, revision 23). */
-const standingView = (standing) => {
+const standingView = (standing, linker) => {
   const byRule = new Map();
   for (const record of standing || []) {
     if (!byRule.has(record.rule)) {
@@ -122,16 +190,55 @@ const standingView = (standing) => {
         host: record.host,
         group: record.group,
         metric: record.metric,
-        value: formatValue(record.value),
-        previous: formatValue(record.previous_day_value),
+        value: roundForReading(record.value),
+        previous: roundForReading(record.previous_day_value),
+        link: linker.standing(record),
       })),
   }));
 };
 
-const buildView = ({ brief, items, windowsByMetric, runId, standing = [] }) => {
+/** The Alert Groups the brief covered (FR-066), each with its instances, linked to the rule list when allowed. */
+const alertsView = (alertGroups, linker) => (alertGroups || []).map((group) => {
+  const links = linker.alertGroup(group);
+  const ruleLink = (title) => {
+    const rule = links ? (links.rules || []).find((r) => r.title === title) : null;
+    return rule ? rule.url : null;
+  };
+  const importance = String(group.importance || 'medium');
+  return {
+    group: group.group,
+    category: group.category,
+    importance,
+    importance_label: importance.toUpperCase(),
+    summary_text: `${group.firing} firing, ${group.stale} stale, ${group.new} new since the previous run`,
+    link: links ? links.group : null,
+    instances: (group.instances || []).map((instance) => ({
+      title: instance.title,
+      host: instance.host || 'watchdog',
+      since: String(instance.started_at || '').slice(0, 10),
+      days_text: `${instance.days_firing}d`,
+      flags: [instance.stale ? 'stale' : null, instance.new ? 'new' : null].filter(Boolean).join(', '),
+      link: ruleLink(instance.title),
+    })),
+  };
+});
+
+const footerView = (footer, linker) => ({
+  links: linker.internal,
+  prompts_url: footer.prompts_url || null,
+  config_url: footer.config_url || null,
+  trace_url: footer.trace_url || null,
+  trace_text: footer.trace_url ? 'recorded' : 'none',
+  cost_text: `$${Number(footer.cost_usd || 0).toFixed(2)}`,
+});
+
+const buildView = ({
+  brief, items, windowsByMetric, discovery, runId, standing = [], alertGroups = [], links = null,
+}) => {
   if (typeof brief.headline !== 'string') {
     throw new Error('brief.headline is required to render the report');
   }
+  const linker = linkBuilder({ links, items: items || [], discovery });
   const severityById = new Map((items || []).map((item) => [item.item_id, item.severity]));
   const severityOf = (id) => severityById.get(id) || null;
   const notices = [brief.expected_load_notice, brief.degradation_notice, ...(brief.notices || [])]
@@ -141,7 +248,8 @@ const buildView = ({ brief, items, windowsByMetric, runId, standing = [] }) => {
   const nested = nestedByParent(ranked);
   const nestedIds = new Set([...nested.values()].flat().map((item) => item.item_id));
   const topLevel = ranked.filter((item) => !nestedIds.has(item.item_id));
-  const standingRows = standingView(standing);
+  const standingRows = standingView(standing, linker);
+  const alertRows = alertsView(alertGroups, linker);
   return {
     run_id: runId,
     date: brief.run_id ? brief.run_id.slice(0, 10) : runId,
@@ -156,14 +264,30 @@ const buildView = ({ brief, items, windowsByMetric, runId, standing = [] }) => {
     })),
     notices,
     checked: brief.checked,
-    footer: {
-      cost_text: `$${Number(brief.footer.cost_usd || 0).toFixed(2)}`,
-      trace_text: brief.footer.trace_url ? 'recorded' : 'none',
-    },
-    items: topLevel.map((item) => itemView(item, windowsByMetric, nested.get(item.item_id) || [])),
+    footer: footerView(brief.footer || {}, linker),
+    has_items: topLevel.length > 0,
+    items: topLevel.map((item) => itemView(item, windowsByMetric, linker, nested.get(item.item_id) || [])),
     has_standing: standingRows.length > 0,
     standing: standingRows,
+    has_alerts: alertRows.length > 0,
+    alerts: alertRows,
   };
+};
+
+/**
+ * A code-built URL for an `href` attribute: only http(s) URLs pass, and the five characters that could break out of
+ * a quoted attribute are escaped. Handlebars' default escaping would also turn `=` into an entity, which browsers
+ * accept but which hides the query a reader may want to copy; the URLs here come from configuration and the run's
+ * own structured references, never from model text.
+ */
+const hrefValue = (url) => {
+  const text = String(url === undefined || url === null ? '' : url);
+  if (!/^https?:\/\//i.test(text)) {
+    return '';
+  }
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+  return new Handlebars.SafeString(escaped);
 };
 
 const compileTemplate = () => {
@@ -171,18 +295,26 @@ const compileTemplate = () => {
   assertNoTripleStash(text);
   const handlebars = Handlebars.create();
   handlebars.registerHelper('sparkline', (samples) => sparklineSvg(samples));
+  handlebars.registerHelper('href', (url) => hrefValue(url));
   return handlebars.compile(text, { strict: true });
 };
 
 /**
  * Render the report HTML for a run.
- * @param {object} options brief, items (ranked), changes (by slug, informational), windowsByMetric
- *   (Map or object keyed `${project_url}|${metric}` -> current-window samples), discovery, runId, standing
- *   (rollup/standing.json: the standing conditions handed to no session, FR-014 revision 23)
+ * @param {object} options brief, items (ranked), windowsByMetric (Map or object keyed `${project_url}|${metric}` ->
+ *   current-window samples), discovery, runId, standing (rollup/standing.json), alertGroups (rollup/alert-groups.json,
+ *   the groups the brief covered), links ({ mode: 'internal'|'none', grafanaUrl, runStart }; without it nothing is
+ *   linked)
  */
-const renderReport = ({ brief, items = [], windowsByMetric = new Map(), runId, standing = [] }) => {
+const renderReport = ({
+  brief, items = [], windowsByMetric = new Map(), discovery = null, runId, standing = [], alertGroups = [],
+  links = null,
+}) => {
   const template = compileTemplate();
-  return template(buildView({ brief, items, windowsByMetric, runId, standing }));
+  return template(buildView({ brief, items, windowsByMetric, discovery, runId, standing, alertGroups, links }));
 };
 
-module.exports = { renderReport, assertNoTripleStash, sparklineSvg, windowKey, formatValue, nestedByParent };
+module.exports = {
+  renderReport, assertNoTripleStash, sparklineSvg, windowKey, roundForReading, roundProse, nestedByParent, hrefValue,
+  LINK_MODES, formatValue: roundForReading,
+};

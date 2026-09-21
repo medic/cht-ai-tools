@@ -29,20 +29,19 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
 
 ## Publishing sequence (`src/publish/slack.js`)
 
-1. **Upload the brief image** with `files.uploadV2({ file: <Buffer>, filename: 'brief-<run_id>.png',
-   title, alt_text })` and **no `channel_id`**, so the file stays private to the bot token. The id
-   is read from `result.files[0].files[0].id`. `files.upload` is sunset (12 November 2025) and is
-   never called.
+1. **No image upload** (revision 24). Until then the brief image was uploaded privately with
+   `files.uploadV2` and shown as an `image` block; the report share (step 3) is the artefact a reader
+   opens, so the parent carries no file before it is posted. `files.upload` is sunset (12 November
+   2025) and is never called.
 2. **Post the parent message** with `chat.postMessage({ channel, text, blocks, unfurl_links: false,
    unfurl_media: false, metadata })`. `text` is the plain-text fallback (headline plus bullets).
    Blocks, at most 50, in order: `header` (headline), one `section` per top-level bullet with
    `mrkdwn` (at most five; the bullet's lines, then each sub-bullet on its own line prefixed by
    three spaces and `◦`, at most eight, since Slack has no nested lists; the indentation's rendering
-   is smoke test S-16), an `image` block `{ type: 'image', slack_file: { id }, alt_text }` (the bot that uploaded the
-   file is the bot posting, which is the documented requirement), a `context` block with the
-   expected-load or degradation notice when present, one `context` block per code-added notice
-   (for example a project new since the previous run), and a `context` footer with the prompts,
-   configuration and trace links and the cost in currency.
+   is smoke test S-16), a `context` block with the expected-load or degradation notice when present,
+   one `context` block per code-added notice (for example a project new since the previous run), and a
+   `context` footer with the prompts, configuration and trace links, the cost in currency and the
+   count of items only in the report.
 3. **Share the report into the thread** with `files.uploadV2({ file, filename: 'report-<run_id>.html',
    title, channel_id, thread_ts: <parent ts>, initial_comment })` (revision 23): an upload given a
    channel and a thread posts the file as the thread's first reply, readable by every channel member,
@@ -87,7 +86,7 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
   "run_id": "2026-09-19",
   "kind": "brief",
   "parent": { "channel": "C…", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.brief", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "kind": "brief" } } },
-  "image": { "filename": "brief-2026-09-19.png", "alt_text": "…", "path": "rollup/brief.png", "slack_file_id": null },
+  "image": null,
   "report": { "filename": "report-2026-09-19.html", "title": "…", "path": "rollup/report.html", "initial_comment": "…", "items": 150, "replied": 21, "slack_file_id": null, "ts": null },
   "replies": [
     { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } },
@@ -98,9 +97,9 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
 ```
 
 `replies` carries only the body items and the alert groups (FR-020, revision 23); `report` is null for a
-heartbeat or a failure. In preview mode `slack_file_id` stays null and nothing is sent; after publishing,
-`publication.json` adds `ts`, `permalink` and `slack_file_id`, and `report: { file_id, ts, permalink }`
-for the share. `digest` is null when the run
+heartbeat or a failure. `image` is always null since revision 24. In preview mode nothing is sent; after publishing,
+`publication.json` adds `ts`, `permalink` and `report: { file_id, ts, permalink }` for the share
+(`slack_file_id` stays null). `digest` is null when the run
 acknowledged nothing new; in preview it is filled but nothing is posted or reacted to, and no
 record is marked acknowledged.
 

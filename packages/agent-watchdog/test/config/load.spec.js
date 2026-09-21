@@ -38,6 +38,7 @@ describe('config/load', () => {
     expect(config.behaviour.feedbackLookbackRuns).to.equal(7);
     expect(config.behaviour.memoryMaxTokens).to.equal(4000);
     expect(config.behaviour.dryRun).to.equal(false);
+    expect(config.publish.reportLinks).to.equal('internal'); // the report links its panels by default (revision 24)
     expect(config.logging.level).to.equal('info');
     expect(config.logging.format).to.equal('json');
     expect(config.storage.corpusRawDir).to.equal('/tmp/agent-watchdog-test-data/knowledge-corpus/raw');
@@ -218,5 +219,20 @@ describe('config/load', () => {
     expect(config.runtime.claudePath).to.equal('/opt/claude/bin/claude');
     expect(sources.AGENT_WATCHDOG_CLAUDE_PATH).to.equal('env');
     expect(() => loadConfig({ env: { ...baseEnv(), AGENT_WATCHDOG_CLAUDE_PATH: '' }, command: 'run' })).to.not.throw();
+  });
+});
+
+describe('config/load: the report link setting (FR-022, revision 24)', () => {
+  it('accepts internal or none and rejects anything else with exit 78', () => {
+    const none = loadConfig({ env: { ...baseEnv(), AGENT_WATCHDOG_REPORT_LINKS: 'none' }, command: 'run' });
+    expect(none.config.publish.reportLinks).to.equal('none');
+    let error;
+    try {
+      loadConfig({ env: { ...baseEnv(), AGENT_WATCHDOG_REPORT_LINKS: 'partner' }, command: 'run' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error.code).to.equal(78);
+    expect(error.keys).to.include('AGENT_WATCHDOG_REPORT_LINKS');
   });
 });

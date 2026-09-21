@@ -73,7 +73,7 @@ One execution for one date (FR-039, FR-042).
 | `projects` | string[] | URLs analysed, in priority order. |
 | `usage` | Usage | Summed token usage across model calls. |
 | `cost_usd` | number | Sum of Cost Records; reconciled with the runtime's estimate (FR-049). |
-| `publications` | Publication[] | Parent post, thread replies, image file (see Brief, Thread Reply). |
+| `publications` | Publication[] | Parent post, thread replies, the report share (see Brief, Thread Reply); the image file until revision 24. |
 | `trace_id`, `trace_url` | string | One trace per run (FR-049). |
 | `supersedes`, `superseded_by` | string or null | Linked forced runs (Edge Cases). |
 | `bounds_hit` | string[] | Which bounds ended work early, if any (FR-012). |
@@ -91,7 +91,7 @@ One execution for one date (FR-039, FR-042).
 | `analysed` | model passes complete or every model-dependent stage degraded | `drafted` |
 | `drafted` | publish gate accepts the brief | `verified` |
 | `drafted` | gate rejects three drafts, or model output unusable | `degraded` (deterministic brief built) |
-| `verified` or `degraded` | report and image rendered | `rendered` |
+| `verified` or `degraded` | report rendered (and the image until revision 24) | `rendered` |
 | `rendered` | `mode = preview` | **previewed** (payload emitted, nothing posted) |
 | `rendered` | posted, with items | **published** |
 | `rendered` | posted, no items | **heartbeat** |
@@ -149,7 +149,9 @@ or a ranked set; such panels are left out of `metrics` and never queried (FR-075
 `reference_line` is null, or `{ subject, source }` for a target after the first on a multi-target panel
 whose expression is another series adjusted only by constant arithmetic (`subject` the first target's
 metric key, `source` the bare metric the line is drawn from); such targets are likewise left out of
-`metrics` and never queried (FR-075, revision 23).
+`metrics` and never queried (FR-075, revision 23): the collection's query list skips them and the
+analysis computes changes for `metrics` only, so a stored window kept from an earlier run cannot bring
+one back (revision 24).
 
 ### Daily Maxima Ledger
 
@@ -210,7 +212,11 @@ candidates from the session and opens none when nothing else remains; the roll-u
 notice per rule grouped by programme, folds dark hosts into the housekeeping notice, writes them to
 `rollup/standing.json` (`{ rule, project_url, host, group, value, previous_day_value }`) so the
 report can list them per host, and leaves them out of the degraded brief's bullets while
-`checked.candidates` still counts them. A condition new today is an ordinary high-floor candidate.
+`checked.candidates` still counts them. A condition new today is an ordinary high-floor candidate. A
+standing rule does not set the floor of the other candidates on its metric, and `monotonic` raises no
+candidate on a standing metric; `deviation` and `pct_change` there carry the floor they earn alone
+(revision 24). A standing record also carries the candidate's `panel_ref`, so the report can link the
+host's panel (revision 24).
 
 ### Alert Rule
 
@@ -287,7 +293,7 @@ accepted or rejected by the gate.
 | `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
 | `why_now` | string | Prose; escaped on render. |
 | `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
-| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). |
+| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). A relation naming the item's own metric is dropped by code when the items are normalised, not rejected (revision 24). |
 | `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
 | `persisting_days` | integer | Consecutive prior analysed **dates** whose ranked items contained this `item_id`, plus one (FR-009, revision 21). The date of a run is the first ten characters of its id, and the latest run of a date speaks for that date, so forced re-runs of one date count once and a re-run reports what the date's first run reported. A date whose latest run wrote no ranked items ends the streak. Set by code, never by the model; the agent stage carries a placeholder `1` because persistence is a roll-up concern it cannot know. |
@@ -356,8 +362,20 @@ The published post for a run (FR-019 to FR-025).
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
 | `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23). Empty on most days. |
-| `image` | object | `{ path, slack_file_id }`; rendered from the same report as the text (FR-023). |
+| `image` | object or null | Retired in revision 24 (FR-019): always null. Until then `{ path, slack_file_id }`, a screenshot of the report's summary. |
 | `report` | object or null | `{ path, slack_file_id, ts }`: the one-page report shared into the thread as its first reply (FR-022, revision 23); null for a heartbeat or failure; `slack_file_id` and `ts` null in preview. |
+
+**Report** (`rollup/report.html`, FR-022, revision 24): the document a reader opens. Sections in order:
+the summary (headline, bullets, notices, what was checked), the items numbered by rank with related
+items nested (FR-009), the alert groups the brief covered with their instances, the standing conditions
+per host (FR-014), and a footer with the prompts, configuration and trace links, the cost, the run id
+and the citation line. Every reference is a link built by code from the structured references the
+thread replies use (`dashboard_ref`, the standing record's `panel_ref`, the alert group's hosts and
+titles) when `AGENT_WATCHDOG_REPORT_LINKS` is `internal`, and a name alone when it is `none`. Numbers
+are rounded for reading at render time (at most three decimals; three significant figures below one),
+in the evidence tables, the standing values and long decimals inside an item's prose; the stored item
+is untouched. The template is designed under the plan's design skill with its design read in the header;
+markers follow FR-082.
 | `footer` | object | `{ prompts_url, config_url, trace_url, cost_usd }` (FR-019). |
 | `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
 
@@ -593,7 +611,13 @@ because they read one spelling only.
   its session (revision 23): for findings, every prompt of the session and every tool result it
   received (`givenText`); for a brief bullet, that item's own prompt entry and the run-wide counts
   only, never another item's. These sets match on the bare value, separators and unit letter
-  dropped. A numeral in none of them that matches no computed value fails, as before.
+  dropped. A fifth set is the **derived values** (revision 24): for every pair of count values the item
+  may quote (levels and increases; a ratio, a percentage or a duration pairs with nothing), their
+  difference, their ratio and their percent change, matched within display rounding like a computed
+  value, so "+27" for 845 against 818 and "-56%" for a fall the model worked out pass, and the run's
+  revisions no longer refuse correct subtraction. Pairing every unit let almost any two-digit numeral
+  through, which is why the pairs are counts alone. A numeral in none of the sets that matches no
+  computed or derived value fails, as before.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
@@ -610,7 +634,7 @@ because they read one spelling only.
   rejected (revision 22). A phone-shaped match whose whitespace- or bracket-separated parts are each
   a decimal number, a date or a time is a list of values, not a phone number, and a host-like token
   that is the leading two or more labels of a discovered host names that project (`projects_known`;
-  revision 23). Partner-facing scans are out of scope here (feature 002).
+  revision 23). A decimal may carry a leading sign (revision 24). Partner-facing scans are out of scope here (feature 002).
 - Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
   delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
   forbidden by lint rule in templates.

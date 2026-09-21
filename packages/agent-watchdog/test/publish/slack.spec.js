@@ -62,21 +62,19 @@ describe('publish/slack', () => {
   });
   afterEach(() => removeDir(dir));
 
-  it('uploads privately, posts the parent with the image, threads a reply per item, records permalinks', async () => {
+  it('posts the parent without any upload before it, threads a reply per item, records permalinks', async () => {
     const client = fakeClient();
     const pace = sinon.stub().resolves();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace });
-    const publication = await publisher.publish({ payload: payloadFor(), imagePath });
+    const publication = await publisher.publish({ payload: payloadFor() });
 
-    const upload = client.files.uploadV2.firstCall.args[0];
-    expect(upload).to.not.have.property('channel_id');
-    expect(upload).to.include({ filename: 'brief-2026-09-18.png' });
-    expect(upload.file).to.exist;
-    expect(publication.slack_file_id).to.equal('F123');
+    // The brief image was retired in revision 24: nothing is uploaded before the parent is posted.
+    expect(client.files.uploadV2.called).to.equal(false);
+    expect(publication.slack_file_id).to.equal(null);
 
     const parent = client.chat.postMessage.firstCall.args[0];
     expect(parent).to.include({ channel: 'C123', unfurl_links: false, unfurl_media: false });
-    expect(parent.blocks.find((b) => b.type === 'image').slack_file.id).to.equal('F123');
+    expect(parent.blocks.some((b) => b.type === 'image')).to.equal(false);
     expect(parent.metadata.event_type).to.equal('agent_watchdog.brief');
     expect(parent).to.not.have.property('thread_ts');
 
@@ -98,21 +96,10 @@ describe('publish/slack', () => {
   it('adds a superseded link when a forced run replaces an earlier post', async () => {
     const client = fakeClient();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
-    await publisher.publish({ payload: payloadFor(), imagePath, superseded: 'https://medic.slack.com/archives/C123/p1' });
+    await publisher.publish({ payload: payloadFor(), superseded: 'https://medic.slack.com/archives/C123/p1' });
     const parent = client.chat.postMessage.firstCall.args[0];
     expect(parent.blocks[0].type).to.equal('context');
     expect(parent.blocks[0].elements[0].text).to.include('https://medic.slack.com/archives/C123/p1');
-  });
-
-  it('posts without an upload when the brief has no image', async () => {
-    const client = fakeClient();
-    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
-    const noImage = payloadFor();
-    noImage.image = null;
-    const publication = await publisher.publish({ payload: noImage, imagePath: null });
-    expect(client.files.uploadV2.called).to.equal(false);
-    expect(publication.slack_file_id).to.equal(null);
-    expect(client.chat.postMessage.firstCall.args[0].blocks.some((b) => b.type === 'image')).to.equal(false);
   });
 
   it('retries a rate-limited call after retryAfter seconds and then succeeds', async () => {
@@ -128,7 +115,7 @@ describe('publish/slack', () => {
     });
     const sleep = sinon.stub().resolves();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), sleep });
-    const publication = await publisher.publish({ payload: payloadFor(), imagePath });
+    const publication = await publisher.publish({ payload: payloadFor() });
     expect(sleep).to.have.been.calledWith(2000);
     expect(publication.ts).to.equal('1700000000.000100');
   });
@@ -140,7 +127,7 @@ describe('publish/slack', () => {
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), sleep });
     let error;
     try {
-      await publisher.publish({ payload: payloadFor(), imagePath });
+      await publisher.publish({ payload: payloadFor() });
     } catch (e) {
       error = e;
     }
@@ -282,44 +269,40 @@ describe('publish/slack: the report shared into the thread (FR-022, revision 23)
   it('shares the report into the thread after the parent, with the comment, and records the share', async () => {
     const client = sharingClient();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace: async () => {} });
-    const publication = await publisher.publish({ payload: payloadFor(), imagePath, reportPath });
-    expect(client.files.uploadV2).to.have.been.calledTwice;
-    const image = client.files.uploadV2.firstCall.args[0];
-    expect(image.channel_id).to.equal(undefined);
-    const share = client.files.uploadV2.secondCall.args[0];
+    const publication = await publisher.publish({ payload: payloadFor(), reportPath });
+    expect(client.files.uploadV2).to.have.been.calledOnce;
+    const share = client.files.uploadV2.firstCall.args[0];
     expect(share)
       .to.include({ channel_id: 'C123', thread_ts: '1700000000.000100', filename: 'report-2026-09-18.html' });
     expect(share.title).to.include('2026-09-18');
     expect(share.initial_comment).to.include('1 item');
     // The share is posted after the parent and before the item replies.
-    expect(client.files.uploadV2.secondCall.calledAfter(client.chat.postMessage.firstCall)).to.equal(true);
-    expect(client.chat.postMessage.secondCall.calledAfter(client.files.uploadV2.secondCall)).to.equal(true);
+    expect(client.files.uploadV2.firstCall.calledAfter(client.chat.postMessage.firstCall)).to.equal(true);
+    expect(client.chat.postMessage.secondCall.calledAfter(client.files.uploadV2.firstCall)).to.equal(true);
     expect(publication.report).to.deep.equal({
       file_id: 'F456', ts: '1700000000.000150', permalink: 'https://medic.slack.com/files/F456',
     });
-    expect(publication.slack_file_id).to.equal('F123');
+    expect(publication.slack_file_id).to.equal(null);
   });
 
   it('shares nothing when the payload carries no report', async () => {
     const client = sharingClient();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace: async () => {} });
     const plain = payloadFor(makeBrief({ bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }] }));
-    const publication = await publisher.publish({ payload: plain, imagePath, reportPath });
-    expect(client.files.uploadV2).to.have.been.calledOnce;
+    const publication = await publisher.publish({ payload: plain, reportPath });
+    expect(client.files.uploadV2.called).to.equal(false);
     expect(publication.report).to.equal(null);
   });
 
   it('fails loudly when the share cannot be made, like the image upload', async () => {
     const client = sharingClient();
-    client.files.uploadV2.onSecondCall().rejects(new Error('boom'));
-    client.files.uploadV2.onThirdCall().rejects(new Error('boom'));
-    client.files.uploadV2.onCall(3).rejects(new Error('boom'));
+    client.files.uploadV2.rejects(new Error('boom'));
     const publisher = createSlackPublisher({
       client, channel: 'C123', logger: quietLogger(), pace: async () => {}, sleep: async () => {},
     });
     let error = null;
     try {
-      await publisher.publish({ payload: payloadFor(), imagePath, reportPath });
+      await publisher.publish({ payload: payloadFor(), reportPath });
     } catch (e) {
       error = e;
     }

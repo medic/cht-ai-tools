@@ -64,6 +64,8 @@ const standingRecords = ({ candidates = [], changes = [], project, groupOf = () 
     metric: candidate.metric,
     value: evidenceValue(candidate, 'current') ?? candidate.observed,
     previous_day_value: previous,
+    // The panel the value was read from, so the report can link the host's dashboard (revision 24).
+    panel_ref: candidate.panel_ref || null,
   };
 });
 

@@ -144,3 +144,45 @@ describe('verify/checks/numbers_match: the text the model was given (FR-016, rev
     expect(check(borrowed).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/numbers_match: derived values (FR-016, revision 24)', () => {
+  const { derivedValues } = require('../../../src/verify/checks/numbers_match');
+
+  it('accepts a difference, a ratio and a percent change of two values the item may quote', () => {
+    const jump = baseContext();
+    jump.items[0].evidence = [
+      { window: 'current', value: 845, unit: 'count' }, { window: 'previous_day', value: 818, unit: 'count' },
+    ];
+    jump.changes[0].current_value = 845;
+    jump.changes[0].previous_day_value = 818;
+    jump.items[0].why_now = 'Conflicts stepped from 818 to 845, a +27 jump in one day.';
+    expect(check(jump).status).to.equal('pass');
+    const ratio = baseContext();
+    ratio.items[0].why_now = 'Backlog is 912 against 300 yesterday, roughly 3x, a 304% level.';
+    expect(check(ratio).status).to.equal('pass');
+    const fall = baseContext();
+    fall.items[0].evidence = [
+      { window: 'current', value: 132, unit: 'count' }, { window: 'previous_day', value: 300, unit: 'count' },
+    ];
+    fall.changes[0].current_value = 132;
+    fall.items[0].why_now = 'The rate fell to 132 from 300, -56% in a day.';
+    expect(check(fall).status).to.equal('pass');
+  });
+
+  it('still refuses a numeral that no pair of quotable values produces', () => {
+    const ctx = baseContext();
+    ctx.items[0].why_now = 'Backlog is 912 against 300 yesterday, so 4321 is expected.';
+    const result = check(ctx);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons.join(' ')).to.include('4321');
+  });
+
+  it('derives from a bounded set and never divides by zero', () => {
+    const allowed = [{ value: 845, unit: 'count' }, { value: 818, unit: 'count' }, { value: 0, unit: 'count' }];
+    const derived = derivedValues(allowed);
+    expect(derived.some((d) => d.value === 27 && d.unit === 'count')).to.equal(true);
+    expect(derived.every((d) => Number.isFinite(d.value))).to.equal(true);
+    const many = Array.from({ length: 200 }, (_, i) => ({ value: i + 1, unit: 'count' }));
+    expect(derivedValues(many).length).to.be.at.most(60 * 59 * 3);
+  });
+});

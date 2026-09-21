@@ -186,12 +186,47 @@ const givenNumerals = (texts) => {
   return out;
 };
 
+// The derived values are built from at most this many computed values, so the set stays small for any item.
+const DERIVED_BASE_LIMIT = 60;
+
+/**
+ * The values a reader would derive from two computed levels (FR-016, revision 24): their difference as a count,
+ * their ratio as a multiple and their percent change. A model writing "+27", "3x" or "-56%" of two figures it was
+ * given has computed nothing the reader could not; the gate refused 127 such numerals in one run (research.md R-29).
+ * Only values in the count unit pair up: a level against a ratio, a percentage or a duration derives nothing a
+ * reader would write, and admitting those pairs let almost any two-digit numeral through.
+ */
+const derivedValues = (allowed) => {
+  const counts = (allowed || [])
+    .filter((a) => a.unit === 'count' || a.unit === undefined || a.unit === null)
+    .map((a) => Number(a.value))
+    .filter((v) => Number.isFinite(v));
+  const base = [...new Set(counts)].slice(0, DERIVED_BASE_LIMIT);
+  const derived = [];
+  for (const a of base) {
+    for (const b of base) {
+      if (a === b || b === 0) {
+        continue;
+      }
+      derived.push({ value: a - b, unit: 'count' });
+      derived.push({ value: a / b, unit: 'x' });
+      derived.push({ value: ((a - b) / b) * 100, unit: 'percent' });
+    }
+  }
+  return derived;
+};
+
 const checkText = (where, text, allowed, spanForms, reasons, ctx, given = new Set()) => {
+  let derived = null;
   for (const token of extractNumbers(stripRunIdentifiers(text, ctx))) {
     if (WINDOW_NAME_TOKENS.has(token) || given.has(bareValue(token))) {
       continue;
     }
-    if (!matches(token, allowed)) {
+    if (matches(token, allowed)) {
+      continue;
+    }
+    derived = derived || derivedValues(allowed);
+    if (!matches(token, derived)) {
       reasons.push(`${where} contains ${token}, which matches no computed value`);
     }
   }
@@ -231,5 +266,6 @@ const check = (ctx) => {
 };
 
 module.exports = {
-  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, WINDOW_NAME_TOKENS,
+  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, derivedValues,
+  WINDOW_NAME_TOKENS,
 };

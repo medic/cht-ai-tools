@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 'use strict';
-// Smoke test S-11 (research.md): render a report and its image with the real headless browser, writing only under
-// TMPDIR, as the container does with a read-only root filesystem. No credentials needed; a browser must be installed
-// (Playwright's chromium-headless-shell in the image, or AGENT_WATCHDOG_CHROMIUM_PATH).
-// Usage: node smoke/render.js [--out <png path>]
+// Smoke test S-11 (research.md): render the report, writing only under TMPDIR, as the container does with a read-only
+// root filesystem. No credentials needed. A run renders no image since revision 24; with --png the retained headless
+// browser (Playwright's chromium-headless-shell in the image, or AGENT_WATCHDOG_CHROMIUM_PATH) captures the summary
+// too, as a check that the browser still works while it stays in the image (research.md R-29).
+// Usage: node smoke/render.js [--out <report path>] [--png]
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -66,16 +67,38 @@ const main = async () => {
   const outArg = process.argv.indexOf('--out');
   const outputPath = outArg !== -1
     ? process.argv[outArg + 1]
-    : path.join(process.env.TMPDIR || os.tmpdir(), 'agent-watchdog-smoke', 'brief.png');
-  const html = renderReport({ brief, items, windowsByMetric, runId: RUN_ID });
+    : path.join(process.env.TMPDIR || os.tmpdir(), 'agent-watchdog-smoke', 'report.html');
+  // A discovery with the items' dashboard, so the item links render as they do in a run (revision 24).
+  const discovery = {
+    run_start: '2026-09-18T06:00:00Z',
+    projects: items.map((i) => ({ url: i.project_url, host: new URL(i.project_url).host })),
+    dashboards: [{
+      uid: 'oa2OfL-Vk', slug: 'cht-admin-overview', title: 'CHT Admin Overview', duplicate_panel_ids: [],
+      panels: [{ panel_id: 3, title: 'Sentinel Backlog', metric: 'cht_sentinel_backlog_count' }],
+    }],
+  };
+  const html = renderReport({
+    brief, items, windowsByMetric, discovery, runId: RUN_ID,
+    links: { mode: 'internal', grafanaUrl: 'https://watchdog.example.org', runStart: '2026-09-18T06:00:00Z' },
+  });
+  if (!html.includes('href="https://watchdog.example.org/d/oa2OfL-Vk/')) {
+    throw new Error('the report carries no panel link although links are internal');
+  }
   if (!html.includes('id="brief-summary"') || /<script/.test(html)) {
     throw new Error('the report is missing its summary element or contains a script');
   }
   const subBullets = (html.match(/<ul class="sub">/g) || []).length;
-  console.log(`ok   report rendered (${html.length} chars, sub-bullets: ${subBullets})`);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, html);
+  console.log(`ok   report rendered to ${outputPath} (${html.length} chars, sub-bullets: ${subBullets})`);
+  if (!process.argv.includes('--png')) {
+    console.log(`ok   writable paths used: ${path.dirname(outputPath)} only (S-11)`);
+    return;
+  }
   const started = Date.now();
   const image = await renderImage({
-    html, executablePath: process.env.AGENT_WATCHDOG_CHROMIUM_PATH || null, outputPath,
+    html, executablePath: process.env.AGENT_WATCHDOG_CHROMIUM_PATH || null,
+    outputPath: outputPath.replace(/\.html$/, '') + '.png',
   });
   const bytes = fs.readFileSync(image.path);
   if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE) || bytes.length < 1000) {

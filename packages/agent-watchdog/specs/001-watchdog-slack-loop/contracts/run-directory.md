@@ -36,10 +36,9 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── verification.draft<n>.json # publish gate reports                               [kept]
 │       │   ├── brief.json                 # final Brief (brief, heartbeat, degraded, failure)  [kept]
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
-│       │   ├── brief.png                  # image rendered from report.html (FR-023)           [raw]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
 │       │   ├── feedback.digest.json       # the feedback digest as built (FR-062)             [kept]
-│       │   └── publication.json           # channel, ts, permalinks, file ids (image, report)  [kept]
+│       │   └── publication.json           # channel, ts, permalinks, the report share's file id  [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]
 │       └── trace.json                     # trace id, url, span summary                        [kept]
@@ -75,8 +74,8 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 | `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
 | `agent` | `candidates.json` less its standing conditions (revision 23), `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
 | `rollup` | all `findings.pass<last>.json`, every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
-| `render` | `brief.json`, `items.ranked.json`, `standing.json`, `changes.json` | `report.html`, `brief.png` |
-| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share, body-item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
+| `render` | `brief.json`, `items.ranked.json`, `standing.json`, `alert-groups.json`, `discovery.json` | `report.html` (the image `brief.png` was retired in revision 24) |
+| `publish` | `brief.json`, `report.html`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share, body-item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 
 Rules:
 

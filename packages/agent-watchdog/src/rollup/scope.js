@@ -1,26 +1,26 @@
 'use strict';
-// A filtered run briefs only what it analysed (FR-066, revision 19). `--project` restricts the analysis while
-// discovery, collection, `alerts.classified.json` and `alerts/episodes.jsonl` deliberately stay whole: a narrow
-// preview must not make another project's open episode look cleared, nor break the next full run's newness. So the
-// narrowing happens here, on a copy, at presentation time only.
+// A filtered run briefs only what it analysed (FR-066, revision 19). `--project` and `--group` (revision 24) restrict
+// the analysis while discovery, collection, `alerts.classified.json` and `alerts/episodes.jsonl` deliberately stay
+// whole: a narrow preview must not make another project's open episode look cleared, nor break the next full run's
+// newness. So the narrowing happens here, on a copy, at presentation time only.
 const { groupAlerts } = require('../alerts/group');
-const { normaliseHost } = require('../config/policy');
+const { selectProjects, filterIsActive } = require('../config/filter');
 
 /**
  * The hosts this run analysed, or null when it analysed everything discovered. Null is the unfiltered case and
  * every caller treats it as "change nothing", so the whole-run path stays exactly as it was.
  * @param {object} options
  * @param {object} options.discovery the run's discovery
- * @param {object} [options.flags] parsed command-line flags; `project` may be a url or a bare host, repeatable
+ * @param {object} [options.flags] parsed command-line flags; `project` may be a url or a bare host, `group` a
+ *   programme label, both repeatable
  * @returns {Set<string>|null}
  */
 const analysedHosts = ({ discovery, flags = {} }) => {
-  const wanted = ((flags && flags.project) || []).map(normaliseHost);
-  if (!wanted.length) {
+  if (!filterIsActive(flags)) {
     return null;
   }
   const discovered = (discovery && discovery.projects) || [];
-  const hosts = new Set(discovered.filter((p) => wanted.includes(p.host)).map((p) => p.host));
+  const hosts = new Set(selectProjects(discovered, flags).map((p) => p.host));
   // Naming every discovered project is the whole run, and a filter is only meaningful if it leaves something out.
   return hosts.size === discovered.length ? null : hosts;
 };

@@ -582,3 +582,49 @@ Deliberately not planned: a configurable reply cap; a report link on the parent 
 exempting every numeral of the items JSON for the brief; a layout change for related items;
 reclassifying the clock-skew gauge; deduplicating backlog items against firing alerts; storing
 rejected draft texts beyond `brief.draft<n>.json` (research.md R-28).
+
+### Revision 24 delta: the report becomes the document, the standing rule stops leaking, the gate verifies the model's arithmetic (FR-009, FR-014, FR-015, FR-016, FR-019, FR-022, FR-023, FR-025, FR-066, FR-075, FR-082)
+
+Planned on 2026-09-21 from the first run on revision 23 (research.md R-29): 20 replies instead of 159
+and a recovered roll-up, but 42 of 43 high items still the chronic backlog through the metric's
+`monotonic` candidates, reference lines excluded from discovery yet still fetched, three projects
+rejected on a signed decimal read as a phone number, and 67 of 83 sessions retried on arithmetic the
+model did correctly. The operator's additions: retire the brief image now that the report is shared,
+make the report the readable document (links where the reader can follow them, a footer with the
+run's links, numbers rounded for reading, a redesign under the plan's design skill), and run one
+programme at a time. Where each lands:
+
+| Change | Story | Requirements |
+|---|---|---|
+| Standing metric floor, `monotonic` withheld on a standing metric, system prompt sentence | US1 | FR-014 |
+| Reference lines never collected; analysis over `discovery.metrics` only | US1 | FR-075 |
+| Signed decimals are values; derived values accepted; self-`relates_to` dropped by code | US1 | FR-016, FR-009 |
+| Brief image retired | US1 | FR-019, FR-023 (retired), FR-025, FR-082 |
+| Report links (setting `AGENT_WATCHDOG_REPORT_LINKS`), footer links, rounding, redesign | US1, groundwork for the recipients story (Out of Scope) | FR-015, FR-019, FR-022 |
+| `--group` filter | US3 | FR-066, contracts/cli.md |
+
+- **I**: no new dependency. The redesign uses system font stacks and CSS in the template; links reuse
+  `src/links/build.js`; the group filter reuses discovery's groups.
+- **II**: tests first for every delta: candidate floors and the withheld `monotonic`; the query list
+  without reference lines and changes only for collected metrics; signed decimals; derived values and
+  the dropped self-relation; a payload and publisher without an image; report links in both modes,
+  the footer, rounding and the sections; the group filter in every stage and the scope.
+- **III**: the gate verifies the model's arithmetic instead of forbidding it; floors and withholding
+  are decided from the computed change; links are built from structured references; rounding is
+  render-time formatting of stored values.
+- **IV**: less is stored (no `brief.png`); one derived field is added, `panel_ref` on a standing
+  record, so the report can link the host's panel without re-deriving it. A setting is configuration,
+  not storage.
+- **V**: no new stage. Collect, analyze, agent, rollup, render and publish each change in their own
+  file.
+- **VI**: unchanged.
+- **VII**: `prompts/system.md`'s severity sentence and the report template change by pull request
+  with tests; the template's design read is recorded in its header.
+- **VIII**: one audience per output. The report is still the internal report; the link setting
+  prepares the same document for readers without watchdog access without splitting the audience of
+  this run.
+  Result: PASS.
+
+Deliberately not planned: the backlog threshold from the panel's reference line (research.md R-29);
+removing Chromium from the container; a per-programme channel or recipient; rounding inside Slack
+replies; dropping FR-082's markers from the report.

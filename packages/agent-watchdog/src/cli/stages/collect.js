@@ -7,7 +7,7 @@ const { collectWindows } = require('../../collect/windows');
 const { createHistory } = require('../../collect/history');
 const { mapWithConcurrency } = require('../../collect/concurrency');
 const { activeWindow } = require('../../analyze/calendar');
-const { normaliseHost } = require('../../config/policy');
+const { selectProjects } = require('../../config/filter');
 
 const name = 'collect';
 const inputs = [];
@@ -52,8 +52,7 @@ const run = async (ctx) => {
     firing: alerts.instances.filter((i) => i.state === 'firing').length, ignored: alerts.ignored.length,
   });
 
-  const wanted = (flags.project || []).map(normaliseHost);
-  const projects = wanted.length ? discovery.projects.filter((p) => wanted.includes(p.host)) : discovery.projects;
+  const projects = selectProjects(discovery.projects, flags);
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
 
   // Projects run through a bounded pool (FR-074); each reuses what the data volume holds (FR-072) and extends

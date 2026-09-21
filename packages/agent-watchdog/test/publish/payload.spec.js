@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildPayload, withImageBlock } = require('../../src/publish/payload');
+const { buildPayload } = require('../../src/publish/payload');
 const { AUDIENCES, assertAudience } = require('../../src/publish/audience');
 const { makeItem, makeBrief } = require('../rollup/factories');
 
@@ -53,9 +53,7 @@ describe('publish/payload', () => {
       event_payload: { run_id: '2026-09-18', date: '2026-09-18', kind: 'brief' },
     });
     expect(payload.parent.unfurl_links).to.equal(false);
-    expect(payload.image).to.deep.equal({
-      filename: 'brief-2026-09-18.png', alt_text: 'Sentinel backlog tripled on alpha', path: null, slack_file_id: null,
-    });
+    expect(payload.image, 'the brief image was retired in revision 24').to.equal(null);
   });
 
   it('adds one threaded reply per item in rank order with escaped text, the dashboard link and item metadata', () => {
@@ -84,16 +82,11 @@ describe('publish/payload', () => {
     expect(payload.parent.text.length).to.be.at.most(4000);
   });
 
-  it('includes the image block only once a Slack file id exists', () => {
-    const withFile = makeBrief({ image: { path: 'rollup/brief.png', slack_file_id: 'F123' } });
-    const payload = buildPayload({ ...args, brief: withFile, items: [item] });
-    const image = payload.parent.blocks.find((b) => b.type === 'image');
-    expect(image).to.deep.equal({ type: 'image', slack_file: { id: 'F123' }, alt_text: withFile.headline });
-    const later = withImageBlock(buildPayload(args), 'F999');
-    expect(later.parent.blocks.find((b) => b.type === 'image').slack_file.id).to.equal('F999');
-    expect(later.image.slack_file_id).to.equal('F999');
-    const idx = later.parent.blocks.findIndex((b) => b.type === 'image');
-    expect(later.parent.blocks[idx - 1].type).to.equal('section');
+  it('carries no image and no image block even when a stored brief still names one (revision 24)', () => {
+    const stale = makeBrief({ image: { path: 'rollup/brief.png', slack_file_id: 'F123' } });
+    const payload = buildPayload({ ...args, brief: stale, items: [item] });
+    expect(payload.image).to.equal(null);
+    expect(payload.parent.blocks.some((b) => b.type === 'image')).to.equal(false);
   });
 
   it('produces text-only heartbeat and failure payloads with metadata and no replies', () => {
@@ -268,7 +261,6 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
     expect(contexts.some((t) => t.startsWith('_✅ Resolved since the previous run'))).to.equal(true);
     expect(payload.parent.text).to.include('🚨 North Programme alerts');
     expect(payload.parent.text).to.include('_✅ Resolved since the previous run');
-    expect(payload.image.alt_text, 'alt text carries no marker').to.equal(brief.headline);
   });
 
   it('collapses a pattern into one paragraph and shows the metric next to an alert (FR-078, FR-079)', () => {

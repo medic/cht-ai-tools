@@ -5,7 +5,7 @@ const { activeWindow } = require('../../analyze/calendar');
 const { computeChanges } = require('../../analyze/changes');
 const { effectiveThresholds } = require('../../analyze/thresholds');
 const { computeCandidates, suppressByHorizon } = require('../../analyze/candidates');
-const { normaliseHost } = require('../../config/policy');
+const { selectProjects } = require('../../config/filter');
 const { roleMatches } = require('../../analyze/thresholds');
 const { runStartOf } = require('./collect');
 const { classifyAlerts, deadHostsFromDiscovery } = require('../../alerts/classify');
@@ -38,8 +38,7 @@ const run = async (ctx) => {
   requireInputs(runDir, inputs);
   const discovery = await runDir.readJson('discovery.json');
   const runStart = runStartOf(ctx);
-  const wanted = (flags.project || []).map(normaliseHost);
-  const projects = wanted.length ? discovery.projects.filter((p) => wanted.includes(p.host)) : discovery.projects;
+  const projects = selectProjects(discovery.projects, flags);
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
   const globalSource = thresholdsAreDeployed(policy, config);
   const horizons = runDir.exists('feedback.ingested.json')
@@ -58,6 +57,7 @@ const run = async (ctx) => {
     const active = activeWindow(defaults, project, runStart);
     const changes = computeChanges({
       windows: stored.windows, project, activeWindow: active, kinds: policy.thresholds.metric_kinds || {},
+      metrics: Array.isArray(discovery.metrics) ? discovery.metrics : null,
     });
     const thresholds = effectiveThresholds(policy.thresholds, project.thresholds, { globalSource });
     const raw = computeCandidates({ changes, project, thresholds, policy, date: ctx.date, windows: stored.windows });
