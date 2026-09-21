@@ -275,7 +275,7 @@ accepted or rejected by the gate.
 | `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). |
 | `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
-| `persisting_days` | integer | Consecutive prior runs whose accepted items contained this `item_id`, plus one. Set by code (Edge Cases). |
+| `persisting_days` | integer | Consecutive prior analysed **dates** whose ranked items contained this `item_id`, plus one (FR-009, revision 21). The date of a run is the first ten characters of its id, and the latest run of a date speaks for that date, so forced re-runs of one date count once and a re-run reports what the date's first run reported. A date whose latest run wrote no ranked items ends the streak. Set by code, never by the model; the agent stage carries a placeholder `1` because persistence is a roll-up concern it cannot know. |
 | `pattern_card` | string or null | Card id from the merged index; unknown ids are rejected. |
 | `candidate_ids` | string[] | Non-empty; every id must exist in this run's candidates. |
 | `reference_urls` | string[] | URLs the model cites; each must have appeared in a tool result this run and be on the allow-list (FR-016). |
@@ -288,7 +288,7 @@ session's `bounds_hit` includes `error`, distinct from `timeout` (revision 13).
 | `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |
 
 Lifecycle: `drafted` (pass 1) → `revised` (later passes) → `ranked` → `placed` → `published` →
-`tracked` (next runs increment `persisting_days`) → `reviewed` (Feedback) → `outcome`
+`tracked` (a run on a later date increments `persisting_days`) → `reviewed` (Feedback) → `outcome`
 (`confirmed` \| `dismissed` \| `unreviewed`, appended to the corpus as a run outcome, FR-030).
 
 ### Pass

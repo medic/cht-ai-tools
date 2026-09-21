@@ -497,6 +497,19 @@ item explains another, and the run then forgets both. A threshold only moves whe
 - [X] T210 [US4] The `relates_to` gate check in `src/verify/checks/relates_to.js`, registered in `CHECK_NAMES` in `src/verify/gate.js`: the named metric must be another item of the same findings and never the item's own, and the relation must be one of the four
 - [X] T211 [US4] The relation into the roll-up prompt in `src/agent/prompt-assembly.js` and the instruction in `prompts/pass-first.md` and `prompts/system.md`; metric pairs counted in `src/calibration/report.js`; spec FR-009, FR-014a, FR-058 and User Story 4 scenario 5 (revision 20), plan revision 20 delta, research R-25 and smoke S-25
 
+## Phase 25: A streak counted in dates, not in runs (revision 21, 2026-09-20)
+
+**Purpose**: Three forced re-runs of one date reported `persisting_days` of 1, then 2, then 3 for the same item, so the
+third published "climb for third consecutive day" and "persisting 3 days" about one day of movement, and the analysis
+read the inflated streak back as prose (research.md R-26). The count walked run ids; the label says days. FR-009 now
+counts analysed dates and the latest run of a date speaks for it. Nothing new is stored: the date is the first ten
+characters of a run id, whose shape `RUN_ID_PATTERN` in src/store/run-dir.js already guarantees.
+
+- [X] T212 [P] [US1] Tests first: extend `test/rollup/history.spec.js` (two forced runs of one date report the same streak for an item both contain; the first run of the next date reports one more; a date whose latest run wrote no `rollup/items.ranked.json` ends the streak; a re-run of an older date counts only dates strictly before its own; a date whose latest run dropped the item breaks the streak even though an earlier run of that same date carried it; `previousRunIds` stays run-keyed and ordered) and `test/rollup/rank.spec.js` (`persisting_days` is one plus the date-keyed count, and is still 1 with no history)
+- [X] T213 [US1] Date-keyed `previousItemCounts` in `src/rollup/history.js`: group run ids by their date (the first ten characters), take the latest run of each date as the one that speaks for it, and walk dates descending from the one immediately before this run's own date, intersecting the ranked item ids and stopping at the first date whose authoritative run has no `rollup/items.ranked.json`. The run's own date contributes nothing and the signature stays `(dataDir, runId)`, so the call site `ctx.previousItemIds = await previousItemCounts(dataDir, runId)` in `src/cli/commands/run.js` is unchanged
+- [X] T214 [US1] Keep `previousRunIds` run-keyed in `src/rollup/history.js` and leave its three callers alone — `previousDiscoveryFor` in `src/cli/stages/rollup.js`, `previousClassified` in `src/cli/stages/analyze.js` and `previousHostsFor` in `src/rollup/new-projects.js` — because each wants the most recent earlier run that wrote a given file, and alert newness is measured against the immediately preceding snapshot by design (FR-065); update the module comment in `src/rollup/history.js` and the `previousItemIds` parameter doc in `src/rollup/rank.js` so each says which unit it counts
+- [X] T215 [US1] Record the revision: spec.md FR-009's persistence clause and the Edge Case "An item persists for many days", the `persisting_days` row and the Item Lifecycle line in data-model.md, the plan.md revision 21 delta, research.md R-26 and smoke test S-26. The agent stage's `persisting_days: 1` placeholder in `src/verify/gate.js` stays as it is: persistence is a roll-up concern the agent stage cannot know, and R-26 records that placeholder as correct
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -693,3 +706,14 @@ US3 can proceed in parallel, then US4, US5 and US6.
   mechanics; the minimum session budget is $0.25 because a pass over a project's candidates cannot finish below
   it; the budget reserved for running sessions counts against the run budget so concurrency cannot overshoot it.
 
+- Phase 25 decisions (2026-09-20, revision 21): the streak counts dates that were analysed, so a date with no run at
+  all neither counts nor breaks it, which preserves the old behaviour across a day the watchdog did not run; the run
+  that speaks for a date is chosen by its forced number read as a number, not by code point, because
+  `RunDir.nextForcedId` allocates `-f10` after `-f9` and `2026-09-20-f10` sorts before `2026-09-20-f2` by code point;
+  `test/rollup/rank.spec.js` needed no new case, since it already pins `persisting_days` as one more than the count it
+  is given and 1 with no history, and the unit lives entirely in `src/rollup/history.js`; the two pre-existing history
+  tests passed unchanged because each used one run per date, which is exactly why the defect survived to a forced
+  re-run. Adjacent and deliberately NOT fixed, for an explicit follow-up: `previousRunIds` orders by code point, so
+  once a date has ten or more forced re-runs its "most recent first" is wrong (`-f9` before `-f10`), which would give
+  `previousDiscoveryFor`, `previousClassified` and `previousHostsFor` the second-newest run; 2026-09-19 already
+  carries `-f8`, so this is reachable, and it is a separate change with its own tests and three affected callers.

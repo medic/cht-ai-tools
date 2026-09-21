@@ -133,7 +133,8 @@ const compareWith = (usersOf) => (a, b) => {
  * @param {object} options
  * @param {object[]} options.items accepted items
  * @param {Map<string, object[]>} [options.feedbackByItem] feedback records by item id (US2)
- * @param {Map<string, number>} [options.previousItemIds] consecutive prior runs that contained each id
+ * @param {Map<string, number>} [options.previousItemIds] consecutive prior analysed dates that contained
+ *   each id (src/rollup/history.js); `persisting_days` is one more than this (FR-009, revision 21)
  * @param {object|null} [options.cards] loaded pattern cards (src/corpus/cards.js); matched before persistence
  * @param {(projectUrl: string) => string} [options.groupOf] the project's group label; everything is "Other" without it
  * @param {object[]} [options.alertGroups] Alert Groups that take body slots of their own (FR-066)

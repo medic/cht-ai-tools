@@ -627,6 +627,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-23 | A one-project run's brief names only that project's alerts, and the next full run reports the same newness and no spurious resolution | Only consecutive hosted runs show that a filtered preview left the durable record alone |
 | S-24 | On the hosted watchdog a quiet project completes in one pass, and a project with items logs `agent.tool_usage` with no failures and no refusals | Tool contracts and pass skipping only show their worth against the real alert and metric mix |
 | S-25 | After a week of hosted runs the weekly report names at least one rule whose candidates the analysis set aside on most days, with a commonest reason, and any suggestion resting on those says so | Only a week of real runs produces enough dismissals to separate a noisy rule from a quiet week |
+| S-26 | An item present in two forced runs of one date is reported with the same `persisting_days` in both, and one higher in the first run of the next date | Only consecutive hosted runs, one of them forced, show the streak counting dates rather than runs |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1265,3 +1266,60 @@ confidence is never scored against what happened, so its weight is unknown, and 
 own piece of work); and letting the analysis name a relation by item id (rejected: identities are
 derived by code from the project, metric and card, so the analysis cannot know them, which is why
 the metric is the handle).
+
+## R-26. A published number that counted runs and called them days
+
+**Evidence** (the run records of 2026-09-20, 2026-09-20-f1 and 2026-09-20-f2, read on 2026-09-20).
+
+All three runs analysed the same date. Their `rollup/items.ranked.json` files carry the same item,
+`cht_conflict_count` on one project, with `persisting_days` of 1, then 2, then 3. The third run
+therefore published the headline "document conflicts climb for third consecutive day" and a thread
+line reading "persisting 3 days" about a metric that had risen on one date and been looked at three
+times. The analysis then read the inflated streak back out of its own item history and wrote that
+the burst was "first observed yesterday", so a wrong number became wrong prose.
+
+The count is produced by `previousItemCounts` in `src/rollup/history.js`, which walks run ids from
+`RunDir.list` and stops at the first run without a ranked-items file, and applied in
+`src/rollup/rank.js` as `persisting_days: 1 + (previousItemIds.get(item.item_id) || 0)`. Both
+`src/publish/payload.js` and `src/render/report.js` render it as `persisting ${n} days`. Under the
+06:00 schedule there is one run per date and the two readings agree, which is why this survived to
+here; `--force` separates them and the published number is then wrong by the number of re-runs.
+
+**The root cause is a contradiction in the specification, not a coding mistake.** FR-009 asks an
+item to carry "the number of days it has persisted" and the Edge Case promises the reader
+"persisting N days", while the Item table in data-model.md defined the field as "Consecutive prior
+runs whose accepted items contained this `item_id`, plus one" and the Lifecycle line said "next runs
+increment `persisting_days`". The implementation followed the data model faithfully. One of the two
+readings had to give.
+
+**Decision: days win, and a date is the unit.** The number is published to a person as days, and how
+many times an operator re-ran a date is an implementation detail of the operator's afternoon.
+Persistence counts consecutive immediately preceding analysed dates whose ranked items contained the
+item id, plus one. Within one date the authoritative run is the latest, because that is the run whose
+output was published; earlier forced re-runs of that date are the same date and add nothing. A date
+whose authoritative run has no ranked-items file ends the streak, which keeps today's behaviour at
+that boundary. The run's own date contributes nothing, so a re-run of a date reports what the first
+run of that date reported.
+
+Nothing new is stored (constitution IV). `RUN_ID_PATTERN` in `src/store/run-dir.js` is
+`/^\d{4}-\d{2}-\d{2}(-f\d+)?$/`, so the analysed date is the first ten characters of an id the code
+already has, and the grouping is derived rather than recorded.
+
+`previousRunIds` stays run-keyed and keeps its three other callers, which genuinely mean runs: the
+previous discovery for episode correlation in `src/cli/stages/rollup.js`, the previous classified
+alerts for newness in `src/cli/stages/analyze.js`, and the previously discovered hosts in
+`src/rollup/new-projects.js` all want the most recent earlier run that got far enough to write a
+file. Alert newness in particular is measured against the immediately preceding snapshot by design,
+so lifting it to dates would change behaviour that is correct.
+
+**Not a defect, recorded so it is not "fixed" later.** The agent stage's own item carries
+`persisting_days: 1` in `src/verify/gate.js`. Persistence is a roll-up concern that the agent stage
+cannot know, and the first analysis of this run wrongly read that placeholder as a second bug
+disagreeing with the rendered 3. The placeholder is correct and stays; only the roll-up computes the
+real value, which is constitution III working as intended.
+
+**Also considered**: counting calendar days between the first and last sighting rather than
+consecutive dates (rejected: it would report a gap of a week as "persisting 8 days" when the item was
+absent for six of them, which is a different and less useful claim than a streak); and storing a
+first-seen date on the item (rejected: it stores something new to answer a question the run ids
+already answer, against constitution IV).

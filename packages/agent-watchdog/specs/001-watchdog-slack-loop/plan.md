@@ -478,3 +478,35 @@ than asking it for anything new.
 Deliberately not planned: analysing one project and reusing the conclusion on others. A shared
 judgement reaches every brief at once, and the reviewed pattern card already carries a lesson from
 one project to all of them with a person in the loop (research.md R-25, Rejected).
+
+### Revision 21 delta: a streak counted in dates, not in runs (FR-009)
+
+Planned on 2026-09-20 after three forced re-runs of one date published "persisting 3 days" for one
+day of movement (research.md R-26). The fix is a unit change, not a feature: `persisting_days`
+counts consecutive preceding analysed dates, the latest run of a date is the authoritative one, and
+the specification's own contradiction between FR-009's "days" and the data model's "prior runs" is
+resolved in favour of days, because days are what the brief publishes to a person.
+
+- **I**: no new dependency. The date of a run is the first ten characters of its id.
+- **II**: tests first: two forced runs of one date reporting the same streak, the next date
+  reporting one more, a missing ranked-items file on the authoritative run ending the streak, and a
+  re-run of an older date counting only dates before it.
+- **III**: the arithmetic stays code's, and moves further into code's hands. The analysis is never
+  asked for the streak; it reads the value the roll-up computed.
+- **IV**: nothing new is stored. No first-seen date, no index: the grouping is derived from run ids
+  the store already guarantees the shape of (`RUN_ID_PATTERN`).
+- **V**: no new stage. One roll-up helper changes its key and `rankItems` keeps its signature.
+- **VI**: unchanged. Nothing acts on the number; it is shown and it orders items (FR-081).
+- **VII**: no prompt or schema change. The model neither emits nor is asked for this field.
+- **VIII**: unchanged, and slightly better served: the number the brief shows a person now means
+  what its label says.
+  Result: PASS.
+
+`previousRunIds` stays run-keyed. Its three other callers — the previous discovery for episode
+correlation, the previous classified alerts for newness, the previously discovered hosts — all mean
+the most recent earlier *run* that wrote a given file, and alert newness is measured against the
+immediately preceding snapshot by design (FR-065). Only the persistence streak changes unit.
+
+Deliberately not planned: reporting a first-seen date or a total number of sightings alongside the
+streak. Both are new numbers for a reader to interpret and neither was asked for; the streak with an
+honest unit is the whole of this revision (research.md R-26, Also considered).

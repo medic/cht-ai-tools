@@ -17,7 +17,7 @@ describe('rollup/history', () => {
     return run;
   };
 
-  it('counts consecutive preceding runs that contained each item, most recent first', async () => {
+  it('counts consecutive preceding dates that contained each item, most recent first', async () => {
     await runWith('2026-09-14', ['A']);
     await runWith('2026-09-15', ['A', 'B']);
     await runWith('2026-09-16', ['A', 'B']);
@@ -28,7 +28,7 @@ describe('rollup/history', () => {
     expect(counts.has('B')).to.equal(false);
   });
 
-  it('ends every streak at a run without a ranked items file', async () => {
+  it('ends every streak at a date without a ranked items file', async () => {
     await runWith('2026-09-15', ['A']);
     await runWith('2026-09-16', null);
     await runWith('2026-09-17', ['A', 'B']);
@@ -36,6 +36,65 @@ describe('rollup/history', () => {
     const counts = await previousItemCounts(dataDir, '2026-09-18');
     expect(counts.get('A')).to.equal(1);
     expect(counts.get('B')).to.equal(1);
+  });
+
+  it('reports the same streak for two forced runs of one date', async () => {
+    await runWith('2026-09-17', ['A']);
+    await runWith('2026-09-18', ['A']);
+    await runWith('2026-09-18-f1', ['A']);
+    const first = await previousItemCounts(dataDir, '2026-09-18');
+    const forced = await previousItemCounts(dataDir, '2026-09-18-f1');
+    expect(first.get('A')).to.equal(1);
+    expect(forced.get('A')).to.equal(1);
+  });
+
+  it('counts one more on the first run of the next date', async () => {
+    await runWith('2026-09-17', ['A']);
+    await runWith('2026-09-18', ['A']);
+    await runWith('2026-09-18-f1', ['A']);
+    const next = await previousItemCounts(dataDir, '2026-09-19');
+    expect(next.get('A')).to.equal(2);
+  });
+
+  it('ends the streak at a date whose latest run wrote no ranked items', async () => {
+    await runWith('2026-09-16', ['A']);
+    await runWith('2026-09-17', ['A']);
+    await runWith('2026-09-17-f1', null);
+    const counts = await previousItemCounts(dataDir, '2026-09-18');
+    expect(counts.has('A')).to.equal(false);
+  });
+
+  it('does not break a streak when an aborted first run of a date was re-run', async () => {
+    await runWith('2026-09-16', ['A']);
+    await runWith('2026-09-17', null);
+    await runWith('2026-09-17-f1', ['A']);
+    const counts = await previousItemCounts(dataDir, '2026-09-18');
+    expect(counts.get('A')).to.equal(2);
+  });
+
+  it('counts only dates strictly before its own when an older date is re-run', async () => {
+    await runWith('2026-09-16', ['A']);
+    await runWith('2026-09-17', ['A']);
+    await runWith('2026-09-18', ['A']);
+    const counts = await previousItemCounts(dataDir, '2026-09-17-f1');
+    expect(counts.get('A')).to.equal(1);
+  });
+
+  it('takes the numerically last forced run as the one that speaks for its date', async () => {
+    await runWith('2026-09-17', ['A']);
+    await runWith('2026-09-17-f2', ['A']);
+    await runWith('2026-09-17-f10', ['B']);
+    const counts = await previousItemCounts(dataDir, '2026-09-18');
+    expect(counts.has('A')).to.equal(false);
+    expect(counts.get('B')).to.equal(1);
+  });
+
+  it('ends the streak at a date that shares no item with it', async () => {
+    await runWith('2026-09-15', ['A']);
+    await runWith('2026-09-16', ['B']);
+    const counts = await previousItemCounts(dataDir, '2026-09-17');
+    expect(counts.get('B')).to.equal(1);
+    expect(counts.has('A')).to.equal(false);
   });
 
   it('lists the n most recent run ids before the current one', async () => {

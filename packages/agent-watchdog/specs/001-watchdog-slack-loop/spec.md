@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 20)
+**Status**: Draft (revision 21)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -424,7 +424,8 @@ line that shows the alert and its metric together.
 - Fetched text (forum, documentation, issues, annotations, notes, corpus items) attempts to
   instruct the agent: treated as data; no item is ever created solely on the strength of such
   text.
-- An item persists for many days: shown as "persisting N days", not re-explained daily.
+- An item persists for many days: shown as "persisting N days", not re-explained daily. N counts
+  analysed dates, so re-running one date does not raise it (FR-009, revision 21).
 - Conflicting reactions from several people: all recorded, aggregate shown.
 - Reaction removed: recorded as a retraction.
 - A hundred projects: the run completes within its time budget; projects with no candidates
@@ -568,15 +569,18 @@ Analysis
 - **FR-009**: Every flagged item MUST include: a stable identity, the project, a severity, metric
   evidence (values and windows), why it matters now, a suggested check, a structured reference to
   the dashboard view (dashboard, panel, project, window) from which the link is built, a
-  confidence, the number of days it has persisted, and the pattern card it matches if any. The
-  dashboard reference MUST be built by code from the item's metric and the window its leading
-  evidence cites, never emitted by the model: the dashboard, the panel and the window bounds are
-  all recorded by collection, so asking the model for them is asking it to compute what code
-  already holds (constitution III, revision 18). An item MAY also record that it relates to another
-  item of the same run and project, naming that item by its metric and the kind of relation, so a
-  judgement the analysis already makes in prose survives as data the roll-up and the weekly report
-  can use; code resolves the metric to that item's identity and verification rejects a metric that
-  is not another item of the same findings (revision 20).
+  confidence, the number of consecutive dates it has persisted, and the pattern card it matches if
+  any. Persistence MUST be counted by code in analysed dates, not in runs: the consecutive dates
+  immediately preceding this run's date whose ranked items contained this item, plus one, where
+  the latest run of a date is the one that speaks for it and re-runs of a single date therefore
+  count once (revision 21). The dashboard reference MUST be built by code from the item's metric
+  and the window its leading evidence cites, never emitted by the model: the dashboard, the panel
+  and the window bounds are all recorded by collection, so asking the model for them is asking it
+  to compute what code already holds (constitution III, revision 18). An item MAY also record that
+  it relates to another item of the same run and project, naming that item by its metric and the
+  kind of relation, so a judgement the analysis already makes in prose survives as data the
+  roll-up and the weekly report can use; code resolves the metric to that item's identity and
+  verification rejects a metric that is not another item of the same findings (revision 20).
 - **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
   bullet is one item or, when a project group has several flagged projects or several alerts, one
   group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
