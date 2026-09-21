@@ -227,8 +227,24 @@ documentation includes a "CHT Watchdog Dashboards & Metrics Reference" page at
 https://docs.communityhealthtoolkit.org/hosting/monitoring/dashboards/. Metric names are settled
 in R-6.
 
-**Alternatives considered**: allowing `ask_question` (rejected: synthesised answers hide which
-source said what, and the gate cannot verify a paraphrase).
+**Alternatives considered**: allowing `ask_question` (rejected: the gate cannot verify a paraphrase).
+
+**Rationale corrected (2026-09-21)**: half of the reason above was wrong, and a live call made while
+reviewing run 2026-09-20-f1 shows why. `ask_question` does not hide which source said what: it
+attaches an inline citation to each claim (`[[Metrics Reference](url)]` after the sentence it
+supports) and ends with a fourteen-entry `**Sources:**` list, every URL of which is already on this
+package's allow-list (`docs.communityhealthtoolkit.org`, `forum.communityhealthtoolkit.org`,
+`github.com/medic/`). The reason that does hold is the second one: `search_docs` hands the model the
+section text itself, so the run record holds the words the item's prose is grounded in, while
+`ask_question` hands it someone else's summary and the record holds only the summary. The gate can
+check that a cited URL was seen and resolves; it cannot check that a paraphrase is faithful to the
+page. The decision therefore stands on provenance, not on citation.
+
+**Also recorded**: the service's own documentation page
+(https://docs.communityhealthtoolkit.org/ai/mcp-servers/cht-docs-mcp-server/, read 2026-09-21)
+states a rate limit of 10 requests a minute per address and 50 a minute globally. Nothing in this
+package handles a refusal for rate, so at ninety projects a day the documentation calls need either
+a budget per run or a retry, whichever a measured run shows is necessary. Not addressed here.
 
 ## R-5. Reading the hosted watchdog through Grafana
 
@@ -610,6 +626,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-22 | With the dashboard reference built by code, a single-project run accepts pass 1 on its first attempt (`verification.pass1.json` outcome `accepted`, attempt 1) and the project's cost falls to roughly the two first attempts | Only a hosted run shows what the model does when it is no longer asked to guess the bounds |
 | S-23 | A one-project run's brief names only that project's alerts, and the next full run reports the same newness and no spurious resolution | Only consecutive hosted runs show that a filtered preview left the durable record alone |
 | S-24 | On the hosted watchdog a quiet project completes in one pass, and a project with items logs `agent.tool_usage` with no failures and no refusals | Tool contracts and pass skipping only show their worth against the real alert and metric mix |
+| S-25 | After a week of hosted runs the weekly report names at least one rule whose candidates the analysis set aside on most days, with a commonest reason, and any suggestion resting on those says so | Only a week of real runs produces enough dismissals to separate a noisy rule from a quiet week |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1197,3 +1214,54 @@ the operator's setting and this run had it at three deliberately); re-seeding a 
 session with the first pass's items and computed data so the review could run on another model
 (rejected here: it gives up the shared tool results and doubles the cached prefix, so it needs
 measuring against a run that keeps one session, which is what this revision leaves in place).
+
+## R-25. Two judgements the analysis already makes and the run then forgets
+
+**Evidence** (the run records of 2026-09-20 and 2026-09-20-f1, read on 2026-09-21).
+
+`findings.pass1.json` of 2026-09-20 carries 2 items and 27 `not_selected` entries whose reasons run
+to 2,722 characters, each naming why a computed candidate was examined and set aside: a low, noisy
+base; a near-zero previous day making a percentage meaningless; a progress counter rising because it
+is a progress counter. A grep of the tree shows the only reader outside the review pass of the same
+run is nothing at all. Meanwhile `src/calibration/report.js` builds its observations from
+`candidates.json` and attributes an outcome through `attributeOutcomes`, which maps *feedback*
+records onto item postings, so a candidate that never became an item is `unreviewed` and
+`src/calibration/suggest.js` answers `no dismissed items`. A threshold therefore only moves when a
+person reacted in Slack to a posted item, and the analysis's own daily judgement on thirty-odd
+candidates a project is discarded.
+
+The second judgement is in the prose. In 2026-09-20-f1 the analysis reported
+`rate(cht_conflict_count[24h]) * 60 * 60 * 24` and `cht_conflict_count` as two items and wrote of
+the second that it "is the standing level behind today's conflict-rate burst"; the two items cite
+overlapping candidate ids (`03485e41bd02`, `dc9dd6f9a0bd` against `ac922c77ed5a`, `153a7f454f46`)
+and both point at conflicts on the same project in the same window. The relationship is real, the
+analysis found it, and it survives only inside a sentence.
+
+**Decision**. A candidate in the last accepted pass's `not_selected` becomes a calibration
+observation of its own kind, with the reason kept. A person's verdict on the same candidate always
+decides; the analysis's dismissals are used only where no person has judged, and any suggestion that
+rests on them says so in its reason. The weekly report gains, per project and metric, what each rule
+raised, what became an item, what the analysis set aside and its commonest reasons. Nothing is
+applied: the report proposes and a person merges (FR-032). Separately an item may carry
+`relates_to`, naming a sibling by its metric and the kind of relation; code resolves the metric to
+that sibling's item id, verification rejects a metric that is not another item of the same findings
+or is the item's own, the roll-up prompt receives the relation, and the weekly report counts which
+metric pairs are reported together. The five-slot layout is untouched.
+
+**Rejected: sharing an analysis between projects.** The idea is that where many projects show the
+same numbers one analysis could serve them all, which at ninety projects a day is the largest cost
+lever left. It is rejected here on two grounds. A judgement shared live reaches every brief at once,
+so one wrong conclusion becomes ninety wrong bullets, and nothing in the run would catch it: the
+gate checks a number against the project's own computed data, not whether the reasoning transferred.
+And the sanctioned path already exists and is gated: a pattern card distilled from one project's
+outcomes is reviewed in a pull request and then matches by metric across every project (FR-036,
+`cardFor` in `src/rollup/rank.js`). The cheap and safe form of the idea, analysing one representative
+of a cluster and naming the others, is a consolidation story of its own, closer to the programme-wide
+alert rule of FR-078 than to a new sharing mechanism, and it should be measured against a full
+ninety-project run before it is built.
+
+**Also considered**: weighting a dismissal by the confidence the analysis stated (rejected for now:
+confidence is never scored against what happened, so its weight is unknown, and scoring it is its
+own piece of work); and letting the analysis name a relation by item id (rejected: identities are
+derived by code from the project, metric and card, so the analysis cannot know them, which is why
+the metric is the handle).

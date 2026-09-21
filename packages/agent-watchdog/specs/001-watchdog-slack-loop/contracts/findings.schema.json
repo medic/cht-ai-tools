@@ -115,6 +115,36 @@
         "suggested_check": {
           "type": "string"
         },
+        "relates_to": {
+          "description": "Optional. Another item of these findings that this one relates to, named by that item's metric because identities are derived by code. level_of and rate_of are two views of one quantity; same_cause and consequence_of are causal claims. The gate rejects a metric that is not another item here.",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "type": "string"
+                },
+                "relation": {
+                  "type": "string",
+                  "enum": [
+                    "level_of",
+                    "rate_of",
+                    "same_cause",
+                    "consequence_of"
+                  ]
+                }
+              },
+              "required": [
+                "metric",
+                "relation"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "confidence": {
           "type": "number",
           "description": "0 to 1; range checked by the gate, not the schema."

@@ -55,4 +55,5 @@ bounded; prefer a few targeted calls.
 Respond only with the structured findings object that matches the schema you were given. Keep
 `why_now` and `suggested_check` short, concrete and specific to the metric and project. Record in
 `not_selected` every candidate you examined and chose not to surface, with a written reason where its severity
-floor is medium or high and the id alone where it is low.
+floor is medium or high and the id alone where it is low. Those reasons are read: they become threshold evidence in
+the weekly calibration report, ranked below a person's own verdict.

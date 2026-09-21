@@ -4,9 +4,11 @@ const { findingsSchema } = require('../agent/output-schema');
 const { itemId } = require('../model/identity');
 const { buildItemLinks } = require('../links/build');
 const { dashboardRefFor } = require('../links/dashboard-ref');
+const { sameMetric } = require('./metric-key');
 
 const CHECK_NAMES = [
-  'schema', 'projects_known', 'metrics_known', 'candidates_known', 'numbers_match', 'dates_match', 'links_built',
+  'schema', 'projects_known', 'metrics_known', 'candidates_known', 'numbers_match', 'dates_match', 'relates_to',
+  'links_built',
   'links_allowlisted', 'links_resolve', 'severity_rules', 'bullet_count', 'bullet_length', 'secrets_absent',
   'personal_data_absent', 'pattern_cards_known',
 ];
@@ -31,6 +33,24 @@ const validateAttempt = (attempt) => {
  * all derived by code (FR-009). `windows` are the run's collected windows: the reference comes from them, never
  * from the model, which no longer emits one (revision 18).
  */
+/** The sibling's identity for a relation the analysis named by metric; null when it named none or names a stranger. */
+const resolveRelation = (item, findings, project) => {
+  const relation = item.relates_to;
+  if (!relation || !relation.metric) {
+    return null;
+  }
+  const sibling = (findings.items || [])
+    .find((other) => other !== item && sameMetric((other.item_key || {}).metric, relation.metric));
+  if (!sibling) {
+    return null;
+  }
+  return {
+    item_id: itemId(project.url, sibling.item_key.metric, sibling.item_key.pattern_card),
+    metric: sibling.item_key.metric,
+    relation: relation.relation,
+  };
+};
+
 const normaliseItems = (findings, project, windows = [], discovery = null) => (findings.items || []).map((item) => ({
   item_id: itemId(project.url, item.item_key.metric, item.item_key.pattern_card),
   project_url: project.url,
@@ -39,6 +59,7 @@ const normaliseItems = (findings, project, windows = [], discovery = null) => (f
   evidence: item.evidence,
   why_now: item.why_now,
   suggested_check: item.suggested_check,
+  relates_to: resolveRelation(item, findings, project),
   dashboard_ref: dashboardRefFor({
     windows, discovery, projectUrl: project.url, metric: item.item_key.metric, evidence: item.evidence,
   }),

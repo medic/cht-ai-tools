@@ -102,3 +102,50 @@ describe('calibration/suggest', () => {
     });
   });
 });
+
+describe("calibration/suggest: the analysis's own dismissals (FR-014a, revision 20)", () => {
+  const { suggestThreshold } = require('../../src/calibration/suggest');
+  const obs = (observed, outcome) => ({ candidate_id: `c${observed}`, observed, outcome });
+
+  it('rests a suggestion on them when nobody judged, and says so', () => {
+    // Six candidates the analysis set aside, all far under the threshold, and no human verdict anywhere.
+    const observations = [10, 12, 15, 18, 20, 22].map((v) => obs(v, 'model_dismissed'));
+    const out = suggestThreshold({ current: 50, observations, dailyValues: [] });
+    expect(out.suggested).to.equal(25);
+    expect(out.reason).to.include("the analysis's own dismissals");
+    // The existing tolerance still applies: a suggestion within a tenth of the current value is not worth making.
+    const near = [44, 45, 46].map((v) => obs(v, 'model_dismissed'));
+    expect(suggestThreshold({ current: 50, observations: near, dailyValues: [] }).reason)
+      .to.equal('within tolerance');
+  });
+
+  it("never mixes them with a person's verdicts: a human dismissal decides alone", () => {
+    const human = [obs(60, 'dismissed'), obs(62, 'dismissed'), obs(200, 'confirmed')];
+    const mixed = [...human, obs(400, 'model_dismissed'), obs(410, 'model_dismissed')];
+    const humanOnly = suggestThreshold({ current: 50, observations: human, dailyValues: [] });
+    const withModel = suggestThreshold({ current: 50, observations: mixed, dailyValues: [] });
+    expect(withModel.suggested).to.equal(humanOnly.suggested);
+    expect(withModel.reason).to.equal(humanOnly.reason);
+    expect(withModel.reason).to.not.include('analysis');
+  });
+
+  it("does not let them override a person's confirmation of the same candidate", () => {
+    // The analysis set it aside; a person later confirmed it. The person wins, so nothing is raised past it.
+    const observations = [
+      { candidate_id: 'shared', observed: 120, outcome: 'confirmed' },
+      { candidate_id: 'other', observed: 30, outcome: 'model_dismissed' },
+      { candidate_id: 'other2', observed: 32, outcome: 'model_dismissed' },
+      { candidate_id: 'other3', observed: 35, outcome: 'model_dismissed' },
+      { candidate_id: 'other4', observed: 38, outcome: 'model_dismissed' },
+      { candidate_id: 'other5', observed: 40, outcome: 'model_dismissed' },
+    ];
+    const out = suggestThreshold({ current: 50, observations, dailyValues: [] });
+    expect(out.suggested === null || out.suggested <= 120).to.equal(true);
+  });
+
+  it('still answers no dismissed items when the analysis set nothing aside either', () => {
+    const observations = [obs(80, 'unreviewed'), obs(90, 'unreviewed'), obs(95, 'confirmed')];
+    expect(suggestThreshold({ current: 50, observations, dailyValues: [] }).reason)
+      .to.equal('no dismissed items');
+  });
+});

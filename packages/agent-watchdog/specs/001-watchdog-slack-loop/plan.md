@@ -452,3 +452,29 @@ expensive, and it showed three separable problems (research.md R-24).
   it would cost the shared session FR-057 requires.
 - **VIII**: one audience. A brief that names projects the run never looked at is the audience rule
   failing in practice, and this is the fix. Result: PASS.
+
+### Revision 20 delta: the analysis's own judgements become data (FR-009, FR-014a, FR-058)
+
+Planned on 2026-09-21 after reading what the converged runs already record and never use
+(research.md R-25). Both deltas take a judgement the analysis already makes and keep it, rather
+than asking it for anything new.
+
+- **I**: no new dependency. One pure module for the selection summary; the relation is a field.
+- **II**: tests first: the dismissal evidence and its ranking below a human verdict, the report's
+  per-rule counts and commonest reasons, the relation resolved from a metric to an item identity,
+  and verification rejecting a metric that is not a sibling item.
+- **III**: the arithmetic stays code's. A dismissal is an input datum and a relation is a claim;
+  the counting, the ranking and the resolution from metric to identity are all deterministic, and
+  nothing is proposed automatically (FR-032).
+- **IV**: nothing new is collected. `not_selected` and the relation both live in files the run
+  already writes, and the weekly report is the only new reader.
+- **V**: no new stage. The calibration command gains a reader; the gate gains a check.
+- **VI**: unchanged. The report proposes and a person decides, and a dismissal by the analysis is
+  explicitly ranked below a dismissal by a person.
+- **VII**: the findings schema and the prompts change by pull request with their tests.
+- **VIII**: unchanged. The relation is within one project's items, so nothing crosses an audience.
+  Result: PASS.
+
+Deliberately not planned: analysing one project and reusing the conclusion on others. A shared
+judgement reaches every brief at once, and the reviewed pattern card already carries a lesson from
+one project to all of them with a person in the loop (research.md R-25, Rejected).

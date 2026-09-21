@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 19)
+**Status**: Draft (revision 20)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -153,6 +153,11 @@ and pattern-level, and that no prompt, skill or threshold file changed.
    calibration runs, **Then** any threshold suggestion states the current value, the proposed
    value, the observed distribution of changes that justifies it, and the effect it would have
    had on the last thirty days of items, including which confirmed items it would have kept.
+5. **Given** a rule that raises candidates the analysis examines and sets aside day after day,
+   and no human has judged them, **When** the weekly calibration runs, **Then** the report states
+   how many candidates each rule raised, how many became items, how many the analysis set aside
+   and its commonest reasons, and any threshold suggestion drawn from those says so; a human
+   verdict on the same candidate always outranks the analysis's own (revision 20).
 
 ### User Story 5 - New projects and readiness (Priority: P3)
 
@@ -518,6 +523,19 @@ line that shows the alert and its metric together.
   (FR-018, revision 19).
 - A quiet project's first pass is accepted with no items: no review pass runs, and the run records
   one pass rather than an unchanged second (FR-057, revision 19).
+- A rule raises the same candidate every day and the analysis sets it aside every day, with nobody
+  reacting in Slack: the weekly report counts those dismissals, names the commonest reason and may
+  rest a threshold suggestion on them, saying that it did (FR-014a, revision 20).
+- A person confirmed a candidate the analysis had set aside, or dismissed one it had surfaced: the
+  person's verdict is the one that counts, and the analysis's own is not mixed in with it
+  (FR-014a, revision 20).
+- The analysis names a relation to a metric that is not another item of the same findings, or names
+  its own metric: verification rejects it, and the item stands or falls on its own evidence
+  (FR-009, revision 20).
+- Two items of a run relate to each other, a level and the rate of change of the same thing: both
+  are still ranked and posted as themselves; the relation is recorded, given to the roll-up and
+  counted in the weekly report, and it does not change the five bullets (FR-009, FR-069,
+  revision 20).
 
 ## Requirements *(mandatory)*
 
@@ -554,7 +572,11 @@ Analysis
   dashboard reference MUST be built by code from the item's metric and the window its leading
   evidence cites, never emitted by the model: the dashboard, the panel and the window bounds are
   all recorded by collection, so asking the model for them is asking it to compute what code
-  already holds (constitution III, revision 18).
+  already holds (constitution III, revision 18). An item MAY also record that it relates to another
+  item of the same run and project, naming that item by its metric and the kind of relation, so a
+  judgement the analysis already makes in prose survives as data the roll-up and the weekly report
+  can use; code resolves the metric to that item's identity and verification rejects a metric that
+  is not another item of the same findings (revision 20).
 - **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
   bullet is one item or, when a project group has several flagged projects or several alerts, one
   group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
@@ -563,6 +585,11 @@ Analysis
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
   reaching a bound the run completes with what it has and says so.
 - **FR-013**: A project with no candidate items MUST NOT incur model usage.
+- **FR-014a**: A candidate the analysis examined and did not surface, with the reason it gave,
+  MUST be usable as threshold evidence in the weekly calibration report, ranking below a human
+  verdict: where a person has judged the same candidate that verdict decides, and a suggestion
+  resting on the analysis's own dismissals MUST say so. The system MUST still propose rather than
+  change (FR-032). Added in revision 20.
 - **FR-014**: Severity levels and candidate thresholds MUST be configurable globally and per
   project. The system MUST NOT change them itself. It MUST compute, per project and metric, the
   observed distribution of changes and the confirmed and dismissed rate of past items, and MUST
@@ -597,7 +624,9 @@ Analysis passes
   and the weekly calibration report MUST state how often later passes changed the outcome, so
   the pass count can be tuned on evidence. The record MUST also make a pass that the gate never
   accepted visible as such, since its items are discarded and the pass contributes nothing
-  (revision 18).
+  (revision 18). The weekly report MUST state, per project and metric, how many candidates were
+  raised, how many became items and how many the analysis set aside with its commonest reasons, so
+  a rule that raises noise every day is visible without reading a run (revision 20).
 
 Verification gate
 
@@ -1193,6 +1222,16 @@ Configuration
   passes on a cheaper model was dropped on inspection: both engines bind the model when the session
   opens, so it would cost the shared session FR-057 requires, and that trade needs its own decision
   (FR-016, FR-018, FR-051, FR-057, FR-066, revision 19).
+- Q: The analysis records which candidates it set aside and why, and it decides in prose that one
+  item explains another. Should either be kept and mined, and should projects seeing the same
+  numbers share an analysis? → A: Keep and use both, and do not share analyses. The dismissals
+  become threshold evidence in the weekly report, ranked below a human verdict and never proposing
+  by themselves, and the report states what each rule raised, what became an item and what was set
+  aside with its reasons. The relation between two items is recorded as data, named by metric and
+  resolved by code, given to the roll-up and counted in the report, without changing the five
+  bullets. Analysing one project and reusing the conclusion on others was rejected: one wrong
+  judgement would reach every project at once, and the reviewed pattern card already carries a
+  lesson from one project to all of them under human review (FR-009, FR-014a, FR-058, revision 20).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

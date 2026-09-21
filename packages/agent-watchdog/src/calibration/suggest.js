@@ -91,8 +91,14 @@ const suggestThreshold = ({ current, observations = [], dailyValues = [] }) => {
   if (obs.length < MIN_OBSERVATIONS && daily.length < MIN_DAYS) {
     return done(null, 'insufficient data');
   }
-  const dismissed = obs.filter((o) => o.outcome === 'dismissed');
   const confirmed = obs.filter((o) => o.outcome === 'confirmed');
+  // A person's dismissal decides. Where nobody judged, the candidates the analysis examined and set aside are
+  // evidence of their own, and a suggestion resting on them says so (FR-014a, revision 20).
+  const byPerson = obs.filter((o) => o.outcome === 'dismissed');
+  const byAnalysis = obs.filter((o) => o.outcome === 'model_dismissed');
+  const dismissed = byPerson.length ? byPerson : byAnalysis;
+  const fromAnalysis = !byPerson.length && byAnalysis.length > 0;
+  const say = (text) => (fromAnalysis ? `${text}, from the analysis's own dismissals` : text);
   let candidate = null;
   let reason = null;
   if (dismissed.length) {
@@ -101,10 +107,10 @@ const suggestThreshold = ({ current, observations = [], dailyValues = [] }) => {
     const separator = Math.floor(maxDismissed / STEP) * STEP + STEP;
     if (minConfirmed > maxDismissed && separator <= minConfirmed) {
       candidate = separator;
-      reason = 'separates dismissed from confirmed items';
+      reason = say('separates dismissed from confirmed items');
     } else {
       candidate = bestByEvaluation({ current, dismissed, confirmed, daily, observed: obs.map((o) => o.observed) });
-      reason = candidate === null ? 'no improving threshold' : 'best trade-off where outcomes overlap';
+      reason = candidate === null ? 'no improving threshold' : say('best trade-off where outcomes overlap');
     }
   } else if (daily.length && daily.filter((v) => v >= current).length / daily.length > NOISY_SHARE) {
     candidate = roundUpToFive(percentile(daily, 90));

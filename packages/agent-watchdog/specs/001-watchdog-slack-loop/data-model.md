@@ -272,6 +272,7 @@ accepted or rejected by the gate.
 | `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
 | `why_now` | string | Prose; escaped on render. |
 | `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
+| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). |
 | `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
 | `persisting_days` | integer | Consecutive prior runs whose accepted items contained this `item_id`, plus one. Set by code (Edge Cases). |
@@ -502,8 +503,9 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 | Field | Type | Rules |
 |---|---|---|
 | `week` | string | ISO week `YYYY-Www`. |
-| `entries` | Entry[] | Per `project_url` and `metric`: `distribution` (percentiles of daily percentage change and deviation), `outcomes` `{ confirmed, dismissed, unreviewed }`, `current_threshold`, `suggested_threshold`, `effect_last_30d` `{ items_kept, items_dropped, confirmed_kept }`. |
+| `entries` | Entry[] | Per `project_url` and `metric`: `distribution` (percentiles of daily percentage change and deviation), `outcomes` `{ confirmed, dismissed, unreviewed, model_dismissed }`, `selection` `{ raised, became_items, set_aside, reasons: [{ reason, count }] }` (FR-014a, FR-058, revision 20), `current_threshold`, `suggested_threshold`, `effect_last_30d` `{ items_kept, items_dropped, confirmed_kept }`. A suggestion resting on the analysis's own dismissals says so in its reason; a person's verdict on the same candidate outranks it. |
 | `pass_change_rate` | number | Share of projects where a later pass changed the outcome (FR-058). |
+| `related_metric_pairs` | object[] | `{ metrics: [a, b], relation, count }`, commonest first: the metric pairs the analysis reported as related, unordered within a pair (FR-009, revision 20). |
 | `proposals` | string[] | Threshold proposal ids written from this report. |
 | `open_proposals` | object[] | Every proposal still `proposed`, as `{ proposal_id, type, age_days }`, so the weekly report is the one reminder of what awaits review (FR-063). |
 | `feedback_rate` | object | `{ window_days: 60, overall, by_month: [{ month, rate, items }] }`, computed from `corpus/outcomes/`, which outlive run-record retention (SC-002). |

@@ -107,6 +107,8 @@ const itemForPrompt = (item) => ({
   evidence: item.evidence,
   why_now: item.why_now,
   suggested_check: item.suggested_check,
+  // The sibling this item relates to, as the analysis judged it, so a bullet can say so (FR-009, revision 20).
+  relates_to: item.relates_to || null,
 });
 
 const buildUserPrompt = ({

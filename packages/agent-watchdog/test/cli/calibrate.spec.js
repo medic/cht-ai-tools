@@ -127,6 +127,8 @@ describe('cli/commands/calibrate', function () {
     expect(proposal.evidence[0].outcomes).to.deep.equal({
       confirmed: history.expected.confirmed, dismissed: history.expected.dismissed,
       unreviewed: history.expected.unreviewed,
+      // This history has no dismissals by the analysis itself (revision 20).
+      model_dismissed: 0,
     });
     expect(proposal.evidence[0].window).to.deep.equal({ from: '2026-08-20', to: '2026-09-18' });
   });

@@ -91,9 +91,14 @@ const collectObservations = async ({ dataDir, from, to, projectFilter = null }) 
           entry.dev.push(Math.abs(change.deviation_sigma));
         }
       }
+      // What the analysis set aside, from the last pass the gate accepted (FR-014a, revision 20).
+      const setAside = runDir.exists(`${slug}/passes.json`)
+        ? setAsideFrom(asArray(await runDir.readJson(`${slug}/passes.json`), 'passes'))
+        : new Map();
       for (const candidate of await readIfExists(runDir, `${slug}/candidates.json`, 'candidates')) {
         seriesFor(project, candidate.metric).candidates.push({
           candidate_id: candidate.candidate_id, rule: candidate.rule, observed: candidate.observed, run_id: id,
+          set_aside: setAside.get(candidate.candidate_id) || null,
         });
       }
       const findings = lastFindingsFile(runDir, slug);
@@ -101,7 +106,7 @@ const collectObservations = async ({ dataDir, from, to, projectFilter = null }) 
       for (const item of items) {
         seriesFor(project, item.metric).items.push({
           item_id: item.item_id, run_id: id, date: run.date, candidate_ids: item.candidate_ids || [],
-          severity: item.severity,
+          severity: item.severity, relates_to: item.relates_to || null,
         });
       }
       if (runDir.exists(`${slug}/passes.json`)) {
@@ -180,6 +185,42 @@ const feedbackRateOf = (records, windowDays) => {
   };
 };
 
+/**
+ * The dismissals of the last pass the gate accepted, as candidate id to reason (true where a low severity floor
+ * needed no written reason). A pass the gate rejected decided nothing, so its list is not read (FR-014a).
+ */
+const setAsideFrom = (passes) => {
+  const accepted = (passes || []).filter((p) => p && p.gate && p.gate.outcome === 'accepted');
+  const last = accepted[accepted.length - 1];
+  const out = new Map();
+  for (const entry of (last && last.not_selected) || []) {
+    if (entry && entry.candidate_id) {
+      out.set(entry.candidate_id, entry.reason || true);
+    }
+  }
+  return out;
+};
+
+/** What a rule raised for one metric, what became items and what the analysis set aside, commonest reason first. */
+const selectionSummary = (candidates, items) => {
+  const referenced = new Set((items || []).flatMap((item) => item.candidate_ids || []));
+  const list = candidates || [];
+  const counts = new Map();
+  for (const candidate of list) {
+    if (candidate.set_aside && typeof candidate.set_aside === 'string') {
+      counts.set(candidate.set_aside, (counts.get(candidate.set_aside) || 0) + 1);
+    }
+  }
+  return {
+    raised: list.length,
+    became_items: list.filter((c) => referenced.has(c.candidate_id)).length,
+    set_aside: list.filter((c) => c.set_aside).length,
+    reasons: [...counts.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
+  };
+};
+
 const entryFor = ({ series: s, policy, outcomesByItem }) => {
   const annotations = policy.projects.projects;
   const annotation = annotations[s.host] || annotations[normaliseHost(s.project_url)] || null;
@@ -188,15 +229,35 @@ const entryFor = ({ series: s, policy, outcomesByItem }) => {
   const current = rules.pct_change_vs_previous_day;
   const pctByCandidate = new Map(s.candidates.filter((c) => c.rule === 'pct_change')
     .map((c) => [c.candidate_id, Math.abs(c.observed)]));
-  const outcomes = { confirmed: 0, dismissed: 0, unreviewed: 0 };
+  const outcomes = { confirmed: 0, dismissed: 0, unreviewed: 0, model_dismissed: 0 };
   const observations = [];
   const outcomeFor = attributeOutcomes(s.items, outcomesByItem);
+  const judgedByPerson = new Set();
   for (const item of s.items) {
     const outcome = outcomeFor(item);
     outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+    if (outcome === 'confirmed' || outcome === 'dismissed') {
+      for (const id of item.candidate_ids) {
+        judgedByPerson.add(id);
+      }
+    }
     const observed = item.candidate_ids.filter((id) => pctByCandidate.has(id)).map((id) => pctByCandidate.get(id));
     if (observed.length) {
       observations.push({ item_id: item.item_id, observed: Math.max(...observed), outcome });
+    }
+  }
+  // A candidate the analysis set aside is evidence of its own, unless a person has judged it (FR-014a).
+  for (const candidate of s.candidates) {
+    if (!candidate.set_aside || judgedByPerson.has(candidate.candidate_id)) {
+      continue;
+    }
+    outcomes.model_dismissed += 1;
+    if (pctByCandidate.has(candidate.candidate_id)) {
+      observations.push({
+        candidate_id: candidate.candidate_id,
+        observed: pctByCandidate.get(candidate.candidate_id),
+        outcome: 'model_dismissed',
+      });
     }
   }
   const suggestion = suggestThreshold({ current, observations, dailyValues: s.pct });
@@ -205,10 +266,36 @@ const entryFor = ({ series: s, policy, outcomesByItem }) => {
     metric: s.metric,
     distribution: distributionOf(s.pct, s.dev),
     outcomes,
+    selection: selectionSummary(s.candidates, s.items),
     current_threshold: current,
     suggested_threshold: suggestion.suggested,
     effect_last_30d: suggestion.effect,
   };
+};
+
+/**
+ * Metric pairs the analysis reported as related, commonest first (FR-009, revision 20). A pair is unordered: the
+ * level and the rate of one quantity are the same pair whichever of them named the other.
+ */
+const relatedPairs = (series) => {
+  const counts = new Map();
+  for (const s of series) {
+    for (const item of s.items) {
+      if (!item.relates_to || !item.relates_to.metric) {
+        continue;
+      }
+      const pair = [s.metric, item.relates_to.metric].sort();
+      const key = `${pair[0]}\u0000${pair[1]}${item.relates_to.relation}`;
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, { metrics: pair, relation: item.relates_to.relation, count: 1 });
+      }
+    }
+  }
+  return [...counts.values()]
+    .sort((a, b) => b.count - a.count || a.metrics[0].localeCompare(b.metrics[0]));
 };
 
 const passChangeRate = (runs) => {
@@ -277,6 +364,7 @@ const buildCalibrationReport = async ({
     week,
     entries,
     pass_change_rate: passChangeRate(runs),
+    related_metric_pairs: relatedPairs([...series.values()]),
     feedback_rate: feedbackRateOf(filteredFeedback, feedbackWindowDays),
     proposals: [],
     open_proposals: await openProposalsFor(dataDir, now),
@@ -287,4 +375,5 @@ module.exports = {
   buildCalibrationReport, collectObservations, reportWindow, distributionOf, feedbackRateOf, passChangeRate,
   openProposalsFor,
   WINDOW_DAYS, FEEDBACK_WINDOW_DAYS, OUTCOME_LAG_DAYS,
+  selectionSummary, setAsideFrom,
 };

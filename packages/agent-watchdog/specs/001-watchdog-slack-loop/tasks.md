@@ -485,6 +485,18 @@ its first tool call was refused for a metric it went on to publish, and a third 
 - [X] T205 A date excluded from the phone pattern in `src/verify/patterns.js`; findings in recorded tool results counted apart in `src/verify/scan.js` and reported as their own count by `src/cli/commands/run.js`; `agent.tool_usage` per project and per run from `src/agent/session-loop.js` and `src/cli/stages/agent.js`
 - [X] T206 A written `not_selected` reason only at a medium or high severity floor in `prompts/pass-first.md`, `prompts/system.md` and the schema in `src/agent/output-schema.js` (regenerated into `schema/` and `contracts/findings.schema.json`); no review pass after an accepted pass with no items in `src/agent/session-loop.js`; plan revision 19 delta, research R-24 with the dropped review-model lever, and smoke S-23, S-24
 
+## Phase 24: The analysis's own judgements become data (revision 20, 2026-09-21)
+
+**Purpose**: Each converged run writes thirty-odd reasons for setting a candidate aside and decides in prose that one
+item explains another, and the run then forgets both. A threshold only moves when a person reacted in Slack
+(research.md R-25). Cross-project sharing of an analysis is recorded there as rejected and is not in this phase.
+
+- [X] T207 [P] [US4] Tests first: `test/calibration/report.spec.js` (the last accepted pass's `not_selected` becomes `model_dismissed` observations with their reasons; a person's verdict on the same candidate wins; the entry's `selection` counts `raised`, `became_items`, `set_aside` and the commonest `reasons`), `test/calibration/suggest.spec.js` (a suggestion may rest on the analysis's own dismissals only where no person judged, and its reason says so; human dismissals alone behave exactly as before), `test/verify/checks/relates_to.spec.js` (a metric that is another item of the same findings passes; the item's own metric, an unknown metric and an unknown relation fail), `test/verify/gate.spec.js` (`relates_to` resolved from the sibling's metric to its item id, or null when the analysis named none), `test/agent/prompt-assembly.spec.js` (the roll-up prompt carries the relation), `test/model/schemas.spec.js` and `test/agent/structured-output-schema.spec.js` (the field and its four relations)
+- [X] T208 [US4] `model_dismissed` observations and the `selection` summary in `src/calibration/report.js`, read from the last accepted `findings.pass<n>.json` of each project; the ranking and the stated reason in `src/calibration/suggest.js`; the report shape in `data-model.md`
+- [X] T209 [US4] `relates_to` on the model's item in `src/agent/output-schema.js` (sibling `metric` plus `relation` of `level_of`, `rate_of`, `same_cause` or `consequence_of`), regenerated into `schema/` by `scripts/build-schema.js` and copied to `contracts/findings.schema.json`; the resolved `{ item_id, metric, relation }` on the Item in `src/model/schemas.js`; resolution from metric to identity in `src/verify/gate.js`
+- [X] T210 [US4] The `relates_to` gate check in `src/verify/checks/relates_to.js`, registered in `CHECK_NAMES` in `src/verify/gate.js`: the named metric must be another item of the same findings and never the item's own, and the relation must be one of the four
+- [X] T211 [US4] The relation into the roll-up prompt in `src/agent/prompt-assembly.js` and the instruction in `prompts/pass-first.md` and `prompts/system.md`; metric pairs counted in `src/calibration/report.js`; spec FR-009, FR-014a, FR-058 and User Story 4 scenario 5 (revision 20), plan revision 20 delta, research R-25 and smoke S-25
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

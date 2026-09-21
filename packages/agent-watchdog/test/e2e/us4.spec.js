@@ -196,7 +196,10 @@ describe('e2e: User Story 4, self-improvement under review', function () {
     expect(entry.distribution).to.include.keys(['days', 'pct_p50', 'pct_p95', 'pct_max', 'dev_p50', 'dev_max']);
     expect(entry.outcomes).to.deep.equal({
       confirmed: expected.confirmed, dismissed: expected.dismissed, unreviewed: expected.unreviewed,
+      model_dismissed: 0,
     });
+    // Every candidate this history raised became an item, so nothing was set aside (FR-058, revision 20).
+    expect(entry.selection).to.include({ set_aside: 0, became_items: entry.selection.raised });
     expect(entry.effect_last_30d).to.deep.equal({
       items_kept: expected.itemsKeptAt(80),
       items_dropped: expected.sessions - expected.itemsKeptAt(80),

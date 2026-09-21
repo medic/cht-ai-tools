@@ -9,6 +9,9 @@ const SCHEMA_BASE = 'https://github.com/medic/cht-ai-tools/packages/agent-watchd
 const TEXT = {
   referenceUrls: 'Each must have appeared in a tool result during this run and be on the host allow-list.',
   changes: 'Empty on pass 1. Later passes record every addition, removal or change with a reason (FR-056).',
+  relatesTo: 'Optional. Another item of these findings that this one relates to, named by that item\'s metric '
+    + 'because identities are derived by code. level_of and rate_of are two views of one quantity; same_cause and '
+    + 'consequence_of are causal claims. The gate rejects a metric that is not another item here.',
   notSelectedReason: 'Required where the candidate\'s severity floor is medium or high; omit it for a low floor, '
     + 'where the id alone records that the candidate was examined.',
   findings: 'Structured output of an analysis pass. Identity, links and persistence are derived by code; '
@@ -45,6 +48,10 @@ const item = z.object({
   evidence: z.array(evidence),
   why_now: z.string(),
   suggested_check: z.string(),
+  relates_to: z.object({
+    metric: z.string(),
+    relation: z.enum(['level_of', 'rate_of', 'same_cause', 'consequence_of']),
+  }).strict().nullable().optional().describe(TEXT.relatesTo),
   confidence: z.number().describe('0 to 1; range checked by the gate, not the schema.'),
   candidate_ids: z.array(z.string()),
   reference_urls: z.array(z.string()).describe(TEXT.referenceUrls),

@@ -231,6 +231,12 @@ const Item = z.object({
   evidence: z.array(Evidence),
   why_now: z.string(),
   suggested_check: z.string(),
+  // The sibling item this one relates to, resolved from the metric the analysis named (FR-009, revision 20).
+  relates_to: z.object({
+    item_id: hex12,
+    metric: z.string(),
+    relation: z.enum(['level_of', 'rate_of', 'same_cause', 'consequence_of']),
+  }).strict().nullable().default(null),
   dashboard_ref: DashboardRef,
   confidence: z.number().min(0).max(1),
   persisting_days: z.number().int().min(1),
@@ -507,6 +513,15 @@ const CalibrationReport = z.object({
       confirmed: z.number().int(),
       dismissed: z.number().int(),
       unreviewed: z.number().int(),
+      // Candidates the analysis examined and set aside that no person has judged (FR-014a, revision 20).
+      model_dismissed: z.number().int(),
+    }).strict(),
+    // What the rule raised for this metric and what became of it, so a rule that raises noise daily is visible.
+    selection: z.object({
+      raised: z.number().int(),
+      became_items: z.number().int(),
+      set_aside: z.number().int(),
+      reasons: z.array(z.object({ reason: z.string(), count: z.number().int() }).strict()),
     }).strict(),
     current_threshold: z.number().nullable(),
     suggested_threshold: z.number().nullable(),
@@ -517,6 +532,12 @@ const CalibrationReport = z.object({
     }).strict(),
   }).strict()),
   pass_change_rate: z.number().min(0).max(1),
+  // Metric pairs the analysis reported as related, commonest first (FR-009, revision 20).
+  related_metric_pairs: z.array(z.object({
+    metrics: z.array(z.string()).length(2),
+    relation: z.enum(['level_of', 'rate_of', 'same_cause', 'consequence_of']),
+    count: z.number().int(),
+  }).strict()),
   feedback_rate: z.object({
     window_days: z.number().int(),
     overall: z.number().nullable(),

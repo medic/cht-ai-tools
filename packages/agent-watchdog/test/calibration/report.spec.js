@@ -65,7 +65,11 @@ describe('calibration/report', function () {
 
     it('counts confirmed, dismissed and unreviewed items from the corpus outcomes', () => {
       const { confirmed, dismissed, unreviewed } = history.expected;
-      expect(report.entries[0].outcomes).to.deep.equal({ confirmed, dismissed, unreviewed });
+      // This history has no dismissals by the analysis: every candidate it raised became an item (revision 20).
+      expect(report.entries[0].outcomes).to.deep.equal({ confirmed, dismissed, unreviewed, model_dismissed: 0 });
+      expect(report.entries[0].selection).to.include({ set_aside: 0 });
+      expect(report.entries[0].selection.raised).to.be.greaterThan(0);
+      expect(report.entries[0].selection.reasons).to.deep.equal([]);
     });
 
     it('takes the current threshold from the policy and suggests the value that keeps every confirmed item', () => {
@@ -212,5 +216,54 @@ describe('calibration/report: open proposals (FR-063)', () => {
       { proposal_id: '2026-09-18-skill-older-lesson', type: 'skill', age_days: 0 },
     ]);
     expect(await openProposalsFor(tempDir(), new Date())).to.deep.equal([]);
+  });
+});
+
+describe('calibration/report: what each rule raised and what the analysis set aside (FR-058, revision 20)', () => {
+  const { selectionSummary, setAsideFrom } = require('../../src/calibration/report');
+
+  it('counts what was raised, what became items and what the analysis set aside, commonest reason first', () => {
+    const candidates = [
+      { candidate_id: 'a', set_aside: 'off a low, noisy base' },
+      { candidate_id: 'b', set_aside: 'off a low, noisy base' },
+      { candidate_id: 'c', set_aside: 'a progress counter rising is normal' },
+      { candidate_id: 'd' },
+      { candidate_id: 'e' },
+    ];
+    const items = [{ candidate_ids: ['d', 'e'] }];
+    expect(selectionSummary(candidates, items)).to.deep.equal({
+      raised: 5,
+      became_items: 2,
+      set_aside: 3,
+      reasons: [
+        { reason: 'off a low, noisy base', count: 2 },
+        { reason: 'a progress counter rising is normal', count: 1 },
+      ],
+    });
+  });
+
+  it('counts a candidate set aside without a written reason, which a low floor no longer requires', () => {
+    const summary = selectionSummary([{ candidate_id: 'a', set_aside: true }], []);
+    expect(summary).to.include({ raised: 1, became_items: 0, set_aside: 1 });
+    expect(summary.reasons).to.deep.equal([]);
+  });
+
+  it('reads the dismissals of the last pass the gate accepted, not of a pass it rejected', () => {
+    const accepted = {
+      gate: { outcome: 'accepted' },
+      not_selected: [{ candidate_id: 'a', reason: 'noise' }, { candidate_id: 'b' }],
+    };
+    const rejected = { gate: { outcome: 'rejected' }, not_selected: [{ candidate_id: 'z', reason: 'never' }] };
+    // Passes are given newest last, as the run directory numbers them.
+    const map = setAsideFrom([accepted, rejected]);
+    expect([...map.keys()].sort()).to.deep.equal(['a', 'b']);
+    expect(map.get('a')).to.equal('noise');
+    expect(map.get('b')).to.equal(true);
+    // The later accepted pass wins over an earlier one.
+    const later = { gate: { outcome: 'accepted' }, not_selected: [{ candidate_id: 'c', reason: 'later' }] };
+    expect([...setAsideFrom([accepted, later]).keys()]).to.deep.equal(['c']);
+    // No accepted pass at all means nothing was decided, so nothing is counted.
+    expect(setAsideFrom([rejected]).size).to.equal(0);
+    expect(setAsideFrom([]).size).to.equal(0);
   });
 });

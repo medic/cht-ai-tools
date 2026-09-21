@@ -21,9 +21,9 @@ const args = (ctx, extra = {}) => ({
 describe('verify/gate', () => {
   it('exposes the fixed check list in order', () => {
     expect(CHECK_NAMES).to.deep.equal([
-      'schema', 'projects_known', 'metrics_known', 'candidates_known', 'numbers_match', 'dates_match', 'links_built',
-      'links_allowlisted', 'links_resolve', 'severity_rules', 'bullet_count', 'bullet_length', 'secrets_absent',
-      'personal_data_absent', 'pattern_cards_known',
+      'schema', 'projects_known', 'metrics_known', 'candidates_known', 'numbers_match', 'dates_match', 'relates_to',
+      'links_built', 'links_allowlisted', 'links_resolve', 'severity_rules', 'bullet_count', 'bullet_length',
+      'secrets_absent', 'personal_data_absent', 'pattern_cards_known',
     ]);
   });
 
@@ -53,6 +53,29 @@ describe('verify/gate', () => {
       expect(strayReport.outcome).to.equal('rejected');
       expect(strayReport.checks.find((c) => c.name === 'schema').reasons.join(' ')).to.include('dashboard_ref');
     });
+
+  it('resolves a relation the analysis named by metric to that sibling\'s identity (revision 20)', async () => {
+    const ctx = baseContext();
+    const [first] = ctx.findings.items;
+    const sibling = JSON.parse(JSON.stringify(first));
+    sibling.item_key = { ...sibling.item_key, metric: 'cht_outbound_push_backlog_count' };
+    ctx.findings.items = [
+      { ...first, relates_to: { metric: 'cht_outbound_push_backlog_count', relation: 'rate_of' } },
+      sibling,
+    ];
+    ctx.windows = [
+      ...ctx.windows,
+      ...ctx.windows.map((w) => ({ ...w, metric: 'cht_outbound_push_backlog_count' })),
+    ];
+    const { items } = await verifyFindings(args(ctx));
+    expect(items[0].relates_to).to.deep.equal({
+      item_id: itemId(URL, 'cht_outbound_push_backlog_count', null),
+      metric: 'cht_outbound_push_backlog_count',
+      relation: 'rate_of',
+    });
+    // The sibling names nothing, so it carries null rather than an empty object.
+    expect(items[1].relates_to).to.equal(null);
+  });
 
   it('rejects an item whose metric has no collected window, naming the item', async () => {
     const ctx = baseContext();

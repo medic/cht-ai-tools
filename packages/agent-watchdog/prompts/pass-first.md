@@ -31,6 +31,8 @@ counts uptime resets in the current window; `excluded` metrics raise no candidat
 - Emit one item per finding, each citing the candidate ids that support it.
 - Quote only computed values in `evidence`; use the metric key exactly as given.
 - Cite the window that matters first in `evidence`: the dashboard link is built from it by code.
+- Where one item is the level of another's rate, or two share a cause, say so in `relates_to` by naming the other
+  item's metric and the relation; the gate rejects a metric that is not another item of this pass.
 - List every examined candidate you did not surface in `not_selected`. Give a written reason only where its
   severity floor is medium or high; for a low floor the candidate id alone is enough.
 - Leave `changes` empty on the first pass. Set `converged` to false.
