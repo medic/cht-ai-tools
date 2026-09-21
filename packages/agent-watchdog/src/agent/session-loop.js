@@ -54,6 +54,24 @@ const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budg
  * the tools the runtime refused. A tool whose contract no longer matches what the model is told shows up here
  * instead of needing the record read.
  */
+/**
+ * True when a tool answered with its own error envelope. The watchdog tools return `{ error }` as the whole
+ * response, so that is what is read: a documentation result quoting an error payload of its own is not a failed
+ * call, and run 2026-09-20-f1 counted one because the text was searched instead (revision 19).
+ */
+const answeredError = (response) => {
+  const text = String(response === undefined || response === null ? '' : response).trim();
+  if (!text.startsWith('{')) {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return Boolean(parsed) && typeof parsed === 'object' && parsed.error !== undefined;
+  } catch {
+    return false;
+  }
+};
+
 const toolUsage = (calls, refused) => {
   const byTool = {};
   let failed = 0;
@@ -65,7 +83,7 @@ const toolUsage = (calls, refused) => {
     }
     byTool[name] = byTool[name] || { calls: 0, failed: 0 };
     byTool[name].calls += 1;
-    if (/"error"\s*:/.test(String(call.tool_response || ''))) {
+    if (answeredError(call.tool_response)) {
       byTool[name].failed += 1;
       failed += 1;
     }

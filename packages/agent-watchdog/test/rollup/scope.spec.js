@@ -117,6 +117,31 @@ describe('rollup/scope scopeClassified', () => {
   });
 });
 
+describe('rollup/scope: the brief and its replies describe the same alerts', () => {
+  const { orderedAlertGroups } = require('../../src/cli/stages/publish');
+
+  it('the publish stage reads the groups the roll-up scoped, not the whole classified record', () => {
+    // Run 2026-09-20-f1 published a bullet reading "1 firing" above a reply reading "7 firing": the roll-up had
+    // scoped its groups while publish re-derived them from the file.
+    const whole = {
+      available: true,
+      groups: [
+        { alert_key: 'MoH Nepal/messaging', firing: 7, hosts: ['a.example.org', 'b.example.org'] },
+        { alert_key: 'Other/database', firing: 1, hosts: ['c.example.org'] },
+      ],
+    };
+    const scoped = {
+      available: true,
+      groups: [{ alert_key: 'MoH Nepal/messaging', firing: 1, hosts: ['a.example.org'] }],
+    };
+    const layout = { body_alerts: ['MoH Nepal/messaging'], thread_alerts: [] };
+    // Given the scoped groups the stage wrote, the reply describes one firing alert, as the bullet does.
+    expect(orderedAlertGroups(scoped, layout).map((g) => g.firing)).to.deep.equal([1]);
+    // Given the whole record it would describe seven, which is the defect.
+    expect(orderedAlertGroups(whole, layout).map((g) => g.firing)).to.deep.equal([7]);
+  });
+});
+
 describe('rollup/scope onAnalysedHosts', () => {
   it('keeps every record when the run analysed everything, and filters by host otherwise', () => {
     const records = [{ host: 'north-a.example.org' }, { host: 'south-a.example.org' }, { host: null }];

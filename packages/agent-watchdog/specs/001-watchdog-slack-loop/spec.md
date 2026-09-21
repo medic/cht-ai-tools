@@ -713,7 +713,9 @@ Alerts and groups
   instances on projects it did not analyse are left out of the groups, the counts, the patterns and
   the notices, because the reader asked about those projects and cannot act on the rest. Collection,
   the classified alert record and the durable episodes stay whole regardless, so the next full run
-  still sees the same newness and no episode appears to have cleared (revision 19).
+  still sees the same newness and no episode appears to have cleared. A thread reply MUST describe
+  the same alerts as the bullet above it, so what the brief covered is recorded for the publish step
+  rather than derived a second time (revision 19).
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the

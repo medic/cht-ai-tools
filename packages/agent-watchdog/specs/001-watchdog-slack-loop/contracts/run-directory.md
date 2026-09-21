@@ -15,7 +15,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── feedback.ingested.json         # feedback read at start, matched and unmatched      [kept]
 │       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels, variables [kept]
 │       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
-│       ├── alerts.classified.json         # observed_at, ignored_hosts, category, importance, staleness, groups, patterns, evidence, housekeeping [kept]
+│       ├── alerts.classified.json         # observed_at, ignored_hosts, category, importance, staleness, groups, patterns, evidence, housekeeping; whole even on a filtered run [kept]
 │       ├── <project_slug>/
 │       │   ├── inputs/windows.json.gz     # Metric Windows, raw series, each with its source   [raw]
 │       │   ├── changes.json               # Computed Changes                                   [kept]
@@ -29,6 +29,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
 │       │   ├── layout.json                # body layout: slots, sub-bullets, alert bullets      [kept]
+│       │   ├── alert-groups.json          # the alert groups the brief described, in body order (FR-066) [kept]
 │       │   ├── brief.draft<n>.json        # drafts submitted to the publish gate               [kept]
 │       │   ├── verification.draft<n>.json # publish gate reports                               [kept]
 │       │   ├── brief.json                 # final Brief (brief, heartbeat, degraded, failure)  [kept]

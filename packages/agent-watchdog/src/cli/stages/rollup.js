@@ -178,6 +178,8 @@ const run = async (ctx) => {
   await runDir.writeJson('rollup/items.ranked.json', ranked);
   const layout = buildLayout(ranked, { groupOf, alertGroups });
   await runDir.writeJson('rollup/layout.json', layout);
+  // The groups the brief describes, so the thread replies cannot describe a different set (FR-066, revision 19).
+  await runDir.writeJson('rollup/alert-groups.json', alertGroups);
   logger.info('rollup.layout', {
     slots: layout.slots.map((slot) => ({
       slot: slot.slot, kind: slot.kind, group: slot.group, items: slot.item_ids.length,

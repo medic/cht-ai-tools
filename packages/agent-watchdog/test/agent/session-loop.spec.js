@@ -331,6 +331,13 @@ describe('agent/session-loop', () => {
         { tool_name: 'mcp__watchdog__get_windows', tool_input: {}, tool_response: '{"windows":[]}' },
         { tool_name: 'mcp__watchdog__get_windows', tool_input: {}, tool_response: '{"error":"unknown metric: x"}' },
         { tool_name: 'mcp__cht-docs__search_docs', tool_input: {}, tool_response: 'a doc' },
+        // A documentation result that quotes an error payload of its own is not a failed call: run 2026-09-20-f1
+        // counted the only call of the session as failed because the text was searched (revision 19).
+        {
+          tool_name: 'mcp__cht-docs__search_docs',
+          tool_input: {},
+          tool_response: 'API logs:\n```\nStatusCodeError: 503 - {"error":"503 Service Unavailable"}\n```',
+        },
         // The runtime's own output mechanism is not a tool the model reads with, so it is left out of the count.
         { tool_name: 'StructuredOutput', tool_input: {}, tool_response: 'ok' },
       ],
@@ -341,10 +348,10 @@ describe('agent/session-loop', () => {
       now: () => new Date('2026-09-18T06:00:00Z'), localTools: [], localServers: {},
     });
     const usage = lines.find((l) => l.event === 'agent.tool_usage');
-    expect(usage).to.include({ project_url: project.url, calls: 3, failed: 1, refused: 1 });
+    expect(usage).to.include({ project_url: project.url, calls: 4, failed: 1, refused: 1 });
     expect(usage.by_tool).to.deep.equal({
       'mcp__watchdog__get_windows': { calls: 2, failed: 1 },
-      'mcp__cht-docs__search_docs': { calls: 1, failed: 0 },
+      'mcp__cht-docs__search_docs': { calls: 2, failed: 0 },
     });
     expect(usage.refused_tools).to.deep.equal(['mcp__cht-docs__ask_question']);
   });

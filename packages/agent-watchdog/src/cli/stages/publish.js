@@ -113,7 +113,12 @@ const run = async (ctx) => {
 
   const classified = runDir.exists('alerts.classified.json') ? await runDir.readJson('alerts.classified.json') : null;
   const layout = runDir.exists('rollup/layout.json') ? await runDir.readJson('rollup/layout.json') : null;
-  const alertGroups = orderedAlertGroups(classified, layout);
+  // The groups the roll-up briefed, which a filtered run narrowed to the projects it analysed; re-deriving them
+  // from the classified record would describe a different set in the replies than in the bullets (revision 19).
+  const briefed = runDir.exists('rollup/alert-groups.json')
+    ? { available: true, groups: await runDir.readJson('rollup/alert-groups.json') }
+    : classified;
+  const alertGroups = orderedAlertGroups(briefed, layout);
   const grafanaUrl = ctx.config.endpoints && ctx.config.endpoints.grafanaUrl;
   const alertLinks = new Map(alertGroups
     .map((group) => [group.alert_key, grafanaUrl ? buildAlertGroupLinks({ grafanaUrl, group }) : null]));
@@ -182,4 +187,4 @@ const run = async (ctx) => {
   return { posted: true, ts: publication.ts, permalink: publication.permalink };
 };
 
-module.exports = { name, inputs, run };
+module.exports = { name, inputs, run, orderedAlertGroups };
