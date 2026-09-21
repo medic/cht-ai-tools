@@ -14,6 +14,7 @@ const { normaliseHost } = require('../../config/policy');
 const { runProjectSession } = require('../../agent/session-loop');
 const { loadPatternCards } = require('../../corpus/cards');
 const { RunDir, dataPaths } = require('../../store/run-dir');
+const { analysedDatesBefore, runDate } = require('../../rollup/history');
 const atomic = require('../../store/atomic');
 
 const name = 'agent';
@@ -56,11 +57,16 @@ const activeWindowFrom = (changes, discovery) => {
   return known || { id: change.expected_load_window_id };
 };
 
-/** Past accepted items for an identity, with the feedback they received, from earlier runs on this volume. */
+/**
+ * Past accepted items for an identity, with the feedback they received, from earlier analysed dates on this volume:
+ * one entry per date, from the last run of that date, over the most recent dates strictly before this run's own
+ * (revision 22). Earlier runs of the same date are attempts at this analysis, not history, so three forced re-runs
+ * of one date no longer read back as three days of persistence. Oldest first, as before.
+ */
 const itemHistoryFor = (dataDir, runId, slug) => async (projectUrl, metric, patternCard) => {
-  const ids = (await RunDir.list(dataDir)).filter((id) => id !== runId).slice(-HISTORY_RUNS);
+  const dated = analysedDatesBefore(await RunDir.list(dataDir), runDate(runId)).slice(0, HISTORY_RUNS).reverse();
   const history = [];
-  for (const id of ids) {
+  for (const [, id] of dated) {
     const file = path.join(dataDir, 'runs', id, slug, 'passes.json');
     if (!fs.existsSync(file)) {
       continue;

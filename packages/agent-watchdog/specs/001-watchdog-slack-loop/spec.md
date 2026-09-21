@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 21)
+**Status**: Draft (revision 22)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -507,10 +507,14 @@ line that shows the alert and its metric together.
   back to the current window, and the item is judged on its evidence as usual (FR-009, revision 18).
 - The model's prose carries an unrounded computed value such as a trailing mean with many decimal
   places: it is a number, not personal data, and MUST NOT be reported as a phone number (FR-016,
-  revision 18).
+  revision 18). A document or byte count of nine or more digits that equals a computed value for the
+  item is likewise a number; a bare digit run that matches nothing computed is still a phone number
+  (revision 22).
 - The model's prose names a window by its identifier (`trailing_14d`, `14d`): it is the run's own
   name for a window, not an invented figure, and MUST NOT be reported as a number that matches no
-  computed value (FR-016, revision 18).
+  computed value (FR-016, revision 18). The same holds for the numeral alone ("the trailing 14
+  days"), for a numeral inside a collected metric expression written out in prose, and for a
+  collected panel's id ("panel 34") (revision 22).
 - A run analyses one project of ninety: the brief names that project's alerts and nothing else, the
   housekeeping and resolved lines cover only hosts it analysed, and the durable episode record is
   still updated for every project so the next full run is unaffected (FR-066, revision 19).
@@ -613,7 +617,11 @@ Analysis
 Analysis passes
 
 - **FR-056**: The analysis of each project MUST run as a configurable number of passes, set
-  through the environment with a default of two, a minimum of one and a hard upper bound in code.
+  through the environment with a default of one, a minimum of one and a hard upper bound in code
+  (the default was two until revision 22, when measured review passes were found to change little
+  at close to half the model spend, research.md R-27). A project whose first pass was rejected by
+  the gate on every attempt MUST be named in the brief's incomplete-analysis notice with the
+  commonest failing check, so it is never read as a quiet project (revision 22).
   The first pass produces items. Each later pass receives the previous pass's items and the
   candidates it did not select, re-examines the computed data, MAY ask the documentation service
   new or clarifying questions prompted by earlier answers, looks specifically for anything
@@ -623,7 +631,9 @@ Analysis passes
   nothing material (same item identities, severities and values within display rounding) and
   MUST stop regardless when the run's cost or turn bound is reached. A review pass MUST NOT run
   when the accepted pass before it produced no items: there is nothing to review, and on a quiet
-  project that is the common case (revision 19).
+  project that is the common case (revision 19). A review pass MUST NOT be sent the candidates,
+  computed changes or alerts again: the first turn of the shared session already carries them, and
+  the review prompt says so (revision 22).
 - **FR-058**: The run record MUST store each pass's items and the differences between passes,
   and the weekly calibration report MUST state how often later passes changed the outcome, so
   the pass count can be tuned on evidence. The record MUST also make a pass that the gate never
@@ -642,7 +652,12 @@ Verification gate
   length limits hold; no secret or personal-data pattern is present. A date is not a phone number.
   Findings in recorded tool results are reference text the model was given, not output the system
   wrote, and MUST be counted apart from findings in what the run produced, so a clean run reports
-  none of its own (revision 19).
+  none of its own (revision 19). The run's own identifiers are not figures the model invented: a
+  numeral that spells a numeric part of a window name, appears inside a metric key or panel
+  expression the run collected, or is the id of a collected dashboard panel MUST NOT be reported
+  as a number that matches no computed value, and a run of nine or more digits that equals a
+  computed value for the item MUST NOT be reported as a phone number, while one that matches no
+  computed value still is (revision 22).
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
 - **FR-018**: The same verification MUST run both inside the analysis (so the model can correct

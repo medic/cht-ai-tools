@@ -16,7 +16,7 @@ installed SDK 0.3.278 type definitions and the `claude` 2.1.278 help text on 202
 | `agent/tools.json` | The enumerated allow-list of tool names and the empty built-in set. | `tools: []`, `allowedTools: [...]` | `--tools "" --allowed-tools <names>` |
 | `schema/findings.schema.json`, `schema/brief.schema.json` | Structured-output schemas ([findings](./findings.schema.json), [brief](./brief.schema.json)), generated from `src/agent/output-schema.js` by `scripts/build-schema.js`. An item carries no `dashboard_ref`: the dashboard, panel and window are recorded by collection and built by code (FR-009, revision 18). | `outputFormat: { type: 'json_schema', schema }` | `--json-schema "$(cat schema/findings.schema.json)"` |
 | `agent/hooks.js` | In-process hook callbacks: `PreToolUse` guard, `PostToolUse` recorder, `Stop` gate. | `hooks: { PreToolUse: [...], PostToolUse: [...], Stop: [...] }` | Not loaded: `--bare` skips hook surfaces (verified). The harness performs the same three functions from the `stream-json` event stream and the result event; see Parity below. |
-| `prompts/pass-first.md`, `prompts/pass-review.md` | User-turn templates for pass 1 and later passes, filled with the project's candidates, changes and feedback. | Yielded as `SDKUserMessage` turns on one streaming-input query | Written to the process's stdin as `stream-json` user messages |
+| `prompts/pass-first.md`, `prompts/pass-review.md` | User-turn templates. Pass 1 is filled with the project's candidates, computed changes, feedback and firing alerts; a review pass is filled with the previous pass's items and the candidates it did not select only, since the shared session's first turn already carries the rest (FR-057, revision 22). | Yielded as `SDKUserMessage` turns on one streaming-input query | Written to the process's stdin as `stream-json` user messages |
 
 Everything above is versioned with the code; hashes of the prompts, skill and schemas are stamped
 into `run.json` (`versions`). No file under `agent/` or `prompts/` is ever written by the agent.
@@ -55,7 +55,7 @@ carry `Source: <url>` lines the gate can check (verified result shape in researc
 | `mcp__watchdog__get_windows` | `{ metric }` | The project's collected Metric Windows and Computed Change for that metric | From `inputs/windows.json.gz` and `changes.json`; no network. |
 | `mcp__watchdog__query_metric` | `{ metric, window }` | A Metric Window for a metric not in the collected set | Templated PromQL `metric{instance="<project>"}` only; metric must exist in the discovered metric names; window is one of the five named windows; capped at 20 calls per session. |
 | `mcp__watchdog__read_pattern_card` | `{ card_id }` | Full text of a merged pattern card | Ids from the index only (FR-038). |
-| `mcp__watchdog__get_item_history` | `{ metric, pattern_card }` | Past accepted items and Feedback for that identity within retention | Author ids are replaced by role labels before return. |
+| `mcp__watchdog__get_item_history` | `{ metric, pattern_card }` | Past accepted items and Feedback for that identity within retention: one entry per analysed date, from the last run of that date, over the thirty most recent analysed dates strictly before the current run's date; earlier runs of the run's own date are not history (revision 22) | Author ids are replaced by role labels before return. |
 
 Under `replay`, the same server answers from `tool-calls.jsonl` keyed by tool name and argument
 hash, and returns `{ "unavailable": true, "reason": "not recorded" }` for anything new, so replay
@@ -72,7 +72,7 @@ turn 1: pass-first prompt (candidates, changes, feedback for this project)
   → gate (src/verify): schema, metrics_known, candidates_known, numbers_match,
     severity_rules, pattern_cards_known, links_allowlisted (reference_urls), secrets_absent
   → rejected? send a revision turn with the reasons (at most VERIFY_MAX_RETRIES per pass)
-turn 2..N: pass-review prompt (previous items + unselected candidates) while N ≤ PASSES,
+turn 2..N: pass-review prompt (previous items + unselected candidates only; candidates, changes and alerts stay in turn 1) while N ≤ PASSES,
   same gate; stop early when the diff is empty (converged) or a bound is hit
 record: findings.pass<n>.json, verification.pass<n>.json, passes.json, session.json
 ```

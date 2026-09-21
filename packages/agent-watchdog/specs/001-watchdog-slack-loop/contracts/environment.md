@@ -42,7 +42,7 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_HTTP_TIMEOUT_MS` | integer | 15000 | 60000 | Grafana API, Slack and link-resolution requests. |
 | `AGENT_WATCHDOG_QUERY_TIMEOUT_MS` | integer | 30000 | 300000 | Range and instant queries through the datasource proxy (FR-073); Grafana's own data proxy gives up at 30 s by default. A query is retried once; three consecutive failures make the source unreachable. |
 | `AGENT_WATCHDOG_VERIFY_MAX_RETRIES` | integer | 2 | 2 | Gate failures returned to the model before degrading (FR-017). |
-| `AGENT_WATCHDOG_PASSES` | integer | 2 | 4 | Analysis passes per project; minimum 1 (FR-056). |
+| `AGENT_WATCHDOG_PASSES` | integer | 1 | 4 | Analysis passes per project; minimum 1 (FR-056). Default lowered from 2 in revision 22: measured review passes changed little at close to half the model spend (research.md R-27). |
 | `AGENT_WATCHDOG_PASS_CONVERGENCE` | boolean | `true` | | Stop early when a pass changes nothing material (FR-057). |
 | `AGENT_WATCHDOG_RUN_TIMEOUT_MS` | integer | 3600000 | 7200000 | Whole-run wall clock; on expiry the run finishes with what it has and says so (Edge Cases). |
 | `AGENT_WATCHDOG_PROJECT_CONCURRENCY` | integer | 3 | 8 | Concurrent project sessions; keeps fifty projects inside the run budget. |

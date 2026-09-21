@@ -259,6 +259,20 @@ const analysisCutOff = (analysis) => {
   };
 };
 
+/** Projects whose every pass the gate rejected (revision 22), with the reason named most often, or null. */
+const analysisRejected = (analysis) => {
+  const rejected = analysis && Array.isArray(analysis.rejected) ? analysis.rejected : [];
+  if (!rejected.length) {
+    return null;
+  }
+  const counts = new Map();
+  for (const entry of rejected) {
+    counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+  }
+  const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return { count: rejected.length, total: analysis.projects || rejected.length, reason };
+};
+
 /**
  * How the analysis fell short: `notice` goes on every brief after "Analysis incomplete: ", `reason` into the
  * degraded brief's notice. Failures keep their revision-13 wording.
@@ -274,6 +288,14 @@ const shortfalls = (analysis) => {
   if (cutOff) {
     const text = `model sessions were stopped by the ${cutOff.bound} on ${cutOff.count} of ${cutOff.total} `
       + `projects before a result (${dollars(cutOff.spent)} spent)`;
+    found.push({ notice: text, reason: text });
+  }
+  // A first pass refused on every attempt leaves no items; with one pass by default the project would otherwise
+  // read as quiet, so it is named with the check that refused it most (FR-056, revision 22).
+  const rejected = analysisRejected(analysis);
+  if (rejected) {
+    const text = `model findings were rejected by the gate on ${rejected.count} of ${rejected.total} projects `
+      + `(commonest reason: ${rejected.reason})`;
     found.push({ notice: text, reason: text });
   }
   return found;

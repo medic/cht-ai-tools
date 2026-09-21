@@ -510,3 +510,37 @@ immediately preceding snapshot by design (FR-065). Only the persistence streak c
 Deliberately not planned: reporting a first-seen date or a total number of sightings alongside the
 streak. Both are new numbers for a reader to interpret and neither was asked for; the streak with an
 honest unit is the whole of this revision (research.md R-26, Also considered).
+
+### Revision 22 delta: the gate stops rejecting the run's own numbers, one pass by default (FR-016, FR-017, FR-018, FR-056, FR-057)
+
+Planned on 2026-09-21 after a ninety-project run on Sonnet 5 whose session ledger showed 100 gate retries
+on 157 first attempts, 70 of them caused only by two checks refusing the run's own identifiers and
+values, and whose review passes cost 45% of the run while changing nothing in 26 of 40 cases
+(research.md R-27). Four deltas, all measured, none adding a store or a stage.
+
+- **I**: no new dependency. Three exemption sets are built from the discovery the run already holds.
+- **II**: tests first for all four: the three exemption classes and the still-caught telephone number;
+  the rejected-on-every-attempt project named with its commonest failing check; the review prompt
+  without the candidates, changes and alerts and with the previous items; the history tool keyed on
+  analysed dates.
+- **III**: the arithmetic moves further into code. The gate stops asking the model to avoid the run's
+  own window names, expression numerals and panel ids, and the history tool stops presenting run-keyed
+  entries as time.
+- **IV**: nothing new is stored. The pass record's `gate` and the run ids already carry what the
+  roll-up and the tool need; rejected attempts' reports stay where the revision prompts already keep
+  their reasons.
+- **V**: no new stage. The gate changes two checks, the roll-up reads a field it already stores.
+- **VI**: unchanged. The brief flags a fully rejected project; nothing acts on it.
+- **VII**: the review template and the two checks change by pull request with their tests.
+- **VIII**: unchanged.
+  Result: PASS.
+
+The default number of passes becomes one. The within-pass revision loop (FR-017) is untouched and
+remains how a gate failure is corrected; the review pass stays available through the environment for
+calibration periods. The pass-loop skip condition that let a fully rejected first pass fall through to
+a review pass is deliberately unchanged (research.md R-27).
+
+Deliberately not planned: storing every rejected attempt's report; the deterministic high-severity
+rules, dark-host sessions and near-identical backlog items of the same run, which need a decision about
+what code hands the model at all; and panel screenshots in the brief, which the Clarifications answer
+with No.

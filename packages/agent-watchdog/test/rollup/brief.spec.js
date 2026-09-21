@@ -411,6 +411,22 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
       + 'projects before a result ($1.20 spent)');
   });
 
+  it('degrades and names the gate when every finding was rejected on every attempt (revision 22)', async () => {
+    const engine = { singleTurn: sinon.stub() };
+    const gate = { verifyBrief: sinon.stub() };
+    const analysis = {
+      projects: 3, failed: [], errors: [], incomplete: [],
+      rejected: [{ project_url: 'https://alpha.example.org', reason: 'numbers_match' }],
+    };
+    const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
+    expect(engine.singleTurn.called).to.equal(false);
+    expect(out.degraded).to.equal(true);
+    const text = 'model findings were rejected by the gate on 1 of 3 projects (commonest reason: numbers_match)';
+    expect(out.brief.degradation_notice).to.include(text);
+    expect(out.brief.notices.filter((n) => n === `Analysis incomplete: ${text}`)).to.have.length(1);
+    expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
+  });
+
   it('keeps the model brief when only some sessions failed, and says so in the notices', async () => {
     const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };

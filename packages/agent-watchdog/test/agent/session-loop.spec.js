@@ -144,6 +144,11 @@ describe('agent/session-loop', () => {
     const verification = JSON.parse(fs.readFileSync(verificationFile, 'utf8'));
     expect(verification.outcome).to.equal('rejected');
     expect(verification.attempt).to.equal(3);
+    // The pass record carries the final gate verdict; the roll-up reads it to name the project (revision 22).
+    const passes = JSON.parse(fs.readFileSync(path.join(runDir.root, project.slug, 'passes.json'), 'utf8'));
+    expect(passes.passes[0].gate.outcome).to.equal('rejected');
+    expect(passes.passes[0].gate.attempt).to.equal(3);
+    expect(passes.passes[0].items).to.deep.equal([]);
   });
 
   it('asks for a revision with only the failing checks\' reasons, never a passing check\'s text (revision 18)',

@@ -99,13 +99,71 @@ const knownSpanForms = (ctx) => {
   return forms;
 };
 
-// A window is named, not measured: `trailing_14d` and the `14d` inside it are the run's own identifiers for a
-// window, so a numeral that spells one is not a figure the model invented (revision 18).
-const WINDOW_NAME_TOKENS = new Set(enums.WindowName.options
-  .flatMap((name) => extractNumbers(name.replace(/_/g, ' ')).concat(extractNumbers(name))));
+// A window is named, not measured: `trailing_14d`, the `14d` inside it and the `14` alone ("the trailing 14 days")
+// are the run's own identifiers for a window, so a numeral that spells one is not a figure the model invented
+// (revision 18, the bare numeral added in revision 22 after it was refused 61 times in one run).
+const WINDOW_NAME_TOKENS = new Set(enums.WindowName.options.flatMap((name) => {
+  const tokens = extractNumbers(name.replace(/_/g, ' ')).concat(extractNumbers(name));
+  return tokens.concat(tokens.map((token) => token.replace(/[%hdx]$/, '')));
+}));
 
-const checkText = (where, text, allowed, spanForms, reasons) => {
-  for (const token of extractNumbers(text)) {
+/**
+ * Every form of every collected metric key and panel expression, longest first so a whole expression is removed
+ * before its bare metric name.
+ */
+const expressionForms = (ctx) => {
+  const forms = new Set();
+  const discovery = ctx.discovery || {};
+  for (const key of discovery.metrics || []) {
+    for (const form of keyForms(key)) {
+      forms.add(form);
+    }
+  }
+  for (const dashboard of discovery.dashboards || []) {
+    for (const panel of flatPanels(dashboard)) {
+      for (const form of keyForms(panel.expr)) {
+        forms.add(form);
+      }
+    }
+  }
+  return [...forms].filter((form) => form.length >= 3).sort((a, b) => b.length - a.length);
+};
+
+/** The ids of every collected dashboard panel, as strings. */
+const panelIds = (ctx) => {
+  const ids = new Set();
+  for (const dashboard of (ctx.discovery || {}).dashboards || []) {
+    for (const panel of flatPanels(dashboard)) {
+      if (panel.id !== undefined && panel.id !== null) {
+        ids.add(String(panel.id));
+      }
+    }
+  }
+  return ids;
+};
+
+const PANEL_REFERENCE = /\bpanels?[\s-]*(\d+)\b/gi;
+
+/**
+ * Remove the run's own identifiers from prose before its numbers are checked (revision 22): a collected metric key
+ * or panel expression written out ("rate(x[24h]) * 60 * 60 * 24" carries 24h, 60, 60 and 24) and a reference to a
+ * collected panel by its id ("panel 34"). Both were given to the model by the run, so neither is a figure it
+ * computed; a numeral outside them is checked exactly as before, and a panel id the run did not collect stays a
+ * number to justify.
+ */
+const stripRunIdentifiers = (text, ctx) => {
+  let out = String(text || '');
+  for (const form of expressionForms(ctx)) {
+    if (out.includes(form)) {
+      out = out.split(form).join(' ');
+    }
+  }
+  const ids = panelIds(ctx);
+  return out.replace(PANEL_REFERENCE, (match, id) => (ids.has(id) ? ' ' : match));
+};
+
+const checkText = (where, text, allowed, spanForms, reasons, ctx) => {
+  for (const token of extractNumbers(stripRunIdentifiers(text, ctx))) {
     if (WINDOW_NAME_TOKENS.has(token)) {
       continue;
     }
@@ -132,16 +190,16 @@ const check = (ctx) => {
         reasons.push(`bullets[${i}] refers to unknown item ${bullet.item_id}`);
         return;
       }
-      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons);
+      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx);
     });
   } else {
     (ctx.items || []).forEach((item, i) => {
       const allowed = allowedValues(item, ctx);
-      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons);
-      checkText(`items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons);
+      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx);
+      checkText(`items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx);
     });
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
-module.exports = { name: NAME, check, allowedValues, matches, WINDOW_NAME_TOKENS };
+module.exports = { name: NAME, check, allowedValues, matches, stripRunIdentifiers, WINDOW_NAME_TOKENS };

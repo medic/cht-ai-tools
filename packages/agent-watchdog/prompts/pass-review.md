@@ -2,8 +2,9 @@ Project: {{project_url}}
 This is pass {{pass}} of the analysis for this project. Pass {{previous_pass}} produced the items
 below. Review them against the computed data and the candidates that were not selected: look
 specifically for anything missed, anything overstated, and any severity that the candidates do
-not justify. Ask the documentation service any new or clarifying question the earlier answers
-raised.
+not justify. The candidates, the computed changes and the firing alerts for this project are in
+the first turn of this session and have not changed, so do not ask for them again. Ask the
+documentation service any new or clarifying question the earlier answers raised.
 
 ## Items from pass {{previous_pass}}
 
@@ -12,18 +13,6 @@ raised.
 ## Candidates not selected in pass {{previous_pass}}
 
 {{not_selected}}
-
-## Candidates
-
-{{candidates}}
-
-## Computed changes
-
-{{changes}}
-
-## Firing alerts for this project
-
-{{alerts}}
 
 ## Instructions
 

@@ -131,6 +131,15 @@ const run = async (ctx) => {
       hint: 'measure one project with a higher AGENT_WATCHDOG_MAX_BUDGET_USD_PROJECT, or lower AGENT_WATCHDOG_EFFORT',
     });
   }
+  if (analysis.rejected.length) {
+    const reasons = analysis.rejected.map((r) => r.reason);
+    logger.warn('rollup.analysis_rejected', {
+      rejected: analysis.rejected.length,
+      projects: analysis.projects,
+      reasons: [...new Set(reasons)],
+      hint: 'the gate refused every attempt; the revision prompts in prompt.pass<n>.md hold each reason',
+    });
+  }
 
   // Merged pattern cards are matched by metric before ranking, so persistence and feedback key on the final id.
   const cards = ctx.deps && ctx.deps.patternCards ? ctx.deps.patternCards : null;

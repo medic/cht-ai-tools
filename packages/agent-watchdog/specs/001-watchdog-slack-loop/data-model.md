@@ -303,7 +303,7 @@ One model pass over one project (FR-056 to FR-058).
 | `not_selected` | `{ candidate_id, reason? }[]` | Candidates examined but not surfaced. The written `reason` is asked for where the candidate's severity floor is medium or high; a low floor records the id alone, so a project with thirty low-floor candidates does not spend output tokens on thirty paragraphs. The review pass reads this list (FR-057, revision 19). |
 | `changes` | PassChange[] | Empty for pass 1; required for later passes. |
 | `converged` | boolean | True when items match the previous pass on identity, severity and evidence within display rounding (FR-057). |
-| `gate` | VerificationReport | Result of the in-analysis gate for this pass. |
+| `gate` | VerificationReport | Result of the in-analysis gate for this pass: the final attempt's report. A project with no items, no error and no stopping bound whose every pass carries `outcome: rejected` is named in the brief's incomplete-analysis notice with its commonest failing check (FR-056, revision 22); the roll-up reads this field, nothing new is stored. |
 | `usage`, `cost_usd`, `num_turns`, `duration_ms` | | From the runtime result. |
 | `tool_calls_path` | string | JSONL of every tool call and result, for replay (FR-041). |
 
@@ -562,7 +562,11 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   `Nd`. Numerals inside backtick code spans are exempt from matching; instead each code span must
   equal, character for character, a PromQL expression from a collected panel target or a metric
   name collected this run, otherwise `numbers_match` fails. Bullet text outside code spans never
-  contains PromQL.
+  contains PromQL. Three further token sets are exempt, all built in code from the run's own
+  discovery (revision 22): every numeric form of a window name (`14` and `14d` alike), every numeral
+  inside a collected metric key or panel expression (so `60`, `60`, `24` from a rate-per-day
+  expression written in prose), and every collected panel id. They are identifiers the run gave the
+  model, not figures it computed.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
@@ -573,7 +577,10 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   `AGENT_WATCHDOG_PROMPTS_URL` and `AGENT_WATCHDOG_CONFIG_URL`.
 - Secrets and personal data (FR-016, FR-045): reject on patterns for Slack tokens (`xox[abp]-`),
   Anthropic keys (`sk-ant-`), Grafana tokens (`glsa_`), bearer strings, e-mail addresses and
-  phone numbers. Partner-facing scans are out of scope here (feature 002).
+  phone numbers. A run of nine or more digits that equals, as an integer, a value the number check
+  allows for the item (evidence, the metric's computed changes, a cited candidate's observed or
+  threshold value) is a number and not a phone number; one matching nothing computed is still
+  rejected (revision 22). Partner-facing scans are out of scope here (feature 002).
 - Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
   delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
   forbidden by lint rule in templates.

@@ -628,6 +628,10 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-24 | On the hosted watchdog a quiet project completes in one pass, and a project with items logs `agent.tool_usage` with no failures and no refusals | Tool contracts and pass skipping only show their worth against the real alert and metric mix |
 | S-25 | After a week of hosted runs the weekly report names at least one rule whose candidates the analysis set aside on most days, with a commonest reason, and any suggestion resting on those says so | Only a week of real runs produces enough dismissals to separate a noisy rule from a quiet week |
 | S-26 | An item present in two forced runs of one date is reported with the same `persisting_days` in both, and one higher in the first run of the next date | Only consecutive hosted runs, one of them forced, show the streak counting dates rather than runs |
+| S-27 | On a full hosted run the retry count taken from `session.json` calls (attempts above 1) is at most a quarter of first attempts, and no revision prompt names a window numeral, a panel id or a numeral from a collected expression as an unmatched figure | The false positives only show against the real metric names, panel ids and prose the model writes at scale; `verification.pass<n>.json` holds the final attempt only, so the ledger is the source for retry counts |
+| S-28 | With `AGENT_WATCHDOG_PASSES` unset, a hosted run records one pass per project with items and the review pass never opens; a project whose first pass was rejected on every attempt is named in the brief's incomplete-analysis notice with the commonest failing check | Only a hosted run has projects whose prose exhausts the retries |
+| S-29 | With `AGENT_WATCHDOG_PASSES=2`, `prompt.pass2.md` carries the previous items and the unselected candidates and no `## Candidates`, `## Computed changes` or `## Firing alerts` section, and pass-2 cache-creation tokens fall well below pass 1's | The saving is only visible against a real candidate set and a real session |
+| S-30 | After two forced runs of one date, `get_item_history` for an item both carried returns one entry for that date, from the later run, and none for the current run's own date | Only the hosted volume has same-date re-runs with accepted items |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1323,3 +1327,89 @@ consecutive dates (rejected: it would report a gap of a week as "persisting 8 da
 absent for six of them, which is a different and less useful claim than a streak); and storing a
 first-seen date on the item (rejected: it stores something new to answer a question the run ids
 already answer, against constitution IV).
+
+
+## R-27. A gate that rejected the run's own numbers, and review passes that mostly confirmed
+
+**Evidence** (the run record of 2026-09-20-f4, Sonnet 5, 90 projects, read on 2026-09-21). The account's
+session limit stopped 35 sessions; 55 completed; the run cost $47.84, of which the 35 failures cost about
+$1.19 in partial work.
+
+**The gate.** `verification.pass<n>.json` holds only a pass's final attempt, so a first reading counted 8
+rejections. The session ledgers (`session.json` `calls`, one entry per model call) show 157 first attempts
+and 100 retries, agreeing exactly with the 100 `# Revision` headers the harness appends to
+`prompt.pass<n>.md`. 49 of 90 sessions needed at least one retry; retries cost $8.62, 18% of the run. The
+100 revision prompts carry 365 reasons: `numbers_match` 272 (in 72 of the 100 revisions), the phone
+pattern of `personal_data_absent` 39 (31), reference URLs not seen in tool results 33 (20), `relates_to`
+11, dates 2, other 8. 70 of the 100 retries were caused only by `numbers_match` and the phone pattern
+($5.79 direct); 19 more mixed those with a real reason; at most 11 had a legitimate cause alone. The
+review pass then spent turns dodging the same checks: pass-2 change reasons read, verbatim, "Reworded
+why_now to remove raw byte-count figures that the verification gate misread as phone numbers" and
+"Removed the long-precision sigma figure from why_now for the same reason".
+
+Each mechanism was confirmed by running the code. `WINDOW_NAME_TOKENS` in
+`src/verify/checks/numbers_match.js` is the set `{"14d"}`: `extractNumbers("trailing_14d")` yields
+nothing and `extractNumbers("trailing 14d")` yields `14d`, so "over the trailing 14 days" or "a 14-day
+baseline" yields the token `14`, refused 61 times, the single commonest rejection. Only backtick code
+spans are matched against collected expressions, so a metric expression written in prose leaks its
+numerals: `rate(cht_conflict_count[24h]) * 60 * 60 * 24` yields `24h`, `60`, `60`, `24` and
+`cht_date_current_millis / 1000` yields `1000`. A panel named in prose ("open panel 34") yields `34`,
+refused 7 times, with `2` and `7` likewise. `phoneMatches` in `src/verify/patterns.js` flags any bare run
+of nine or more digits, so document and byte counts such as 9532463080, 1795907584, 980205568 and
+903880600 were refused as phone numbers, while the same figures with thousands separators pass, which is
+why the final items carry commas the model learned to insert.
+
+**Decision on the gate.** A numeral is not an invented figure when it spells a numeric part of a window
+name (every `extractNumbers` form of each window name, with and without the unit letter, so `14` and
+`14d` alike), or appears inside any metric key or panel expression the run collected, or is the id of a
+collected dashboard panel. Those three sets are built from the run's own discovery in code and their
+tokens are exempt before matching; the code-span rule is unchanged. A run of nine or more digits that
+equals a computed value allowed for the item, under the same allowed values `numbers_match` uses and
+compared as an integer, is a number, not a phone number; a digit run matching no computed value stays a
+phone number, so a bare twelve-digit telephone number is still caught. Storing every rejected attempt's
+report was considered and rejected: the revision prompts already preserve every reason, so nothing is
+lost, and the ledger is the source for retry counts (S-27).
+
+**The passes.** The run was configured with `AGENT_WATCHDOG_PASSES=3`. Of the 55 completed sessions 10
+ran one pass, 26 two and 19 three; 42 converged. By the ledger, pass 1 cost $26.22 (55%), pass 2 $16.15
+(34%) and pass 3 $5.47 (11%): review passes were 45% of model spend. Of 40 pass-1-to-pass-2 diffs, 26
+were empty and 14 changed something, adding no item, removing one and changing fourteen; the model's own
+`changes` lists across pass 2 hold 47 changed, 4 added and 1 removed, and the sampled reasons are wording
+and evidence edits ("Enriched suggested_check", "Attempted to downgrade severity") plus the gate-dodging
+edits above. Of 18 pass-2-to-pass-3 diffs, 16 were empty.
+
+**Decision on the passes.** The default number of passes becomes one. The within-pass revision loop
+(FR-017) is unchanged and remains how a gate failure is corrected; the review pass stays available by
+configuration for calibration periods. Six projects had pass 1 rejected on all three attempts, and five
+recovered only because a review pass ran anyway: the skip condition in `src/agent/session-loop.js`
+(`!acceptedItems.length && lastAcceptedPass === pass`) does not fire while `lastAcceptedPass` is still
+zero, so pass 2 opened as a review of an empty list and acted as a fresh attempt. With one pass those
+projects end with no items, and `analysisRecord` in `src/rollup/analysis.js` named only failed sessions
+and sessions a bound stopped, so a fully rejected project would pass as quiet. The record therefore gains
+`rejected`, read from the `gate` each pass already stores, with the commonest failing check, and the
+brief's incomplete-analysis notice names it. The skip condition is deliberately left alone: with one pass
+by default the question is moot, and removing a behaviour that helped five projects needs its own
+decision.
+
+**The review prompt.** For one project `prompt.pass1.md` is 85,364 bytes and `prompt.pass2.md` 89,471;
+the `## Candidates` heading appears in both and 37 of the 39 candidate ids in pass 2 are the ids of pass
+1; pass-2 cache writes averaged 27,043 tokens per session against 13,167 for pass 1. FR-057 exists so
+that earlier turns remain available to later passes, and the first turn already carries the candidates,
+the computed changes and the firing alerts. The review template drops those three sections and says they
+are in the first turn.
+
+**The history tool.** `itemHistoryFor` in `src/cli/stages/agent.js` took the last thirty run ids
+excluding only the current one, so forced re-runs of one date each appeared as a history entry. The
+analysis wrote, verbatim, that a conflict item "matches history of this metric firing at medium severity
+across today's earlier passes, indicating a persistent conflict-generation event rather than a
+single-scrape spike": three re-runs of one date read back as persistence, the defect revision 21 fixed
+for `persisting_days`, in another place. The tool now returns one entry per analysed date, from the last
+run of that date, over the thirty most recent analysed dates strictly before the run's own, reusing
+`analysedDatesBefore` from `src/rollup/history.js`; the entry shape is unchanged because `run_id`
+already carries the date.
+
+**Rejected or deferred here**: storing rejected attempts' reports (above); changing the pass-loop skip
+condition (above); any change to the deterministic high-severity rules, the dark-host sessions or the 28
+near-identical outbound-backlog items of this run, which belong to a separate decision about what code
+hands the model at all; and Grafana panel screenshots in the brief, which the Clarifications already
+answer with No and which would be a new story.

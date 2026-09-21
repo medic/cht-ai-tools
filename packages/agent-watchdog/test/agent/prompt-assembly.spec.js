@@ -103,6 +103,14 @@ describe('agent/prompt-assembly', () => {
       expect(text).to.include('c9');
       expect(text).to.match(/pass 2/i);
       expect(text).to.not.include('{{');
+      // The shared session's first turn already carries the candidates, changes and alerts (FR-057, revision 22).
+      expect(text).to.not.include('"candidate_id": "c1"');
+      expect(text).to.not.include('"current_value": 912');
+      // The bare candidates section is gone; the list of unselected candidates stays.
+      expect(text).to.not.match(/^## Candidates\s*$/m);
+      expect(text).to.not.include('## Computed changes');
+      expect(text).to.not.include('## Firing alerts');
+      expect(text).to.match(/first turn/i);
     });
 
     it('builds a revision turn from gate reasons', () => {
@@ -125,7 +133,7 @@ describe('agent/prompt-assembly: firing alerts in the pass prompt (FR-067, User 
     days_firing: 0, stale: false, new: true, value: '<script>1200</script>',
   }];
 
-  it('wraps the alerts as untrusted data in the first pass and the review pass, and says so when none fire', () => {
+  it('wraps the alerts as untrusted data in the first pass only, and says so when none fire', () => {
     const first = assembly.buildPassPrompt({
       definition, pass: 1, project, candidates: [], changes: [], alerts, date: '2026-09-18',
     });
@@ -134,10 +142,11 @@ describe('agent/prompt-assembly: firing alerts in the pass prompt (FR-067, User 
     expect(first).to.include('"title": "Sentinel Backlog"');
     expect(first).to.include('"days_firing": 0');
     expect(first).to.not.include('{{alerts}}');
+    // A review pass is not sent the alerts again: they are in the first turn of the same session (revision 22).
     const review = assembly.buildPassPrompt({
       definition, pass: 2, project, candidates: [], changes: [], alerts, previousItems: [], notSelected: [],
     });
-    expect(review).to.include('<untrusted source="alerts">');
+    expect(review).to.not.include('<untrusted source="alerts">');
     expect(review).to.not.include('{{alerts}}');
     const none = assembly.buildPassPrompt({ definition, pass: 1, project, candidates: [], changes: [], alerts: [] });
     expect(none).to.match(/no alert is firing/i);

@@ -14,7 +14,7 @@ describe('rollup/analysis analysisRecord', () => {
       { url: 'https://beta.example.org', passes: null },
       { url: 'https://gamma.example.org', passes: passes({ items: [], bounds_hit: ['passes'] }) },
     ]);
-    expect(out).to.deep.equal({ projects: 2, failed: [], errors: [], incomplete: [] });
+    expect(out).to.deep.equal({ projects: 2, failed: [], errors: [], incomplete: [], rejected: [] });
   });
 
   it('marks sessions with errors or the error bound as failed, with their messages', () => {
@@ -50,5 +50,53 @@ describe('rollup/analysis analysisRecord', () => {
     ]);
     expect(out.failed).to.deep.equal(['https://delta.example.org']);
     expect(INCOMPLETE_BOUNDS).to.deep.equal(['budget', 'turns']);
+  });
+
+  it('names a project whose every pass the gate rejected, with its commonest failing check (revision 22)', () => {
+    const gate = (outcome, failing) => ({
+      outcome, attempt: 3,
+      checks: [
+        { name: 'schema', status: 'pass', reasons: [] },
+        ...failing.map((name) => ({ name, status: 'fail', reasons: [`${name} failed`] })),
+      ],
+    });
+    const out = analysisRecord([
+      {
+        url: 'https://alpha.example.org',
+        passes: passes({
+          items: [],
+          passes: [
+            { pass: 1, gate: gate('rejected', ['numbers_match', 'personal_data_absent']) },
+            { pass: 2, gate: gate('rejected', ['numbers_match']) },
+          ],
+        }),
+      },
+      // Items stand: a rejected pass on the way to accepted items is not a rejected project.
+      {
+        url: 'https://beta.example.org',
+        passes: passes({
+          passes: [{ pass: 1, gate: gate('rejected', ['numbers_match']) }, { pass: 2, gate: gate('accepted', []) }],
+        }),
+      },
+      // A rejected first pass followed by an accepted quiet one is a quiet project.
+      {
+        url: 'https://gamma.example.org',
+        passes: passes({
+          items: [],
+          passes: [{ pass: 1, gate: gate('rejected', ['relates_to']) }, { pass: 2, gate: gate('accepted', []) }],
+        }),
+      },
+      // A failure wins over a rejection, never counted twice.
+      {
+        url: 'https://delta.example.org',
+        passes: passes({
+          items: [], bounds_hit: ['error'], errors: [{ message: 'boom' }],
+          passes: [{ pass: 1, gate: gate('rejected', ['schema']) }],
+        }),
+      },
+    ]);
+    expect(out.rejected).to.deep.equal([{ project_url: 'https://alpha.example.org', reason: 'numbers_match' }]);
+    expect(out.failed).to.deep.equal(['https://delta.example.org']);
+    expect(out.incomplete).to.deep.equal([]);
   });
 });

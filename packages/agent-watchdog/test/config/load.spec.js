@@ -27,7 +27,7 @@ describe('config/load', () => {
     expect(config.model.effort).to.equal('max');
     expect(config.model.engine).to.equal('sdk');
     expect(config.bounds.maxTurns).to.equal(20);
-    expect(config.bounds.passes).to.equal(2);
+    expect(config.bounds.passes).to.equal(1); // one pass by default since revision 22
     expect(config.bounds.passConvergence).to.equal(true);
     expect(config.bounds.maxBudgetUsdProject).to.equal(2);
     expect(config.bounds.maxBudgetUsdRun).to.equal(25);

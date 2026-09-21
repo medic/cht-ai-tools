@@ -33,6 +33,32 @@ describe('verify/checks/personal_data_absent', () => {
     expect(check(ctx4).reasons[0]).to.include('phone');
   });
 
+  it('does not mistake a nine-plus digit count that equals a computed value for a phone number (revision 22)', () => {
+    // A document count as the run holds it: ten digits, no separators. It is the item's own evidence value.
+    const ctx = baseContext();
+    ctx.items[0].evidence[0].value = 9532463080;
+    ctx.findings.items[0].evidence[0].value = 9532463080;
+    ctx.findings.items[0].why_now = 'the increase over the window is 9532463080 documents';
+    expect(check(ctx).status).to.equal('pass');
+    // A byte count that is a computed change for the item's metric, not written in the evidence.
+    const ctx2 = baseContext();
+    ctx2.changes[0].current_value = 1795907584;
+    ctx2.findings.items[0].suggested_check = 'resident memory reached 1795907584 bytes';
+    expect(check(ctx2).status).to.equal('pass');
+  });
+
+  it('still flags a nine-plus digit run that matches nothing computed, in an item or outside one (revision 22)', () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].why_now = 'call 9876543210 for the on-call rota';
+    expect(check(ctx).reasons[0]).to.include('phone');
+    // Outside items[] there is no computed value to compare with, so the rule is unchanged.
+    const ctx2 = baseContext();
+    ctx2.items[0].evidence[0].value = 9532463080;
+    ctx2.findings.items[0].evidence[0].value = 9532463080;
+    ctx2.findings.notes = 'ring 9532463080 tonight';
+    expect(check(ctx2).reasons[0]).to.include('phone');
+  });
+
   it('does not mistake a date or a date and time for a phone number (revision 19)', () => {
     const ctx = baseContext();
     // Both forms were reported against fetched CHT documentation in run 2026-09-20.

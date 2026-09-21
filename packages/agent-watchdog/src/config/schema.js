@@ -197,7 +197,8 @@ const VARIABLES = [
     env: 'AGENT_WATCHDOG_PASSES',
     path: 'bounds.passes',
     schema: int(1, HARD_CAPS.passes),
-    default: 2,
+    // One pass by default since revision 22: measured review passes changed little at close to half the spend.
+    default: 1,
   },
   {
     env: 'AGENT_WATCHDOG_PASS_CONVERGENCE',

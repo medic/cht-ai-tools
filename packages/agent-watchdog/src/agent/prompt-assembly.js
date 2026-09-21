@@ -102,13 +102,18 @@ const buildPassPrompt = ({
     project_url: project.url,
     pass,
     date: date || new Date().toISOString().slice(0, 10),
-    candidates: json(sanitiseData(candidates)),
-    changes: json(sanitiseData(changes)),
-    alerts: alertsBlock(alerts),
   };
   if (pass === 1) {
-    return fill(definition.passFirst, { ...common, feedback: feedbackBlock(feedback) });
+    return fill(definition.passFirst, {
+      ...common,
+      candidates: json(sanitiseData(candidates)),
+      changes: json(sanitiseData(changes)),
+      alerts: alertsBlock(alerts),
+      feedback: feedbackBlock(feedback),
+    });
   }
+  // A review pass is not sent the candidates, changes or alerts again: the shared session's first turn already
+  // carries them, and re-sending them was most of a review pass's cache writes (FR-057, revision 22).
   return fill(definition.passReview, {
     ...common,
     previous_pass: pass - 1,
