@@ -29,6 +29,8 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
 │       │   ├── layout.json                # body layout: slots, sub-bullets, alert bullets      [kept]
+│       │   ├── standing.json              # standing conditions handed to no session (FR-014, revision 23) [kept]
+│       │   ├── prompt.md                  # the exact roll-up prompt and its revisions (revision 23) [kept]
 │       │   ├── alert-groups.json          # the alert groups the brief described, in body order (FR-066) [kept]
 │       │   ├── brief.draft<n>.json        # drafts submitted to the publish gate               [kept]
 │       │   ├── verification.draft<n>.json # publish gate reports                               [kept]
@@ -37,7 +39,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── brief.png                  # image rendered from report.html (FR-023)           [raw]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
 │       │   ├── feedback.digest.json       # the feedback digest as built (FR-062)             [kept]
-│       │   └── publication.json           # channel, ts, permalinks, file id                   [kept]
+│       │   └── publication.json           # channel, ts, permalinks, file ids (image, report)  [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]
 │       └── trace.json                     # trace id, url, span summary                        [kept]
@@ -71,10 +73,10 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 | `feedback` | `publication.json` of the previous N runs, Slack | `feedback.ingested.json`, `feedback.jsonl` |
 | `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances), the stored current windows of the runs one and seven days earlier, `history/<slug>.json` | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory), `history/<slug>.json` extended with the day's maxima |
 | `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
-| `agent` | `candidates.json`, `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
-| `rollup` | all `findings.pass<last>.json`, `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
-| `render` | `brief.json`, `changes.json` | `report.html`, `brief.png` |
-| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
+| `agent` | `candidates.json` less its standing conditions (revision 23), `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
+| `rollup` | all `findings.pass<last>.json`, every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
+| `render` | `brief.json`, `items.ranked.json`, `standing.json`, `changes.json` | `report.html`, `brief.png` |
+| `publish` | `brief.json`, `brief.png`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share, body-item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 
 Rules:
 

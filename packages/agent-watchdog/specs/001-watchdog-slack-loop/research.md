@@ -632,6 +632,12 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-28 | With `AGENT_WATCHDOG_PASSES` unset, a hosted run records one pass per project with items and the review pass never opens; a project whose first pass was rejected on every attempt is named in the brief's incomplete-analysis notice with the commonest failing check | Only a hosted run has projects whose prose exhausts the retries |
 | S-29 | With `AGENT_WATCHDOG_PASSES=2`, `prompt.pass2.md` carries the previous items and the unselected candidates and no `## Candidates`, `## Computed changes` or `## Firing alerts` section, and pass-2 cache-creation tokens fall well below pass 1's | The saving is only visible against a real candidate set and a real session |
 | S-30 | After two forced runs of one date, `get_item_history` for an item both carried returns one entry for that date, from the later run, and none for the current run's own date | Only the hosted volume has same-date re-runs with accepted items |
+| S-31 | `files.uploadV2` with `channel_id`, `thread_ts` and `initial_comment` shares `report.html` as the first reply of the brief's thread, readable by channel members, and the result carries the share's `ts` and file id | The share's rendering of an HTML file and the shape of the completed-upload result are not stated in the typings |
+| S-32 | A thread note `#7 :-1: expected until 1 October` under a hosted post is recorded on the item ranked 7 of that run with verdict `down` and the horizon, and a note `:+1:` alone is recorded unmatched | Slack's delivered text for the thumbs (shortcode or emoji) and the ranked items of a real run are only seen in the channel |
+| S-33 | On a hosted run whose first roll-up draft is rejected, the second turn's cache-read tokens are at least the first turn's cache-creation tokens and only the failing bullets change between `brief.draft1.json` and `brief.draft2.json` | Prefix caching across turns of one session is only measurable on the runtime |
+| S-34 | On a full hosted run the sessions that retry are at most a quarter of those that ran, no revision prompt names a numeral present in that project's `prompt.pass1.md` or `tool-calls.jsonl` as unmatched, and no revision names two decimals side by side as a phone number | The given-text rule only shows against the volume of prose the model writes at scale |
+| S-35 | On the hosted watchdog a run opens no session for a project whose only candidates are standing conditions, names them in one notice per rule with the programme counts, folds the dark hosts into the housekeeping line, and lists them per host in `report.html` | Only the hosted volume has programme-wide chronic conditions |
+| S-36 | On the hosted dashboards `discovery.json` records the six reference-line targets with `reference_line.subject` and `source`, `metrics` shrinks accordingly, and `Sentinel Backlog >50` is classified `backlog` at medium | The stock dashboards' second targets are only seen against the live Grafana documents |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1413,3 +1419,126 @@ condition (above); any change to the deterministic high-severity rules, the dark
 near-identical outbound-backlog items of this run, which belong to a separate decision about what code
 hands the model at all; and Grafana panel screenshots in the brief, which the Clarifications already
 answer with No and which would be a new story.
+
+## R-28. A thread nobody would read, a gate that refused what it had said, and a roll-up that started over
+
+**Evidence** (the run record of 2026-09-20-f5, Sonnet 5 at high effort on the command-line engine, one
+pass, concurrency 5, 90 projects, read on 2026-09-21). Every session completed; the run cost $39.41, of
+which the project sessions $37.45 and the roll-up $1.96; collection took 660 s, the sessions 3,049 s and
+the roll-up 615 s.
+
+**The thread.** 150 ranked items (56 high, 48 medium, 46 low). The five-slot layout placed 21 items in
+the body (20 of them as one-line sub-bullets) and 129 in the thread, beside 9 alert groups, and the
+payload carried 159 thread replies: one per item, as FR-020 then required, plus one per alert group. A
+reader cannot use 159 replies, and every reply is a reaction target nobody will reach. Of the 150 items,
+14 carry `relates_to` (13 `same_cause`, 1 `consequence_of`), each resolving to an item of the same run,
+none in the body; the roll-up prompt carries the relation and nothing downstream presents it.
+
+**Decision on the thread.** Only body items get a reply, highest rank first, at most twenty-five (a
+constant in code beside the fifty alert instances, not a setting), then the alert groups as before. The
+one-page report (FR-022) is shared into the thread as its first reply through `files.uploadV2` with the
+channel and the parent's `thread_ts`: a file uploaded without a channel is readable by the bot alone, so
+the earlier private upload could not be linked for readers, while a share in the thread is. Its
+code-built comment says how many items the report holds, how many have replies, and how to cite an item
+in a note: `#<rank>`, or the host and metric, with a thumbs as the verdict. The report numbers every item
+by rank, shows its identity, nests an item under the higher-ranked item it relates to, and lists the
+standing conditions below. The parent's footer counts the items that are only in the report. Feedback
+follows: `matchNote` resolves `#<rank>` against the ranked items of the run whose post the note sits
+under, before the item id, host and metric; a thumbs written in a note (`:+1:`, `:thumbsup:`, `:-1:`,
+`:thumbsdown:` or the emoji) is that note's verdict, counted like a reaction; a thumbs citing nothing
+stays unmatched and is surfaced as today. Reactions on body-item replies map exactly as before. A
+related item beyond the body takes no reply, like every thread item now; the higher item's reply names it
+with the relation and rank, and a related body item keeps the reply its bullet needs.
+
+**The gate.** The sessions retried on 78 of 90 projects (90 revisions, $7.72 against $29.73 for first
+attempts). The revision prompts carry 301 refused numerals; the commonest were `24h` (16), `5` (10),
+`41` (10), `2` (9), `48h` (9), `7`, `34`, `60`, `74` (8 each) and `24` (7). Checked against the text the
+model had been given, 183 of the 301 appear in the pass-1 prompt (alert `days_firing`, the `[24h]` of an
+expression, a panel id, a history count) and 111 more only in a tool result the session received
+(windows, item history); 7 appear in neither (`48h` five times, `1500x`, `5.9h`: durations and ratios the
+model derived). 48 of the 90 revisions carried no reason other than such numerals and the phone pattern
+(8 reasons, one of them two decimals side by side, "0.00465 (0.01858", spanned by the phone pattern
+because `DECIMAL_PATTERN` requires the whole match to be one decimal); the other 42 had a real cause:
+reference URLs the tools never returned (22), `relates_to` naming the item's own metric (9), code spans
+that are not collected expressions (6), and the derived durations. The revision-22 exemptions did remove
+the classes they targeted (no window numeral, no panel id and no phone-shaped count among the 301), but
+the model quotes far more of its input than the run's identifiers.
+
+**Decision on the gate.** A numeral present in the text the model was given in its session, its prompts
+and the results its tools returned, is not a figure it invented. The session loop hands the gate that
+text (`givenText`); `numbers_match` exempts a token whose bare value (separators and unit letter
+dropped) appears in it, after the computed values are tried. For a brief bullet the given text is the
+item's own prompt entry and the run-wide counts, never another item's, so a bullet cannot borrow a
+neighbour's number; without that scoping every small integer would pass against 150 items' ranks. A
+numeral in neither set still fails: the 7 derived durations stay refused, and that is the check working.
+The phone pattern learns that a match whose whitespace- or bracket-separated parts are each a decimal, a
+date or a time is a list of values. Together these would have removed 48 of the 90 revisions (S-34
+measures the hosted effect). Noted, not changed: `close()` accepts an integer token within ±0.5 of any
+allowed value, so `2` matches 2.4 while the formatter would have written `2.4`; a looseness in the
+model's favour, left as is.
+
+**The roll-up.** Three drafts were rejected in turn, each on one or two of twenty-one bullets: draft 1 on
+`projects_known` (a host written as its first three labels, a label-boundary prefix of a discovered
+five-label host, three times, to fit a bullet) and on `21`; draft 2 on the phone pattern in one bullet;
+draft 3 on `2`. Each attempt re-sent the whole prompt of 150 items in a fresh single-turn session and
+asked for a whole new draft, so bullets that had passed were rewritten and could fail anew; after the
+third the run published the deterministic degraded brief. The roll-up's cost records carried zero cache
+tokens because `costRecord` read one spelling of the counters while the runtime's result carries the
+other; `normaliseUsage` in `src/agent/turn-mapper.js` already reads both. The exact roll-up prompt is
+not stored, unlike `prompt.pass<n>.md`, which made this reading harder than the sessions'.
+
+**Decision on the roll-up.** Recover, do not restart. The brief is drafted in one session on the same
+engine (`openSession` with no tools), so the items are sent once and the prefix is cached; a turn after a
+rejection carries only the failing bullets with their reasons and asks for the full draft with every
+other bullet copied verbatim; code then assembles the draft it verifies from the accepted bullets of the
+previous attempt and the rewrites, so a retry can only mend what was wrong. `rollup/prompt.md` records
+the turns with `# Revision n` headers. `costRecord` normalises usage. `projects_known` accepts a host
+written as the leading two or more labels of a discovered host, since it names that project; a bare
+domain or a single label still names nothing.
+
+**What code hands the model.** 48 of the 56 high items are the outbound-push-backlog rule: 49
+`backlog_absolute` candidates, every one with a previous-day value above zero, 45 of them on one
+programme of 47 projects and the rest on three others; 14 sessions produced nothing but that item
+($4.71), and the Grafana rule for the same condition was read firing on 83 instances. Eight hosts read a
+scrape target of zero for the whole window and the day before; their eight sessions ($1.73) produced nine
+items, all "target down", and seven of the hosts already carried the classified housekeeping instance
+"API Server Down", stale for 74 days. Of 1,189 candidates, 324 come from expression metrics and 161 of
+those from six targets: `cht_connected_users_count * 0.003 + 2` (34) and `cht_connected_users_count / 10`
+(34), and three lines drawn from `rate(cht_couchdb_update_sequence{db="medic"}[30d])` scaled and offset
+(`* 60 * 60 * 24 * 0.25 + 10`, `* 60 * 60 * 0.05 + 5`, `* 60 * 60 + 500`; 24 each), which are each the
+second target on a panel whose first target is the panel's own series (a users threshold beside the
+replication-limit count, an expected rate beside the conflicts, backlogs and feedback rates), and the
+clock skew `floor(abs(cht_date_current_millis / 1000 - time()))` (21), the single target of its panel. The
+model made two low items of the 140 reference-line candidates and one of the 21 skew candidates. The
+hosted watchdog also fires a rule titled `Sentinel Backlog >50`, read on 83 instances, which
+`alerts.yaml` lacks, so it was classified uncategorised at medium importance and formed a group of its
+own.
+
+**Decisions on what code hands the model.** (1) A **standing condition** is a high-rule candidate whose
+condition already held before today: a `backlog_absolute` candidate whose previous-day evidence is
+above zero, or a `target_down` candidate on a project whose scrape target read zero the previous day and
+throughout the trailing fortnight (its trailing mean is zero). The fortnight matters: a gauge's previous-day
+value is the last sample of yesterday's window, so a target that went down twenty-four hours ago already
+"read zero yesterday", and an outage in its second day is news the model should weigh, while the eight
+hosts of this run had been dark for 74 days. It is computed and recorded as today (thresholds, proposals and replay are untouched), derived by
+code from fields the candidate and its change already carry, and withheld from the session; a project
+with nothing else opens no session (FR-013). The roll-up names standing conditions once per rule as a
+notice grouped by programme with the count out of the programme's size and the largest value, folds
+dark hosts into the housekeeping notice (FR-080), writes `rollup/standing.json` so the report can list
+them per host, and leaves them out of the degraded brief's bullets. A condition new today keeps its high
+floor and goes to the model: that is news. Deduplicating against firing alerts was rejected, since what
+the model sees would then depend on the alerting API answering. (2) A **reference line**, a target
+after the first on a multi-target panel whose expression is another series adjusted only by constant
+arithmetic, is recorded in discovery with its subject and source, like a breakdown (FR-075), and is
+neither collected nor analysed. The clock skew is not one: it is its panel's only target and FR-076
+makes a derived expression a gauge; its 21 candidates (16 `monotonic`, 5 `deviation`) are deferred to a
+`metric_kinds` decision, since `metricKind` cannot yet name an expression. (3) `alerts.yaml` gains
+`Sentinel Backlog >50: { category: backlog, importance: medium }`: medium because it fires on 83 of 90
+projects on an ordinary day and the high sentinel rule already exists; a pull request, as FR-065 wants.
+
+**Rejected or deferred here**: a configurable reply cap (a code constant, like the fifty alert
+instances); linking a private report file from the parent (unreadable to anyone but the bot); exempting
+every numeral of the items JSON for the brief (see above); changing the five-slot layout for related
+items (revision 20 decided it does not); reclassifying the clock skew (above); storing a rejected draft's
+text beyond `brief.draft<n>.json`, which already holds it; and the 22 reference-URL refusals, which are
+the gate doing its job on URLs the model did not retrieve.

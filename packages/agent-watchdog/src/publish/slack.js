@@ -16,12 +16,30 @@ const retryDelayMs = (error, attempt) => {
   return retryAfter > 0 ? retryAfter * 1000 : 500 * 2 ** (attempt - 1);
 };
 
-const fileIdOf = (result) => {
+/** The first uploaded file object in a `files.uploadV2` result, or null. */
+const fileOf = (result) => {
   const groups = (result && result.files) || [];
   for (const group of groups) {
     const files = group && group.files;
     if (files && files.length && files[0].id) {
-      return files[0].id;
+      return files[0];
+    }
+  }
+  return null;
+};
+
+const fileIdOf = (result) => {
+  const file = fileOf(result);
+  return file ? file.id : null;
+};
+
+/** The `ts` of a file's share into `channel`, when the completed upload reports it, else null (smoke test S-31). */
+const shareTs = (file, channel) => {
+  const shares = (file && file.shares) || {};
+  for (const scope of ['public', 'private']) {
+    const list = shares[scope] && shares[scope][channel];
+    if (Array.isArray(list) && list.length && list[0].ts) {
+      return list[0].ts;
     }
   }
   return null;
@@ -72,12 +90,35 @@ const createSlackPublisher = ({
     return fileId;
   };
 
+  /**
+   * Share the report into the thread (FR-022, revision 23): an upload given the channel and the parent's `ts` posts
+   * the file as the thread's first reply, readable by every member, where the image's private upload is readable by
+   * the bot alone. The comment tells the reader how to cite an item.
+   */
+  const shareReport = async (report, reportPath, parentTs) => {
+    const result = await call('files.uploadV2', () => client.files.uploadV2({
+      file: fs.createReadStream(reportPath),
+      filename: report.filename,
+      title: report.title,
+      channel_id: channel,
+      thread_ts: parentTs,
+      initial_comment: report.initial_comment,
+    }));
+    const file = fileOf(result);
+    if (!file) {
+      throw new codes.ExitError(codes.IOERR, 'Slack files.uploadV2 returned no file id for the report', {
+        label: 'files.uploadV2',
+      });
+    }
+    return { file_id: file.id, ts: shareTs(file, channel), permalink: file.permalink || null };
+  };
+
   const supersededBlock = (permalink) => ({
     type: 'context',
     elements: [{ type: 'mrkdwn', text: `Supersedes an earlier post for this date: <${permalink}|earlier brief>` }],
   });
 
-  const publish = async ({ payload, imagePath, superseded = null }) => {
+  const publish = async ({ payload, imagePath, reportPath = null, superseded = null }) => {
     let post_ = payload;
     let fileId = null;
     if (payload.image && imagePath) {
@@ -97,6 +138,12 @@ const createSlackPublisher = ({
       metadata: post_.parent.metadata,
     });
     logger.info('slack.parent_posted', { ts: parent.ts });
+    let report = null;
+    if (post_.report && reportPath) {
+      await pace();
+      report = await shareReport(post_.report, reportPath, parent.ts);
+      logger.info('slack.report_shared', { file_id: report.file_id, ts: report.ts, items: post_.report.items });
+    }
     const replies = [];
     for (const reply of post_.replies) {
       await pace();
@@ -116,6 +163,7 @@ const createSlackPublisher = ({
       permalink: await permalinkOf(parent.ts),
       replies,
       slack_file_id: fileId,
+      report,
     };
   };
 
@@ -175,4 +223,4 @@ const createSlackPublisher = ({
   return { publish, postHeartbeat, postFailureNotice, postTextOnly, postDigest, reactToNotes };
 };
 
-module.exports = { createSlackPublisher, retryDelayMs, fileIdOf };
+module.exports = { createSlackPublisher, retryDelayMs, fileIdOf, fileOf, shareTs };

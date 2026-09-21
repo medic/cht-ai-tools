@@ -59,13 +59,40 @@ const samplesFor = (windowsByMetric, item) => {
   return numeric(found || []);
 };
 
-const itemView = (item, windowsByMetric) => ({
+const rankOf = (item) => (item.rank === null || item.rank === undefined ? Number.MAX_SAFE_INTEGER : item.rank);
+
+const relationText = (relation) => String(relation || '').replace(/_/g, ' ');
+
+/**
+ * Items nested under the higher-ranked item they relate to (FR-009, revision 23), by that item's id; an item whose
+ * relation points at a lower-ranked item, or at nothing in the run, stays at the top level.
+ */
+const nestedByParent = (items) => {
+  const byId = new Map(items.map((item) => [item.item_id, item]));
+  const nested = new Map();
+  for (const item of items) {
+    const parent = item.relates_to && item.relates_to.item_id ? byId.get(item.relates_to.item_id) : null;
+    if (parent && parent !== item && rankOf(parent) < rankOf(item)) {
+      if (!nested.has(parent.item_id)) {
+        nested.set(parent.item_id, []);
+      }
+      nested.get(parent.item_id).push(item);
+    }
+  }
+  return nested;
+};
+
+const itemView = (item, windowsByMetric, related = []) => ({
   item_id: item.item_id,
   host: hostOf(item.project_url),
   metric: item.metric,
   severity: item.severity,
   severity_label: item.severity.toUpperCase(),
   rank: item.rank === null || item.rank === undefined ? '-' : item.rank,
+  rank_text: item.rank === null || item.rank === undefined ? '' : `#${item.rank}`,
+  relation_text: item.relates_to ? relationText(item.relates_to.relation) : '',
+  has_related: related.length > 0,
+  related: related.map((other) => itemView(other, windowsByMetric)),
   persisting_text: item.persisting_days > 1 ? `persisting ${item.persisting_days} days` : 'new today',
   confidence_pct: Math.round((item.confidence || 0) * 100),
   why_now: item.why_now,
@@ -74,7 +101,34 @@ const itemView = (item, windowsByMetric) => ({
   samples: samplesFor(windowsByMetric, item),
 });
 
-const buildView = ({ brief, items, windowsByMetric, runId }) => {
+const STANDING_RULE_TEXT = {
+  backlog_absolute: 'Outbound push backlog above zero, as yesterday',
+  target_down: 'Scrape target dark for the whole trailing fortnight',
+};
+
+/** Standing conditions grouped by rule, hosts sorted by value, largest first (FR-014, revision 23). */
+const standingView = (standing) => {
+  const byRule = new Map();
+  for (const record of standing || []) {
+    if (!byRule.has(record.rule)) {
+      byRule.set(record.rule, []);
+    }
+    byRule.get(record.rule).push(record);
+  }
+  return [...byRule.entries()].map(([rule, records]) => ({
+    rule_text: STANDING_RULE_TEXT[rule] || rule,
+    hosts: [...records].sort((a, b) => Number(b.value) - Number(a.value) || String(a.host).localeCompare(b.host))
+      .map((record) => ({
+        host: record.host,
+        group: record.group,
+        metric: record.metric,
+        value: formatValue(record.value),
+        previous: formatValue(record.previous_day_value),
+      })),
+  }));
+};
+
+const buildView = ({ brief, items, windowsByMetric, runId, standing = [] }) => {
   if (typeof brief.headline !== 'string') {
     throw new Error('brief.headline is required to render the report');
   }
@@ -83,6 +137,11 @@ const buildView = ({ brief, items, windowsByMetric, runId }) => {
   const notices = [brief.expected_load_notice, brief.degradation_notice, ...(brief.notices || [])]
     .filter(Boolean)
     .map((text) => ({ text: withMarker(noticeMarker(text), text) }));
+  const ranked = [...(items || [])].sort((a, b) => rankOf(a) - rankOf(b) || a.item_id.localeCompare(b.item_id));
+  const nested = nestedByParent(ranked);
+  const nestedIds = new Set([...nested.values()].flat().map((item) => item.item_id));
+  const topLevel = ranked.filter((item) => !nestedIds.has(item.item_id));
+  const standingRows = standingView(standing);
   return {
     run_id: runId,
     date: brief.run_id ? brief.run_id.slice(0, 10) : runId,
@@ -101,7 +160,9 @@ const buildView = ({ brief, items, windowsByMetric, runId }) => {
       cost_text: `$${Number(brief.footer.cost_usd || 0).toFixed(2)}`,
       trace_text: brief.footer.trace_url ? 'recorded' : 'none',
     },
-    items: (items || []).map((item) => itemView(item, windowsByMetric)),
+    items: topLevel.map((item) => itemView(item, windowsByMetric, nested.get(item.item_id) || [])),
+    has_standing: standingRows.length > 0,
+    standing: standingRows,
   };
 };
 
@@ -116,11 +177,12 @@ const compileTemplate = () => {
 /**
  * Render the report HTML for a run.
  * @param {object} options brief, items (ranked), changes (by slug, informational), windowsByMetric
- *   (Map or object keyed `${project_url}|${metric}` -> current-window samples), discovery, runId
+ *   (Map or object keyed `${project_url}|${metric}` -> current-window samples), discovery, runId, standing
+ *   (rollup/standing.json: the standing conditions handed to no session, FR-014 revision 23)
  */
-const renderReport = ({ brief, items = [], windowsByMetric = new Map(), runId }) => {
+const renderReport = ({ brief, items = [], windowsByMetric = new Map(), runId, standing = [] }) => {
   const template = compileTemplate();
-  return template(buildView({ brief, items, windowsByMetric, runId }));
+  return template(buildView({ brief, items, windowsByMetric, runId, standing }));
 };
 
-module.exports = { renderReport, assertNoTripleStash, sparklineSvg, windowKey, formatValue };
+module.exports = { renderReport, assertNoTripleStash, sparklineSvg, windowKey, formatValue, nestedByParent };

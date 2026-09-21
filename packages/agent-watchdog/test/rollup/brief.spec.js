@@ -28,6 +28,18 @@ const successResult = (structuredOutput) => ({
   referenceUnavailable: false,
 });
 
+
+// The roll-up drafts in one session since revision 23: `openSession` once, one `turn` per attempt, closed at the end.
+const engineWith = (...responses) => {
+  const turn = sinon.stub();
+  responses.forEach((response, i) => turn.onCall(i).resolves(response));
+  if (responses.length === 1) {
+    turn.resolves(responses[0]);
+  }
+  const session = { turn, close: sinon.stub().resolves() };
+  return { openSession: sinon.stub().resolves(session), session, singleTurn: sinon.stub() };
+};
+
 const accepted = {
   report: { subject: 'brief', subject_ref: 'rollup/draft1', attempt: 1, checks: [], outcome: 'accepted' },
 };
@@ -65,7 +77,7 @@ describe('rollup/brief composeBrief', () => {
   });
 
   it('accepts the first draft, returns a brief with ranked bullets and the memory update and proposals', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.degraded).to.equal(false);
@@ -81,7 +93,7 @@ describe('rollup/brief composeBrief', () => {
     expect(out.proposals).to.have.length(1);
     expect(out.calls).to.have.length(1);
     expect(out.calls[0]).to.include({ cost_usd: 0.02, model: 'claude-fable-5-1' });
-    const call = engine.singleTurn.firstCall.args[0];
+    const call = { ...engine.openSession.firstCall.args[0], userPrompt: engine.session.turn.firstCall.args[0] };
     expect(call.outputSchema.$id).to.include('brief.schema.json');
     expect(call.systemPrompt[0]).to.match(/one bullet per body item/i);
     expect(call.userPrompt).to.include('## Body layout');
@@ -93,10 +105,10 @@ describe('rollup/brief composeBrief', () => {
   });
 
   it('returns rejection reasons to the model and accepts a later draft', async () => {
-    const engine = { singleTurn: sinon.stub() };
-    engine.singleTurn.onCall(0).resolves(successResult(draftFor(items, { headline: 'bad numbers' })));
-    engine.singleTurn.onCall(1).resolves(successResult(draftFor(items, { headline: 'still bad' })));
-    engine.singleTurn.onCall(2).resolves(successResult(draftFor(items)));
+    const engine = engineWith();
+    engine.session.turn.onCall(0).resolves(successResult(draftFor(items, { headline: 'bad numbers' })));
+    engine.session.turn.onCall(1).resolves(successResult(draftFor(items, { headline: 'still bad' })));
+    engine.session.turn.onCall(2).resolves(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub() };
     gate.verifyBrief.onCall(0).resolves(rejected(['912 does not match']));
     gate.verifyBrief.onCall(1).resolves(rejected(['still wrong']));
@@ -105,19 +117,19 @@ describe('rollup/brief composeBrief', () => {
     expect(out.degraded).to.equal(false);
     expect(out.drafts).to.have.length(3);
     expect(out.drafts.map((d) => d.attempt)).to.deep.equal([1, 2, 3]);
-    expect(engine.singleTurn.secondCall.args[0].userPrompt).to.include('912 does not match');
-    expect(engine.singleTurn.thirdCall.args[0].userPrompt).to.include('still wrong');
+    expect(engine.session.turn.secondCall.args[0]).to.include('912 does not match');
+    expect(engine.session.turn.thirdCall.args[0]).to.include('still wrong');
     expect(gate.verifyBrief.thirdCall.args[0].attempt).to.equal(3);
   });
 
   it('degrades to the deterministic brief after the third rejection', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(rejected(['nope'])) };
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.degraded).to.equal(true);
     expect(out.brief.kind).to.equal('degraded');
     expect(out.brief.degradation_notice).to.include('three');
-    expect(engine.singleTurn.callCount).to.equal(3);
+    expect(engine.session.turn.callCount).to.equal(3);
     expect(out.drafts).to.have.length(3);
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
   });
@@ -125,17 +137,17 @@ describe('rollup/brief composeBrief', () => {
   it('degrades immediately when the model result is unusable', async () => {
     const bad = successResult(null);
     bad.result.subtype = 'error_max_budget_usd';
-    const engine = { singleTurn: sinon.stub().resolves(bad) };
+    const engine = engineWith(bad);
     const gate = { verifyBrief: sinon.stub() };
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.degraded).to.equal(true);
-    expect(engine.singleTurn.callCount).to.equal(1);
+    expect(engine.session.turn.callCount).to.equal(1);
     expect(gate.verifyBrief.called).to.equal(false);
     expect(out.brief.degradation_notice).to.include('error_max_budget_usd');
   });
 
   it('degrades when the structured output does not match the brief schema', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult({ headline: 5 })) };
+    const engine = engineWith(successResult({ headline: 5 }));
     const gate = { verifyBrief: sinon.stub() };
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.degraded).to.equal(true);
@@ -143,32 +155,32 @@ describe('rollup/brief composeBrief', () => {
   });
 
   it('skips the model entirely and returns a heartbeat when there are no items', async () => {
-    const engine = { singleTurn: sinon.stub() };
+    const engine = engineWith();
     const gate = { verifyBrief: sinon.stub() };
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items: [], ...base(), candidates: [] });
-    expect(engine.singleTurn.called).to.equal(false);
+    expect(engine.openSession.called).to.equal(false);
     expect(out.brief.kind).to.equal('heartbeat');
     expect(out.degraded).to.equal(false);
     expect(out.memoryUpdate).to.equal(null);
   });
 
   it('notes unavailable reference sources on the brief and in the prompt', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const out = await composeBrief({
       ctx: makeCtx({ engine, gate }), items, ...base(), referenceSourcesUnavailable: true,
     });
     expect(out.brief.degradation_notice).to.match(/reference sources were unavailable/i);
-    expect(engine.singleTurn.firstCall.args[0].userPrompt).to.match(/reference sources were unavailable/i);
+    expect(engine.session.turn.firstCall.args[0]).to.match(/reference sources were unavailable/i);
   });
 
   it('uses a built-in roll-up template when the definition has none', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const ctx = makeCtx({ engine, gate });
     delete ctx.definition;
     await composeBrief({ ctx, items, ...base() });
-    expect(engine.singleTurn.firstCall.args[0].systemPrompt[0]).to.match(/bullets/i);
+    expect(engine.openSession.firstCall.args[0].systemPrompt[0]).to.match(/bullets/i);
   });
 });
 
@@ -194,9 +206,9 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
   });
 
   it('fills every placeholder of prompts/rollup.md and puts the matched feedback in the user turn', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     await composeBrief({ ctx: ctxWith(engine), items, ...inputs() });
-    const call = engine.singleTurn.firstCall.args[0];
+    const call = { ...engine.openSession.firstCall.args[0], userPrompt: engine.session.turn.firstCall.args[0] };
     expect(call.systemPrompt).to.have.length(1);
     expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/one bullet per body item/i);
     expect(call.userPrompt).to.include('## Body layout');
@@ -224,11 +236,11 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
   });
 
   it('says so when there is no feedback, no memory and no expected-load window', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     await composeBrief({
       ctx: ctxWith(engine), items, ...inputs(), feedback: [], feedbackBrief: null, memory: null, feedbackUnmatched: [],
     });
-    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    const prompt = engine.session.turn.firstCall.args[0];
     expect(prompt).to.include('No feedback was recorded for this run.');
     expect(prompt).to.include('No memory has been recorded yet.');
     expect(prompt).to.include('No expected-load window is active.');
@@ -262,10 +274,10 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
   });
 
   it('tells the model which items are one-line sub-bullets and passes the layout to the gate', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     await composeBrief(inputs(engine, gate));
-    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    const prompt = engine.session.turn.firstCall.args[0];
     const section = prompt.slice(prompt.indexOf('## Body layout'));
     const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(section)[1]);
     expect(json).to.deep.equal(layout.slots);
@@ -275,7 +287,7 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
   });
 
   it('assembles a group bullet from the layout with code-built text and the model\'s one-line children', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const out = await composeBrief(inputs(engine, gate));
     expect(out.degraded).to.equal(false);
@@ -292,7 +304,7 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
   });
 
   it('builds the layout itself from the discovery when the caller passes none', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const out = await composeBrief({ ...inputs(engine, gate), layout: undefined });
     expect(out.brief.bullets).to.have.length(2);
@@ -316,7 +328,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('puts the code-built alerts bullet first and hands the alert links to the gate', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const links = ['https://watchdog.example.org/alerting/list?search=x'];
     const out = await composeBrief({ ...base(engine, gate), alertLinks: links });
@@ -327,7 +339,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
       'availability: 1 firing (API Server Down), oldest since 2026-09-17',
       'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
     ]);
-    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    const prompt = engine.session.turn.firstCall.args[0];
     expect(prompt).to.match(/kind.*alerts.*written by code/i);
     const layoutArg = gate.verifyBrief.firstCall.args[0].layout;
     expect(layoutArg.slots[0]).to.include({ kind: 'alerts', group: 'North Programme' });
@@ -336,7 +348,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('degrades to the deterministic brief and names the failure when the sessions failed (revision 13)', async () => {
-    const engine = { singleTurn: sinon.stub() };
+    const engine = engineWith();
     const gate = { verifyBrief: sinon.stub() };
     const analysis = {
       projects: 2,
@@ -344,7 +356,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
       errors: ['Claude Code process exited with code 1. stderr: Error: --json-schema is not a valid JSON Schema'],
     };
     const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
-    expect(engine.singleTurn.called).to.equal(false);
+    expect(engine.openSession.called).to.equal(false);
     expect(out.degraded).to.equal(true);
     expect(out.brief.kind).to.equal('degraded');
     expect(out.brief.headline).to.not.include('no metric changes');
@@ -364,14 +376,14 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('degrades and names the bound when every session was stopped before a result (revision 16)', async () => {
-    const engine = { singleTurn: sinon.stub() };
+    const engine = engineWith();
     const gate = { verifyBrief: sinon.stub() };
     const analysis = {
       projects: 1, failed: [], errors: [],
       incomplete: [{ project_url: 'https://alpha.example.org', bounds: ['budget'], cost_usd: 0.84874 }],
     };
     const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
-    expect(engine.singleTurn.called).to.equal(false);
+    expect(engine.openSession.called).to.equal(false);
     expect(out.degraded).to.equal(true);
     expect(out.brief.kind).to.equal('degraded');
     expect(out.brief.degradation_notice)
@@ -399,7 +411,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('keeps the model brief when only some sessions were stopped before a result, and says so', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const analysis = {
       projects: 3, failed: [], errors: [],
@@ -412,14 +424,14 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('degrades and names the gate when every finding was rejected on every attempt (revision 22)', async () => {
-    const engine = { singleTurn: sinon.stub() };
+    const engine = engineWith();
     const gate = { verifyBrief: sinon.stub() };
     const analysis = {
       projects: 3, failed: [], errors: [], incomplete: [],
       rejected: [{ project_url: 'https://alpha.example.org', reason: 'numbers_match' }],
     };
     const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
-    expect(engine.singleTurn.called).to.equal(false);
+    expect(engine.openSession.called).to.equal(false);
     expect(out.degraded).to.equal(true);
     const text = 'model findings were rejected by the gate on 1 of 3 projects (commonest reason: numbers_match)';
     expect(out.brief.degradation_notice).to.include(text);
@@ -428,7 +440,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('keeps the model brief when only some sessions failed, and says so in the notices', async () => {
-    const engine = { singleTurn: sinon.stub().resolves(successResult(draftFor(items))) };
+    const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const analysis = { projects: 3, failed: ['https://gamma.example.org'], errors: ['session ended before a result'] };
     const out = await composeBrief({ ...base(engine, gate), analysis });
@@ -438,10 +450,10 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
   });
 
   it('posts alert bullets without any model call when no item was flagged, instead of a heartbeat', async () => {
-    const engine = { singleTurn: sinon.stub() };
+    const engine = engineWith();
     const gate = { verifyBrief: sinon.stub() };
     const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [] });
-    expect(engine.singleTurn.called).to.equal(false);
+    expect(engine.openSession.called).to.equal(false);
     expect(gate.verifyBrief.called).to.equal(false);
     expect(out.brief.kind).to.equal('brief');
     expect(out.degraded).to.equal(false);
@@ -451,5 +463,124 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
     const quiet = await composeBrief({ ...base(engine, gate), items: [], candidates: [], alertGroups: [] });
     expect(quiet.brief.kind).to.equal('heartbeat');
+  });
+});
+
+describe('rollup/brief: one session that recovers instead of restarting (FR-017, revision 23)', () => {
+  const { RunDir } = require('../../src/store/run-dir');
+  const { tempDir, removeDir } = require('../helpers/fixtures');
+  const items = rankItems({
+    items: [makeItem(), makeItem({ metric: 'cht_conflict_count', severity: 'low', confidence: 0.4 })],
+  });
+  const base = () => ({
+    discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()], memory: null, feedbackUnmatched: [],
+    expectedLoadNotice: null, referenceSourcesUnavailable: false, footer: footer(),
+  });
+  const draftWith = (texts, overrides = {}) => draftFor(items, {
+    bullets: items.map((item, i) => ({ item_id: item.item_id, text: texts[i] })), ...overrides,
+  });
+  const rejectedWith = (reasons) => ({
+    report: {
+      subject: 'brief', subject_ref: 'rollup/draft1', attempt: 1, outcome: 'rejected',
+      checks: [{ name: 'numbers_match', status: 'fail', reasons }],
+    },
+  });
+
+  it('opens one session with no tools, takes one turn per attempt and closes it', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
+    expect(engine.openSession).to.have.been.calledOnce;
+    expect(engine.openSession.firstCall.args[0]).to.include({ model: 'claude-fable-5-1', sessionName: 'rollup' });
+    expect(engine.openSession.firstCall.args[0].tools).to.deep.equal([]);
+    expect(engine.session.turn).to.have.been.calledOnce;
+    expect(engine.session.close).to.have.been.calledOnce;
+    expect(engine.singleTurn.called).to.equal(false);
+  });
+
+  it('asks the second turn for the failing bullets only and keeps the other bullets from the first draft', async () => {
+    const engine = engineWith(
+      successResult(draftWith(['first-0 912 vs 300', 'first-1 999 conflicts'], { headline: 'first headline' })),
+      successResult(draftWith(['second-0 rewritten', 'second-1 12 conflicts'], { headline: 'second headline' })),
+    );
+    const gate = { verifyBrief: sinon.stub() };
+    gate.verifyBrief.onCall(0).resolves(rejectedWith(['bullets[1] contains 999, which matches no computed value']));
+    gate.verifyBrief.onCall(1).resolves(accepted);
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
+    expect(out.degraded).to.equal(false);
+    const revision = engine.session.turn.secondCall.args[0];
+    expect(revision).to.include('bullets[1]').and.include(items[1].item_id).and.include('999');
+    expect(revision).to.match(/copy|verbatim/i);
+    expect(revision).to.not.include('first-0 912 vs 300');
+    const verified = gate.verifyBrief.secondCall.args[0].draft;
+    expect(verified.bullets.map((b) => b.text)).to.deep.equal(['first-0 912 vs 300', 'second-1 12 conflicts']);
+    expect(verified.headline).to.equal('first headline');
+    expect(out.drafts[1].draft).to.deep.equal(verified);
+    expect(out.brief.headline).to.equal('first headline');
+    expect(out.brief.bullets.map((b) => b.text)).to.deep.equal(['first-0 912 vs 300', 'second-1 12 conflicts']);
+  });
+
+  it('takes the new headline when the headline failed, and the whole new draft when no bullet is named', async () => {
+    const engine = engineWith(
+      successResult(draftWith(['first-0', 'first-1'], { headline: 'first headline' })),
+      successResult(draftWith(['second-0', 'second-1'], { headline: 'second headline' })),
+    );
+    const gate = { verifyBrief: sinon.stub() };
+    gate.verifyBrief.onCall(0).resolves(rejectedWith(['headline names partner.other.org']));
+    gate.verifyBrief.onCall(1).resolves(accepted);
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
+    expect(out.brief.headline).to.equal('second headline');
+    expect(out.brief.bullets.map((b) => b.text)).to.deep.equal(['first-0', 'first-1']);
+
+    const whole = engineWith(
+      successResult(draftWith(['first-0', 'first-1'])),
+      successResult(draftWith(['second-0', 'second-1'])),
+    );
+    const gate2 = { verifyBrief: sinon.stub() };
+    gate2.verifyBrief.onCall(0).resolves(rejectedWith(['draft has 2 bullets but the layout has 3']));
+    gate2.verifyBrief.onCall(1).resolves(accepted);
+    const out2 = await composeBrief({ ctx: makeCtx({ engine: whole, gate: gate2 }), items, ...base() });
+    expect(out2.brief.bullets.map((b) => b.text)).to.deep.equal(['second-0', 'second-1']);
+  });
+
+  it('writes the roll-up prompt and its revisions to rollup/prompt.md when given a run directory', async () => {
+    const dataDir = tempDir();
+    try {
+      const runDir = await RunDir.create(dataDir, '2026-09-18');
+      const engine = engineWith(successResult(draftFor(items)), successResult(draftFor(items)));
+      const gate = { verifyBrief: sinon.stub() };
+      gate.verifyBrief.onCall(0).resolves(rejectedWith(['bullets[0] contains 7, which matches no computed value']));
+      gate.verifyBrief.onCall(1).resolves(accepted);
+      await composeBrief({ ctx: { ...makeCtx({ engine, gate }), runDir }, items, ...base() });
+      const prompt = await runDir.readText('rollup/prompt.md');
+      expect(prompt.startsWith('ROLLUP TEMPLATE 2026-09-18')).to.equal(true);
+      expect(prompt).to.include('# Revision 1').and.include('bullets[0] contains 7');
+    } finally {
+      removeDir(dataDir);
+    }
+  });
+
+  it('records the cache counters under either spelling the runtime uses', async () => {
+    const spelled = successResult(draftFor(items));
+    spelled.result.usage = { input_tokens: 5, output_tokens: 6, cache_read_tokens: 10, cache_creation_tokens: 5 };
+    const engine = engineWith(spelled);
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
+    expect(out.calls[0]).to.include({ cache_read_tokens: 10, cache_creation_tokens: 5, input_tokens: 5 });
+    const other = engineWith(successResult(draftFor(items)));
+    const out2 = await composeBrief({ ctx: makeCtx({ engine: other, gate }), items, ...base() });
+    expect(out2.calls[0]).to.include({ cache_read_tokens: 10, cache_creation_tokens: 0 });
+  });
+
+  it('hands the gate the layout and checked texts and each item\'s prompt entry as given text', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
+    const call = gate.verifyBrief.firstCall.args[0];
+    expect(call.givenText.some((text) => text.includes('Computed by code'))).to.equal(true);
+    expect(call.givenText.some((text) => text.includes('3 projects'))).to.equal(true);
+    expect(call.itemTexts).to.be.instanceOf(Map);
+    expect(call.itemTexts.get(items[0].item_id)).to.include('"rank": 1').and.include(items[0].item_id);
+    expect(call.itemTexts.get(items[0].item_id)).to.not.include(items[1].item_id);
   });
 });

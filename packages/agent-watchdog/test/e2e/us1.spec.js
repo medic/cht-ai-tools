@@ -52,12 +52,18 @@ describe('e2e: User Story 1, the daily brief', function () {
 
     const payload = r.read('rollup/payload.json');
     expect(payload.parent.metadata.event_type).to.equal('agent_watchdog.brief');
-    expect(payload.replies.length).to.equal(ranked.length);
+    // Replies for the body items only; every item is in the report shared into the thread (FR-020, revision 23).
+    const layout = r.read('rollup/layout.json');
+    expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal([...layout.body_items].sort());
+    expect(payload.report)
+      .to.include({ path: 'rollup/report.html', items: ranked.length, replied: payload.replies.length });
     const publication = r.read('rollup/publication.json');
     expect(publication.ts).to.be.a('string');
-    expect(r.slack.files.uploadV2).to.have.been.calledOnce;
+    expect(publication.report).to.include({ file_id: 'F0001' });
+    expect(r.slack.files.uploadV2).to.have.been.calledTwice;
     expect(r.slack.files.uploadV2.firstCall.args[0]).to.not.have.property('channel_id');
-    expect(r.slack.chat.postMessage.callCount).to.equal(1 + ranked.length);
+    expect(r.slack.files.uploadV2.secondCall.args[0]).to.include({ channel_id: 'C123', thread_ts: publication.ts });
+    expect(r.slack.chat.postMessage.callCount).to.equal(1 + payload.replies.length);
     const parentCall = r.slack.chat.postMessage.firstCall.args[0];
     const imageBlock = parentCall.blocks.find((b) => b.type === 'image');
     expect(imageBlock && imageBlock.slack_file && imageBlock.slack_file.id).to.equal('F0001');

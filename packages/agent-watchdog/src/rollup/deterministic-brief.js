@@ -42,6 +42,7 @@ const baseBrief = ({ runId, footer, expectedLoadNotice, notices = [] }) => ({
   degradation_notice: null,
   notices: [...notices],
   image: null,
+  report: null,
   footer,
   publication: null,
 });

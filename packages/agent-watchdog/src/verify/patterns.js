@@ -54,6 +54,12 @@ const phoneMatches = (text) => {
     if (DECIMAL_PATTERN.test(match[0]) || DATE_PATTERN.test(match[0].trim())) {
       continue;
     }
+    // Two decimals side by side ("0.00465 (0.01858") span the pattern; a run made only of decimal numbers and dates
+    // is a list of values, not a phone number (revision 23).
+    const parts = match[0].trim().split(/[\s()]+/).filter(Boolean);
+    if (parts.length > 1 && parts.every((part) => DECIMAL_PATTERN.test(part) || DATE_PATTERN.test(part))) {
+      continue;
+    }
     let start = match.index;
     let end = match.index + match[0].length;
     while (start > 0 && /[^\s"',;|<>[\]{}]/.test(text[start - 1])) {

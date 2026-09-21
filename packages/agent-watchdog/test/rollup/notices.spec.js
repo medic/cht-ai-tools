@@ -65,3 +65,26 @@ describe('rollup/notices', () => {
     expect(ignored).to.deep.equal([]);
   });
 });
+
+describe('rollup/notices: dark hosts in the housekeeping line (FR-080, revision 23)', () => {
+  const stale = [{
+    instance_id: 'i0', title: 'API Server Down', host: 'dead-0.example.org', started_at: '2026-07-08T00:00:00Z',
+    days_firing: 72,
+  }];
+
+  it('names hosts dark for the whole trailing fortnight once, with or without a stale alert there', () => {
+    expect(housekeepingNotice([], ['dark-a.example.org', 'dark-b.example.org'])).to.equal(
+      'Housekeeping: 2 hosts dark for the whole trailing fortnight (dark-a.example.org, dark-b.example.org): '
+      + 'remove them from the watchdog or restore the scrape',
+    );
+    expect(housekeepingNotice(stale, ['dead-0.example.org', 'dark-a.example.org'])).to.equal(
+      'Housekeeping: 1 alert stale for 72+ days on 1 host with no data (dead-0.example.org): remove it from the '
+      + 'watchdog or silence the rule; 1 more host dark for the whole trailing fortnight (dark-a.example.org)',
+    );
+    expect(housekeepingNotice(stale, ['dead-0.example.org']), 'a host already named is not named twice').to.equal(
+      'Housekeeping: 1 alert stale for 72+ days on 1 host with no data (dead-0.example.org): remove it from the '
+      + 'watchdog or silence the rule',
+    );
+    expect(housekeepingNotice([], [])).to.equal(null);
+  });
+});

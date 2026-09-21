@@ -2,9 +2,12 @@
 
 // The stage keeps computed changes keyed by project slug; the gate wants one flat list.
 const asChangeList = (changes) => (Array.isArray(changes) ? changes : Object.values(changes || {}).flat());
-// The roll-up: one bounded model call that writes the brief from ranked items, gated before use (FR-010,
-// FR-015, FR-016, FR-017). Everything the model returns is untrusted until the gate accepts it.
+// The roll-up: one bounded model session that writes the brief from ranked items, gated before use (FR-010,
+// FR-015, FR-016, FR-017). Everything the model returns is untrusted until the gate accepts it. A rejected draft
+// is mended, not redrafted: the next turn names only the failing bullets and code keeps every other bullet as it
+// was (revision 23).
 const { briefSchema, toJsonSchemas } = require('../agent/output-schema');
+const { normaliseUsage } = require('../agent/turn-mapper');
 const { schemas } = require('../model/schemas');
 const { buildDeterministicBrief, buildHeartbeat, checkedCounts, hostOf } = require('./deterministic-brief');
 const { buildLayout, groupOfProjects, assembleBullets } = require('./layout');
@@ -148,17 +151,18 @@ const buildUserPrompt = ({
 };
 
 const costRecord = ({ ctx, attempt, result }) => {
-  const usage = result.usage || {};
+  // The runtime spells the cache counters two ways; the mapper's normaliser reads both (revision 23).
+  const usage = normaliseUsage(result.usage || {});
   return {
     run_id: ctx.runId,
     project_url: null,
     stage: 'rollup',
     pass: attempt,
     model: ctx.config.model.name,
-    input_tokens: usage.input_tokens || 0,
-    output_tokens: usage.output_tokens || 0,
-    cache_read_tokens: usage.cache_read_input_tokens || 0,
-    cache_creation_tokens: usage.cache_creation_input_tokens || 0,
+    input_tokens: usage.input_tokens,
+    output_tokens: usage.output_tokens,
+    cache_read_tokens: usage.cache_read_tokens,
+    cache_creation_tokens: usage.cache_creation_tokens,
     cost_usd: result.total_cost_usd || 0,
     num_turns: result.num_turns === undefined ? null : result.num_turns,
     duration_ms: result.duration_ms === undefined ? null : result.duration_ms,
@@ -168,6 +172,99 @@ const costRecord = ({ ctx, attempt, result }) => {
 const reasonsOf = (report) => (report.checks || [])
   .filter((check) => check.status === 'fail')
   .flatMap((check) => check.reasons.map((reason) => `${check.name}: ${reason}`));
+
+const CHECK_PREFIX = /^[a-z_]+: /;
+const BULLET_REASON = /^bullets\[(\d+)\]/;
+
+/**
+ * What a rejection names (revision 23): the bullet indices, the headline, the thread order, or something general (a
+ * bullet count, a layout mismatch) that no single part can answer for.
+ */
+const failingParts = (reasons) => {
+  const parts = { bullets: new Set(), headline: false, threadOrder: false, general: false };
+  for (const line of reasons) {
+    const reason = line.replace(CHECK_PREFIX, '');
+    const bullet = BULLET_REASON.exec(reason);
+    if (bullet) {
+      parts.bullets.add(Number(bullet[1]));
+    } else if (/^headline/.test(reason)) {
+      parts.headline = true;
+    } else if (/^thread_order/.test(reason)) {
+      parts.threadOrder = true;
+    } else {
+      parts.general = true;
+    }
+  }
+  return parts;
+};
+
+/**
+ * The turn after a rejection: only the failing bullets, with their reasons, and the instruction to return the full
+ * draft with everything else copied verbatim.
+ */
+const revisionPrompt = ({ attempt, draft, failing, reasons }) => {
+  const lines = [
+    `The previous draft (attempt ${attempt}) was rejected by the verification gate. Rewrite only what is named`,
+    'below so that every reason is resolved, and return the full draft again, copying every other bullet, the',
+    'headline and thread_order verbatim from your previous draft.',
+  ];
+  const named = [...failing.bullets].sort((a, b) => a - b);
+  if (named.length) {
+    lines.push('', 'Failing bullets:');
+    for (const index of named) {
+      const bullet = (draft.bullets || [])[index] || {};
+      const own = reasons.filter((r) => BULLET_REASON.test(r.replace(CHECK_PREFIX, ''))
+        && Number(BULLET_REASON.exec(r.replace(CHECK_PREFIX, ''))[1]) === index);
+      lines.push(`- bullets[${index}] (item ${bullet.item_id || 'unknown'}): "${bullet.text || ''}"`);
+      for (const reason of own) {
+        lines.push(`  - ${reason}`);
+      }
+    }
+  }
+  const other = reasons.filter((r) => !BULLET_REASON.test(r.replace(CHECK_PREFIX, '')));
+  if (other.length) {
+    lines.push('', 'Other reasons:');
+    for (const reason of other) {
+      lines.push(`- ${reason}`);
+    }
+  }
+  return lines.join('\n');
+};
+
+/**
+ * The draft to verify after a retry: the previous attempt's text for every bullet the gate did not name, the
+ * model's rewrite for the ones it did, the headline and thread order likewise; a general reason takes the new draft
+ * whole, since nothing of the old one can be trusted to stand.
+ */
+const mergeDraft = (previous, next, failing) => {
+  if (!previous || !failing || failing.general) {
+    return next;
+  }
+  const rewritten = new Map((next.bullets || []).map((bullet) => [bullet.item_id, bullet]));
+  return {
+    ...next,
+    headline: failing.headline ? next.headline : previous.headline,
+    bullets: (previous.bullets || []).map((bullet, index) => (failing.bullets.has(index)
+      ? rewritten.get(bullet.item_id) || (next.bullets || [])[index] || bullet
+      : bullet)),
+    thread_order: failing.threadOrder ? next.thread_order : previous.thread_order,
+  };
+};
+
+/** The exact roll-up turns, kept like a project's prompt.pass<n>.md (revision 23); nothing without a run directory. */
+const recordPrompt = async (ctx, attempt, prompt) => {
+  const runDir = ctx.runDir;
+  if (!runDir || typeof runDir.writeText !== 'function') {
+    return;
+  }
+  const file = 'rollup/prompt.md';
+  if (attempt === 1) {
+    await runDir.writeText(file, prompt);
+    return;
+  }
+  const existing = runDir.exists(file) ? await runDir.readText(file) : '';
+  await runDir.writeText(file, `${existing}\n\n---\n\n# Revision ${attempt - 1}\n\n${prompt}`);
+};
 
 /**
  * Assemble the Bullet entities from the model's per-item lines and the code-built layout (FR-010, FR-069): a group
@@ -302,10 +399,12 @@ const shortfalls = (analysis) => {
 };
 
 const composeBrief = async ({
-  ctx, items, discovery, changes, candidates, memory = null, feedbackUnmatched = [], expectedLoadNotice = null,
-  referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [], feedbackBrief = null,
-  layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
+  ctx, items, discovery, changes, candidates, allCandidates = candidates, memory = null, feedbackUnmatched = [],
+  expectedLoadNotice = null, referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [],
+  feedbackBrief = null, layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
 }) => {
+  // `candidates` are the ones the model was handed; `allCandidates` include the standing conditions code handled,
+  // which the counts still cover (FR-014, revision 23).
   // Failed or bound-stopped model sessions are never silent: a notice on every brief, and the deterministic brief
   // when they left nothing to publish although candidates exist (revision 13, 16).
   const short = shortfalls(analysis);
@@ -324,10 +423,10 @@ const composeBrief = async ({
     }
     const brief = alertGroups.length
       ? alertsOnlyBrief({
-        ctx, layout: bodyLayout, alertGroups, staleAfterDays, discovery, candidates, footer, expectedLoadNotice,
-        notices,
+        ctx, layout: bodyLayout, alertGroups, staleAfterDays, discovery, candidates: allCandidates, footer,
+        expectedLoadNotice, notices,
       })
-      : buildHeartbeat({ ...base, candidatesCount: candidates.length });
+      : buildHeartbeat({ ...base, candidatesCount: allCandidates.length });
     return { brief, drafts: [], degraded: false, memoryUpdate: null, proposals: [], calls: [] };
   }
 
@@ -350,68 +449,94 @@ const composeBrief = async ({
     calls,
   });
 
-  for (let attempt = 1; attempt <= maxDrafts; attempt += 1) {
-    const userPrompt = buildUserPrompt({
-      ctx, items, expectedLoadNotice, referenceSourcesUnavailable, memory, feedbackUnmatched, rejections,
-      discovery, candidates, feedback, feedbackBrief, userTemplate: split.userTemplate, layout: bodyLayout,
-    });
-    const turn = await ctx.engine.singleTurn({
-      systemPrompt: [instructions],
-      userPrompt,
-      outputSchema,
-      bounds: {
-        maxTurns: ctx.config.bounds.maxTurns,
-        maxBudgetUsd: ctx.config.bounds.maxBudgetUsdProject,
-        timeoutMs: ctx.config.bounds.modelTimeoutMs,
-      },
-      model: ctx.config.model.name,
-      effort: ctx.config.model.effort,
-      name: `rollup-draft-${attempt}`,
-    });
-    const result = turn.result || {};
-    calls.push(costRecord({ ctx, attempt, result }));
-    ctx.logger.info('rollup.draft', { attempt, subtype: result.subtype, cost_usd: result.total_cost_usd });
+  // What the model was given, for the gate (FR-016, revision 23): the run-wide texts and each item's own entry.
+  const givenText = [layoutText(bodyLayout), checkedText(discovery, allCandidates)];
+  const itemTexts = new Map(items.map((item) => [item.item_id, JSON.stringify(itemForPrompt(item), null, 2)]));
 
-    if (result.subtype !== 'success') {
-      return degrade(`model result unusable (${result.subtype || 'no result'})`);
-    }
-    const parsed = briefSchema.safeParse(turn.structuredOutput);
-    if (!parsed.success) {
-      return degrade('model output failed the brief schema');
-    }
-    const draft = parsed.data;
-    const { report } = await ctx.gate.verifyBrief({
-      draft,
-      items,
-      discovery,
-      changes: asChangeList(changes),
-      runId: ctx.runId,
-      attempt,
-      resolveLinks: ctx.resolveLinks,
-      allowlist: ctx.allowlist,
-      layout: bodyLayout,
-      extraUrls: alertLinks,
-    });
-    drafts.push({ attempt, draft, report });
-    if (report.outcome === 'accepted') {
-      const brief = briefFromDraft({
-        ctx, draft, layout: bodyLayout, items, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable,
-        footer, notices, alertGroups, staleAfterDays,
-      });
-      const validated = schemas.Brief.safeParse(brief);
-      if (!validated.success) {
-        return degrade('accepted draft failed entity validation');
+  // One session for every attempt (FR-017, revision 23): the items are sent once and cached; a retry carries only
+  // the failing bullets and code keeps the rest.
+  const session = await ctx.engine.openSession({
+    systemPrompt: [instructions],
+    outputSchema,
+    tools: [],
+    localTools: [],
+    localServers: {},
+    mcpConfig: null,
+    bounds: {
+      maxTurns: ctx.config.bounds.maxTurns,
+      maxBudgetUsd: ctx.config.bounds.maxBudgetUsdProject,
+      timeoutMs: ctx.config.bounds.modelTimeoutMs,
+    },
+    model: ctx.config.model.name,
+    effort: ctx.config.model.effort,
+    sessionName: 'rollup',
+  });
+  let previousDraft = null;
+  let failing = null;
+  try {
+    for (let attempt = 1; attempt <= maxDrafts; attempt += 1) {
+      const last = rejections[rejections.length - 1];
+      const userPrompt = attempt === 1
+        ? buildUserPrompt({
+          ctx, items, expectedLoadNotice, referenceSourcesUnavailable, memory, feedbackUnmatched, rejections: [],
+          discovery, candidates: allCandidates, feedback, feedbackBrief, userTemplate: split.userTemplate,
+          layout: bodyLayout,
+        })
+        : revisionPrompt({ attempt: attempt - 1, draft: previousDraft, failing, reasons: last.reasons });
+      await recordPrompt(ctx, attempt, userPrompt);
+      const turn = await session.turn(userPrompt);
+      const result = turn.result || {};
+      calls.push(costRecord({ ctx, attempt, result }));
+      ctx.logger.info('rollup.draft', { attempt, subtype: result.subtype, cost_usd: result.total_cost_usd });
+
+      if (result.subtype !== 'success') {
+        return degrade(`model result unusable (${result.subtype || 'no result'})`);
       }
-      return {
-        brief: validated.data,
-        drafts,
-        degraded: false,
-        memoryUpdate: draft.memory_update,
-        proposals: draft.proposals,
-        calls,
-      };
+      const parsed = briefSchema.safeParse(turn.structuredOutput);
+      if (!parsed.success) {
+        return degrade('model output failed the brief schema');
+      }
+      const draft = mergeDraft(previousDraft, parsed.data, failing);
+      const { report } = await ctx.gate.verifyBrief({
+        draft,
+        items,
+        discovery,
+        changes: asChangeList(changes),
+        runId: ctx.runId,
+        attempt,
+        resolveLinks: ctx.resolveLinks,
+        allowlist: ctx.allowlist,
+        layout: bodyLayout,
+        extraUrls: alertLinks,
+        givenText,
+        itemTexts,
+      });
+      drafts.push({ attempt, draft, report });
+      if (report.outcome === 'accepted') {
+        const brief = briefFromDraft({
+          ctx, draft, layout: bodyLayout, items, discovery, candidates: allCandidates, expectedLoadNotice,
+          referenceSourcesUnavailable, footer, notices, alertGroups, staleAfterDays,
+        });
+        const validated = schemas.Brief.safeParse(brief);
+        if (!validated.success) {
+          return degrade('accepted draft failed entity validation');
+        }
+        return {
+          brief: validated.data,
+          drafts,
+          degraded: false,
+          memoryUpdate: draft.memory_update,
+          proposals: draft.proposals,
+          calls,
+        };
+      }
+      const reasons = reasonsOf(report);
+      rejections.push({ attempt, reasons });
+      failing = failingParts(reasons);
+      previousDraft = draft;
     }
-    rejections.push({ attempt, reasons: reasonsOf(report) });
+  } finally {
+    await session.close();
   }
   const last = rejections[rejections.length - 1];
   const reasonText = last && last.reasons.length ? ` (last reasons: ${last.reasons.join('; ')})` : '';
@@ -419,6 +544,6 @@ const composeBrief = async ({
 };
 
 module.exports = {
-  composeBrief, buildUserPrompt, bulletsFromDraft, alertsOnlyBrief, splitRollupTemplate, BUILT_IN_TEMPLATE,
-  DEFAULT_USER_TEMPLATE, REFERENCE_UNAVAILABLE_NOTICE,
+  composeBrief, buildUserPrompt, bulletsFromDraft, alertsOnlyBrief, splitRollupTemplate, failingParts, mergeDraft,
+  revisionPrompt, BUILT_IN_TEMPLATE, DEFAULT_USER_TEMPLATE, REFERENCE_UNAVAILABLE_NOTICE,
 };

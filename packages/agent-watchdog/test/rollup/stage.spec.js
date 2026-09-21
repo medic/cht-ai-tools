@@ -79,6 +79,11 @@ describe('cli/stages/rollup', () => {
   });
   afterEach(() => removeDir(dataDir));
 
+  // The roll-up drafts in one session (revision 23); the memory condenser still uses a single turn.
+  const sessionEngine = (output) => {
+    const session = { turn: sinon.stub().resolves(output), close: sinon.stub().resolves() };
+    return { openSession: sinon.stub().resolves(session), session, singleTurn: sinon.stub().resolves(output) };
+  };
   const ctxWith = (engineOutput) => ({
     config: makeConfig(),
     logger: quietLogger(),
@@ -88,7 +93,7 @@ describe('cli/stages/rollup', () => {
     mode: 'scheduled',
     traceUrl: 'https://langfuse.example.org/trace/t1',
     costSoFar: 0.05,
-    engine: { singleTurn: sinon.stub().resolves(engineOutput) },
+    engine: sessionEngine(engineOutput),
     gate: {
       verifyBrief: sinon.stub().resolves({
         report: { subject: 'brief', subject_ref: 'rollup/draft1', attempt: 1, checks: [], outcome: 'accepted' },
@@ -153,7 +158,7 @@ describe('cli/stages/rollup', () => {
       referenceUnavailable: false,
     });
     const ctx = ctxWith(null);
-    ctx.engine.singleTurn = sinon.stub().onFirstCall().resolves(turn(0.02)).onSecondCall().resolves(turn(0.03));
+    ctx.engine.session.turn = sinon.stub().onFirstCall().resolves(turn(0.02)).onSecondCall().resolves(turn(0.03));
     const rejected = {
       subject: 'brief', subject_ref: 'rollup/draft1', attempt: 1, outcome: 'rejected',
       checks: [{ name: 'numbers_match', status: 'fail', reasons: ['bullets[0] contains 913'] }],
@@ -181,7 +186,7 @@ describe('cli/stages/rollup', () => {
     const ctx = ctxWith(null);
     const out = await stage.run(ctx);
     expect(out.kind).to.equal('heartbeat');
-    expect(ctx.engine.singleTurn.called).to.equal(false);
+    expect(ctx.engine.openSession.called).to.equal(false);
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.headline).to.include('All quiet');
   });
@@ -244,12 +249,11 @@ describe('cli/stages/rollup', () => {
     const ctx = ctxWith(null);
     ctx.config.behaviour = { memoryMaxTokens: 500 };
     ctx.definition = loadDefinition({ paths: PACKAGE_PATHS, env: { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://d/mcp' } });
-    ctx.engine.singleTurn = sinon.stub()
-      .onFirstCall().resolves(turn(draft, 0.01))
-      .onSecondCall().resolves(turn({ memory: 'condensed durable facts\n' }, 0.02));
+    ctx.engine.session.turn = sinon.stub().resolves(turn(draft, 0.01));
+    ctx.engine.singleTurn = sinon.stub().resolves(turn({ memory: 'condensed durable facts\n' }, 0.02));
     const out = await stage.run(ctx);
     expect(out.kind).to.equal('brief');
-    expect(ctx.engine.singleTurn.secondCall.args[0].name).to.equal('memory-condense');
+    expect(ctx.engine.singleTurn.firstCall.args[0].name).to.equal('memory-condense');
     expect(fs.readFileSync(path.join(dataDir, 'memory', 'memory.md'), 'utf8')).to.equal('condensed durable facts\n');
     expect(runDir.exists('memory.patch')).to.equal(true);
     expect(out.calls.map((c) => c.cost_usd)).to.deep.equal([0.01, 0.02]);
@@ -258,6 +262,40 @@ describe('cli/stages/rollup', () => {
     const output = await runDir.readJson('rollup/rollup-output.json');
     expect(output.memory).to.include({ applied: true, reason: 'condensed', condensed_by: 'model' });
     expect(Math.ceil(estimateTokens(over) * 1.1)).to.be.greaterThan(500);
+  });
+
+  it('writes the standing conditions, names them in a notice and counts every candidate (revision 23)', async () => {
+    const standingBacklog = makeCandidate({
+      candidate_id: 'b'.repeat(12), metric: 'cht_outbound_push_backlog_count', rule: 'backlog_absolute', observed: 100,
+      evidence: [
+        { window: 'current', value: 100, unit: 'count' }, { window: 'previous_day', value: 90, unit: 'count' },
+      ],
+    });
+    await runDir.writeJson('alpha-example-org/candidates.json', [makeCandidate(), standingBacklog]);
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    await stage.run(ctx);
+    const standing = await runDir.readJson('rollup/standing.json');
+    expect(standing).to.have.length(1);
+    expect(standing[0]).to.include({
+      rule: 'backlog_absolute', host: 'alpha.example.org', group: 'Other', value: 100, previous_day_value: 90,
+    });
+    const brief = await runDir.readJson('rollup/brief.json');
+    const standingLine = 'Standing: outbound push backlog above zero on 1 project as yesterday';
+    expect(brief.notices.some((n) => n.startsWith(standingLine))).to.equal(true);
+    expect(brief.checked.candidates, 'standing candidates are still counted').to.equal(2);
+    expect(runDir.exists('rollup/prompt.md')).to.equal(true);
   });
 
   it('refuses to run without discovery.json', async () => {

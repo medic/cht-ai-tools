@@ -1,7 +1,9 @@
 'use strict';
 // Every number the model wrote in prose must equal a computed value under the display formatter; numerals inside
 // code spans are exempt, but each span must be a collected expression or metric (data-model.md "Number matching").
-const { formatValue, extractNumbers, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS } = require('../format');
+const {
+  formatValue, extractNumbers, extractNumbersEverywhere, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS,
+} = require('../format');
 const { sameMetric, keyForms, flatPanels } = require('../metric-key');
 const { enums } = require('../../model/schemas');
 
@@ -162,9 +164,31 @@ const stripRunIdentifiers = (text, ctx) => {
   return out.replace(PANEL_REFERENCE, (match, id) => (ids.has(id) ? ' ' : match));
 };
 
-const checkText = (where, text, allowed, spanForms, reasons, ctx) => {
+/** A token's bare value: separators and the unit letter dropped, so `1,234`, `1234` and `1234d` agree. */
+const bareValue = (token) => {
+  const bare = String(token).replace(/,/g, '').replace(/[%hdx]$/, '');
+  const n = Number(bare);
+  return Number.isFinite(n) ? String(n) : bare;
+};
+
+/**
+ * The numerals of the text the model was given (FR-016, revision 23): for findings, every prompt of the session and
+ * every tool result it received; for a brief bullet, the item's own prompt entry and the run-wide counts. A numeral
+ * the model read is not one it invented.
+ */
+const givenNumerals = (texts) => {
+  const out = new Set();
+  for (const text of texts || []) {
+    for (const token of extractNumbersEverywhere(text)) {
+      out.add(bareValue(token));
+    }
+  }
+  return out;
+};
+
+const checkText = (where, text, allowed, spanForms, reasons, ctx, given = new Set()) => {
   for (const token of extractNumbers(stripRunIdentifiers(text, ctx))) {
-    if (WINDOW_NAME_TOKENS.has(token)) {
+    if (WINDOW_NAME_TOKENS.has(token) || given.has(bareValue(token))) {
       continue;
     }
     if (!matches(token, allowed)) {
@@ -182,6 +206,7 @@ const checkText = (where, text, allowed, spanForms, reasons, ctx) => {
 const check = (ctx) => {
   const reasons = [];
   const spanForms = knownSpanForms(ctx);
+  const runGiven = givenNumerals(ctx.givenText || []);
   if (ctx.mode === 'brief') {
     const byId = new Map((ctx.items || []).map((item) => [item.item_id, item]));
     (ctx.draft.bullets || []).forEach((bullet, i) => {
@@ -190,16 +215,21 @@ const check = (ctx) => {
         reasons.push(`bullets[${i}] refers to unknown item ${bullet.item_id}`);
         return;
       }
-      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx);
+      // A bullet may quote its own item's prompt entry and the run-wide counts, never a neighbour's numbers.
+      const own = ctx.itemTexts && typeof ctx.itemTexts.get === 'function' ? ctx.itemTexts.get(bullet.item_id) : null;
+      const given = new Set([...runGiven, ...givenNumerals(own ? [own] : [])]);
+      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx, given);
     });
   } else {
     (ctx.items || []).forEach((item, i) => {
       const allowed = allowedValues(item, ctx);
-      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx);
-      checkText(`items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx);
+      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx, runGiven);
+      checkText(`items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx, runGiven);
     });
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
-module.exports = { name: NAME, check, allowedValues, matches, stripRunIdentifiers, WINDOW_NAME_TOKENS };
+module.exports = {
+  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, WINDOW_NAME_TOKENS,
+};

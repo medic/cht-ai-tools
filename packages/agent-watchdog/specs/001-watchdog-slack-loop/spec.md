@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 22)
+**Status**: Draft (revision 23)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -37,8 +37,10 @@ quiet day and verify the one-line post.
    executes, **Then** a single-line post states all is quiet and how many projects and panels
    were checked, and no thread replies are created.
 3. **Given** more items qualify than five bullets can hold, **When** the run executes, **Then**
-   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, and the
-   remainder appear as additional threaded replies, each still individually reactable.
+   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, each body
+   item has its own threaded reply, and the remainder appear only in the run's report, shared into
+   the thread as its first reply, where every item is numbered by rank so a note can cite it
+   (revision 23; until then every item had a reply, which reached 159 replies under one post).
 4. **Given** the run falls inside a configured expected-load window (month-end, sync week),
    **When** a metric rises in line with the same phase of the previous cycle, **Then** it is
    not flagged and the post notes that the window is active.
@@ -87,6 +89,10 @@ the agent's memory reflect the note.
 5. **Given** feedback has accumulated for thirty days, **When** the next run executes,
    **Then** confirmed and dismissed items have been appended to the knowledge corpus as run
    outcomes, available to the distillation described in User Story 6.
+6. **Given** a thread note reads "#12 :-1: known migration until 1 October" under a brief whose
+   report lists an item ranked 12, **When** it is ingested, **Then** it is recorded as feedback on
+   that item with verdict down, the note and its horizon; and a note whose only content is a
+   thumbs, citing no item, is recorded as unmatched (revision 23).
 
 ### User Story 3 - Steering, auditing and running it yourself (Priority: P2)
 
@@ -515,6 +521,22 @@ line that shows the alert and its metric together.
   computed value (FR-016, revision 18). The same holds for the numeral alone ("the trailing 14
   days"), for a numeral inside a collected metric expression written out in prose, and for a
   collected panel's id ("panel 34") (revision 22).
+- The model's prose quotes a number it read in its own session, an alert's days firing, the
+  duration inside an expression's window, a count from a history entry: it is the run's own text
+  read back, not an invented figure, and MUST NOT be reported as unmatched; a number found in
+  neither the session's text nor the computed values still is (FR-016, revision 23).
+- The model writes two decimals side by side ("0.00465 (0.01858 yesterday)"): the phone pattern
+  spans both, but a run made only of decimal numbers, dates and times is a list of values, not a
+  phone number (FR-016, revision 23).
+- The model abbreviates a project's host to its leading labels to fit a bullet: it names that
+  project and MUST NOT be reported as an undiscovered one; a bare domain or a single label names
+  nothing (FR-016, revision 23).
+- Every candidate of a project is a standing condition (an outbound push backlog above zero as
+  yesterday, a host dark for the whole trailing fortnight): the project opens no session, code names the condition in
+  the brief and lists it in the report, and the project is neither quiet nor incomplete (FR-013,
+  FR-014, revision 23).
+- A note cites `#7` under a forced re-run's post: the rank is resolved against that run's own
+  ranked items, never against another run of the same date (FR-027, revision 23).
 - A run analyses one project of ninety: the brief names that project's alerts and nothing else, the
   housekeeping and resolved lines cover only hosts it analysed, and the durable episode record is
   still updated for every project so the next full run is unaffected (FR-066, revision 19).
@@ -584,7 +606,10 @@ Analysis
   it relates to another item of the same run and project, naming that item by its metric and the
   kind of relation, so a judgement the analysis already makes in prose survives as data the
   roll-up and the weekly report can use; code resolves the metric to that item's identity and
-  verification rejects a metric that is not another item of the same findings (revision 20).
+  verification rejects a metric that is not another item of the same findings (revision 20). An
+  item related to a higher-ranked item of the same run and project is presented under that item:
+  the report nests it, the higher item's thread reply names it with the relation and its rank,
+  and, unless it is a body item itself, it takes no thread reply of its own (revision 23).
 - **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
   bullet is one item or, when a project group has several flagged projects or several alerts, one
   group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
@@ -592,7 +617,9 @@ Analysis
   validation MUST NOT be published.
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
   reaching a bound the run completes with what it has and says so.
-- **FR-013**: A project with no candidate items MUST NOT incur model usage.
+- **FR-013**: A project with no candidate items MUST NOT incur model usage. A project whose only
+  candidates are standing conditions (FR-014) MUST NOT incur model usage either: code names them,
+  and a session spent on them adds nothing the reader does not already know (revision 23).
 - **FR-014a**: A candidate the analysis examined and did not surface, with the reason it gave,
   MUST be usable as threshold evidence in the weekly calibration report, ranking below a human
   verdict: where a person has judged the same candidate that verdict decides, and a suggestion
@@ -606,7 +633,14 @@ Analysis
   more versus the previous day, a deviation of 2.5 standard deviations or more versus the
   trailing fourteen days, or a monotonic rise lasting six hours or more. Severities are low,
   medium and high; high is reserved for a scrape target down, an outbound push backlog above
-  zero, or a sentinel backlog above three times its baseline.
+  zero, or a sentinel backlog above three times its baseline. A high rule whose condition already
+  held before today (an outbound push backlog above zero yesterday as well; a scrape target that
+  read zero yesterday and throughout the trailing fortnight, since an outage in its second day is
+  news and a host dark for weeks is not) is a **standing condition**: the candidate is still computed and
+  recorded, but it is not handed to the model; code names standing conditions once per rule in the
+  brief, grouped by programme with the count out of the programme's size and the largest value,
+  and lists them per host in the report (revision 23, research.md R-28). A condition new today keeps
+  its high floor and goes to the model as before.
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
   they appear in the watchdog, PromQL where it helps the reader confirm. Emoji are permitted as
@@ -657,9 +691,22 @@ Verification gate
   expression the run collected, or is the id of a collected dashboard panel MUST NOT be reported
   as a number that matches no computed value, and a run of nine or more digits that equals a
   computed value for the item MUST NOT be reported as a phone number, while one that matches no
-  computed value still is (revision 22).
+  computed value still is (revision 22). A numeral that appears in the text the model was given in
+  its session, its prompts and the results its tools returned, is not a figure it invented either
+  and MUST NOT be reported as unmatched; for a brief bullet the given text is that item's own entry
+  and the run-wide counts, never another item's, so a bullet cannot borrow a neighbour's number; a
+  numeral found in neither the given text nor the computed values still is. A phone-shaped run
+  whose parts are each a decimal number, a date or a time is a list of values, not a phone number.
+  A host written as the leading labels of a discovered host, two labels or more, names that
+  project and is not an undiscovered one (revision 23).
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
+  For the brief, every attempt MUST share one model session so the ranked items are sent once and
+  cached, the return MUST name only the bullets that failed with their reasons, and the corrected
+  draft MUST be assembled by code from the accepted bullets of the previous attempt and the model's
+  rewrites of the failing ones before it is verified again, so a retry can only mend what was wrong
+  (revision 23; on one day three drafts were each rejected on one or two bullets and the brief
+  degraded, research.md R-28).
 - **FR-018**: The same verification MUST run both inside the analysis (so the model can correct
   itself) and again immediately before publication, using the same code. A revision request MUST
   carry only the reasons of checks that failed; a check that passed MUST NOT contribute text to it,
@@ -675,11 +722,20 @@ Publishing
 - **FR-019**: The system MUST post one message per run to the configured Slack channel containing
   a headline, at most five bullets (FR-010), the brief image, and a footer with a link to the prompts, a
   link to the deployment configuration, a link to the run's trace, and the run's cost in currency.
-- **FR-020**: The system MUST post each flagged item as its own threaded reply so it can receive
-  reactions independently.
+- **FR-020**: The system MUST post each **body** item, a bullet or a sub-bullet of the five-slot
+  layout, as its own threaded reply so it can receive reactions independently, highest rank first
+  and at most twenty-five, after the run's report (FR-022) and before the alert-group replies
+  (FR-066); items beyond the body appear in the report only, and the parent's footer says how many.
+  Until revision 23 every item had a reply, which reached 159 replies under one post (research.md
+  R-28).
 - **FR-021**: On a quiet day the system MUST post a one-line heartbeat stating what was checked.
 - **FR-022**: The system MUST render a one-page report per run containing every flagged item and
-  evidence charts drawn from the collected data, and store it with the run.
+  evidence charts drawn from the collected data, and store it with the run. The report MUST number
+  every item by its rank and show its identity, list the standing conditions per host (FR-014) and
+  nest related items under the item they relate to (FR-009), and MUST be shared into the post's
+  thread as its first reply with a code-built comment that states how many items it holds, how
+  many have replies, and how to cite an item in a note (`#<rank>`, or its host and metric) with a
+  thumbs as the verdict (revision 23).
 - **FR-023**: The brief image MUST be rendered from that same report so image and text never
   diverge.
 - **FR-024**: On failure the system MUST post a one-line failure notice with the trace link and
@@ -693,7 +749,11 @@ Feedback
 - **FR-026**: At the start of each run the system MUST read reactions and thread replies from the
   posts of the previous N runs, N configurable with a default of seven.
 - **FR-027**: The system MUST map thumbs-up and thumbs-down to items by stable identity, and notes
-  to items by explicit reference; unmatched notes MUST be recorded as such.
+  to items by explicit reference; unmatched notes MUST be recorded as such. An explicit reference
+  includes `#<rank>`, resolved against the ranked items of the run whose post the note sits under
+  and tried before the item id, host and metric; a thumbs-up or thumbs-down written inside a note is
+  that note's verdict and counts like a reaction on the item it cites; a thumbs that cites no item
+  stays unmatched (revision 23).
 - **FR-028**: The system MUST persist each piece of feedback with date, item identity, verdict,
   note and author, in an append-only record that is never purged (FR-059).
 - **FR-029**: Feedback MUST influence subsequent runs: repeatedly dismissed patterns rank lower,
@@ -809,7 +869,12 @@ Alerts and groups
   recorded in discovery with its grouping and MUST NOT be collected or analysed; a query that
   returns several series for a project MUST make that window unavailable, naming the labels that
   differ, rather than have one series chosen over the others. Breakdown analysis per route, code or
-  database is a later feature (Out of Scope). Added in revision 12.
+  database is a later feature (Out of Scope). Added in revision 12. A **reference line**, a target
+  after the first on a panel with several targets whose expression is another series adjusted only
+  by constant arithmetic (a threshold drawn from the connected-user count, an expected rate drawn
+  from the write rate), MUST likewise be recorded in discovery with its subject and source and MUST
+  NOT be collected or analysed: it repeats a series the run already holds, scaled (revision 23; six
+  such targets produced 161 of one day's 1,189 candidates and two low items, research.md R-28).
 - **FR-076**: Each metric MUST be analysed according to its kind, declared in the reviewed
   thresholds policy (`metric_kinds`) by metric name, with the stock CHT metrics as the default: a
   gauge as a level; a counter as its increase over each window, its trailing baseline as daily
@@ -831,7 +896,10 @@ Alerts and groups
   revision 14.
 - **FR-080**: A stale alert on a host whose scrape target was down for the whole current window is
   housekeeping: left out of the alert groups and counts and named once in a housekeeping notice
-  that suggests removing the host from the watchdog or silencing the rule. An episode open in the
+  that suggests removing the host from the watchdog or silencing the rule. The same notice MUST
+  name, once, every host whose scrape target read zero for the whole current window, on the
+  previous day and throughout the trailing fortnight (a dark host), whether or not an alert is
+  stale there, so no session is spent describing a host dark for weeks (revision 23). An episode open in the
   durable record whose instance no longer fires MUST be named in a resolved notice with how long it
   fired. Added in revision 14.
 - **FR-081**: The number of connected users of a project MUST be a ranking input for its items:

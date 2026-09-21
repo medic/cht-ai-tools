@@ -244,3 +244,86 @@ describe('publish/slack: alert-group replies (User Story 8)', () => {
     expect(client.chat.postMessage.thirdCall.args[0].metadata.event_type).to.equal('agent_watchdog.alerts');
   });
 });
+
+describe('publish/slack: the report shared into the thread (FR-022, revision 23)', () => {
+  let dir;
+  let imagePath;
+  let reportPath;
+  const item = makeItem({ rank: 1, placement: 'body' });
+  const brief = makeBrief({
+    bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
+    report: { path: 'rollup/report.html', slack_file_id: null, ts: null },
+  });
+  const payloadFor = (b = brief) => buildPayload({
+    brief: b, items: [item], links: new Map(), runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
+    channel: 'C123', layout: { body_items: [item.item_id], thread_items: [] },
+  });
+  const sharingClient = () => {
+    const client = fakeClient();
+    client.files.uploadV2 = sinon.stub().callsFake(async ({ file, channel_id: channelId }) => {
+      await settle(file);
+      const shared = channelId
+        ? { id: 'F456', title: 'report', permalink: 'https://medic.slack.com/files/F456', shares: { public: { C123: [{ ts: '1700000000.000150' }] } } }
+        : { id: 'F123', title: 'brief' };
+      return { ok: true, files: [{ ok: true, files: [shared] }] };
+    });
+    return client;
+  };
+
+  beforeEach(() => {
+    dir = tempDir();
+    imagePath = path.join(dir, 'brief.png');
+    reportPath = path.join(dir, 'report.html');
+    fs.writeFileSync(imagePath, 'PNG');
+    fs.writeFileSync(reportPath, '<html></html>');
+  });
+  afterEach(() => removeDir(dir));
+
+  it('shares the report into the thread after the parent, with the comment, and records the share', async () => {
+    const client = sharingClient();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace: async () => {} });
+    const publication = await publisher.publish({ payload: payloadFor(), imagePath, reportPath });
+    expect(client.files.uploadV2).to.have.been.calledTwice;
+    const image = client.files.uploadV2.firstCall.args[0];
+    expect(image.channel_id).to.equal(undefined);
+    const share = client.files.uploadV2.secondCall.args[0];
+    expect(share)
+      .to.include({ channel_id: 'C123', thread_ts: '1700000000.000100', filename: 'report-2026-09-18.html' });
+    expect(share.title).to.include('2026-09-18');
+    expect(share.initial_comment).to.include('1 item');
+    // The share is posted after the parent and before the item replies.
+    expect(client.files.uploadV2.secondCall.calledAfter(client.chat.postMessage.firstCall)).to.equal(true);
+    expect(client.chat.postMessage.secondCall.calledAfter(client.files.uploadV2.secondCall)).to.equal(true);
+    expect(publication.report).to.deep.equal({
+      file_id: 'F456', ts: '1700000000.000150', permalink: 'https://medic.slack.com/files/F456',
+    });
+    expect(publication.slack_file_id).to.equal('F123');
+  });
+
+  it('shares nothing when the payload carries no report', async () => {
+    const client = sharingClient();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace: async () => {} });
+    const plain = payloadFor(makeBrief({ bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }] }));
+    const publication = await publisher.publish({ payload: plain, imagePath, reportPath });
+    expect(client.files.uploadV2).to.have.been.calledOnce;
+    expect(publication.report).to.equal(null);
+  });
+
+  it('fails loudly when the share cannot be made, like the image upload', async () => {
+    const client = sharingClient();
+    client.files.uploadV2.onSecondCall().rejects(new Error('boom'));
+    client.files.uploadV2.onThirdCall().rejects(new Error('boom'));
+    client.files.uploadV2.onCall(3).rejects(new Error('boom'));
+    const publisher = createSlackPublisher({
+      client, channel: 'C123', logger: quietLogger(), pace: async () => {}, sleep: async () => {},
+    });
+    let error = null;
+    try {
+      await publisher.publish({ payload: payloadFor(), imagePath, reportPath });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).to.be.instanceOf(codes.ExitError);
+    expect(error.code).to.equal(codes.IOERR);
+  });
+});

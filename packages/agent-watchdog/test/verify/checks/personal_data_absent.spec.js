@@ -119,3 +119,20 @@ describe('personal_data_absent: brief drafts', () => {
     expect(check(notice).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/personal_data_absent: decimals side by side (FR-016, revision 23)', () => {
+  it('does not mistake two decimals separated by a space or a bracket for a phone number', () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].why_now = 'Error rate 0.00465 (0.01858 yesterday) and 0.00012 0.00034 before';
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('still flags a phone number written with spaces, and one bare', () => {
+    const spaced = baseContext();
+    spaced.findings.items[0].why_now = 'call 555 123 4567 for the on-call engineer';
+    expect(check(spaced).status).to.equal('fail');
+    const bare = baseContext();
+    bare.findings.items[0].why_now = 'reach 254712345678 for help';
+    expect(check(bare).status).to.equal('fail');
+  });
+});

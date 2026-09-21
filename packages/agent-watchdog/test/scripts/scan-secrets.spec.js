@@ -62,6 +62,16 @@ describe('verify/scan', () => {
       expect(findings[0].excerpt).to.match(/^sk-ant…\(\d+ chars\)$/);
     });
 
+    it('skips an operator\'s own .env files, which git ignores, and still scans the committed .env.example', () => {
+      fs.writeFileSync(path.join(dir, '.env'), `AGENT_WATCHDOG_SLACK_BOT_TOKEN=${SLACK}\n`);
+      fs.writeFileSync(path.join(dir, '.env.local'), `AGENT_WATCHDOG_SLACK_BOT_TOKEN=${SLACK}\n`);
+      fs.writeFileSync(path.join(dir, '.env.example'), `AGENT_WATCHDOG_SLACK_BOT_TOKEN=${SLACK}\n`);
+      const files = scanRepository(dir).map((f) => f.file);
+      expect(files).to.include('.env.example').and.include('leak.md');
+      expect(files).to.not.include('.env');
+      expect(files).to.not.include('.env.local');
+    });
+
     it('scans run artefacts with phone numbers included', () => {
       const findings = scanRunArtefacts(path.join(dir, 'runs'));
       expect(findings.map((f) => [f.file, f.pattern])).to.deep.equal([['r1/feedback.ingested.json', 'phone']]);

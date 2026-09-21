@@ -40,7 +40,7 @@ const createFindingsGate = ({
     return windowsCache.get(slug);
   };
 
-  return async ({ findings, pass, project, candidates = [], changes = [], toolResultUrls = [] }) => {
+  return async ({ findings, pass, project, candidates = [], changes = [], toolResultUrls = [], givenText = [] }) => {
     const disc = await discovery();
     if (!offline && !resolver) {
       resolver = createResolver({
@@ -59,6 +59,7 @@ const createFindingsGate = ({
       candidates,
       windows: await windowsFor(project.slug),
       toolResultUrls: new Set(toolResultUrls),
+      givenText,
       knownCards,
       allowlist,
       attempt,

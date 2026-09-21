@@ -52,7 +52,12 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
   };
   afterEach(() => {
     while (dirs.length) {
-      removeDir(dirs.pop());
+      const dir = dirs.pop();
+      if (process.env.E2E_KEEP) {
+        console.log(`E2E_KEEP: run directory kept at ${dir}`);
+      } else {
+        removeDir(dir);
+      }
     }
   });
 
@@ -206,7 +211,7 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
     }
     // The original run is untouched and Slack saw only the original posting.
     expect(original.read('run.json').status).to.equal('published');
-    expect(original.slack.chat.postMessage.callCount).to.equal(1 + original.read('rollup/items.ranked.json').length);
+    expect(original.slack.chat.postMessage.callCount).to.equal(1 + original.read('rollup/payload.json').replies.length);
   });
 
   it('scenario 4: the run record names the code, prompt and configuration versions', async () => {

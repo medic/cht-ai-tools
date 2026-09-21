@@ -15,6 +15,7 @@ rules:                                  # keyed by rule title exactly as provisi
   Server Time Accurate:         { category: host,          importance: low }
   Message Delivery (2h):        { category: messaging,     importance: high }
   Low Disk Space - 80% Full:    { category: capacity,      importance: high }
+  Sentinel Backlog >50:         { category: backlog,       importance: medium }   # the hosted lower threshold (R-28)
 categories:                             # metric names related to a category; a metric key that contains one counts
   availability: ['up{job="cht"}']
   backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]

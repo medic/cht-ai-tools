@@ -70,3 +70,34 @@ describe('feedback/match: notes about an alert group (User Story 8)', () => {
       .to.deep.equal({ alertKey: null });
   });
 });
+
+describe('feedback/match: citations by rank and inline verdicts (FR-027, revision 23)', () => {
+  const { noteVerdict } = require('../../src/feedback/match');
+  const items = loadJson('slack', 'items-2026-09-17.json');
+  const [alpha, gamma] = items;
+
+  it('resolves #<rank> against the items\' ranks before any other reference', () => {
+    expect(matchNote({ text: '#2 :-1: known outage, expected until 1 October', items }))
+      .to.include({ item: gamma, how: 'rank' });
+    // A rank beats a host or metric named in the same note.
+    expect(matchNote({ text: '#2 the alpha.example.org sentinel backlog note applies here too', items }))
+      .to.include({ item: gamma, how: 'rank' });
+  });
+
+  it('falls through to the other references when no item has the cited rank', () => {
+    expect(matchNote({ text: '#99 sentinel backlog is expected', items })).to.include({ item: alpha, how: 'metric' });
+    expect(matchNote({ text: '#99', items })).to.deep.equal({ item: null, how: null });
+  });
+
+  it('reads a thumbs written in the note as its verdict, and none or both as no verdict', () => {
+    expect(noteVerdict('#2 :-1: expected until 1 October')).to.equal('down');
+    expect(noteVerdict(':thumbsdown: not useful')).to.equal('down');
+    expect(noteVerdict('👎 no')).to.equal('down');
+    expect(noteVerdict(':+1: confirmed')).to.equal('up');
+    expect(noteVerdict('good catch :thumbsup:')).to.equal('up');
+    expect(noteVerdict('👍')).to.equal('up');
+    expect(noteVerdict('what is this?')).to.equal(null);
+    expect(noteVerdict(':+1: and :-1:')).to.equal(null);
+    expect(noteVerdict('')).to.equal(null);
+  });
+});

@@ -128,8 +128,13 @@ const runProjectSession = async ({
   let converged = false;
   let session = null;
   const toolUrls = new Set();
+  // Every text the model was given in this session, prompts and tool results, so the gate can tell a numeral the
+  // model read from one it invented (FR-016, revision 23).
+  const givenTexts = [];
 
   const pastDeadline = () => deadline !== null && deadline !== undefined && Date.now() > deadline;
+
+  const textOf = (value) => (typeof value === 'string' ? value : JSON.stringify(value === undefined ? null : value));
 
   const recordToolCalls = async (pass, attempt, toolCalls) => {
     for (const call of toolCalls || []) {
@@ -137,6 +142,7 @@ const runProjectSession = async ({
       for (const url of urlsIn(call.tool_response)) {
         toolUrls.add(url);
       }
+      givenTexts.push(textOf(call.tool_response));
     }
   };
 
@@ -145,6 +151,7 @@ const runProjectSession = async ({
     const header = attempt === 1 ? '' : `\n\n---\n\n# Revision ${attempt - 1}\n\n`;
     const existing = attempt === 1 ? '' : await runDir.readText(promptFile);
     await runDir.writeText(promptFile, `${existing}${header}${prompt}`);
+    givenTexts.push(prompt);
     const turn = await session.turn(prompt);
     const result = turn.result || {};
     sessionId = result.session_id || sessionId;
@@ -229,7 +236,9 @@ const runProjectSession = async ({
       findings = lastTurn.structuredOutput;
       let reasons;
       if (findings && typeof findings === 'object') {
-        const verdict = await gate({ findings, pass, project, candidates, changes, toolResultUrls: [...toolUrls] });
+        const verdict = await gate({
+          findings, pass, project, candidates, changes, toolResultUrls: [...toolUrls], givenText: [...givenTexts],
+        });
         report = { ...verdict.report, attempt, subject: 'pass', subject_ref: `${slug}/pass${pass}` };
         accepted = verdict.report.outcome === 'accepted';
         items = accepted ? verdict.items : [];

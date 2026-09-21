@@ -127,7 +127,8 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       expect(alertReplies.map((r) => r.alert_key).sort())
         .to.deep.equal(classified.groups.map((g) => g.alert_key).sort());
       const ranked = day1.read('rollup/items.ranked.json');
-      expect(payload.replies.filter((r) => r.item_id)).to.have.length(ranked.length);
+      expect(payload.replies.filter((r) => r.item_id)).to.have.length(layout.body_items.length);
+      expect(payload.report.items).to.equal(ranked.length);
       const backlogReply = alertReplies.find((r) => r.alert_key === 'North Programme/backlog');
       expect(backlogReply.metadata).to.deep.equal({
         event_type: 'agent_watchdog.alerts',
@@ -143,7 +144,8 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       expect(JSON.stringify(payload)).to.not.include('cht-dev');
       const publication = day1.read('rollup/publication.json');
       expect(publication.replies.filter((r) => r.alert_key)).to.have.length(classified.groups.length);
-      expect(day1.slack.chat.postMessage.callCount).to.equal(1 + ranked.length + classified.groups.length);
+      expect(day1.slack.chat.postMessage.callCount).to.equal(1 + payload.replies.length);
+      expect(payload.replies.filter((r) => r.alert_key)).to.have.length(classified.groups.length);
 
       // Episodes: one opened event per firing instance with its correlations; the Sentinel Backlog alert on north-a
       // is explained by the sentinel item the analysis raised on that project.

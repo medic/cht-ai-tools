@@ -94,3 +94,41 @@ describe('render/report: sub-bullets (User Story 9)', () => {
     expect(html).to.not.include('<b>');
   });
 });
+
+describe('render/report: ranks, identities, related items and standing conditions (revision 23)', () => {
+  const primary = makeItem({ rank: 1, placement: 'body' });
+  const related = makeItem({
+    metric: 'cht_outbound_push_backlog_count', severity: 'medium', rank: 3, placement: 'thread',
+    relates_to: { item_id: primary.item_id, metric: primary.metric, relation: 'same_cause' },
+  });
+  const other = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });
+  const brief = makeBrief({ bullets: [{ item_id: primary.item_id, text: 'alpha 912 vs 300' }] });
+  const base = { brief, windowsByMetric: new Map(), discovery: makeDiscovery(), runId: '2026-09-18' };
+
+  it('numbers every item by rank, shows its identity and says how to cite one', () => {
+    const html = renderReport({ ...base, items: [primary, other, related] });
+    expect(html).to.include('#1').and.include('#2').and.include('#3');
+    expect(html).to.include(primary.item_id).and.include(other.item_id);
+    expect(html).to.match(/cite an item/i);
+  });
+
+  it('nests an item under the higher-ranked item it relates to, once, with the relation', () => {
+    const html = renderReport({ ...base, items: [primary, other, related] });
+    const first = html.indexOf('cht_outbound_push_backlog_count');
+    expect(html.indexOf('cht_outbound_push_backlog_count', first + 1), 'the related item appears once').to.equal(-1);
+    const primarySection = html.slice(html.indexOf('#1'), html.indexOf('#2'));
+    expect(primarySection).to.include('cht_outbound_push_backlog_count').and.include('same cause');
+    expect(html).to.include('class="related"');
+  });
+
+  it('lists standing conditions per host when given, and omits the section otherwise', () => {
+    const standing = [{
+      rule: 'backlog_absolute', project_url: 'https://north-a.example.org', host: 'north-a.example.org',
+      group: 'North Programme', metric: 'cht_outbound_push_backlog_count', value: 1234, previous_day_value: 1200,
+    }];
+    const html = renderReport({ ...base, items: [primary], standing });
+    expect(html).to.include('Standing conditions').and.include('north-a.example.org').and.include('1234')
+      .and.include('North Programme');
+    expect(renderReport({ ...base, items: [primary] })).to.not.include('Standing conditions');
+  });
+});

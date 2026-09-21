@@ -49,8 +49,10 @@ const run = async (ctx) => {
     ? await runDir.readJson('discovery.json')
     : { projects: [], dashboards: [] };
   const windowsByMetric = await loadCurrentWindows(runDir, discovery, items);
+  // Standing conditions the roll-up handed to no session (FR-014, revision 23), listed per host in the report.
+  const standing = runDir.exists('rollup/standing.json') ? await runDir.readJson('rollup/standing.json') : [];
 
-  const html = renderReport({ brief, items, windowsByMetric, discovery, runId: ctx.runId });
+  const html = renderReport({ brief, items, windowsByMetric, discovery, runId: ctx.runId, standing });
   await runDir.writeText('rollup/report.html', html);
 
   if (NO_IMAGE_KINDS.has(brief.kind)) {
@@ -66,6 +68,8 @@ const run = async (ctx) => {
     logger,
   });
   brief.image = { path: 'rollup/brief.png', slack_file_id: null };
+  // The report is shared into the thread by the publish stage (FR-022, revision 23).
+  brief.report = { path: 'rollup/report.html', slack_file_id: null, ts: null };
   await runDir.writeJson('rollup/brief.json', brief);
   return { report: 'rollup/report.html', image: 'rollup/brief.png' };
 };

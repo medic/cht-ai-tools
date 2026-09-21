@@ -4,9 +4,11 @@ Daily analysis of the CHT projects monitored by Medic's hosted [CHT Watchdog](ht
 posted to Slack as a short brief that flags what a human should look into. It reads metrics
 through Grafana, computes changes deterministically, asks a bounded Claude Agent SDK session to
 interpret them with read-only tools, verifies every number and link in code, and posts one
-message with one threaded reply per item. Reactions and thread notes shape the next day's brief
-and are acknowledged in it, and what the agent learns arrives as proposal files for human review,
-never as changes to its own prompts, skill or thresholds.
+message with a threaded reply per body item and the full report shared into the thread, where every
+item is numbered so a note can cite it (`#7`, or its host and metric, with a thumbs as the verdict).
+Reactions and thread notes shape the next day's brief and are acknowledged in it, and what the agent
+learns arrives as proposal files for human review, never as changes to its own prompts, skill or
+thresholds.
 
 It flags; it never acts. Paging stays with the existing monitoring stack.
 
@@ -132,7 +134,8 @@ it overflows, and every memory change is stored as a diff under `memory/history/
 Every reaction and thread note is stored permanently in `feedback.jsonl` on the data volume; no retention
 setting removes it. Its effect on ranking is bounded instead: a record adjusts confidence for
 `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` (30 by default), while a horizon stated in a note holds until its
-date. The next run reviews what it read: reactions are tallied in code, each note is classified once by a
+date. The next run reviews what it read: reactions and the thumbs written in notes are tallied in code, a note
+citing `#7` lands on the item ranked 7 of that post, each note is classified once by a
 bounded model call into the place its lesson belongs (the skill, a prompt, a `projects.yaml` annotation, a
 threshold or a pattern card) and becomes a proposal file. One code-built digest reply per run, in that
 day's brief or heartbeat thread, names each item's effect, the proposals written and where the records
@@ -145,7 +148,9 @@ report lists proposals still awaiting review with their age.
 (`ignore`, development instances). Hosts matching no group belong to `Other`; ignored hosts are listed in
 `discovery.json` and are never analysed, charged or named. The post body holds at most five bullets of two
 lines: a programme with several flagged projects becomes one code-written line ("North Programme: 3 projects with
-issues") with one one-line sub-bullet per project, and every project item keeps its own thread reply. The
+issues") with one one-line sub-bullet per project, and every body item keeps its own thread reply (items beyond the
+body live in the report shared into the thread; standing conditions such as a backlog above zero since yesterday or
+a host dark for a fortnight are named by code and open no session). The
 layout is computed by code before the roll-up call (`rollup/layout.json`), the model writes only item text,
 and the gate rejects a draft whose bullets differ from the layout. `npm run smoke:grafana -- --hosts` prints
 every discovered host with its group, which is how the placeholder patterns in `config/defaults/projects.yaml`

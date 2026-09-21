@@ -216,3 +216,64 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     expect((await readAll(dataDir)).every((r) => r.acknowledged_run_id === '2026-09-18')).to.equal(true);
   });
 });
+
+describe('cli/stages/publish: the report shared into the thread (revision 23)', () => {
+  let dataDir;
+  let runDir;
+  const item = makeItem({ rank: 1, placement: 'body' });
+  const sharingClient = () => ({
+    files: {
+      uploadV2: sinon.stub().callsFake(async ({ channel_id: channelId }) => ({
+        ok: true,
+        files: [{ files: [channelId
+          ? { id: 'F2', permalink: 'https://slack/files/F2', shares: { public: { C123: [{ ts: '1.0009' }] } } }
+          : { id: 'F1' }] }],
+      })),
+    },
+    chat: {
+      postMessage: sinon.stub().callsFake(async ({ thread_ts: threadTs }) => ({
+        ok: true, channel: 'C123', ts: threadTs ? `${threadTs}9` : '1.000',
+      })),
+      getPermalink: sinon.stub().callsFake(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://slack/p${ts}` })),
+    },
+  });
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+    await runDir.writeJson('discovery.json', makeDiscovery());
+    await runDir.writeJson('rollup/items.ranked.json', [item]);
+    await runDir.writeJson('rollup/layout.json', {
+      slots: [], body_items: [item.item_id], thread_items: [], one_line: [],
+    });
+    await runDir.writeJson('rollup/brief.json', makeBrief({
+      bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
+      image: { path: 'rollup/brief.png', slack_file_id: null },
+      report: { path: 'rollup/report.html', slack_file_id: null, ts: null },
+    }));
+    await runDir.writeText('rollup/brief.png', 'PNG');
+    await runDir.writeText('rollup/report.html', '<html></html>');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const ctx = (mode, client) => ({
+    config: makeConfig(), logger: quietLogger(), runDir, runId: '2026-09-18', date: '2026-09-18', mode,
+    links: { buildItemLinks: () => new Map() }, deps: { slack: client },
+  });
+
+  it('records the report on the preview payload and uploads nothing', async () => {
+    const client = sharingClient();
+    const out = await stage.run(ctx('preview', client));
+    expect(out.payload.report).to.include({ path: 'rollup/report.html', slack_file_id: null, items: 1, replied: 1 });
+    expect(client.files.uploadV2.called).to.equal(false);
+  });
+
+  it('shares the report for real and records it on the publication and the brief', async () => {
+    const client = sharingClient();
+    await stage.run(ctx('scheduled', client));
+    const publication = await runDir.readJson('rollup/publication.json');
+    expect(publication.report).to.deep.equal({ file_id: 'F2', ts: '1.0009', permalink: 'https://slack/files/F2' });
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.report).to.deep.equal({ path: 'rollup/report.html', slack_file_id: 'F2', ts: '1.0009' });
+    expect(brief.image.slack_file_id).to.equal('F1');
+  });
+});

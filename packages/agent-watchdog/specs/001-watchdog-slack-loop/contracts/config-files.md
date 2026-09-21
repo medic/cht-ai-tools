@@ -156,6 +156,7 @@ rules:                                  # keyed by rule title exactly as provisi
   Users Over Replication Limit: { category: replication,   importance: medium }
   DB Fragmentation:             { category: database,      importance: low }
   Server Time Accurate:         { category: host,          importance: low }
+  Sentinel Backlog >50:         { category: backlog,       importance: medium }   # hosted rule, revision 23
 categories:                             # metric names related to a category, for episode correlations (FR-067)
   availability: ['up{job="cht"}']
   backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]

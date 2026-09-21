@@ -145,7 +145,11 @@ Each dashboard in `discovery.json` carries `variables`, what its templating vari
 `unresolved` (those with no single value), so a window's `unresolved variable` reason is traceable
 to the dashboard document (FR-071). A panel record's `breakdown` is null for one series per project,
 or `{ kind: by | without | topk | bottomk, labels }` for a panel that yields one series per label value
-or a ranked set; such panels are left out of `metrics` and never queried (FR-075).
+or a ranked set; such panels are left out of `metrics` and never queried (FR-075). A panel record's
+`reference_line` is null, or `{ subject, source }` for a target after the first on a multi-target panel
+whose expression is another series adjusted only by constant arithmetic (`subject` the first target's
+metric key, `source` the bare metric the line is drawn from); such targets are likewise left out of
+`metrics` and never queried (FR-075, revision 23).
 
 ### Daily Maxima Ledger
 
@@ -196,6 +200,17 @@ A deterministic flag on a Computed Change (Key Entities; FR-006, FR-014).
 | `severity_floor` | enum | `low` \| `medium` \| `high`. `high` only from the FR-014 high rules: `target_down`; outbound push backlog above zero; sentinel backlog above three times its baseline. |
 | `evidence` | Evidence[] | See Item. |
 | `expected_load_window_id` | string or null | Copied from the Computed Change. |
+
+**Standing condition** (FR-013, FR-014, revision 23): a `backlog_absolute` candidate whose
+previous-day evidence is above zero, or a `target_down` candidate on a project whose scrape-target
+change read zero on the previous day and whose trailing mean is zero (dark throughout the trailing
+fortnight; an outage in its second day stays with the model). Derived by code from fields the candidate and its
+Computed Change already carry and never stored on the candidate. The agent stage withholds standing
+candidates from the session and opens none when nothing else remains; the roll-up names them in one
+notice per rule grouped by programme, folds dark hosts into the housekeeping notice, writes them to
+`rollup/standing.json` (`{ rule, project_url, host, group, value, previous_day_value }`) so the
+report can list them per host, and leaves them out of the degraded brief's bullets while
+`checked.candidates` still counts them. A condition new today is an ordinary high-floor candidate.
 
 ### Alert Rule
 
@@ -272,7 +287,7 @@ accepted or rejected by the gate.
 | `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
 | `why_now` | string | Prose; escaped on render. |
 | `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
-| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). |
+| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). |
 | `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
 | `persisting_days` | integer | Consecutive prior analysed **dates** whose ranked items contained this `item_id`, plus one (FR-009, revision 21). The date of a run is the first ten characters of its id, and the latest run of a date speaks for that date, so forced re-runs of one date count once and a re-run reports what the date's first run reported. A date whose latest run wrote no ranked items ends the streak. Set by code, never by the model; the agent stage carries a placeholder `1` because persistence is a roll-up concern it cannot know. |
@@ -340,8 +355,9 @@ The published post for a run (FR-019 to FR-025).
 | `expected_load_notice` | string or null | Present when a window was active (FR-007). |
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
-| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008). Empty on most days. |
+| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23). Empty on most days. |
 | `image` | object | `{ path, slack_file_id }`; rendered from the same report as the text (FR-023). |
+| `report` | object or null | `{ path, slack_file_id, ts }`: the one-page report shared into the thread as its first reply (FR-022, revision 23); null for a heartbeat or failure; `slack_file_id` and `ts` null in preview. |
 | `footer` | object | `{ prompts_url, config_url, trace_url, cost_usd }` (FR-019). |
 | `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
 
@@ -377,6 +393,9 @@ written by code.
 ### Thread Reply
 
 The per-item message that carries reactions (FR-020), and the per-alert-group message (FR-066).
+Since revision 23 only body items have one, highest rank first and at most twenty-five; the report's
+share is the thread's first reply and items beyond the body live there, numbered by rank. A body
+item's reply names the lower-ranked items that relate to it (FR-009).
 
 | Field | Type | Rules |
 |---|---|---|
@@ -418,7 +437,7 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `item_id` | string or null | Required when `target` is `item`. |
 | `alert_key` | string or null | Required when `target` is `alert_group`. Recorded and acknowledged like item feedback; it does not change alert ranking in this revision. |
 | `kind` | enum | `reaction` \| `note`. |
-| `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions; null for notes. A removed reaction is recorded as `retracted` (Edge Cases). |
+| `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions. For a note, `up` or `down` when the note carries a thumbs (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:` or the emoji), else null; a note's verdict counts in the tallies like a reaction on the item it cites (revision 23). A removed reaction is recorded as `retracted` (Edge Cases). |
 | `note` | string or null | Thread reply text, verbatim, untrusted. |
 | `horizon` | string or null | Date parsed from the note by the feedback-parsing stage, when one is stated (US2 scenario 1). |
 | `author` | string | Slack user id. Never rendered into partner-facing output. |
@@ -538,6 +557,10 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 | `cost_usd` | number | From the runtime result. |
 | `num_turns`, `duration_ms` | integer | |
 
+Cache counters are read under both spellings the runtime uses (`cache_read_input_tokens` and
+`cache_read_tokens`) through `normaliseUsage`; the roll-up's records carried zeros until revision 23
+because they read one spelling only.
+
 ## Relationships
 
 - A Run analyses many Projects; each Project has many Metric Windows, one Computed Change per
@@ -566,7 +589,11 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   discovery (revision 22): every numeric form of a window name (`14` and `14d` alike), every numeral
   inside a collected metric key or panel expression (so `60`, `60`, `24` from a rate-per-day
   expression written in prose), and every collected panel id. They are identifiers the run gave the
-  model, not figures it computed.
+  model, not figures it computed. A fourth set is the numerals of the text the model was given in
+  its session (revision 23): for findings, every prompt of the session and every tool result it
+  received (`givenText`); for a brief bullet, that item's own prompt entry and the run-wide counts
+  only, never another item's. These sets match on the bare value, separators and unit letter
+  dropped. A numeral in none of them that matches no computed value fails, as before.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
@@ -580,7 +607,10 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
   phone numbers. A run of nine or more digits that equals, as an integer, a value the number check
   allows for the item (evidence, the metric's computed changes, a cited candidate's observed or
   threshold value) is a number and not a phone number; one matching nothing computed is still
-  rejected (revision 22). Partner-facing scans are out of scope here (feature 002).
+  rejected (revision 22). A phone-shaped match whose whitespace- or bracket-separated parts are each
+  a decimal number, a date or a time is a list of values, not a phone number, and a host-like token
+  that is the leading two or more labels of a discovered host names that project (`projects_known`;
+  revision 23). Partner-facing scans are out of scope here (feature 002).
 - Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
   delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
   forbidden by lint rule in templates.

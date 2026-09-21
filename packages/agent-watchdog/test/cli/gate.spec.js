@@ -77,3 +77,26 @@ describe('cli/gate adapter', () => {
     expect(resolve.reasons).to.deep.equal(['not resolved (offline)']);
   });
 });
+
+describe('cli/gate adapter: the text the model was given (revision 23)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+    await runDir.writeJson('discovery.json', { projects: [], dashboards: [], metrics: [] });
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('forwards givenText to the verification module, and an empty list when the loop sends none', async () => {
+    const verifyFindings = sinon.stub().resolves({ report: {}, items: [] });
+    const gate = createFindingsGate({
+      gateModule: { verifyFindings }, runDir, config, fetch: async () => null, offline: true,
+    });
+    const project = { slug: 'alpha-example-org', url: 'https://alpha.example.org', host: 'alpha.example.org' };
+    await gate({ findings: {}, pass: 1, project, givenText: ['prompt text', '{"count": 41}'] });
+    expect(verifyFindings.firstCall.args[0].givenText).to.deep.equal(['prompt text', '{"count": 41}']);
+    await gate({ findings: {}, pass: 2, project });
+    expect(verifyFindings.secondCall.args[0].givenText).to.deep.equal([]);
+  });
+});

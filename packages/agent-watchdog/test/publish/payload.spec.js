@@ -421,3 +421,81 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
       .to.include('North Programme alerts: 2 firing, 1 stale for more than 14 days\n   ◦ backlog: 2 firing');
   });
 });
+
+describe('publish/payload: replies for body items only, the report in the thread, related items (revision 23)', () => {
+  const { MAX_ITEM_REPLIES } = require('../../src/publish/payload');
+  const body = makeItem({ rank: 1, placement: 'body' });
+  const threadItem = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });
+  const related = makeItem({
+    metric: 'cht_outbound_push_backlog_count', severity: 'medium', rank: 3, placement: 'thread',
+    relates_to: { item_id: body.item_id, metric: body.metric, relation: 'same_cause' },
+  });
+  const report = { path: 'rollup/report.html', slack_file_id: null, ts: null };
+  const brief = makeBrief({ bullets: [{ item_id: body.item_id, text: 'alpha 912 vs 300' }], report });
+  const layout = { body_items: [body.item_id], thread_items: [threadItem.item_id, related.item_id] };
+  const args = () => ({
+    brief, items: [body, threadItem, related], links: new Map(), runId: '2026-09-18', date: '2026-09-18',
+    audience: 'internal', channel: 'C123', layout,
+  });
+
+  it('builds a reply for each body item of the layout, in rank order, and none for a thread item', () => {
+    const payload = buildPayload(args());
+    expect(payload.replies.map((r) => r.item_id)).to.deep.equal([body.item_id]);
+  });
+
+  it('falls back to the items\' placement when no layout is given', () => {
+    const withoutLayout = { ...args() };
+    delete withoutLayout.layout;
+    expect(buildPayload(withoutLayout).replies.map((r) => r.item_id)).to.deep.equal([body.item_id]);
+  });
+
+  it('caps the item replies at twenty-five, a constant in code', () => {
+    expect(MAX_ITEM_REPLIES).to.equal(25);
+    const many = Array.from({ length: 30 }, (_, i) => makeItem({
+      project_url: `https://p${i}.example.org`, rank: i + 1, placement: 'body',
+    }));
+    const wide = makeBrief({ bullets: [{ item_id: many[0].item_id, text: 'p0 912 vs 300' }], report });
+    const payload = buildPayload({
+      ...args(), brief: wide, items: many, layout: { body_items: many.map((i) => i.item_id), thread_items: [] },
+    });
+    expect(payload.replies.filter((r) => r.item_id)).to.have.length(25);
+    expect(payload.replies[24].item_id).to.equal(many[24].item_id);
+  });
+
+  it('carries the report as a share into the thread with a code-built comment that says how to cite an item', () => {
+    const payload = buildPayload(args());
+    expect(payload.report).to.include({
+      filename: 'report-2026-09-18.html', path: 'rollup/report.html', items: 3, replied: 1, slack_file_id: null,
+      ts: null,
+    });
+    expect(payload.report.title).to.include('2026-09-18');
+    expect(payload.report.initial_comment).to.include('3 items').and.include('1 with a reply');
+    expect(payload.report.initial_comment).to.include('#2').and.include('host and metric');
+    expect(payload.report.initial_comment).to.match(/👍|:\+1:/);
+  });
+
+  it('says in the footer how many items are only in the report', () => {
+    const payload = buildPayload(args());
+    const footer = payload.parent.blocks[payload.parent.blocks.length - 1].elements[0].text;
+    expect(footer).to.include('2 more items in the report');
+    const all = buildPayload({ ...args(), items: [body], layout: { body_items: [body.item_id], thread_items: [] } });
+    const footerAll = all.parent.blocks[all.parent.blocks.length - 1].elements[0].text;
+    expect(footerAll).to.not.include('more items');
+  });
+
+  it('carries no report when the brief has none, nor on a heartbeat or a failure', () => {
+    const none = buildPayload({ ...args(), brief: makeBrief({ bullets: [{ item_id: body.item_id, text: 'x' }] }) });
+    expect(none.report).to.equal(null);
+    const heartbeat = buildPayload({
+      ...args(), brief: makeBrief({ kind: 'heartbeat', headline: 'All quiet', bullets: [], report }), items: [],
+    });
+    expect(heartbeat.report).to.equal(null);
+  });
+
+  it('names the lower-ranked items that relate to a body item in that item\'s reply, with relation and rank', () => {
+    const payload = buildPayload(args());
+    expect(payload.replies[0].text).to.include('Related: `cht_outbound_push_backlog_count` (same cause) #3');
+    const unrelated = buildPayload({ ...args(), items: [body, threadItem] });
+    expect(unrelated.replies[0].text).to.not.include('Related:');
+  });
+});

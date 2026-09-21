@@ -43,9 +43,16 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    expected-load or degradation notice when present, one `context` block per code-added notice
    (for example a project new since the previous run), and a `context` footer with the prompts,
    configuration and trace links and the cost in currency.
-3. **Post one threaded reply per item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
+3. **Share the report into the thread** with `files.uploadV2({ file, filename: 'report-<run_id>.html',
+   title, channel_id, thread_ts: <parent ts>, initial_comment })` (revision 23): an upload given a
+   channel and a thread posts the file as the thread's first reply, readable by every channel member,
+   where the private image upload of step 1 is readable by the bot alone. `initial_comment` is built
+   by code and states the item count, how many items have replies and how to cite an item in a note
+   (`#<rank>`, or host and metric) with a thumbs as the verdict. The file id and the share's `ts` are
+   recorded (smoke test S-31). Then **post one threaded reply per body item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
    text, blocks, metadata: { event_type: 'agent_watchdog.item', event_payload } })`, highest rank
-   first, body items first, then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
+   first, at most twenty-five (items beyond the body are in the report only and the parent's footer
+   says how many, FR-020 revision 23), then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
    the rule titles, at most fifty instances with host and days firing, the count of the rest, and
    the code-built link to the filtered alert list) with `metadata.event_type: 'agent_watchdog.alerts'`,
    in body order (FR-066). A reply is fitted into one 3,000-character section by code and a link is
@@ -81,6 +88,7 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
   "kind": "brief",
   "parent": { "channel": "C…", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.brief", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "kind": "brief" } } },
   "image": { "filename": "brief-2026-09-19.png", "alt_text": "…", "path": "rollup/brief.png", "slack_file_id": null },
+  "report": { "filename": "report-2026-09-19.html", "title": "…", "path": "rollup/report.html", "initial_comment": "…", "items": 150, "replied": 21, "slack_file_id": null, "ts": null },
   "replies": [
     { "item_id": "a1b2c3d4e5f6", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.item", "event_payload": { "run_id": "2026-09-19", "item_id": "a1b2c3d4e5f6", "project_url": "https://…", "metric": "…" } } },
     { "alert_key": "North Programme/backlog", "text": "…", "blocks": [ … ], "metadata": { "event_type": "agent_watchdog.alerts", "event_payload": { "run_id": "2026-09-19", "date": "2026-09-19", "group": "North Programme", "category": "backlog", "firing": 12 } } }
@@ -89,8 +97,10 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
 }
 ```
 
-In preview mode `slack_file_id` stays null and nothing is sent; after publishing,
-`publication.json` adds `ts`, `permalink` and `slack_file_id`. `digest` is null when the run
+`replies` carries only the body items and the alert groups (FR-020, revision 23); `report` is null for a
+heartbeat or a failure. In preview mode `slack_file_id` stays null and nothing is sent; after publishing,
+`publication.json` adds `ts`, `permalink` and `slack_file_id`, and `report: { file_id, ts, permalink }`
+for the share. `digest` is null when the run
 acknowledged nothing new; in preview it is filled but nothing is posted or reacted to, and no
 record is marked acknowledged.
 
@@ -120,8 +130,10 @@ using the `ts` values recorded in that run's `publication.json`:
    history payloads may omit users.
 3. Map `+1`/`thumbsup` to `up` and `-1`/`thumbsdown` to `down`; a reaction recorded in
    `feedback.jsonl` on a previous ingestion and absent now is recorded as `retracted`. Reactions on
-   the parent target the brief. Notes are matched to items by explicit reference (item id, metric
-   name or project in the note, resolved by the feedback-parsing stage) or recorded as unmatched.
+   the parent target the brief. Notes are matched to items by explicit reference, `#<rank>` against
+   the source run's `items.ranked.json` first, then item id, then host and metric (revision 23), or
+   recorded as unmatched; a thumbs written in the note (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:`
+   or the emoji) is the note's verdict and counts like a reaction on the item it cites.
 4. Only when a run's `publication.json` is missing does the ingester fall back to
    `conversations.history({ channel, oldest, latest, include_all_metadata: true })` and identify
    posts by their `agent_watchdog.brief` metadata.

@@ -307,6 +307,9 @@ const Brief = z.object({
   degradation_notice: z.string().nullable(),
   notices: z.array(z.string()).default([]),
   image: z.object({ path: z.string(), slack_file_id: z.string().nullable() }).strict().nullable(),
+  // The one-page report shared into the thread (FR-022, revision 23); null for a heartbeat or a failure.
+  report: z.object({ path: z.string(), slack_file_id: z.string().nullable(), ts: z.string().nullable() })
+    .strict().nullable().default(null),
   footer: z.object({
     prompts_url: z.string(),
     config_url: z.string(),

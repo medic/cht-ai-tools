@@ -7,6 +7,7 @@ const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
 const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
 const { analysisRecord } = require('../../rollup/analysis');
+const { splitStanding, standingRecords, standingNotices, darkHostsOf } = require('../../analyze/standing');
 const { analysedHosts, onAnalysedHosts, scopeClassified } = require('../../rollup/scope');
 const { readEpisodeEvents } = require('../../alerts/episodes');
 const { bareKey } = require('../../analyze/kinds');
@@ -95,6 +96,10 @@ const run = async (ctx) => {
 
   const items = [];
   const candidates = [];
+  // The candidates the sessions were handed, and the standing conditions code kept (FR-014, revision 23).
+  const forModelCandidates = [];
+  const standing = [];
+  const groupOf = groupOfProjects(discovery);
   const changes = {};
   let referenceSourcesUnavailable = false;
   // Sessions that failed before a result (revision 13): counted and named so the brief can say so rather than
@@ -102,8 +107,11 @@ const run = async (ctx) => {
   const passesByProject = [];
   for (const project of discovery.projects || []) {
     const { slug } = project;
-    candidates.push(...await readIfExists(runDir, `${slug}/candidates.json`, []));
+    const own = await readIfExists(runDir, `${slug}/candidates.json`, []);
+    candidates.push(...own);
     changes[slug] = await readIfExists(runDir, `${slug}/changes.json`, []);
+    forModelCandidates.push(...splitStanding({ candidates: own, changes: changes[slug] }).forModel);
+    standing.push(...standingRecords({ candidates: own, changes: changes[slug], project, groupOf }));
     const findings = lastFindingsFile(runDir, slug);
     if (findings) {
       const pass = await runDir.readJson(findings);
@@ -171,7 +179,6 @@ const run = async (ctx) => {
 
   // Items of one programme share a body slot as sub-bullets (FR-069); the layout is written for the gate and the
   // publish stage to read, so the prompt, the accepted draft and the post agree.
-  const groupOf = groupOfProjects(discovery);
   // Connected users per project, from the computed changes, rank the most-used projects first (FR-081).
   const usersByUrl = new Map();
   for (const project of discovery.projects || []) {
@@ -215,12 +222,21 @@ const run = async (ctx) => {
   if (budgetNotice) {
     notices.push(budgetNotice);
   }
+  // Standing conditions (FR-014, revision 23): named once per rule, grouped by programme, and listed per host in the
+  // report; the hosts dark today and yesterday join the housekeeping line.
+  await runDir.writeJson('rollup/standing.json', standing);
+  const groupSizes = Object.fromEntries((discovery.groups || []).map((g) => [g.label, (g.hosts || []).length]));
+  const standingLines = standingNotices({ records: standing, groupSizes });
+  if (standingLines.length) {
+    logger.info('rollup.standing', { records: standing.length, notices: standingLines });
+    notices.push(...standingLines);
+  }
   // Old news and good news (FR-080): stale alerts on dead hosts once, and episodes that cleared since the last run.
+  const housekeeping = housekeepingNotice(alertsAvailable ? classified.housekeeping || [] : [], darkHostsOf(standing));
+  if (housekeeping) {
+    notices.push(housekeeping);
+  }
   if (alertsAvailable) {
-    const housekeeping = housekeepingNotice(classified.housekeeping || []);
-    if (housekeeping) {
-      notices.push(housekeeping);
-    }
     const firingIds = new Set((classified.instances || [])
       .filter((i) => i.state === 'firing')
       .map((i) => i.instance_id));
@@ -239,7 +255,8 @@ const run = async (ctx) => {
     items: ranked,
     discovery,
     changes,
-    candidates,
+    candidates: forModelCandidates,
+    allCandidates: candidates,
     analysis,
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],

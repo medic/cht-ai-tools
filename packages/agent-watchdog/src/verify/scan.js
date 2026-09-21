@@ -12,6 +12,9 @@ const SKIP_DIRS = new Set([
 ]);
 // Lock files carry package author addresses, not this project's data.
 const SKIP_FILES = new Set(['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml']);
+// An operator's own environment file (`.env`, `.env.local`) is ignored by git and never part of the repository; the
+// committed `.env.example` is scanned like any other file.
+const isLocalEnvFile = (name) => name === '.env' || (name.startsWith('.env.') && name !== '.env.example');
 const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.gz', '.zip', '.pdf', '.ico', '.woff', '.woff2']);
 // A line that deliberately holds a sample value (a test fixture) says so, visibly to reviewers.
 const ALLOW_MARKER = /scan-secrets:\s*allow/;
@@ -84,7 +87,8 @@ const scanText = (text, { phones = false } = {}) => {
 const looksBinary = (buffer) => buffer.subarray(0, 512).includes(0);
 
 const scanFile = (file, options = {}) => {
-  if (SKIP_FILES.has(path.basename(file)) || BINARY_EXTENSIONS.has(path.extname(file).toLowerCase())) {
+  const name = path.basename(file);
+  if (SKIP_FILES.has(name) || isLocalEnvFile(name) || BINARY_EXTENSIONS.has(path.extname(file).toLowerCase())) {
     return [];
   }
   const stat = fs.statSync(file);

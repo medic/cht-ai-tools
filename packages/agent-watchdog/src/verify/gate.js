@@ -99,13 +99,15 @@ const outcomeOf = (checks) => (checks.every((c) => c.status === 'pass') ? 'accep
  */
 const verifyFindings = async ({
   findings, pass, project, discovery, changes = [], candidates = [], windows = [], toolResultUrls = new Set(),
-  knownCards = [], allowlist = [], attempt = 1, resolveLinks = null, grafanaUrl = null,
+  knownCards = [], allowlist = [], attempt = 1, resolveLinks = null, grafanaUrl = null, givenText = [],
 }) => {
   validateAttempt(attempt);
   const subjectRef = `${project.slug}/pass${pass}`;
+  // `givenText`: the prompts of the session and the tool results it received, whose numerals the model may quote
+  // (FR-016, revision 23).
   const base = {
     mode: 'findings', findings, project, discovery, changes, candidates, windows, toolResultUrls, knownCards, allowlist,
-    linkResults: null, builtLinks: null, items: [],
+    linkResults: null, builtLinks: null, items: [], givenText,
   };
   if (!findingsSchema.safeParse(findings).success) {
     const checks = [CHECKS.schema.check(base)];
@@ -127,14 +129,16 @@ const verifyFindings = async ({
  */
 const verifyBrief = async ({
   draft, items = [], discovery, changes = [], candidates = [], runId, attempt = 1, resolveLinks = null, allowlist = [],
-  grafanaUrl = null, toolResultUrls = new Set(), layout = null, extraUrls = [],
+  grafanaUrl = null, toolResultUrls = new Set(), layout = null, extraUrls = [], givenText = [], itemTexts = null,
 }) => {
   validateAttempt(attempt);
   const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl, extraUrls });
+  // `givenText` holds the run-wide texts of the roll-up prompt and `itemTexts` each item's own entry, keyed by id, so
+  // a bullet may quote what its item was given and nothing of a neighbour's (FR-016, revision 23).
   const ctx = {
     mode: 'brief', draft, items, discovery, changes, candidates, windows: [], toolResultUrls, knownCards: [], allowlist,
     linkResults, builtLinks: grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null, findings: null,
-    project: null, runId, layout,
+    project: null, runId, layout, givenText, itemTexts,
   };
   const checks = runChecks(BRIEF_CHECK_NAMES, ctx);
   const report = {

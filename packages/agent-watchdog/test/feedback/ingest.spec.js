@@ -125,30 +125,39 @@ describe('feedback/ingest', () => {
     expect(briefReaction.feedback_id).to.equal(identity.feedbackId(PARENT_TS, 'U9', 'reaction', 'up'));
 
     const notes = doc.records.filter((r) => r.kind === 'note');
-    expect(notes).to.have.length(2);
-    const matched = notes.find((n) => n.matched);
+    expect(notes).to.have.length(4);
+    const matched = notes.find((n) => n.matched && n.author === 'U1');
     expect(matched).to.include({ target: 'item', item_id: ALPHA, author: 'U1', horizon: '2026-10-01', verdict: null });
     expect(matched.note).to.include('known migration');
-    const unmatched = notes.find((n) => !n.matched);
+    // A note citing the item by rank with a thumbs written in it is that item's feedback with a verdict (revision 23).
+    const byRank = notes.find((n) => n.author === 'U5');
+    expect(byRank)
+      .to.include({ target: 'item', item_id: ALPHA, matched: true, verdict: 'down', horizon: '2026-10-01' });
+    expect(byRank.feedback_id).to.equal(identity.feedbackId('1758097000.000600', 'U5', 'note', null));
+    const unmatched = notes.find((n) => !n.matched && n.author === 'U4');
     expect(unmatched).to.include({ target: 'brief', item_id: null, author: 'U4', note: 'what is this?' });
-    expect(doc.unmatched).to.deep.equal([unmatched]);
+    // A thumbs that cites nothing stays unmatched, its verdict recorded but counted nowhere.
+    const bareThumbs = notes.find((n) => n.author === 'U6');
+    expect(bareThumbs).to.include({ target: 'brief', item_id: null, matched: false, verdict: 'up' });
+    expect(doc.unmatched).to.deep.equal([unmatched, bareThumbs]);
 
-    expect(doc.horizons).to.have.length(1);
+    expect(doc.horizons).to.have.length(2);
     expect(doc.horizons[0]).to.include({
       item_id: ALPHA, project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', pattern_card: null,
       horizon: '2026-10-01', expected_max: null, observed_value: 912, author_count: 1, source_run_id: '2026-09-17',
     });
 
     expect(doc.by_item[ALPHA]).to.include({
-      up: 0, down: 1, retracted: 0, verdict: 'dismissed', horizon: '2026-10-01',
+      up: 0, down: 2, retracted: 0, verdict: 'dismissed', horizon: '2026-10-01',
     });
-    expect(doc.by_item[ALPHA].notes).to.deep.equal([matched.note]);
+    expect(doc.by_item[ALPHA].notes).to.deep.equal([matched.note, byRank.note]);
     expect(doc.by_item[GAMMA]).to.include({ up: 2, down: 0, retracted: 0, verdict: 'confirmed', horizon: null });
-    expect(doc.brief).to.deep.equal({ up: 1, down: 0, notes: ['what is this?'] });
+    expect(doc.brief).to.deep.equal({ up: 1, down: 0, notes: ['what is this?', ':+1:'] });
     expect(Object.keys(doc.projects).sort()).to.deep.equal(['https://alpha.example.org', 'https://gamma.example.org']);
-    expect(doc.projects['https://alpha.example.org'].map((r) => r.kind).sort()).to.deep.equal(['note', 'reaction']);
+    expect(doc.projects['https://alpha.example.org'].map((r) => r.kind).sort())
+      .to.deep.equal(['note', 'note', 'reaction']);
     expect(doc.sources).to.deep.equal([
-      { run_id: '2026-09-17', parent_ts: PARENT_TS, replies: 2, notes: 2, fallback: false },
+      { run_id: '2026-09-17', parent_ts: PARENT_TS, replies: 2, notes: 4, fallback: false },
     ]);
     expect(doc.run_id).to.equal('2026-09-18');
     expect((await readAll(dataDir)).length).to.equal(doc.records.length);
@@ -288,7 +297,7 @@ describe('cli/stages/feedback', () => {
     const doc = await runDir.readJson('feedback.ingested.json');
     expect(doc.records.length).to.be.greaterThan(0);
     expect(doc.projects['https://alpha.example.org']).to.be.an('array');
-    expect(result).to.include({ records: doc.records.length, unmatched: 1, horizons: 1, sources: 1 });
+    expect(result).to.include({ records: doc.records.length, unmatched: 2, horizons: 2, sources: 1 });
     expect(fs.existsSync(path.join(dataDir, 'feedback.jsonl'))).to.equal(true);
   });
 

@@ -63,6 +63,15 @@ const proseOnly = (text) => String(text || '')
 /** Numeric tokens in prose: integers with separators, decimals, percentages, hours, days and ratios. */
 const extractNumbers = (text) => [...proseOnly(text).matchAll(NUMBER_TOKEN_PATTERN)].map((m) => m[0]);
 
+/**
+ * Numeric tokens anywhere in a text the model was given (revision 23): dates and clock times dropped, code kept,
+ * because a prompt's fenced JSON is exactly where its numbers live.
+ */
+const extractNumbersEverywhere = (text) => [...String(text || '')
+  .replace(DATE_LIKE_PATTERN, ' ')
+  .replace(TIME_LIKE_PATTERN, ' ')
+  .matchAll(NUMBER_TOKEN_PATTERN)].map((m) => m[0]);
+
 /** Parse a token produced by extractNumbers into its numeric value, suffix and decimal precision. */
 const parseToken = (token) => {
   const suffixMatch = /[%hdx]$/.exec(token);
@@ -73,5 +82,6 @@ const parseToken = (token) => {
 };
 
 module.exports = {
-  formatValue, extractNumbers, codeSpans, proseOnly, parseToken, toSignificant, HOUR_SECONDS, DAY_SECONDS,
+  formatValue, extractNumbers,
+  extractNumbersEverywhere, codeSpans, proseOnly, parseToken, toSignificant, HOUR_SECONDS, DAY_SECONDS,
 };

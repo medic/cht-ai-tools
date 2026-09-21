@@ -1,6 +1,9 @@
 *{{mrkdwn severity_label}}* · {{mrkdwn host}} · `{{mrkdwn metric}}`
 {{mrkdwn why_now}}
 _Check:_ {{mrkdwn suggested_check}}
+{{#each related}}
+{{mrkdwn text}}
+{{/each}}
 {{#if has_alert}}
 {{mrkdwn alert_text}}
 {{/if}}

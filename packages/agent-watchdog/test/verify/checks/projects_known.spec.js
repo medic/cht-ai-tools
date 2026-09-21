@@ -33,3 +33,28 @@ describe('verify/checks/projects_known', () => {
     expect(check(ctx).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/projects_known: a host written as its leading labels (FR-016, revision 23)', () => {
+  const withDeep = () => {
+    const ctx = baseContext();
+    ctx.discovery.projects.push({
+      host: 'cht.north.prod.example.org', url: 'https://cht.north.prod.example.org', slug: 'cht-north-prod-example-org',
+    });
+    return ctx;
+  };
+
+  it('accepts the leading two or more labels of a discovered host as naming that project', () => {
+    const ctx = withDeep();
+    ctx.items[0].why_now = 'Backlog is 912; cht.north.prod shows the same shape and cht.north.prod.example.org too.';
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('still refuses a host of another domain, and trailing labels that are not a project', () => {
+    const domain = withDeep();
+    domain.items[0].why_now = 'Backlog is 912, unlike north.prod.example.org which is fine.';
+    expect(check(domain).status).to.equal('fail');
+    const other = withDeep();
+    other.items[0].why_now = 'Backlog is 912, unlike cht.north.staging.example.org.';
+    expect(check(other).status).to.equal('fail');
+  });
+});

@@ -544,3 +544,41 @@ Deliberately not planned: storing every rejected attempt's report; the determini
 rules, dark-host sessions and near-identical backlog items of the same run, which need a decision about
 what code hands the model at all; and panel screenshots in the brief, which the Clarifications answer
 with No.
+
+### Revision 23 delta: a thread a person can read, a gate that trusts its own text, a roll-up that recovers, and what code hands the model (FR-009, FR-013, FR-014, FR-016, FR-017, FR-020, FR-022, FR-027, FR-075, FR-080)
+
+Planned on 2026-09-21 after the first ninety-project run to complete on one pass (Sonnet 5, $39.41):
+150 items became 159 thread replies under one post, 78 of 90 sessions still retried because the
+gate refused numerals the model had read in its own session, the roll-up was rejected three times
+on one or two bullets each and degraded, 48 of the 56 high items were one deterministic rule that
+already held the day before, eight sessions described hosts dark for weeks, and six reference-line
+targets produced 161 of 1,189 candidates (research.md R-28). Six deltas, all measured.
+
+- **I**: no new dependency. The report share uses the `files.uploadV2` the image already uses; the
+  roll-up session uses the `openSession` the project sessions use.
+- **II**: tests first for all six: the body-only replies, the cap and the report share; `#rank` and
+  inline thumbs in `matchNote` and the ingester; the given-text exemption scoped per bullet and the
+  two-decimal phone match; the roll-up's single session, its merged draft and its prompt record;
+  standing conditions withheld from sessions and named by code; reference lines classified out of
+  collection; related items nested in the report and named in a reply.
+- **III**: more judgement moves into code. Standing conditions and reference lines are decided
+  from fields the run already computes; the gate stops asking the model not to quote its input; a
+  retry mends only the failing bullets; presentation of related items follows a field the analysis
+  already fills.
+- **IV**: four derived artefacts are added and named here, nothing the model wrote is stored anew:
+  `reference_line` on a panel record (as `breakdown` is), `rollup/prompt.md` (as `prompt.pass<n>.md`
+  is), `rollup/standing.json` (as `layout.json` is, so the report can list hosts) and the report
+  share's file id and `ts` on the payload and `publication.json` (as the image's id is). A note's
+  verdict fills a field that was null for notes.
+- **V**: no new stage. Analyze classifies, agent withholds, rollup names, render lists, publish
+  shares; each in the stage that owns it.
+- **VI**: unchanged. Standing conditions and dark hosts are flagged once; nothing acts on them.
+- **VII**: `prompts/pass-first.md` gains one sentence (name another item's metric, never the item's
+  own) and the roll-up's revision text changes, both by pull request with tests.
+- **VIII**: unchanged; the report and the thread address the same internal audience.
+  Result: PASS.
+
+Deliberately not planned: a configurable reply cap; a report link on the parent to a private file;
+exempting every numeral of the items JSON for the brief; a layout change for related items;
+reclassifying the clock-skew gauge; deduplicating backlog items against firing alerts; storing
+rejected draft texts beyond `brief.draft<n>.json` (research.md R-28).

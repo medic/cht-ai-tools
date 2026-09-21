@@ -103,6 +103,21 @@ const createScriptedEngine = ({
 
   const openSession = async (options) => {
     calls.sessions.push(options);
+    // The roll-up drafts in a session of its own since revision 23: its turns are answered like the single brief
+    // turn used to be, a revision turn from the first turn's prompt (the ranked items travel once).
+    if (options.sessionName === 'rollup') {
+      let firstPrompt = null;
+      let attempt = 0;
+      return {
+        async turn(userText) {
+          attempt += 1;
+          firstPrompt = firstPrompt || userText;
+          calls.turns.push({ pass: attempt, userText, rollup: true });
+          return singleTurn({ ...options, userPrompt: firstPrompt, name: `rollup-draft-${attempt}` });
+        },
+        async close() {},
+      };
+    }
     let pass = 0;
     let sessionProject = null;
     return {

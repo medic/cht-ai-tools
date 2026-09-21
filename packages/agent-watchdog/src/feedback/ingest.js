@@ -5,7 +5,7 @@ const { RunDir, dataPaths } = require('../store/run-dir');
 const { schemas } = require('../model/schemas');
 const identity = require('../model/identity');
 const { appendRecords, readAll } = require('./store');
-const { matchNote, matchAlertNote } = require('./match');
+const { matchNote, matchAlertNote, noteVerdict } = require('./match');
 const { parseNoteWithModel } = require('./parse-notes');
 
 const BRIEF_EVENT = 'agent_watchdog.brief';
@@ -110,8 +110,14 @@ const applyRecord = (counts, record) => {
     } else if (record.verdict === 'up' || record.verdict === 'down') {
       counts[record.verdict] += 1;
     }
-  } else if (record.kind === 'note' && record.note) {
-    counts.notes.push(record.note);
+  } else if (record.kind === 'note') {
+    if (record.note) {
+      counts.notes.push(record.note);
+    }
+    // A thumbs written in a note is its verdict (FR-027, revision 23), counted on the item it cites and nowhere else.
+    if (record.target === 'item' && record.matched && (record.verdict === 'up' || record.verdict === 'down')) {
+      counts[record.verdict] += 1;
+    }
   }
 };
 
@@ -315,8 +321,10 @@ const ingestFeedback = async ({
       candidates.push({
         feedback_id: feedbackId,
         date: observedDate, run_id: sourceId, target, item_id: item ? item.item_id : null, alert_key: alertKey || null,
-        kind: 'note', verdict: null, note: message.text, horizon: parsed.horizon, author: message.user,
-        matched: Boolean(item || alertKey), source_ts: message.ts,
+        // The note's own thumbs is its verdict (revision 23); the id stays keyed on the note alone, so re-reading it
+        // finds the stored record.
+        kind: 'note', verdict: noteVerdict(message.text), note: message.text, horizon: parsed.horizon,
+        author: message.user, matched: Boolean(item || alertKey), source_ts: message.ts,
       });
       if (item && parsed.horizon) {
         const meta = itemMeta.get(item.item_id) || {};

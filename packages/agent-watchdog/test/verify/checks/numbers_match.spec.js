@@ -95,3 +95,52 @@ describe('verify/checks/numbers_match', () => {
     expect(check(ctx).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/numbers_match: the text the model was given (FR-016, revision 23)', () => {
+  const { givenNumerals } = require('../../../src/verify/checks/numbers_match');
+
+  it('accepts a numeral that appears in the session\'s prompts or tool results, in any of its forms', () => {
+    const prompt = baseContext();
+    prompt.givenText = ['"days_firing": 74, "title": "API Server Down"', 'rate(cht_conflict_count[24h]) * 60 * 60'];
+    prompt.items[0].why_now = 'Backlog is 912; the alert has fired for 74 days (74d) over the 24h window.';
+    expect(check(prompt).status).to.equal('pass');
+    const tool = baseContext();
+    tool.givenText = ['{"history": [{"run_id": "2026-09-01", "count": 41}]}'];
+    tool.items[0].suggested_check = 'Compare with the 41 earlier occurrences.';
+    expect(check(tool).status).to.equal('pass');
+  });
+
+  it('still refuses a numeral found in neither the given text nor the computed values', () => {
+    const ctx = baseContext();
+    ctx.givenText = ['nothing numeric was given'];
+    ctx.items[0].why_now = 'Backlog is 912 after 48h of climbing.';
+    const result = check(ctx);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons.join(' ')).to.include('48h');
+  });
+
+  it('collects bare values from given text: separators and unit letters dropped, dates ignored', () => {
+    const given = givenNumerals(['{"value": 1,234, "since": "2026-09-01T06:00:00Z", "window": "[24h]", "pct": 12.5%}']);
+    expect(given.has('1234')).to.equal(true);
+    expect(given.has('24')).to.equal(true);
+    expect(given.has('12.5')).to.equal(true);
+    expect(given.has('2026')).to.equal(false);
+    expect(givenNumerals([]).size).to.equal(0);
+  });
+
+  it('scopes a brief bullet to its own item\'s prompt entry and the run-wide counts, never another item\'s', () => {
+    const ctx = briefContext();
+    ctx.givenText = ['3 projects, 5 panels, 7 candidates'];
+    ctx.itemTexts = new Map([
+      [ctx.items[0].item_id, '{"rank": 1, "confidence": 0.85}'],
+      ['other-item', '{"evidence": [{"value": 4321}]}'],
+    ]);
+    ctx.draft.bullets[0].text = 'cht.example.org backlog 912 vs 300, rank 1 of 7 candidates';
+    expect(check(ctx).status).to.equal('pass');
+    const borrowed = briefContext();
+    borrowed.givenText = ctx.givenText;
+    borrowed.itemTexts = ctx.itemTexts;
+    borrowed.draft.bullets[0].text = 'cht.example.org backlog now 4321';
+    expect(check(borrowed).status).to.equal('fail');
+  });
+});

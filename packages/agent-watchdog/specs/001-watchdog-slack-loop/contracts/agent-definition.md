@@ -105,3 +105,14 @@ record: findings.pass<n>.json, verification.pass<n>.json, passes.json, session.j
 Secrets, Slack user ids, raw corpus material, other projects' data during a project session, and
 any tool that writes or executes. The whole allow-list is code; no configuration adds a tool
 (constitution IV, FR-046, FR-054).
+
+## The roll-up session (revision 23)
+
+The brief is drafted in one session opened with `openSession({ tools: [] })` on the same engine as the
+project sessions. Turn 1 carries the ranked items, the layout and the day's context (the data sections of
+`prompts/rollup.md`); a turn after a rejection carries only the failing bullets with their reasons and
+asks for the full draft with every other bullet copied verbatim, and code assembles the draft it verifies
+from the accepted bullets of the previous attempt and the rewrites, so the items are sent once, the prefix
+is cached and a retry can only mend what was wrong (FR-017). The turns are written to `rollup/prompt.md`
+with `# Revision n` headers, as `prompt.pass<n>.md` is for a project. `singleTurn` remains for the memory
+condenser and the note parser.

@@ -136,6 +136,7 @@ const run = async (ctx) => {
     alertLinks,
     staleAfterDays: (classified && classified.stale_after_days) || 14,
     alertCategories: (ctx.policy && ctx.policy.alerts && ctx.policy.alerts.categories) || {},
+    layout,
   });
   await runDir.writeJson('rollup/payload.json', payload);
   if (built) {
@@ -157,7 +158,12 @@ const run = async (ctx) => {
     publication = await publisher.postTextOnly(payload);
   } else {
     const imagePath = brief.image && brief.image.path ? runDir.path(brief.image.path) : null;
-    publication = await publisher.publish({ payload, imagePath, superseded: ctx.supersededPermalink || null });
+    const reportPath = brief.report && brief.report.path && runDir.exists(brief.report.path)
+      ? runDir.path(brief.report.path)
+      : null;
+    publication = await publisher.publish({
+      payload, imagePath, reportPath, superseded: ctx.supersededPermalink || null,
+    });
   }
   if (built) {
     // Digest last, under today's parent; acknowledge only once the digest is out, then the courtesy reactions.
@@ -181,6 +187,10 @@ const run = async (ctx) => {
   brief.publication = { channel_id: publication.channel_id, ts: publication.ts, permalink: publication.permalink };
   if (brief.image && publication.slack_file_id) {
     brief.image.slack_file_id = publication.slack_file_id;
+  }
+  if (brief.report && publication.report) {
+    brief.report.slack_file_id = publication.report.file_id;
+    brief.report.ts = publication.report.ts;
   }
   await runDir.writeJson('rollup/brief.json', brief);
   logger.info('publish.done', { kind: brief.kind, ts: publication.ts, replies: publication.replies.length });

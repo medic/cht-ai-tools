@@ -15,6 +15,7 @@ const { runProjectSession } = require('../../agent/session-loop');
 const { loadPatternCards } = require('../../corpus/cards');
 const { RunDir, dataPaths } = require('../../store/run-dir');
 const { analysedDatesBefore, runDate } = require('../../rollup/history');
+const { splitStanding } = require('../../analyze/standing');
 const atomic = require('../../store/atomic');
 
 const name = 'agent';
@@ -118,6 +119,18 @@ const replayToolingFor = (ctx, slug) => {
   };
 };
 
+/**
+ * What a project's session is handed (FR-013, FR-014, revision 23): its candidates less the standing conditions,
+ * which code names instead; a project with none left, or none at all, opens no session and the reason is named.
+ */
+const planFor = ({ candidates, changes }) => {
+  if (!candidates.length) {
+    return { forModel: [], standing: [], skipReason: 'no candidates' };
+  }
+  const { forModel, standing } = splitStanding({ candidates, changes });
+  return { forModel, standing, skipReason: forModel.length ? null : 'standing conditions only' };
+};
+
 const selectProjects = (projects, flags) => {
   const wanted = ((flags && flags.project) || []).map(normaliseHost);
   return wanted.length ? projects.filter((p) => wanted.includes(p.host)) : projects;
@@ -163,14 +176,19 @@ const run = async (ctx) => {
   const skipped = [];
   for (const project of projects) {
     const candidates = await readIfExists(ctx.runDir, `${project.slug}/candidates.json`, 'candidates');
-    if (!candidates.length) {
-      logger.info('agent.skip', { project_url: project.url, reason: 'no candidates' });
+    let changes = [];
+    if (candidates.length) {
+      const changesFile = `${project.slug}/changes.json`;
+      requireInputs(ctx.runDir, [changesFile]);
+      changes = asArray(await ctx.runDir.readJson(changesFile), 'changes');
+    }
+    const { forModel, standing, skipReason } = planFor({ project, candidates, changes });
+    if (skipReason) {
+      logger.info('agent.skip', { project_url: project.url, reason: skipReason, standing: standing.length });
       skipped.push(project.url);
       continue;
     }
-    const changesFile = `${project.slug}/changes.json`;
-    requireInputs(ctx.runDir, [changesFile]);
-    plan.push({ project, candidates, changes: asArray(await ctx.runDir.readJson(changesFile), 'changes') });
+    plan.push({ project, candidates: forModel, changes, standing: standing.length });
   }
 
   const results = new Array(plan.length).fill(null);
@@ -228,7 +246,8 @@ const run = async (ctx) => {
         recorder: replay ? replay.recorder : () => {},
       });
       logger.info('agent.session_start', {
-        project_url: project.url, candidates: candidates.length, budget_usd: granted,
+        project_url: project.url, candidates: candidates.length, standing_withheld: plan[index].standing,
+        budget_usd: granted,
       });
       try {
         results[index] = await runProjectSession({
@@ -287,4 +306,6 @@ const run = async (ctx) => {
   return summary;
 };
 
-module.exports = { name, inputs, run, asArray, feedbackFor, activeWindowFrom, itemHistoryFor, selectProjects };
+module.exports = {
+  name, inputs, run, asArray, feedbackFor, activeWindowFrom, itemHistoryFor, selectProjects, planFor,
+};

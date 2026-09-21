@@ -209,3 +209,14 @@ on day two, observes fifteen, clears one (also written to `corpus/outcomes/`) an
 watchdog, `node smoke/grafana.js --alerts` lists the rules and instances the Viewer token can read with their
 states and paging (S-14) and prints the alert-list links to open (S-15); `agent-watchdog run --dry-run` with the
 alerting endpoints unreachable posts nothing but leaves an "Alerts unavailable" notice in the payload.
+
+## 14. Thread economy and the report (revision 23)
+
+Preview a recorded day with many items (the alerts-day fixture, or a hosted preview) and open
+`rollup/payload.json`: `replies` holds one entry per body item (the layout's `body_items`, at most
+twenty-five) and one per alert group, `report` names `rollup/report.html` with a code-built
+`initial_comment`, and the parent's footer counts the items that are only in the report. Open
+`rollup/report.html`: every item is numbered by rank with its id, related items sit under the item they
+relate to, and standing conditions are listed per host. Then run the feedback stage against the Slack
+fixtures: a note "#2 :-1: expected until 1 October" is recorded on the item ranked 2 with verdict `down`
+and the horizon, and a note that is only a thumbs is recorded as unmatched.

@@ -65,6 +65,48 @@ const breakdownOf = (expr) => {
   return ranked ? { kind: ranked[1], labels: [] } : null;
 };
 
+// Trailing `<op> <constant>` terms: the arithmetic a dashboard author adds to draw a guide line from another series.
+const CONSTANT_TAIL = /\s*[-+*/]\s*\d+(?:\.\d+)?\s*$/;
+// The first metric name in an expression: an identifier followed by a selector or a range, so `rate(` is skipped.
+const METRIC_NAME = /([a-zA-Z_:][a-zA-Z0-9_:]*)\s*(?=[{[])/;
+
+const metricNameOf = (expr) => {
+  const match = METRIC_NAME.exec(String(expr || ''));
+  return match ? match[1] : null;
+};
+
+const stripConstantTail = (expr) => {
+  let out = String(expr || '').trim();
+  let stripped = false;
+  while (CONSTANT_TAIL.test(out)) {
+    out = out.replace(CONSTANT_TAIL, '').trim();
+    stripped = true;
+  }
+  return { expr: out, stripped };
+};
+
+/**
+ * A reference line (FR-075, revision 23): on a panel with several targets, a target after the first whose expression
+ * is another series adjusted only by constant arithmetic, the threshold or expected band drawn beside the panel's own
+ * series (`cht_connected_users_count / 10` beside a feedback rate). It repeats a series the run already holds, scaled,
+ * so it is recorded and never collected. Returns `{ subject, source }` (the first target's metric key and the bare
+ * metric the line is drawn from) or null.
+ */
+const referenceLineOf = (target, first) => {
+  if (!target || !first || target === first || !target.expr || !first.expr) {
+    return null;
+  }
+  const { expr, stripped } = stripConstantTail(target.expr);
+  if (!stripped) {
+    return null;
+  }
+  const source = metricNameOf(expr);
+  if (!source || source === metricNameOf(first.expr)) {
+    return null;
+  }
+  return { subject: metricKey(first.expr), source };
+};
+
 /** Every panel with a query, including panels nested inside `row` panels. */
 const flattenPanels = (dashboard) => {
   const out = [];
@@ -95,21 +137,25 @@ const panelRecords = (doc, allowedIds = []) => {
   const variables = dashboardVariables(doc);
   return flattenPanels(doc.dashboard)
     .filter((panel) => !allowedIds.length || allowedIds.includes(panel.id))
-    .flatMap((panel) => panel.targets.filter((t) => t && t.expr).map((target) => {
-      const used = variablesIn(target.expr);
-      return {
-        panel_id: panel.id,
-        title: panel.title || '',
-        ref_id: target.refId || 'A',
-        expr: target.expr,
-        unit: unitOf(panel),
-        metric: metricKey(target.expr),
-        per_project: target.expr.includes('$cht_instance'),
-        variables: used,
-        unresolved: used.filter((name) => !isBuiltin(name) && (variables[name] ?? null) === null),
-        breakdown: breakdownOf(target.expr),
-      };
-    }));
+    .flatMap((panel) => {
+      const targets = panel.targets.filter((t) => t && t.expr);
+      return targets.map((target) => {
+        const used = variablesIn(target.expr);
+        return {
+          panel_id: panel.id,
+          title: panel.title || '',
+          ref_id: target.refId || 'A',
+          expr: target.expr,
+          unit: unitOf(panel),
+          metric: metricKey(target.expr),
+          per_project: target.expr.includes('$cht_instance'),
+          variables: used,
+          unresolved: used.filter((name) => !isBuiltin(name) && (variables[name] ?? null) === null),
+          breakdown: breakdownOf(target.expr),
+          reference_line: referenceLineOf(target, targets[0]),
+        };
+      });
+    });
 };
 
 const duplicatePanelIds = (doc, allowedIds = []) => {
@@ -157,6 +203,16 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
       variables,
       duplicate_panel_ids: duplicatePanelIds(doc, entry.panels || []),
     });
+    const references = panels.filter((p) => p.reference_line);
+    if (references.length) {
+      logger.info('discovery.reference_line_panels', {
+        dashboard: entry.uid,
+        panels: references.map((p) => ({
+          panel_id: p.panel_id, title: p.title, ref_id: p.ref_id, subject: p.reference_line.subject,
+          source: p.reference_line.source,
+        })),
+      });
+    }
     const breakdowns = panels.filter((p) => p.per_project && p.breakdown);
     if (breakdowns.length) {
       // One series per route, code or database is not a per-project metric: shown on the dashboard, not analysed.
@@ -240,7 +296,7 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
   const groups = [...groupPolicy.map((g) => g.label), UNGROUPED]
     .map((label) => ({ label, hosts: projects.filter((p) => p.group === label).map((p) => p.host) }));
 
-  const isAnalysable = (p) => p.per_project && !p.breakdown;
+  const isAnalysable = (p) => p.per_project && !p.breakdown && !p.reference_line;
   const perProject = dashboards.flatMap((d) => d.panels.filter(isAnalysable).map((p) => p.metric));
   const metrics = [...new Set([...perProject, scrapeTargetMetric])].sort();
 
@@ -259,5 +315,5 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
 
 module.exports = {
   discover, metricKey, flattenPanels, panelRecords, duplicatePanelIds, unitOf, groupFor, ignoredBy, dashboardVariables,
-  breakdownOf,
+  breakdownOf, referenceLineOf,
 };

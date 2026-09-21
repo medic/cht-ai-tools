@@ -56,13 +56,17 @@ describe('perf: fifty projects at concurrency 3 (Edge Cases, FR-013)', function 
       expect(candidatesOf(url).length, url).to.be.above(0);
       expect(fs.existsSync(path.join(r.root, slugOf(url), 'session.json')), url).to.equal(true);
     }
-    expect(r.engine.calls.sessions).to.have.length(summary.projects_analysed.length);
+    // One session per analysed project, plus the roll-up's own session (FR-017, revision 23).
+    expect(r.engine.calls.sessions).to.have.length(summary.projects_analysed.length + 1);
     expect(r.read('run.json').bounds_hit).to.deep.equal([]);
     // SC-010: the end-of-run scan over every artefact of fifty projects raises no warning.
     expect(r.err.text()).to.not.include('run.scan_findings');
     const brief = r.read('rollup/brief.json');
     expect(brief.bullets).to.have.length(5);
-    expect(r.read('rollup/payload.json').replies).to.have.length(r.read('rollup/items.ranked.json').length);
+    // Replies for the body items only (FR-020, revision 23); the report shared into the thread holds every item.
+    const payload = r.read('rollup/payload.json');
+    expect(payload.replies).to.have.length(r.read('rollup/layout.json').body_items.length);
+    expect(payload.report.items).to.equal(r.read('rollup/items.ranked.json').length);
 
     // FR-072: a cold volume fetches four windows per metric; the next day reuses the previous-day window and the
     // ledger, so only the current and previous-week windows are fetched and no trailing query is sent.

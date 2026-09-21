@@ -1,6 +1,6 @@
 const path = require('node:path');
 const {
-  discover, metricKey, flattenPanels, panelRecords, dashboardVariables, breakdownOf,
+  discover, metricKey, flattenPanels, panelRecords, dashboardVariables, breakdownOf, referenceLineOf,
 } = require('../../src/collect/discovery');
 const { createGrafanaClient } = require('../../src/collect/grafana');
 const { loadPolicy } = require('../../src/config/policy');
@@ -335,5 +335,79 @@ describe('collect/discovery: programme groups and ignored hosts (FR-068, User St
     expect(plain.projects.every((p) => p.group === 'Other')).to.equal(true);
     expect(plain.groups).to.deep.equal([{ label: 'Other', hosts: plain.projects.map((p) => p.host) }]);
     expect(plain.ignored).to.deep.equal([]);
+  });
+});
+
+describe('collect/discovery: reference lines (FR-075, revision 23)', () => {
+  const target = (refId, expr) => ({ refId, expr });
+  const first = target('A', 'rate(cht_feedback_total{instance=~"$cht_instance"}[24h]) * 60 * 60 * 24');
+
+  it('classifies a later target that is another series adjusted only by constant arithmetic', () => {
+    expect(referenceLineOf(target('B', 'cht_connected_users_count{instance=~"$cht_instance"} / 10'), first))
+      .to.deep.equal({ subject: 'rate(cht_feedback_total[24h]) * 60 * 60 * 24', source: 'cht_connected_users_count' });
+    expect(referenceLineOf(
+      target('users_threshold', 'cht_connected_users_count{instance=~"$cht_instance"} * 0.003 + 2'),
+      target('users_over_limit', 'cht_replication_limit_count{instance=~"$cht_instance"}'),
+    ))
+      .to.deep.equal({ subject: 'cht_replication_limit_count', source: 'cht_connected_users_count' });
+    expect(referenceLineOf(
+      target('changes_hr',
+        'rate(cht_couchdb_update_sequence{db="medic", instance=~"$cht_instance"}[30d]) * 60 * 60 + 500'),
+      target('backlog', 'cht_sentinel_backlog_count{instance=~"$cht_instance"} >= 0'),
+    )).to.deep.equal({ subject: 'cht_sentinel_backlog_count', source: 'cht_couchdb_update_sequence' });
+  });
+
+  it('never classifies the first target, a single target, one without a constant tail or the subject itself', () => {
+    expect(referenceLineOf(first, first)).to.equal(null);
+    expect(referenceLineOf(target('A', 'cht_connected_users_count{instance=~"$cht_instance"} / 10'), null))
+      .to.equal(null);
+    expect(referenceLineOf(target('B', 'cht_connected_users_count{instance=~"$cht_instance"}'), first)).to.equal(null);
+    expect(referenceLineOf(target('B', 'rate(cht_feedback_total{instance=~"$cht_instance"}[1h]) * 3600'), first))
+      .to.equal(null);
+    expect(referenceLineOf(
+      target('B', 'sum(rate(cht_api_http_response_size_bytes_sum{instance=~"$cht_instance"}[5m])) + sum(rate(x[5m]))'),
+      first,
+    ), 'a term that is not a constant is not a tail').to.equal(null);
+  });
+
+  it('records the reference line on the panel record and leaves it out of the metric list', async () => {
+    const doc = {
+      meta: { slug: 'r', url: '/d/r/r' },
+      dashboard: {
+        uid: 'r', title: 'R',
+        panels: [{
+          id: 14, title: 'Client Feedback/Error Rate',
+          targets: [
+            { refId: 'A', expr: 'rate(cht_feedback_total{instance=~"$cht_instance"}[24h]) * 60 * 60 * 24' },
+            { refId: 'B', expr: 'cht_connected_users_count{instance=~"$cht_instance"} / 10' },
+          ],
+        }, {
+          id: 15,
+          title: 'Users',
+          targets: [{ refId: 'A', expr: 'cht_connected_users_count{instance=~"$cht_instance"}' }],
+        }],
+      },
+    };
+    const records = panelRecords(doc, []);
+    expect(records.map((r) => [r.ref_id, r.reference_line])).to.deep.equal([
+      ['A', null],
+      ['B', { subject: 'rate(cht_feedback_total[24h]) * 60 * 60 * 24', source: 'cht_connected_users_count' }],
+      ['A', null],
+    ]);
+    const logger = { debug() {}, info: sinon.spy(), warn() {}, error() {} };
+    const fake = createFakeGrafana({ fixtureDir: fixturePath('runs', 'seeded-anomaly') });
+    const grafana = createGrafanaClient({
+      baseUrl: fake.baseUrl, token: fake.token, datasourceUid: fake.datasourceUid, timeoutMs: 1000, fetch: fake.fetch,
+    });
+    const discovery = await discover({
+      grafana, policy: policyWith({}), config: {}, runStart: RUN_START, logger,
+      docs: [doc, doc, doc, doc],
+    });
+    expect(discovery.metrics).to.include('cht_connected_users_count');
+    expect(discovery.metrics).to.include('rate(cht_feedback_total[24h]) * 60 * 60 * 24');
+    expect(discovery.metrics).to.not.include('cht_connected_users_count / 10');
+    const logged = logger.info.getCalls().find((c) => c.args[0] === 'discovery.reference_line_panels');
+    expect(logged, 'the classification is logged like breakdowns').to.exist;
+    expect(logged.args[1].panels[0]).to.include({ panel_id: 14, ref_id: 'B', source: 'cht_connected_users_count' });
   });
 });

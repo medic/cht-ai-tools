@@ -197,6 +197,8 @@ describe('config/policy: the alert policy alerts.yaml (FR-065, User Story 8)', (
     expect(policy.alerts.rules['API Server Down']).to.deep.equal({ category: 'availability', importance: 'critical' });
     expect(policy.alerts.rules['Sentinel Backlog']).to.deep.equal({ category: 'backlog', importance: 'high' });
     expect(policy.alerts.rules['Outbound Push Backlog']).to.deep.equal({ category: 'backlog', importance: 'high' });
+    // The hosted watchdog's lower-threshold sentinel rule, categorised by revision 23 (research.md R-28).
+    expect(policy.alerts.rules['Sentinel Backlog >50']).to.deep.equal({ category: 'backlog', importance: 'medium' });
     expect(policy.alerts.rules['Message Delivery Rate']).to.deep.equal({ category: 'messaging', importance: 'high' });
     expect(policy.alerts.rules['DB Conflicts Rate']).to.deep.equal({ category: 'database', importance: 'medium' });
     expect(policy.alerts.rules['Client Feedback/Error Rate'])

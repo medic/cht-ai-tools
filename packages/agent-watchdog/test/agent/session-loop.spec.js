@@ -384,3 +384,38 @@ describe('agent/session-loop', () => {
     expect(gateSpy.firstCall.args[0].toolResultUrls).to.deep.equal(['https://docs.communityhealthtoolkit.org/x']);
   });
 });
+
+describe('agent/session-loop: the text the model was given reaches the gate (FR-016, revision 23)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('hands the gate every prompt sent in the session and every tool result text', async () => {
+    const engine = createFakeEngine({ responses: [
+      {
+        structuredOutput: findings([modelItem(913)]),
+        toolCalls: [{
+          tool_name: 'mcp__watchdog__get_windows', tool_input: { metric: 'x' }, tool_response: '{"count": 41}',
+        }],
+      },
+      { structuredOutput: findings([modelItem()]) },
+    ] });
+    const gateSpy = sinon.spy(acceptingGate);
+    await runProjectSession({
+      engine, definition, project, candidates, changes, feedback: [], memory: '', activeWindow: null,
+      config: config({ passes: 1 }), gate: gateSpy, runDir, logger, now: () => new Date('2026-09-18T06:00:00Z'),
+      localTools: [], localServers: {}, mcpConfig: { mcpServers: {} },
+    });
+    expect(gateSpy).to.have.been.calledTwice;
+    const first = gateSpy.firstCall.args[0].givenText;
+    expect(first.some((text) => text.includes('cht_sentinel_backlog_count')), 'the pass prompt').to.equal(true);
+    expect(first).to.include('{"count": 41}');
+    const second = gateSpy.secondCall.args[0].givenText;
+    expect(second.length).to.be.greaterThan(first.length);
+    expect(second.some((text) => text.includes('913')), 'the revision prompt').to.equal(true);
+  });
+});

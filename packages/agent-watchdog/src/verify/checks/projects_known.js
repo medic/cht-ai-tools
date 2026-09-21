@@ -12,11 +12,19 @@ const exemptHosts = (ctx) => new Set([
   ...allowedHosts(ctx.allowlist || []).map((h) => h.toLowerCase()),
 ]);
 
-const undiscoveredHosts = (text, exempt) => {
+/**
+ * A host written as the leading two or more labels of a discovered host names that project (revision 23): a bullet
+ * has 120 characters, and the model shortens `cht.north.prod.example.org` to `cht.north.prod`. A bare domain or the
+ * trailing labels name no project.
+ */
+const namesDiscoveredHost = (token, discovered) => token.split('.').length >= 2
+  && [...discovered].some((host) => host === token || host.startsWith(`${token}.`));
+
+const undiscoveredHosts = (text, exempt, discovered = new Set()) => {
   const found = new Set();
   for (const match of proseOnly(text).matchAll(HOST_LIKE_PATTERN)) {
     const token = match[0].toLowerCase();
-    if (isProjectLikeHost(token) && !exempt.has(token)) {
+    if (isProjectLikeHost(token) && !exempt.has(token) && !namesDiscoveredHost(token, discovered)) {
       found.add(token);
     }
   }
@@ -26,6 +34,7 @@ const undiscoveredHosts = (text, exempt) => {
 const check = (ctx) => {
   const reasons = [];
   const exempt = exemptHosts(ctx);
+  const discovered = discoveredHosts(ctx);
   const texts = [];
   if (ctx.mode === 'brief') {
     texts.push(['headline', ctx.draft.headline]);
@@ -45,11 +54,11 @@ const check = (ctx) => {
     texts.push(['notes', ctx.findings.notes]);
   }
   for (const [where, text] of texts) {
-    for (const host of undiscoveredHosts(text, exempt)) {
+    for (const host of undiscoveredHosts(text, exempt, discovered)) {
       reasons.push(`${where} names ${host}, which is not a discovered project`);
     }
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons: [...new Set(reasons)] };
 };
 
-module.exports = { name: NAME, check };
+module.exports = { name: NAME, check, namesDiscoveredHost };

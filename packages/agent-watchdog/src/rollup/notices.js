@@ -16,17 +16,32 @@ const listOf = (values) => `${values.slice(0, MAX_NAMED).join(', ')}${values.len
   : ''}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Stale alerts on hosts with no data: old news, named once, with what to do about them. */
-const housekeepingNotice = (housekeeping) => {
-  if (!housekeeping || !housekeeping.length) {
+/**
+ * Stale alerts on hosts with no data: old news, named once, with what to do about them. Hosts dark for the whole
+ * trailing fortnight (FR-080, revision 23) are named in the same line, once each, whether or not an alert is stale
+ * there.
+ */
+const housekeepingNotice = (housekeeping, darkHosts = []) => {
+  const stale = housekeeping || [];
+  const staleHosts = [...new Set(stale.map((h) => h.host).filter(Boolean))].sort(byCodePoint);
+  const named = new Set(staleHosts);
+  const dark = [...new Set((darkHosts || []).filter((host) => host && !named.has(host)))].sort(byCodePoint);
+  if (!stale.length && !dark.length) {
     return null;
   }
-  const hosts = [...new Set(housekeeping.map((h) => h.host).filter(Boolean))].sort(byCodePoint);
-  const minDays = Math.min(...housekeeping.map((h) => h.days_firing || 0));
-  const one = housekeeping.length === 1;
-  return `Housekeeping: ${plural(housekeeping.length, 'alert')} stale for ${minDays}+ days on `
-    + `${plural(hosts.length, 'host')} with no data (${listOf(hosts)}): remove ${one ? 'it' : 'them'} from the `
-    + `watchdog or silence the rule${one ? '' : 's'}`;
+  if (!stale.length) {
+    const oneDark = dark.length === 1;
+    return `Housekeeping: ${plural(dark.length, 'host')} dark for the whole trailing fortnight (${listOf(dark)}): `
+      + `remove ${oneDark ? 'it' : 'them'} from the watchdog or restore the scrape`;
+  }
+  const minDays = Math.min(...stale.map((h) => h.days_firing || 0));
+  const one = stale.length === 1;
+  const text = `Housekeeping: ${plural(stale.length, 'alert')} stale for ${minDays}+ days on `
+    + `${plural(staleHosts.length, 'host')} with no data (${listOf(staleHosts)}): remove ${one ? 'it' : 'them'} `
+    + `from the watchdog or silence the rule${one ? '' : 's'}`;
+  return dark.length
+    ? `${text}; ${plural(dark.length, 'more host')} dark for the whole trailing fortnight (${listOf(dark)})`
+    : text;
 };
 
 /** Open episodes whose instance no longer fires, with how long they fired, oldest first (`observedAt`, else

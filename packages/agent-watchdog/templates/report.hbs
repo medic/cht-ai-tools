@@ -35,6 +35,15 @@
   .value { font-size: 22px; font-weight: 700; }
   .spark { margin: 6px 0; }
   .footer { font-size: 12px; color: #4b5563; margin-top: 12px; }
+  .cite { font-size: 12px; color: #4b5563; margin-top: 6px; }
+  .rank { font-weight: 700; margin-right: 8px; }
+  .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6b7280; margin-left: 8px; }
+  ul.related { padding-left: 18px; margin: 8px 0 0; border-left: 3px solid #d9dee5; list-style: none; }
+  ul.related li { margin: 6px 0; font-size: 14px; }
+  .relation { font-style: italic; color: #4b5563; margin-right: 6px; }
+  section.standing { width: 840px; background: #fff; border: 1px solid #d9dee5; border-radius: 12px; padding: 18px 28px; margin-top: 16px; }
+  section.standing h2 { font-size: 18px; margin: 0 0 8px; }
+  section.standing h3 { font-size: 14px; margin: 10px 0 4px; color: #4b5563; }
 </style>
 </head>
 <body>
@@ -59,10 +68,11 @@
 {{/each}}
   <div class="checked">Checked {{checked.projects}} projects, {{checked.panels}} panels, {{checked.candidates}} candidates.</div>
   <div class="footer">Cost {{footer.cost_text}} · trace: {{footer.trace_text}}</div>
+  <div class="cite">To cite an item in a thread note, give its number (#rank) or its host and metric; a thumbs up or down in the note is its verdict.</div>
 </div>
 {{#each items}}
 <section class="item">
-  <div><span class="sev sev-{{severity}}">{{severity_label}}</span><strong>{{host}}</strong> · <span class="metric">{{metric}}</span> · rank {{rank}} · {{persisting_text}} · confidence {{confidence_pct}}%</div>
+  <div><span class="rank">{{rank_text}}</span><span class="sev sev-{{severity}}">{{severity_label}}</span><strong>{{host}}</strong> · <span class="metric">{{metric}}</span> · rank {{rank}} · {{persisting_text}} · confidence {{confidence_pct}}%<code class="id">{{item_id}}</code></div>
   <table class="evidence">
 {{#each evidence}}
     <tr><td>{{window}}</td><td class="value">{{value}}</td><td>{{unit}}</td></tr>
@@ -71,7 +81,27 @@
   <div class="spark">{{sparkline samples}}</div>
   <p>{{why_now}}</p>
   <p><em>Check:</em> {{suggested_check}}</p>
+{{#if has_related}}
+  <ul class="related">
+{{#each related}}
+    <li><span class="relation">{{relation_text}}</span><span class="rank">{{rank_text}}</span><span class="sev sev-{{severity}}">{{severity_label}}</span><strong>{{host}}</strong> · <span class="metric">{{metric}}</span><code class="id">{{item_id}}</code><br>{{why_now}}</li>
+{{/each}}
+  </ul>
+{{/if}}
 </section>
 {{/each}}
+{{#if has_standing}}
+<section class="standing">
+  <h2>Standing conditions</h2>
+{{#each standing}}
+  <h3>{{rule_text}}</h3>
+  <table class="evidence">
+{{#each hosts}}
+    <tr><td>{{group}}</td><td><strong>{{host}}</strong></td><td class="metric">{{metric}}</td><td class="value">{{value}}</td><td>yesterday {{previous}}</td></tr>
+{{/each}}
+  </table>
+{{/each}}
+</section>
+{{/if}}
 </body>
 </html>
