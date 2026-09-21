@@ -155,11 +155,20 @@ describe('agent/engine-sdk', () => {
     const s1 = await bareSession(makeEngine(failed.sdk));
     expect((await s1.turn('x')).referenceUnavailable).to.equal(true);
     await s1.close();
+    // A refusal of a documentation tool the session allowed means the sources could not be reached.
     const denial = { ...success(null), permission_denials: [{ tool_name: 'mcp__cht-docs__search_docs' }] };
     const denied = fakeSdk({ turns: [{ result: denial }] });
-    const s2 = await bareSession(makeEngine(denied.sdk));
+    const s2 = await bareSession(makeEngine(denied.sdk), { tools: ['mcp__cht-docs__search_docs'] });
     expect((await s2.turn('x')).referenceUnavailable).to.equal(true);
     await s2.close();
+
+    // A refusal of the synthesised-answer tool, which the allow-list never carries, is this package's own design
+    // working and says nothing about the sources (revision 19).
+    const expected = { ...success(null), permission_denials: [{ tool_name: 'mcp__cht-docs__ask_question' }] };
+    const byDesign = fakeSdk({ turns: [{ result: expected }] });
+    const s3 = await bareSession(makeEngine(byDesign.sdk), { tools: ['mcp__cht-docs__search_docs'] });
+    expect((await s3.turn('x')).referenceUnavailable).to.equal(false);
+    await s3.close();
   });
 
   it('maps error subtypes and exposes errors', async () => {

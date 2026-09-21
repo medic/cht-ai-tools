@@ -428,3 +428,27 @@ bought nothing. Four of five model turns were rejected, every one of them on `da
 - **VI**: unchanged.
 - **VII**: the model-facing output schema is code, changed here by pull request with its prompt.
 - **VIII**: unchanged. Result: PASS.
+
+### Revision 19 delta: a filtered brief, honest tool contracts, first cost levers (FR-016, FR-066)
+
+Re-checked on 2026-09-20 after the run that converged for the first time. It was correct and
+expensive, and it showed three separable problems (research.md R-24).
+
+- **I**: no new dependency. One pure module for the tool-call summary; the rest is existing code.
+- **II**: tests first for each: the roll-up scoped to the analysed projects while the episode
+  record stays whole; a refused tool that was never allowed; the metric tool accepting a collected
+  key; a date that is not a phone number and reference findings counted apart; the skipped review
+  pass; the review-model override.
+- **III**: what the brief covers, which refusals matter, which metric keys are valid and when a
+  review pass is pointless are all decided by code from the run's own record. The `not_selected`
+  change asks the model for less prose; it does not let code write the reasons.
+- **IV**: nothing new is stored. `alerts.classified.json` and `alerts/episodes.jsonl` deliberately
+  stay whole on a filtered run, so a narrow preview cannot corrupt the next full run's newness or
+  make another project's episode look cleared.
+- **V**: no new stage. The roll-up regroups from the classified instances it already reads.
+- **VI**: unchanged; the watchdog still only reports.
+- **VII**: the prompts and the output schema change by pull request with their tests. Pricing the
+  review passes separately was dropped on inspection: the model is bound when the session opens, so
+  it would cost the shared session FR-057 requires.
+- **VIII**: one audience. A brief that names projects the run never looked at is the audience rule
+  failing in practice, and this is the fix. Result: PASS.

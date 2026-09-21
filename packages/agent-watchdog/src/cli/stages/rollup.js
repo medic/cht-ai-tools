@@ -7,6 +7,7 @@ const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
 const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
 const { analysisRecord } = require('../../rollup/analysis');
+const { analysedHosts, onAnalysedHosts, scopeClassified } = require('../../rollup/scope');
 const { readEpisodeEvents } = require('../../alerts/episodes');
 const { bareKey } = require('../../analyze/kinds');
 const { updateEpisodes } = require('../../alerts/episodes');
@@ -139,7 +140,18 @@ const run = async (ctx) => {
   }
   // Alert Groups (FR-066) take body slots of their own, ranked among the items by importance; an unavailable
   // alerting API is a notice on the brief, never a failure.
-  const classified = await readIfExists(runDir, 'alerts.classified.json', null);
+  const wholeClassified = await readIfExists(runDir, 'alerts.classified.json', null);
+  // A filtered run briefs only what it analysed (FR-066): the record on disk and the episodes stay whole, so the
+  // next full run sees the same newness and no other project's episode looks cleared (revision 19).
+  const analysed = analysedHosts({ discovery, flags: ctx.flags || {} });
+  const classified = scopeClassified(wholeClassified, analysed, {
+    groupSizes: Object.fromEntries((discovery.groups || []).map((g) => [g.label, (g.hosts || []).length])),
+  });
+  if (analysed) {
+    logger.info('rollup.scoped', {
+      analysed: [...analysed], alert_groups: ((classified && classified.groups) || []).length,
+    });
+  }
   const alertsAvailable = Boolean(classified && classified.available);
   // When the alerts were read: the classification's time, else this run's clock (revision 16).
   const alertsObservedAt = (classified && classified.observed_at) || ctx.now || null;
@@ -177,7 +189,10 @@ const run = async (ctx) => {
   // Projects that were not in the previous run are named in the brief (SC-008); unconfigured ones are marked.
   const dataDirForHistory = (ctx.config.storage && ctx.config.storage.dataDir) || runDir.dataDir;
   const previousHosts = await previousHostsFor({ dataDir: dataDirForHistory, runId: ctx.runId || runDir.runId });
-  const notices = newProjectNotices({ discovery, previousHosts });
+  const noticeDiscovery = analysed
+    ? { ...discovery, projects: (discovery.projects || []).filter((p) => analysed.has(p.host)) }
+    : discovery;
+  const notices = newProjectNotices({ discovery: noticeDiscovery, previousHosts });
   if (notices.length) {
     logger.info('rollup.new_projects', { notices, first_run: previousHosts === null });
   }
@@ -198,11 +213,11 @@ const run = async (ctx) => {
     const firingIds = new Set((classified.instances || [])
       .filter((i) => i.state === 'firing')
       .map((i) => i.instance_id));
-    const cleared = clearedEpisodes({
+    const cleared = onAnalysedHosts(clearedEpisodes({
       events: await readEpisodeEvents(dataDirForHistory), firingIds,
       runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`), observedAt: alertsObservedAt,
       ignoredHosts: classified.ignored_hosts || [],
-    });
+    }), analysed);
     const resolved = resolvedNotice(cleared);
     if (resolved) {
       notices.push(resolved);
@@ -284,8 +299,8 @@ const run = async (ctx) => {
       date: ctx.date,
       runStart: ctx.runStart || new Date(`${ctx.date}T06:00:00Z`),
       observedAt: alertsObservedAt,
-      ignoredHosts: classified.ignored_hosts || [],
-      classified,
+      ignoredHosts: (wholeClassified && wholeClassified.ignored_hosts) || [],
+      classified: wholeClassified,
       items: ranked,
       candidatesByProject,
       discovery,

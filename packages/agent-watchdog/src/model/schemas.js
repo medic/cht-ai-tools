@@ -262,7 +262,9 @@ const Pass = z.object({
   pass: z.number().int().min(1),
   session_id: z.string().nullable(),
   items: z.array(Item),
-  not_selected: z.array(z.object({ candidate_id: z.string(), reason: z.string() }).strict()),
+  // A written reason where the candidate's severity floor is medium or high; the id alone where it is low, so a
+  // project with thirty low-floor candidates does not spend output tokens on thirty paragraphs (revision 19).
+  not_selected: z.array(z.object({ candidate_id: z.string(), reason: z.string().optional() }).strict()),
   changes: z.array(PassChangeRecord),
   converged: z.boolean(),
   gate: VerificationReport.nullable(),

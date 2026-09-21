@@ -3,6 +3,7 @@
 // one session, the gate between turns, convergence, bounds, and every artefact the run directory contract
 // names (FR-056 to FR-058, FR-012, FR-017).
 const { assembleSystemPrompt, buildPassPrompt } = require('./prompt-assembly');
+const { RUNTIME_TOOLS } = require('../../agent/hooks');
 
 const URL_PATTERN = /https?:\/\/[^\s)"'<>\]]+/g;
 
@@ -49,6 +50,37 @@ const urlsIn = (value) => {
 const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budget' };
 
 /**
+ * How the session used its tools (FR-018, revision 19): calls by tool with the ones that answered an error, and
+ * the tools the runtime refused. A tool whose contract no longer matches what the model is told shows up here
+ * instead of needing the record read.
+ */
+const toolUsage = (calls, refused) => {
+  const byTool = {};
+  let failed = 0;
+  for (const call of calls) {
+    const name = call.tool_name || 'unknown';
+    // The runtime's own structured-output mechanism is how the model answers, not a tool we gave it to read with.
+    if (RUNTIME_TOOLS.includes(name)) {
+      continue;
+    }
+    byTool[name] = byTool[name] || { calls: 0, failed: 0 };
+    byTool[name].calls += 1;
+    if (/"error"\s*:/.test(String(call.tool_response || ''))) {
+      byTool[name].failed += 1;
+      failed += 1;
+    }
+  }
+  const counted = Object.values(byTool).reduce((sum, t) => sum + t.calls, 0);
+  return {
+    calls: counted,
+    failed,
+    refused: refused.length,
+    by_tool: byTool,
+    refused_tools: [...new Set(refused)].sort(),
+  };
+};
+
+/**
  * Run the analysis passes for one project inside one engine session.
  * `localTools` are served in-process as the `watchdog` server; `localServers` maps further server names to
  * tool lists (replay serves the documentation service from recordings this way).
@@ -67,6 +99,8 @@ const runProjectSession = async ({
   const calls = [];
   const boundsHit = new Set();
   const errors = [];
+  const allToolCalls = [];
+  const refusedTools = [];
   const usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
   let costUsd = 0;
   let sessionId = null;
@@ -105,6 +139,10 @@ const runProjectSession = async ({
       num_turns: result.num_turns ?? null, duration_ms: result.duration_ms ?? null,
     });
     await recordToolCalls(pass, attempt, turn.toolCalls);
+    allToolCalls.push(...(turn.toolCalls || []));
+    for (const denial of (result.permission_denials || [])) {
+      refusedTools.push(denial.tool_name || 'unknown');
+    }
     if (tracer && typeof tracer.generation === 'function') {
       tracer.generation({
         name: `${slug} pass ${pass}${attempt > 1 ? ` revision ${attempt - 1}` : ''}`,
@@ -290,11 +328,17 @@ const runProjectSession = async ({
         converged = true;
         break;
       }
+      // Nothing to review: an accepted pass that flagged nothing gives a later pass no items to check, and on a
+      // quiet project that is the common case (FR-057, revision 19).
+      if (!acceptedItems.length && lastAcceptedPass === pass) {
+        break;
+      }
     }
   } finally {
     await session.close();
   }
 
+  logger.info('agent.tool_usage', { project_url: project.url, ...toolUsage(allToolCalls, refusedTools) });
   logger.info('agent.session_done', {
     project_url: project.url, passes: passRecords.length, items: acceptedItems.length, converged,
     bounds_hit: [...boundsHit], reference_sources_unavailable: referenceUnavailable, cost_usd: costUsd,

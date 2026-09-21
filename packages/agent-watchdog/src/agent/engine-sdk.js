@@ -113,7 +113,7 @@ const createSdkEngine = ({
     const sdk = await loadSdk();
     const abortController = new AbortController();
     const queue = createQueue();
-    const mapper = createTurnMapper({ docsServer: DOCS_SERVER });
+    const mapper = createTurnMapper({ docsServer: DOCS_SERVER, allowedTools: tools });
     let pending = null;
     let ended = false;
 

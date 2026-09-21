@@ -220,7 +220,7 @@ const createCliEngine = ({
       throw error;
     }
 
-    const mapper = createTurnMapper({ docsServer: DOCS_SERVER });
+    const mapper = createTurnMapper({ docsServer: DOCS_SERVER, allowedTools: tools });
     let pending = null;
     let ended = false;
     let turnStartedAt = null;

@@ -608,6 +608,8 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-20 | A forced re-run of the previous date (`--force --date <yesterday>`) completes the roll-up, its `alerts.classified.json` carries `observed_at` at the clock time, and every cleared episode has a duration of zero or more | Only the hosted alert state has instances that started after the analysed date |
 | S-21 | With a valid model id, a single-project preview on the operator's login completes at least one session with `cost_usd` above zero and either accepted items or a converged empty result, and `agent.turn_error` never appears | Only the hosted runtime shows whether the model is available to the plan |
 | S-22 | With the dashboard reference built by code, a single-project run accepts pass 1 on its first attempt (`verification.pass1.json` outcome `accepted`, attempt 1) and the project's cost falls to roughly the two first attempts | Only a hosted run shows what the model does when it is no longer asked to guess the bounds |
+| S-23 | A one-project run's brief names only that project's alerts, and the next full run reports the same newness and no spurious resolution | Only consecutive hosted runs show that a filtered preview left the durable record alone |
+| S-24 | On the hosted watchdog a quiet project completes in one pass, and a project with items logs `agent.tool_usage` with no failures and no refusals | Tool contracts and pass skipping only show their worth against the real alert and metric mix |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1119,3 +1121,79 @@ and the check was unpassable by design); stating the bounds in the prompt (rejec
 model tokens restating a computed fact, and drifts the moment the window policy changes); keeping
 `dashboard_ref` in the schema as optional and overwriting it (rejected: it leaves a field a reader
 would believe the model sets).
+
+## R-24. A correct run that was too wide, too trusting of its own refusals, and too expensive
+
+**Evidence** (live, 2026-09-20, run `2026-09-20`, one project, 33 candidates, Opus 4.8 at high
+effort, `AGENT_WATCHDOG_PASSES=3`). The revision-18 fixes held: no `dates_match` failure, pass 1
+accepted, pass 2 accepted, pass 3 accepted and identical, `converged: true`, and `diffs` recorded
+for the first time. Per turn, from `session.json`:
+
+| pass | attempt | cost | output tokens | cache read | cache write | turns |
+|---|---|---|---|---|---|---|
+| 1 | 1 | $0.841 | 10,264 | 43,651 | 56,246 | 5 |
+| 1 | 2 | $0.244 | 6,126 | 56,246 | 6,249 | 2 |
+| 2 | 1 | $1.085 | 10,056 | 286,241 | 69,001 | 6 |
+| 3 | 1 | $0.649 | 3,723 | 131,496 | 48,980 | 2 |
+
+Total $2.818 for the project and $0.106 for the roll-up. Prompt caching is already effective:
+517,634 cached reads against 180,476 writes across the session. The third pass changed nothing
+(`diffs` 2 to 3 empty) for $0.649, which is what `AGENT_WATCHDOG_PASSES` exists to control.
+`findings.pass1.json` carried 2 items and 27 `not_selected` entries whose reasons ran to 2,722
+characters, and `not_selected` is read: `src/agent/prompt-assembly.js` feeds it into
+`prompts/pass-review.md`, so it cannot be dropped, only asked for more sparingly.
+
+**Three problems, from the run's own record.** First, the brief carried five alert bullets covering
+eCHIS Kenya (50 firing), Mali and eCHIS Uganda, plus a housekeeping line for seven hosts and a
+resolved line for another project, while the run had analysed one project. `contracts/cli.md`
+defines `--project` as restricting analysis with discovery still running, so this is the contract
+working as written and the contract being wrong for a reader.
+
+Second, `reference_sources_unavailable` was true while the brief's own item cites CHT documentation
+on managing database conflicts. `tool-calls.jsonl` shows why: the model called
+`mcp__cht-docs__ask_question` twice and was refused ("Permission to use … has been denied because
+Claude Code is running in don't ask mode"), then fell back to `mcp__cht-docs__search_docs`, which
+returned the documentation. `agent/mcp.template.json` sets `ask_question` to `always_deny` and
+`agent/tools.json` does not list it among the allowed tools, so the refusal is this package's own
+design; but `src/agent/turn-mapper.js` counts any refusal of a `cht-docs` tool as the sources being
+unavailable. The false clause reached the headline, where it consumed more than half of the
+150-character limit, and added a warning notice to the brief.
+
+Third, the session's first tool call failed: `mcp__watchdog__get_windows` answered
+`{"error":"unknown metric: rate(cht_messaging_outgoing_total{status=\"delivered\"}[24h])"}` for the
+very metric of the item the model went on to publish. `METRIC_NAME` in
+`src/agent/tools/watchdog-tools.js` is `/^[a-zA-Z_:][a-zA-Z0-9_:]*$/`, a bare metric name, while the
+tool's own schema describes the argument as the "metric key as it appears in the candidates or
+computed changes", and those keys are panel expressions. Separately the secret scan reported the
+same three findings it reports every run, all from documentation text inside `tool-calls.jsonl`: an
+address in a CHT release note and the dates `2024-07-16` and `2025-08-20` read as phone numbers.
+
+**Decision**. The roll-up presents only the analysed projects when the run was filtered, regrouping
+from `alerts.classified.json`'s instances rather than its stored groups, and scoping the
+housekeeping, resolved and new-project notices the same way; collection, the classified record and
+`alerts/episodes.jsonl` stay whole, so a narrow preview cannot make another project's open episode
+look cleared or break the next run's newness. A refusal counts as the sources being unavailable
+only when the refused tool was on the allow-list, and the permitted reference tools are named in
+the prompt so a turn is not spent discovering the refusal. `get_windows` accepts any key that
+matches a collected metric under the gate's own key forms, keeping a length and character guard;
+`query_metric` stays a bare name, which is what it queries with. The scan excludes a date from the
+phone pattern and counts findings in recorded tool results apart from findings in what the run
+produced. Each run logs `agent.tool_usage` per project and per run with calls by tool, failures and
+refusals. For cost: a written `not_selected` reason is asked for only where the candidate's severity
+floor is medium or high, and no review pass runs when the pass before it produced no items.
+
+**Dropped on inspection**: pricing the review passes on a cheaper model. Both engines bind the model
+when the session opens, the CLI as a `--model` process argument and the SDK as a `query()` option,
+and `session.turn()` takes none; so a second model means a second session, and FR-057 requires the
+passes to share one so earlier tool results stay available to later ones. Trading that for cost is a
+design decision of its own, not a knob, and it is not made here.
+
+**Alternatives considered**: filtering the classified record or the episode update as well
+(rejected: it corrupts the next full run, as above); keeping the whole programme's alert group on a
+filtered run so the reader sees programme context (rejected: the reader asked about one project, and
+the group's counts would then describe projects the run never analysed); dropping `not_selected`
+(rejected on evidence: the review pass reads it); lowering the default pass count (rejected: that is
+the operator's setting and this run had it at three deliberately); re-seeding a cheaper second
+session with the first pass's items and computed data so the review could run on another model
+(rejected here: it gives up the shared tool results and doubles the cached prefix, so it needs
+measuring against a run that keeps one session, which is what this revision leaves in place).

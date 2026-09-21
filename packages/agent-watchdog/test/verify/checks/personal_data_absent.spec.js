@@ -33,6 +33,16 @@ describe('verify/checks/personal_data_absent', () => {
     expect(check(ctx4).reasons[0]).to.include('phone');
   });
 
+  it('does not mistake a date or a date and time for a phone number (revision 19)', () => {
+    const ctx = baseContext();
+    // Both forms were reported against fetched CHT documentation in run 2026-09-20.
+    ctx.findings.items[0].why_now = 'the release notes are dated 2024-07-16 15:04 and 2025-08-20 13:22';
+    expect(check(ctx).status).to.equal('pass');
+    const ctx2 = baseContext();
+    ctx2.findings.items[0].suggested_check = 'compare the 2026-09-18 window with 2026-09-19';
+    expect(check(ctx2).status).to.equal('pass');
+  });
+
   it('fails on e-mail addresses and phone numbers', () => {
     const ctx = baseContext();
     ctx.findings.items[0].why_now = 'ask ops@medic.org'; // scan-secrets:allow

@@ -445,8 +445,17 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   // its file, line and pattern (never the value) for the operator; the run itself is not failed for it
   // (constitution VI: flag, do not act).
   const scanFindings = scanRunArtefacts(runDir.root);
+  // Findings in what the run wrote are the ones it is answerable for; findings in reference text it was given are
+  // reported apart, so a clean run shows none of its own (FR-016, revision 19).
+  const ownFindings = scanFindings.filter((f) => !f.reference);
+  const referenceFindings = scanFindings.filter((f) => f.reference);
   if (scanFindings.length) {
-    log.warn('run.scan_findings', { count: scanFindings.length, findings: scanFindings.slice(0, 20) });
+    log.warn('run.scan_findings', {
+      count: ownFindings.length,
+      reference_count: referenceFindings.length,
+      findings: ownFindings.slice(0, 20),
+      reference_findings: referenceFindings.slice(0, 20),
+    });
   }
   try {
     await tracer.finish({ output: { status: status || 'stage', cost_usd: ctx.costSoFar } });
@@ -456,7 +465,8 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   }
   log.info('run.finish', {
     status: status || 'stage', duration_ms: patch.duration_ms, cost_usd: ctx.costSoFar,
-    scan_findings: scanFindings.length,
+    scan_findings: ownFindings.length,
+    scan_findings_reference: referenceFindings.length,
   });
 
   if (mode === 'preview' && publishResult && publishResult.payload) {

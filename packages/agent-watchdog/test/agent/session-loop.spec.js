@@ -294,6 +294,61 @@ describe('agent/session-loop', () => {
       expect(stopped.errors).to.deep.equal([]);
     });
 
+  it('runs no review pass when the accepted pass produced no items, and records one pass (revision 19)',
+    async () => {
+      const engine = createFakeEngine({ responses: [
+        { structuredOutput: findings([]) },
+        { structuredOutput: findings([modelItem()], { pass: 2 }) },
+      ] });
+      const emptyGate = async () => ({ report: report('accepted'), items: [] });
+      const result = await run(engine, { gate: emptyGate });
+      expect(result.items).to.deep.equal([]);
+      expect(result.passes).to.have.length(1);
+      expect(engine.sessions[0].turns).to.have.length(1);
+      expect(result.bounds_hit).to.deep.equal([]);
+      const passes = await runDir.readJson(`${project.slug}/passes.json`);
+      expect(passes.passes).to.have.length(1);
+      // A pass that produced items is still reviewed as before.
+      const busy = createFakeEngine({ responses: [
+        { structuredOutput: findings([modelItem()]) },
+        { structuredOutput: findings([modelItem()], { pass: 2 }) },
+      ] });
+      expect((await run(busy)).passes).to.have.length(2);
+    });
+
+  it('logs how the session used its tools, per project, with failures and refusals (revision 19)', async () => {
+    const lines = [];
+    const counting = createLogger({ level: 'info', stream: new Writable({ write(chunk, enc, cb) {
+      for (const line of chunk.toString().split('\n').filter(Boolean)) {
+        lines.push(JSON.parse(line));
+      }
+      cb();
+    } }) });
+    const engine = createFakeEngine({ responses: [{
+      structuredOutput: findings([modelItem()]),
+      result: { permission_denials: [{ tool_name: 'mcp__cht-docs__ask_question' }] },
+      toolCalls: [
+        { tool_name: 'mcp__watchdog__get_windows', tool_input: {}, tool_response: '{"windows":[]}' },
+        { tool_name: 'mcp__watchdog__get_windows', tool_input: {}, tool_response: '{"error":"unknown metric: x"}' },
+        { tool_name: 'mcp__cht-docs__search_docs', tool_input: {}, tool_response: 'a doc' },
+        // The runtime's own output mechanism is not a tool the model reads with, so it is left out of the count.
+        { tool_name: 'StructuredOutput', tool_input: {}, tool_response: 'ok' },
+      ],
+    }] });
+    await runProjectSession({
+      engine, definition, project, candidates, changes, feedback: [], memory: '', activeWindow: null,
+      config: config({ passes: 1 }), gate: acceptingGate, runDir, logger: counting, tracer: null,
+      now: () => new Date('2026-09-18T06:00:00Z'), localTools: [], localServers: {},
+    });
+    const usage = lines.find((l) => l.event === 'agent.tool_usage');
+    expect(usage).to.include({ project_url: project.url, calls: 3, failed: 1, refused: 1 });
+    expect(usage.by_tool).to.deep.equal({
+      'mcp__watchdog__get_windows': { calls: 2, failed: 1 },
+      'mcp__cht-docs__search_docs': { calls: 1, failed: 0 },
+    });
+    expect(usage.refused_tools).to.deep.equal(['mcp__cht-docs__ask_question']);
+  });
+
   it('honours the run deadline before opening a new turn', async () => {
     const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
     const result = await run(engine, { deadline: Date.now() - 1 });

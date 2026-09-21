@@ -3,7 +3,14 @@ const { createReplayLookup } = require('../../../src/agent/tools/replay-shim');
 const { createSdkToolServer } = require('../../../src/agent/tools/sdk-server');
 
 const project = { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' };
-const discovery = { metrics: ['cht_sentinel_backlog_count', 'cht_conflict_count'] };
+const discovery = {
+  metrics: [
+    'cht_sentinel_backlog_count',
+    'cht_conflict_count',
+    'cht_couchdb_doc_total{db="medic"}',
+    'rate(cht_messaging_outgoing_total{status="delivered"}[24h])',
+  ],
+};
 const parse = (out) => JSON.parse(out.content[0].text);
 
 const build = (overrides = {}) => {
@@ -27,6 +34,37 @@ const build = (overrides = {}) => {
 };
 
 describe('agent/tools/watchdog-tools', () => {
+  it('get_windows accepts a collected metric key, functions and matchers included (revision 19)', async () => {
+    const { byName, deps } = build();
+    // The key the candidates and the computed changes use, which is what the tool's own schema promises. This
+    // exact call was refused in run 2026-09-20 for the metric the model then published.
+    const key = 'rate(cht_messaging_outgoing_total{status="delivered"}[24h])';
+    expect(parse(await byName.get_windows.handler({ metric: key }))).to.not.have.property('error');
+    expect(deps.getWindows).to.have.been.calledWith(project, key);
+    // A label matcher, and the same key with the per-project instance matcher the panels carry.
+    expect(parse(await byName.get_windows.handler({ metric: 'cht_couchdb_doc_total{db="medic"}' })))
+      .to.not.have.property('error');
+    const withInstance = 'cht_couchdb_doc_total{instance=~"$cht_instance",db="medic"}';
+    expect(parse(await byName.get_windows.handler({ metric: withInstance }))).to.not.have.property('error');
+    // A metric the run never collected is still refused, and the refusal still names it.
+    const unknown = parse(await byName.get_windows.handler({ metric: 'cht_made_up_total' }));
+    expect(unknown.error).to.include('unknown metric');
+    // Nothing enormous or multi-line gets through to the lookup.
+    expect(parse(await byName.get_windows.handler({ metric: 'a'.repeat(400) })).error).to.include('unknown metric');
+    expect(parse(await byName.get_windows.handler({ metric: 'cht_conflict_count\nmore' })).error)
+      .to.include('unknown metric');
+  });
+
+  it('query_metric still takes a bare metric name, which is what it queries with', async () => {
+    const { byName } = build();
+    const expression = parse(await byName.query_metric.handler({
+      metric: 'rate(cht_messaging_outgoing_total{status="delivered"}[24h])', window: 'current',
+    }));
+    expect(expression.error).to.include('unknown metric');
+    expect(parse(await byName.query_metric.handler({ metric: 'cht_conflict_count', window: 'previous_week' })))
+      .to.not.have.property('error');
+  });
+
   it('exposes exactly the four enumerated read-only tools with zod shapes and descriptions', () => {
     const { tools } = build();
     expect(tools.map((t) => t.name).sort())

@@ -21,6 +21,10 @@ const MIN_SECRET_LENGTH = 24;
 const PLACEHOLDER = /(test|example|placeholder|fake|dummy|replay-eval|smoke)$/i;
 const EXAMPLE_DOMAIN = /@(?:[a-z0-9-]+\.)*example\.(?:org|com|net|invalid)$/i;
 const HEX_ID = /^[0-9a-f]{12,64}$/;
+// Files that hold text the model was given rather than text the run wrote: a documentation result may carry an
+// address or a build timestamp of its own, and quoting it into a post is blocked by the gate, not by deleting the
+// record of what was read (FR-016, revision 19).
+const REFERENCE_FILES = Object.freeze(new Set(['tool-calls.jsonl']));
 const DECIMAL = /^\d+(\.\d+)?$/;
 
 const globalOf = (pattern) => (pattern.flags.includes('g')
@@ -95,6 +99,9 @@ const scanFile = (file, options = {}) => {
 };
 
 /** Every finding under a directory, with paths relative to it. */
+/** True when a run-directory path holds reference text the model was given rather than the run's own output. */
+const isReferenceFile = (relative) => REFERENCE_FILES.has(String(relative).split('/').pop());
+
 const scanTree = (root, { phones = false, skipDirs = SKIP_DIRS } = {}) => {
   const findings = [];
   const visit = (dir) => {
@@ -110,8 +117,9 @@ const scanTree = (root, { phones = false, skipDirs = SKIP_DIRS } = {}) => {
         }
         continue;
       }
+      const rel = path.relative(root, full).split(path.sep).join('/');
       for (const finding of scanFile(full, { phones })) {
-        findings.push({ file: path.relative(root, full).split(path.sep).join('/'), ...finding });
+        findings.push({ file: rel, ...finding, reference: isReferenceFile(rel) });
       }
     }
   };
@@ -129,5 +137,5 @@ const scanRunArtefacts = (root) => scanTree(root, { phones: true, skipDirs: new 
 
 module.exports = {
   scanText, scanFile, scanTree, scanRepository, scanRunArtefacts, secretFindings, personalFindings, MIN_SECRET_LENGTH,
-  SKIP_DIRS, SKIP_FILES, ALLOW_MARKER,
+  SKIP_DIRS, SKIP_FILES, ALLOW_MARKER, REFERENCE_FILES, isReferenceFile,
 };

@@ -24,6 +24,42 @@ const pass = (n, items) => ({
   tool_calls_path: 'alpha-example-org/tool-calls.jsonl',
 });
 
+describe('cli/stages/rollup: a filtered run (FR-066, revision 19)', () => {
+  const { analysedHosts, scopeClassified } = require('../../src/rollup/scope');
+
+  it('narrows what the brief covers without touching the classified record or the episodes', () => {
+    // The seam this relies on: the stage scopes a copy for presentation and writes neither file.
+    const discovery = {
+      projects: [
+        { host: 'alpha.example.org', url: 'https://alpha.example.org', slug: 'alpha-example-org' },
+        { host: 'beta.example.org', url: 'https://beta.example.org', slug: 'beta-example-org' },
+      ],
+      groups: [{ label: 'Other', hosts: ['alpha.example.org', 'beta.example.org'] }],
+    };
+    const hosts = analysedHosts({ discovery, flags: { project: ['https://alpha.example.org'] } });
+    expect([...hosts]).to.deep.equal(['alpha.example.org']);
+    const classified = {
+      available: true,
+      instances: [
+        { instance_id: 'aaaaaaaaaaaa', host: 'alpha.example.org', state: 'firing', group: 'Other',
+          category: 'backlog', importance: 'high', started_at: '2026-09-17T06:00:00Z', days_firing: 1,
+          stale: false, new: false, housekeeping: false, title: 'Sentinel Backlog', rule_uid: 'r1' },
+        { instance_id: 'bbbbbbbbbbbb', host: 'beta.example.org', state: 'firing', group: 'Other',
+          category: 'database', importance: 'low', started_at: '2026-09-17T06:00:00Z', days_firing: 1,
+          stale: false, new: false, housekeeping: false, title: 'DB Fragmentation', rule_uid: 'r2' },
+      ],
+      groups: [{ alert_key: 'Other/backlog' }, { alert_key: 'Other/database' }],
+      housekeeping: [],
+      counts: { firing: 2, new: 0, stale: 0, housekeeping: 0, pending: 0, unknown_rules: 0 },
+    };
+    const before = JSON.stringify(classified);
+    const scoped = scopeClassified(classified, hosts, { groupSizes: { Other: 2 } });
+    expect(scoped.groups.map((g) => g.alert_key)).to.deep.equal(['Other/backlog']);
+    expect(scoped.counts.firing).to.equal(1);
+    expect(JSON.stringify(classified)).to.equal(before);
+  });
+});
+
 describe('cli/stages/rollup', () => {
   let dataDir;
   let runDir;

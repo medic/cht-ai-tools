@@ -31,13 +31,24 @@ const round6 = (value) => Number(value.toFixed(6));
  * @param {object} [options]
  * @param {string} [options.docsServer] MCP server name whose failures mark reference sources unavailable
  */
-const createTurnMapper = ({ docsServer = 'cht-docs' } = {}) => {
+const createTurnMapper = ({ docsServer = 'cht-docs', allowedTools = null } = {}) => {
   const docsPrefix = `mcp__${docsServer}__`;
   const toolUses = new Map();
   let sessionId = null;
   let initUnavailable = false;
   let lastCumulativeCost = 0;
   let current = null;
+
+  // A reference tool the allow-list never carried is refused by this package's own design (agent/tools.json keeps
+  // the synthesised-answer tool off), so its refusal says nothing about whether the sources could be reached. Only
+  // a refusal of a tool we did allow means that (revision 19). With no allow-list, the older reading stands.
+  const refusalMatters = (name) => {
+    const tool = String(name || '');
+    if (!tool.startsWith(docsPrefix)) {
+      return false;
+    }
+    return allowedTools === null || allowedTools.includes(tool);
+  };
 
   const beginTurn = () => {
     current = { toolCalls: [], referenceUnavailable: false, assistantTurns: 0 };
@@ -50,7 +61,7 @@ const createTurnMapper = ({ docsServer = 'cht-docs' } = {}) => {
       toolCalls: current ? current.toolCalls : [],
       referenceUnavailable: initUnavailable
         || Boolean(current && current.referenceUnavailable)
-        || result.permission_denials.some((d) => String(d.tool_name || '').startsWith(docsPrefix)),
+        || result.permission_denials.some((d) => refusalMatters(d.tool_name)),
     };
     current = null;
     return turn;

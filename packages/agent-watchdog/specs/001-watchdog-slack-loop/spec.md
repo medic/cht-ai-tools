@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 18)
+**Status**: Draft (revision 19)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -505,6 +505,19 @@ line that shows the alert and its metric together.
 - The model's prose names a window by its identifier (`trailing_14d`, `14d`): it is the run's own
   name for a window, not an invented figure, and MUST NOT be reported as a number that matches no
   computed value (FR-016, revision 18).
+- A run analyses one project of ninety: the brief names that project's alerts and nothing else, the
+  housekeeping and resolved lines cover only hosts it analysed, and the durable episode record is
+  still updated for every project so the next full run is unaffected (FR-066, revision 19).
+- A run analyses a subset and none of those projects has a firing alert: the brief says so for the
+  projects it looked at rather than reporting the other projects' alerts (FR-066, revision 19).
+- A reference tool the allow-list does not carry is refused: that is the design working, not a
+  failure, so the brief MUST NOT say the reference sources were unavailable when another reference
+  tool answered (FR-018, revision 19).
+- The model asks a metric tool for a metric by the key the candidates and changes use, functions
+  and label matchers included: the tool MUST accept it, since that is the key it was told to use
+  (FR-018, revision 19).
+- A quiet project's first pass is accepted with no items: no review pass runs, and the run records
+  one pass rather than an unchanged second (FR-057, revision 19).
 
 ## Requirements *(mandatory)*
 
@@ -577,7 +590,9 @@ Analysis passes
 - **FR-057**: Passes MUST share one session so earlier tool results remain available to later
   passes. Every pass runs the verification gate. Passes MUST stop early when a pass changes
   nothing material (same item identities, severities and values within display rounding) and
-  MUST stop regardless when the run's cost or turn bound is reached.
+  MUST stop regardless when the run's cost or turn bound is reached. A review pass MUST NOT run
+  when the accepted pass before it produced no items: there is nothing to review, and on a quiet
+  project that is the common case (revision 19).
 - **FR-058**: The run record MUST store each pass's items and the differences between passes,
   and the weekly calibration report MUST state how often later passes changed the outcome, so
   the pass count can be tuned on evidence. The record MUST also make a pass that the gate never
@@ -591,13 +606,21 @@ Verification gate
   text matches the computed data for that project and metric within display rounding; every date
   and window matches the run; every link is built by the system from a structured reference or
   appeared in a reference-lookup result during this run, and resolves; the bullet count and
-  length limits hold; no secret or personal-data pattern is present.
+  length limits hold; no secret or personal-data pattern is present. A date is not a phone number.
+  Findings in recorded tool results are reference text the model was given, not output the system
+  wrote, and MUST be counted apart from findings in what the run produced, so a clean run reports
+  none of its own (revision 19).
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
 - **FR-018**: The same verification MUST run both inside the analysis (so the model can correct
   itself) and again immediately before publication, using the same code. A revision request MUST
   carry only the reasons of checks that failed; a check that passed MUST NOT contribute text to it,
-  so every line the model is asked to act on is a real defect (revision 18).
+  so every line the model is asked to act on is a real defect (revision 18). A reference tool the
+  allow-list does not carry MUST NOT be presented to the model as available, and its refusal MUST
+  NOT be reported as the reference sources being unavailable. Each run MUST log how its tools were
+  used, per project and per run, counting calls by tool with their failures and refusals, so a tool
+  whose contract no longer matches what the model is told shows up without reading the record
+  (revision 19).
 
 Publishing
 
@@ -685,7 +708,12 @@ Alerts and groups
   group has several categories the bullet carries one sub-bullet per category. Alert bullets rank
   with flagged items by importance, critical first. Each alert group gets one thread reply listing
   its instances (at most fifty, with the count of the rest) that can receive reactions and notes;
-  the reply is fitted into one message block by code, and a link is never cut (revision 17).
+  the reply is fitted into one message block by code, and a link is never cut (revision 17). When a
+  run analyses only some of the discovered projects, the brief MUST cover only those: alert
+  instances on projects it did not analyse are left out of the groups, the counts, the patterns and
+  the notices, because the reader asked about those projects and cannot act on the rest. Collection,
+  the classified alert record and the durable episodes stay whole regardless, so the next full run
+  still sees the same newness and no episode appears to have cleared (revision 19).
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -832,7 +860,10 @@ Configuration
   documented defaults: model, effort level, per-stage model overrides, cost and turn bounds,
   timeouts, endpoints and identifiers (metrics source, Slack channel, documentation service,
   tracing backend, footer links), storage paths, retention periods, feedback look-back, memory
-  cap, analysis pass count, engine selection, log level and format, and preview mode.
+  cap, analysis pass count, engine selection, log level and format, and preview mode. Pricing the
+  review passes apart from the first is deferred: both engines bind the model when the session
+  opens, so a second model means a second session, and FR-057 requires the passes to share one so
+  earlier tool results stay available (revision 19).
 - **FR-052**: Secrets MUST be supplied only through the environment, never through configuration
   files or the run record.
 - **FR-053**: Structured, reviewed policy — project annotations, dashboard priorities, thresholds,
@@ -1144,6 +1175,22 @@ Configuration
   trailing mean a phone number and a window identifier an invented number. Cost work at ninety
   projects a day is a separate story, to be measured after these land, not guessed now
   (FR-009, FR-016, FR-018, FR-058, revision 18).
+- Q: With the reference built by code the run converged for the first time, three passes and two
+  items, but it cost $2.82 for one project, its brief carried fifty alerts from projects it never
+  analysed, and it declared its own reference sources unavailable while citing the documentation it
+  had just read. What holds, and where is the cost? → A: Three things. A filtered run's brief covers
+  only the projects it analysed, while collection, the classified record and the episodes stay whole
+  so the next full run is unaffected. A refusal of a tool the allow-list never carried is the design
+  working, not a source failure, and such a tool is not offered to the model at all; the metric tool
+  accepts the key the candidates use, functions and matchers included; a date is not a phone number
+  and findings in recorded reference text are counted apart from the run's own output; and each run
+  logs how its tools were used. On cost, caching already works, so the levers are output tokens and
+  wasted passes: a written justification is asked for only where the candidate's floor is medium or
+  high, and no review pass runs when the pass before it produced no items. A third pass cost $0.649
+  and changed nothing, which is what the existing pass-count setting is for. Pricing the review
+  passes on a cheaper model was dropped on inspection: both engines bind the model when the session
+  opens, so it would cost the shared session FR-057 requires, and that trade needs its own decision
+  (FR-016, FR-018, FR-051, FR-057, FR-066, revision 19).
 
 ## Notes for `/speckit.plan` *(not requirements)*
 

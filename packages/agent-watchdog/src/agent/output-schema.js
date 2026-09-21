@@ -9,6 +9,8 @@ const SCHEMA_BASE = 'https://github.com/medic/cht-ai-tools/packages/agent-watchd
 const TEXT = {
   referenceUrls: 'Each must have appeared in a tool result during this run and be on the host allow-list.',
   changes: 'Empty on pass 1. Later passes record every addition, removal or change with a reason (FR-056).',
+  notSelectedReason: 'Required where the candidate\'s severity floor is medium or high; omit it for a low floor, '
+    + 'where the id alone records that the candidate was examined.',
   findings: 'Structured output of an analysis pass. Identity, links and persistence are derived by code; '
     + 'the model never emits URLs except reference_urls that appeared in tool results.',
   threadOrder: 'Every accepted item id: the body items first, in the order of the bullets, then the rest highest '
@@ -52,7 +54,10 @@ const findingsSchema = z.object({
   project_url: z.string().describe('Must equal the project this session was opened for.'),
   pass: z.number().int().describe('1-based pass number.'),
   items: z.array(item),
-  not_selected: z.array(z.object({ candidate_id: z.string(), reason: z.string() }).strict()),
+  not_selected: z.array(z.object({
+    candidate_id: z.string(),
+    reason: z.string().optional().describe(TEXT.notSelectedReason),
+  }).strict()),
   changes: z.array(z.object({
     item_key: itemKey,
     change: z.enum(['added', 'removed', 'changed']),

@@ -24,7 +24,7 @@ The daily pipeline: `purge`, `feedback`, `collect`, `analyze`, `agent`, `rollup`
 | Flag | Value | Default | Effect |
 |---|---|---|---|
 | `--date` | `YYYY-MM-DD` | today, UTC | Date to analyse; also the run directory name. |
-| `--project` | URL, repeatable | all discovered | Restrict analysis to these projects; discovery still runs. |
+| `--project` | URL, repeatable | all discovered | Restrict analysis to these projects; discovery still runs, and so do collection, the classified alert record and the durable episodes, so a filtered run leaves the next full run's newness and episodes intact. The brief covers only the projects analysed: alerts, patterns and notices for the rest are left out (FR-066, revision 19). |
 | `--stage` | stage name | none | Run only this stage from the previous stage's files (FR-043). Exit 65 when inputs are missing. |
 | `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | Which face of the same agent definition runs the passes (FR-050). `cli` runs `claude -p --verbose … --input-format stream-json --output-format stream-json` (print mode requires `--verbose` for stream-json output), with `--bare` when `ANTHROPIC_API_KEY` is set and, without a key, on the operator's `claude` login with `--setting-sources ""` instead; it serves the local tools through `tools-server`. |
 | `--dry-run` | flag | `AGENT_WATCHDOG_DRY_RUN` | Preview mode: every artefact, `payload.json`, nothing posted (FR-025). |

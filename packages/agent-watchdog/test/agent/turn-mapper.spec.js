@@ -124,6 +124,27 @@ describe('agent/turn-mapper', () => {
       expect(long.result.result_text).to.have.length(500);
     });
 
+  it('counts a refused reference tool as unavailable only when the allow-list carried it (revision 19)', () => {
+    const denied = (name) => result({ permission_denials: [{ tool_name: name }], structured_output: undefined });
+    // ask_question is denied by this package's own design and is not in agent/tools.json allowed: expected, not a
+    // failure. search_docs is allowed, so its refusal does mean the sources could not be reached.
+    const allowed = ['mcp__cht-docs__search_docs', 'mcp__cht-docs__get_sources'];
+    const expectedRefusal = createTurnMapper({ allowedTools: allowed });
+    expectedRefusal.beginTurn();
+    expect(expectedRefusal.handle(denied('mcp__cht-docs__ask_question')).referenceUnavailable).to.equal(false);
+    const realRefusal = createTurnMapper({ allowedTools: allowed });
+    realRefusal.beginTurn();
+    expect(realRefusal.handle(denied('mcp__cht-docs__search_docs')).referenceUnavailable).to.equal(true);
+    // A refusal of a tool from another server is not about the reference sources at all.
+    const other = createTurnMapper({ allowedTools: allowed });
+    other.beginTurn();
+    expect(other.handle(denied('mcp__watchdog__get_windows')).referenceUnavailable).to.equal(false);
+    // Without an allow-list the old reading stands, so a caller that passes none loses nothing.
+    const noList = createTurnMapper();
+    noList.beginTurn();
+    expect(noList.handle(denied('mcp__cht-docs__ask_question')).referenceUnavailable).to.equal(true);
+  });
+
   it('counts assistant messages in the current turn and synthesises a capped result with the calls so far', () => {
     const mapper = createTurnMapper();
     mapper.handle(init());

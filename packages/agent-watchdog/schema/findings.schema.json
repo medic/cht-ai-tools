@@ -28,12 +28,12 @@
             "type": "string"
           },
           "reason": {
+            "description": "Required where the candidate's severity floor is medium or high; omit it for a low floor, where the id alone records that the candidate was examined.",
             "type": "string"
           }
         },
         "required": [
-          "candidate_id",
-          "reason"
+          "candidate_id"
         ],
         "additionalProperties": false
       }

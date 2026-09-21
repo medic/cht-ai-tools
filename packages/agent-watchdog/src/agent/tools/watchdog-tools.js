@@ -1,6 +1,7 @@
 'use strict';
 // The enumerated, read-only local tools the model may call (contracts/agent-definition.md).
 const { z } = require('zod');
+const { sameMetric } = require('../../verify/metric-key');
 const { argsHash } = require('./args-hash');
 const { enums } = require('../../model/schemas');
 
@@ -12,7 +13,12 @@ const BASE_METRICS = [
   'cht_messaging_outgoing_total', 'cht_outbound_push_backlog_count', 'cht_replication_limit_count',
   'cht_sentinel_backlog_count', 'up',
 ];
+// A bare metric name, which is what query_metric queries with.
 const METRIC_NAME = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
+// get_windows reads stored windows and its schema promises the key as the candidates and changes carry it, so it
+// accepts a panel expression too, matched under the gate's own key forms (revision 19). The guard is size and
+// shape: nothing multi-line, nothing longer than the longest key a dashboard could hold.
+const METRIC_KEY_MAX = 200;
 const WINDOWS = enums.WindowName.options;
 const QUERY_CAP = 20;
 const ROLE_LABEL = 'a reviewer';
@@ -68,6 +74,10 @@ const createWatchdogTools = ({
   };
 
   const validMetric = (metric) => typeof metric === 'string' && METRIC_NAME.test(metric) && knownMetrics.has(metric);
+  const collectedKey = (metric) => typeof metric === 'string'
+    && metric.length <= METRIC_KEY_MAX
+    && !/[\n\r]/.test(metric)
+    && [...knownMetrics].some((known) => sameMetric(known, metric));
 
   return [
     {
@@ -75,7 +85,7 @@ const createWatchdogTools = ({
       description: WINDOWS_DESCRIPTION,
       schema: { metric: z.string().describe('Metric key as it appears in the candidates or computed changes') },
       handler: (args) => run('get_windows', args, async () => {
-        if (!validMetric(args.metric)) {
+        if (!collectedKey(args.metric)) {
           return { error: `unknown metric: ${String(args.metric).slice(0, 80)}` };
         }
         return deps.getWindows(project, args.metric);

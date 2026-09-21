@@ -27,6 +27,7 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_EFFORT` | enum `low\|medium\|high\|xhigh\|max` | `max` | Passed to the runtime as the effort option. |
 | `AGENT_WATCHDOG_MODEL_FEEDBACK` | string | value of `MODEL` | Feedback-note parsing. |
 | `AGENT_WATCHDOG_MODEL_CALIBRATION` | string | value of `MODEL` | Weekly calibration summary. |
+
 | `AGENT_WATCHDOG_MODEL_DISTILL` | string | value of `MODEL` | Corpus distillation. |
 | `AGENT_WATCHDOG_ENGINE` | enum `sdk\|cli` | `sdk` | `cli` shells out to `claude -p`; same agent definition (FR-050). With the key: `--bare` and a private `CLAUDE_CONFIG_DIR`. Without it: the operator's login, no `--bare`, `--setting-sources ""`. |
 

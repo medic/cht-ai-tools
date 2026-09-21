@@ -15,6 +15,9 @@ const PHONE_MIN_DIGITS = 9;
 // Digits, one decimal point, digits: a computed value, whatever its length. A bare run of digits is not
 // exempt, because that is also what an unformatted phone number looks like.
 const DECIMAL_PATTERN = /^\d+\.\d+$/;
+// A date, or a date with a time after it: the separators are the phone pattern's own, but no phone number begins
+// with a four-digit year and a month (revision 19).
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[\s.T-]\d{1,2}(?::\d{2}){0,2})?$/;
 
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/g;
 
@@ -48,7 +51,7 @@ const phoneMatches = (text) => {
     }
     // A decimal is a computed value, not a phone number: an unrounded trailing mean such as
     // `26.263157894736842` has one decimal point and more digits than any phone number (revision 18).
-    if (DECIMAL_PATTERN.test(match[0])) {
+    if (DECIMAL_PATTERN.test(match[0]) || DATE_PATTERN.test(match[0].trim())) {
       continue;
     }
     let start = match.index;
@@ -72,6 +75,7 @@ module.exports = {
   PHONE_PATTERN,
   PHONE_MIN_DIGITS,
   DECIMAL_PATTERN,
+  DATE_PATTERN,
   URL_PATTERN,
   HOST_LIKE_PATTERN,
   KNOWN_HOST_SUFFIXES,

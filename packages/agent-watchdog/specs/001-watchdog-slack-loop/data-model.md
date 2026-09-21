@@ -299,7 +299,7 @@ One model pass over one project (FR-056 to FR-058).
 | `pass` | integer | 1-based; at most the hard cap in code. |
 | `session_id` | string | Shared by all passes of the project (FR-057). |
 | `items` | Item[] | Output of this pass after schema validation. |
-| `not_selected` | `{ candidate_id, reason }[]` | Candidates examined but not surfaced. |
+| `not_selected` | `{ candidate_id, reason? }[]` | Candidates examined but not surfaced. The written `reason` is asked for where the candidate's severity floor is medium or high; a low floor records the id alone, so a project with thirty low-floor candidates does not spend output tokens on thirty paragraphs. The review pass reads this list (FR-057, revision 19). |
 | `changes` | PassChange[] | Empty for pass 1; required for later passes. |
 | `converged` | boolean | True when items match the previous pass on identity, severity and evidence within display rounding (FR-057). |
 | `gate` | VerificationReport | Result of the in-analysis gate for this pass. |
