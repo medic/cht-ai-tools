@@ -270,6 +270,21 @@ describe('cli/commands/run', () => {
     expect(t.args.deps.tracer.finish).to.have.been.calledOnce;
   });
 
+  it('redacts a secret quoted in the error before posting the failure notice (FR-024, revision 27)', async () => {
+    const { stages } = fakeStages({
+      analyze: new Error('Slack rejected token xoxb-123456-abcdef for ops@example.org'),
+    });
+    const t = base(dataDir, { deps: { stages } });
+    try {
+      await runCommand(t.args);
+    } catch {
+      // the run fails; the notice is what this test is about
+    }
+    const text = t.slackPublisher.postFailureNotice.firstCall.args[0].text;
+    expect(text).to.include('failed at stage analyze').and.include('[redacted]');
+    expect(text).to.not.include('xoxb-').and.not.include('ops@example.org');
+  });
+
   it('posts a failure notice and exits 1 on an unexpected error', async () => {
     const { stages } = fakeStages({ analyze: new Error('kaboom') });
     const t = base(dataDir, { deps: { stages } });

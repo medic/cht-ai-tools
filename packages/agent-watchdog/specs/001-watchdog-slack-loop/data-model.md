@@ -368,7 +368,7 @@ The published post for a run (FR-019 to FR-025).
 **Report** (`rollup/report.html`, FR-022, revision 24): the document a reader opens. Sections in order:
 the summary (headline, bullets, notices, what was checked), the items numbered by rank with related
 items nested (FR-009), the alert groups the brief covered with their instances, the standing conditions
-per host (FR-014), and a footer with the prompts, configuration and trace links, the cost, the run id
+per host (FR-014), and a footer with the specification, configuration and trace links, the cost, the run id
 and the citation line. Every reference is a link built by code from the structured references the
 thread replies use (`dashboard_ref`, the standing record's `panel_ref`, the alert group's hosts and
 titles) when `AGENT_WATCHDOG_REPORT_LINKS` is `internal`, and a name alone when it is `none`. Numbers
@@ -414,7 +414,7 @@ written by code.
 ### Thread Reply
 
 The per-item message that carries reactions (FR-020), and the per-alert-group message (FR-066).
-Since revision 23 only body items have one, highest rank first and at most twenty-five; the report's
+Since revision 25 only high items have one (body items from revision 23), highest rank first and at most twenty-five; the report's
 share is the thread's first reply and items beyond the body live there, numbered by rank. A body
 item's reply names the lower-ranked items that relate to it (FR-009).
 
@@ -647,7 +647,10 @@ because they read one spelling only.
   revision 23). A decimal may carry a leading sign (revision 24). A run of digits equal to a numeral
   in the text the model was given (its prompts and tool results; for a bullet, its item's own entry)
   is a number it read, not a phone number, and the reason names the digits refused (revision 25).
-  Partner-facing scans are out of scope here (feature 002).
+  The failure notice (FR-024) is code text outside the gate; its quoted error message passes through
+  these same patterns with every match redacted before it is posted (revision 27). These lists, the
+  check names and the link allow-list are closed and fixed in code; the spec names them (FR-016,
+  revision 27). Partner-facing scans are out of scope here (feature 002).
 - Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
   delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
   forbidden by lint rule in templates.

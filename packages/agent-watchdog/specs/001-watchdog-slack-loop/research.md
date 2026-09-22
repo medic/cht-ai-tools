@@ -1755,3 +1755,40 @@ group's counts, a line for members that share a metric and one section per membe
 its own (the operator asked for it; the next revision); unit scaling in the gate (`827 MB` for
 826,957,824 bytes, which f8's first draft was refused for as `826,957`); one alert reply per programme
 rather than per category (f8's thread was 11 alert replies to 1 item reply).
+
+## R-32. The security checklist, re-read against the code
+
+**Evidence** (a reviewer's pass over `checklists/security.md` on 2026-09-22; the checklist dates from
+2026-09-19, revision 2). Of 34 items, 13 were satisfied and 21 found a gap, an ambiguity or a conflict.
+Read against the code: the model has never had a write tool (`contracts/agent-definition.md` lists the
+seven read-only tools; FR-046's "file writes only into the current run's directory" described the
+system's writes but read as the model's); memory is wrapped as untrusted in all three places it is fed
+back (`prompt-assembly.js`, `brief.js`, `memory.js`); link resolution fails closed on a timeout or an
+error and follows a redirect only inside the allow-list (`links/resolve.js`); the untrusted delimiter is
+stripped from content before wrapping; logs redact secret-named keys; the PR scan and the end-of-run
+scan import the gate's own patterns. The one real gap was the failure notice: it quoted `error.message`
+verbatim, which a Slack or Grafana error could fill with a token or an address. The reviewer also found
+User Story 1 carrying two scenarios numbered 6, added in revision 24. **Decisions:** the requirements
+say what the code does (FR-002, FR-008, FR-016, FR-024, FR-044, FR-045, FR-046, FR-054, SC-004);
+egress and Slack scopes become requirements (FR-083, FR-084); the failure notice's error message passes
+through the gate's patterns with matches redacted; the scenarios are renumbered; ten checklist items
+are appended for the report link setting, the group filter, the direct-message test, the thread rule,
+the failure notice, egress, the container, the scan's surfaces and the personal-data definition, left
+unchecked for the reviewer. Browser isolation items are moot since revision 24 retired the image.
+
+**The first `/speckit-analyze` pass** (run the same day, read-only, by a subagent over spec, plan,
+tasks, data model, contracts and quickstart) found no duplicate requirement ids and no open marker,
+but 33 stale statements, 7 of them in acceptance scenarios, contracts and the data model: replies
+described as one per body item (revision 23) where revision 25 made them one per high item, the
+footer's prompts link where revision 25 linked the specification, the brief image and its browser
+where revision 24 retired them, the labelled item header where revision 25 restored the original,
+and FR-046 naming `ask_question` as available where the contract denies it. All are corrected in this
+revision; the historical task texts keep their wording as a record. The pass also noted that tasks
+are tagged by user story and not by requirement id, so 38 requirements cannot be traced to a task by
+id; the story tags are the intended traceability and no change is made.
+
+**Rejected or deferred here**: a startup membership check of the configured conversation (needs read
+scopes the app does not hold; the refused post already fails loudly); container enforcement of FR-083
+(the container revision); adding "database names" as a personal-data category (none appears in any
+published surface; a label value that carried one would be a hostname-like or free-text token the
+existing checks already see).

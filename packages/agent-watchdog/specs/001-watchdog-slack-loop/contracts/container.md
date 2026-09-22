@@ -15,7 +15,7 @@ contract states what the image needs from the platform and what it guarantees.
 | Entrypoint | `node bin/agent-watchdog.js`; the CronJob passes the command, for example `run` or `calibrate` |
 | Baked environment | `NODE_ENV=production`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, `TMPDIR=/tmp` |
 | Labels | `org.opencontainers.image.version`, `.revision`, `.source` set from the release |
-| Size budget | under 900 MB compressed; the runtime binary and the browser dominate |
+| Size budget | under 900 MB compressed; the runtime binary and the browser dominate (the browser is unused by a run since revision 24 and leaves with the container revision) |
 
 The image contains no secrets, no configuration policy files and no run data.
 
@@ -36,7 +36,7 @@ The image contains no secrets, no configuration policy files and no run data.
   which is acceptable because the page rendered is the package's own template with JavaScript
   disabled and every network request aborted.
 - Requests and limits are documented for the deployment to set: CPU request 500m, limit 2;
-  memory request 1 Gi, limit 3 Gi (headless Chromium and the agent runtime are the drivers).
+  memory request 1 Gi, limit 3 Gi (the agent runtime is the driver; headless Chromium was, until revision 24).
   `activeDeadlineSeconds` should exceed `AGENT_WATCHDOG_RUN_TIMEOUT_MS` by at least ten minutes so
   the package's own timeout produces the failure notice rather than a kill.
 - `concurrencyPolicy: Forbid` and `startingDeadlineSeconds` on the CronJob back up FR-047; the

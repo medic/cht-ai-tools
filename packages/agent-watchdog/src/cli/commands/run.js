@@ -2,6 +2,7 @@
 // The daily pipeline: purge, feedback, collect, analyze, agent, rollup, render, publish (contracts/cli.md).
 // Owns the run's state machine (data-model.md "Run") and the loud-failure rules (constitution V).
 const codes = require('../exit-codes');
+const { redactText } = require('../../publish/redact');
 const { loadConfig } = require('../../config/load');
 const { RunDir, RunExistsError, ensureDataLayout } = require('../../store/run-dir');
 const { collectVersions } = require('../../store/versions');
@@ -400,8 +401,10 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
       const notifier = failureNotifier(config, log, deps);
       if (notifier) {
         try {
+          // The error message is code text outside the gate; it is redacted before it is posted (FR-024, revision 27).
           await notifier.postFailureNotice({
-            text: `agent-watchdog run ${runId} failed at stage ${currentStage || 'setup'}: ${error.message}`,
+            text: `agent-watchdog run ${runId} failed at stage ${currentStage || 'setup'}: `
+              + redactText(error.message),
             traceUrl,
             runId,
             date,

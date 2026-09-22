@@ -68,6 +68,19 @@
 - [ ] CHK033 Is the assumption that monitoring endpoints carry no patient data validated, and is behaviour defined if personal data appears in metric labels? [Assumption, Spec §Assumptions]
 - [ ] CHK034 Are the Slack app prerequisites, scopes, metadata registration and channel membership, captured as requirements or only in contracts? [Dependency, Gap]
 
+## Surfaces added after the first review (appended 2026-09-22, revisions 24 to 27)
+
+- [ ] CHK035 - Is the report link setting (`AGENT_WATCHDOG_REPORT_LINKS`) defined so that a report rendered for a reader without hosted-watchdog access can carry no link at all, including the footer, and is the default stated? [Completeness, Spec §FR-022]
+- [ ] CHK036 - Are the links a report may carry restricted to code-built URLs from structured references, with the model never supplying one, and is the attribute escaping of those URLs specified? [Clarity, Spec §FR-022, §FR-016]
+- [ ] CHK037 - Does the restricted-run requirement (`--project`, `--group`) state that collection, the classified alert record and the episodes stay whole, so a narrow run can neither clear another project's episode nor leak its data into the brief? [Consistency, Spec §FR-066]
+- [ ] CHK038 - Are the Slack scopes and the conversation-membership precondition stated as requirements, including the direct-message case used for testing, and is the failure mode when the bot is not a member specified? [Completeness, Spec §FR-084]
+- [ ] CHK039 - Does the requirement for thread replies (high items and alert groups only) state where every other item's detail lives and how a reader cites it, so nothing is unreachable? [Coverage, Spec §FR-020, §FR-022]
+- [ ] CHK040 - Is the failure notice's content specified as code text with the error message redacted, and is it stated that it bypasses the gate? [Clarity, Spec §FR-024]
+- [ ] CHK041 - Is the egress allow-list an enumerated requirement, and does it name the hosts the gate resolves footer links against? [Completeness, Spec §FR-083]
+- [ ] CHK042 - For the container revision to come: are the read-only root filesystem, the non-root user, the writable mounts, resource limits and the absence of a browser stated as requirements rather than plan notes? [Gap, Spec §FR-083, contracts/container.md]
+- [ ] CHK043 - Is it stated which run artefacts the end-of-run scan covers (prompts, tool results, session ledgers, verification reports) and that it shares the gate's pattern set? [Consistency, Spec §FR-045]
+- [ ] CHK044 - Is "personal data" defined once, and does the definition cover what the gate, the proposal scrubber and the Slack-id rule each handle? [Consistency, Spec §FR-016, §FR-033]
+
 ## Notes
 
 - Mark items `[x]` only after review confirms the requirement-quality criterion is satisfied

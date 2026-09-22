@@ -12,7 +12,7 @@ datasource proxy, computes changes and candidates deterministically, then opens 
 Claude Agent SDK session per project with candidates: two passes in one session, read-only MCP
 tools only, schema-validated structured output, and a verification gate that runs in code between
 turns and again before publication. The roll-up posts one Slack message with at most five bullets
-and a rendered image, one threaded reply per item, and a footer with prompts, configuration, trace
+the report shared into the thread, one threaded reply per high item and alert group, and a footer with specification, configuration, trace
 and cost links. The next run reads reactions and notes, updates capped memory by diff, and writes
 proposals that humans adopt by pull request. Every stage writes files the next stage reads, so any
 run replays offline and any contributor can run the pipeline in preview mode. Deployment manifests
@@ -30,7 +30,7 @@ through dynamic `import()` as the Notes prescribe (research.md R-1).
 **Primary Dependencies**: `@anthropic-ai/claude-agent-sdk` 0.3.x (ships the native Claude Code
 runtime 2.1.x as a platform package, about 224 MB on linux-x64), `@slack/web-api` 8.x, `zod` 4.x
 (validation and `z.toJSONSchema()` for the findings schema), `handlebars` 4.7.x, `playwright-core`
-1.6x driving the image's Chromium, `@langfuse/tracing`, `@langfuse/otel` and `@langfuse/client` with `@opentelemetry/sdk-node` (the
+1.6x (retained for the smoke test's browser check only since revision 24 retired the image), `@langfuse/tracing`, `@langfuse/otel` and `@langfuse/client` with `@opentelemetry/sdk-node` (the
 classic `langfuse` package describes itself as a deprecated v3 client; research.md R-8), `yaml`
 2.x (policy files are YAML; justified below), `@modelcontextprotocol/sdk` (already a dependency of
 the Agent SDK; used directly for the stdio tool server the CLI engine needs). Development:
@@ -101,7 +101,7 @@ adjustment to the Notes are justified in Complexity Tracking.
 | Verification: implemented once under `src/verify/`, wired as the SDK Stop hook and a PostToolUse hook on the findings write, called again before publish; the CLI path loads the same checks through `--settings` | `src/verify/` is called by the harness after every turn on both engines and before publish; the SDK additionally runs it in the Stop hook; PostToolUse records tool calls for replay | Adjusted: `claude --bare` skips hooks (verified in the 2.1.278 help text), so the CLI cannot load the checks through `--settings`; the harness-driven gate gives both engines identical behaviour with the same code (research.md R-3) |
 | Reference sources: cht-docs-mcp via `mcpServers` and `--mcp-config`, watchdog repository indexed, search tools allowed, synthesised-answer tool off by default | `cht-docs` HTTP server with per-tool policies: `search_docs` and `get_sources` allowed, `ask_question` denied; the watchdog repository is already among the service's sources (verified) | Adopted |
 | Metrics through the hosted Grafana's datasource proxy | `src/collect/grafana.js` uses the proxy for PromQL and the Grafana API for dashboards, targets and annotations (research.md R-5) | Adopted |
-| Rendering: screenshot of the report's summary element in a headless browser with network disabled; template filled, never generated; designed once with the design skill | `templates/report.hbs` + `src/render/browser.js` with `playwright-core`, `page.route` aborting every request; Chromium provisioning per research.md R-7 | Adopted |
+| Rendering: the report template filled, never generated, in its original design (a design-skill redesign was tried in revision 24 and set aside in 25); no browser in a run since revision 24 retired the image; `src/render/browser.js` remains for `smoke/render.js --png` | `templates/report.hbs` + `src/render/report.js`; Chromium provisioning per research.md R-7, removal pending the container revision | Adopted |
 | Storage: 10 Gi volume under `runs/<date>/<project>/`, memory, feedback, proposals, corpus index beside them; raw corpus outside the repository; retention per FR-040 | run-directory contract; raw series gzip-compressed to fit fifty projects for 14 days | Adopted |
 | CommonJS on Node 22; SDK through dynamic import if ESM-only | The SDK is ESM-only (`exports` has no `require` condition); loaded with `await import()` inside `src/agent/engine-sdk.js` | Adopted |
 
@@ -123,7 +123,7 @@ specs/001-watchdog-slack-loop/
 │   ├── cli.md               # Commands, flags, streams
 │   ├── run-directory.md     # Stage inputs and outputs on disk
 │   ├── agent-definition.md  # One definition, two engines
-│   ├── slack-payload.md     # Message, thread and image shapes; scopes
+│   ├── slack-payload.md     # Message and thread shapes; scopes
 │   ├── findings.schema.json # Structured output of an analysis pass
 │   └── brief.schema.json    # Structured output of the roll-up
 └── tasks.md                 # Phase 2 output (/speckit-tasks), not created here
@@ -156,7 +156,7 @@ packages/agent-watchdog/
 │   ├── rollup/                    # rank.js, layout.js (five slots, sub-bullets, alert bullets; US9),
 │   │                              # brief.js, deterministic-brief.js, memory.js, proposals.js
 │   ├── links/                     # build.js (dashboard deep links, alert-list links), allowlist.js, resolve.js
-│   ├── render/                    # report.js (Handlebars), browser.js (playwright-core screenshot)
+│   ├── render/                    # report.js (Handlebars); browser.js retained for the smoke test only
 │   ├── publish/                   # slack.js (post, thread, upload, permalink, reactions), payload.js, digest.js, audience.js
 │   ├── corpus/                    # index.js, distill.js, scrub.js
 │   ├── calibration/               # report.js, suggest.js
@@ -192,7 +192,7 @@ never lives in this tree. Deployment manifests are not in this package.
 |---|---|---|
 | `yaml` dependency | Policy files (`projects.yaml`, `dashboards.yaml`, `thresholds.yaml`) are YAML per the Notes and the `.env.example`, and Node has no YAML parser | JSON policy files would be simpler but were decided against in the Notes; `yaml` 2.x is CommonJS, dependency-free and verified to load |
 | `@modelcontextprotocol/sdk` as a direct dependency | The CLI engine needs the local read-only tools served over stdio; the Agent SDK's in-process server cannot be reached from a separate `claude` process | It is already installed transitively by the Agent SDK at the same major, so the direct dependency adds no weight and pins the API we call |
-| Chromium in the container image | FR-022 and FR-023 require a rendered image that cannot diverge from the report; playwright-core needs a browser binary | Server-side chart images without a browser would duplicate the HTML report's layout in a second renderer, exactly the divergence the spec forbids |
+| Chromium in the container image | Retained after revision 24 retired the image (FR-023) only until the container revision removes it; nothing in a run uses it | Removing it now would widen a formatting revision into a container change; research.md R-29 defers it |
 | Langfuse v5 as four packages (`@langfuse/tracing`, `@langfuse/otel`, `@langfuse/client`, `@opentelemetry/sdk-node`) instead of the single `langfuse` package | The classic package's own npm description calls it a deprecated v3 client and directs new work to these packages; all four load from CommonJS | One dependency instead of four would be simpler, but it builds a new system on a client the vendor has retired |
 | Native Claude Code runtime in the image (about 224 MB) | Inherent to the Agent SDK decision in the Notes; the SDK spawns the platform binary | Calling the Messages API directly would remove the runtime but discard the MCP, hooks, session and structured-output machinery the design relies on |
 | Harness-driven verification instead of `--settings` hooks on the CLI engine | `claude --bare` skips hooks by design (verified), so the CLI cannot run the gate as a hook | Running the CLI without `--bare` restores hooks but re-opens filesystem settings discovery; the harness-driven gate keeps both engines on the same code path |
@@ -694,3 +694,30 @@ The programme thread reply the operator also asked for is the next revision.
 
 Deliberately not planned (research.md R-31): the programme thread reply (next revision); unit scaling
 in the gate (`827 MB` for 826,957,824 bytes); an alert reply per programme rather than per category.
+
+### Revision 27 delta: the security requirements catch up with the code (FR-002, FR-008, FR-016, FR-024, FR-044, FR-045, FR-046, FR-054, FR-083, FR-084, SC-004)
+
+Planned on 2026-09-22 from a reviewer's pass over the security checklist generated on 2026-09-19
+(research.md R-32). Twenty-one of its thirty-four items found the requirement missing, ambiguous or
+in conflict, and in every case but one the code already behaved as the reviewer wanted: the gap was
+in the spec's words, and the checklist had not been revisited through twenty-four revisions. One
+delta, almost entirely spec text, with one code change.
+
+| Change | Story | Requirements |
+|---|---|---|
+| FR-002 scoped to CHT systems and the metrics store; FR-046 rewritten so the model has no write tool and the seven tools are named; FR-054 counts the hard caps as rails | US1, US3 | FR-002, FR-046, FR-054 |
+| Memory is untrusted when read back; delimiter text stripped before wrapping; proposals and the preview need no template escaping | US1, US4 | FR-008, FR-044 |
+| Closed lists of checks, patterns and allowed hosts named; link timeouts and redirects specified; personal data defined once; the scan covers every published text whatever its source | US1 | FR-016 |
+| Run records and logs named as surfaces of the secret rule | US3 | FR-045 |
+| The failure notice is code text outside the gate with its error message redacted (the one code change: `src/publish/redact.js`) | US1 | FR-024 |
+| Egress and Slack scopes promoted from plan and dependencies to requirements | US3 | FR-083, FR-084 |
+| The replay evaluation and a manual sample named as the gate's independent oracle | US1 | SC-004 |
+| User Story 1's duplicated scenario 6 renumbered; ten checklist items appended for the surfaces revisions 24 to 26 added | | |
+
+- **I**: no new dependency. **II**: the redaction has its tests first. **III**, **IV**, **V**: unchanged;
+  nothing new is stored or computed. **VI**: unchanged. **VII**: no prompt changes. **VIII**: unchanged.
+  Result: PASS.
+
+Deliberately not planned: enforcing egress and the container hardening (the container revision, which
+FR-083 now anchors); a startup check of the bot's channel membership (it would need `channels:read`
+scopes the app does not hold; the post's own refusal is the loud failure).

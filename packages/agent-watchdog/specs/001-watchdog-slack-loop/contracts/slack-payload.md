@@ -11,7 +11,7 @@ The payload builder adds emoji markers when it renders (FR-082): the header by b
 🚨 alerts only, ✅ heartbeat, ⚠️ degraded, ❌ failure), each item or programme section by its worst
 severity (🔴 🟠 🟡), alert sections with 🚨, and context lines by kind (✅ resolved, 🧹 housekeeping,
 🆕 first run or new projects, ⚠️ analysis incomplete or alerts unavailable, 📅 expected load).
-`brief.json`, the image alt text and the model's output carry no markers. An alert group's thread
+`brief.json` and the model's output carry no markers. An alert group's thread
 reply opens with one paragraph per programme-wide pattern (`🔁 Programme-wide: <rule> on N of M
 projects, first <date>, last <date>` and the hosts) and lists the other instances with the metric
 behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply carries
@@ -22,7 +22,7 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
 | Item | Value |
 |---|---|
 | Bot display name | `agent-watchdog` |
-| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if `#agents` becomes private |
+| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if `#agents` becomes private; `im:write` and `im:history` when the configured conversation is a direct message with the bot, as a test post (FR-084, revision 27). The bot must be a member of the conversation; a post refused for `not_in_channel` fails the run with exit 74 |
 | Channel membership | the bot is invited to `#agents`; posting and reading both require membership (`not_in_channel` otherwise) |
 | Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.item` with `run_id`, `item_id`, `project_url`, `metric`; `agent_watchdog.feedback_digest` with `run_id`, `date`, `acknowledged` (count); `agent_watchdog.alerts` with `run_id`, `date`, `group`, `category`, `firing` (count) for alert-group replies (FR-066). Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
 | Rate-limit class | internal customer-built app: `conversations.history` and `conversations.replies` keep Tier 3 and the normal `limit` values; the 2025 one-request-per-minute limit applies only to non-Marketplace apps distributed commercially |
@@ -97,7 +97,7 @@ second per channel; the client's built-in retry handles `429` with `Retry-After`
 }
 ```
 
-`replies` carries only the body items and the alert groups (FR-020, revision 23); `report` is null for a
+`replies` carries only the high items and the alert groups (FR-020, revision 25); `report` is null for a
 heartbeat or a failure. `image` is always null since revision 24. In preview mode nothing is sent; after publishing,
 `publication.json` adds `ts`, `permalink` and `report: { file_id, ts, permalink }` for the share
 (`slack_file_id` stays null). `digest` is null when the run

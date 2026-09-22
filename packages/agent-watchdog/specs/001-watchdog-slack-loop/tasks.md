@@ -153,7 +153,7 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 
 ## Phase 5: User Story 3 - Steering, auditing and running it yourself (Priority: P2)
 
-**Goal**: Footer links lead to prompts, configuration and trace with cost; the priority list steers analysis; every run is versioned and replayable offline; contributors run stages, preview mode and the CLI engine on their own machines.
+**Goal**: Footer links lead to prompts (the specification since revision 25), configuration and trace with cost; the priority list steers analysis; every run is versioned and replayable offline; contributors run stages, preview mode and the CLI engine on their own machines.
 
 **Independent Test**: quickstart steps 3 to 6 plus `test/e2e/us3.spec.js`.
 
@@ -349,7 +349,7 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - [X] T108 [P] Run `semantic-release --dry-run` from the package directory and record the result in `README.md` "Releasing"; if path scoping fails, switch `release.config.js` to the workflow-filtered fallback from research.md R-12 (S-12)
 - [X] T109 [P] Add `.github/pull_request_template.md` items for dependency justification, replay diff on prompt or skill changes, and `AGENTS.md` and `README.md` updates (constitution Quality Gates)
 - [X] T110 Update `README.md` and `AGENTS.md` with the final commands, stage list, exit codes, contracts index and smoke-test instructions; confirm `AGENTS.md` agrees with `.specify/memory/constitution.md`
-- [ ] T111 Run quickstart.md steps 1 to 10 against a real watchdog in preview mode, fix what fails, and confirm `npm run lint` reports zero warnings and coverage is at or above `main`
+- [ ] T111 Run quickstart.md sections 1 to 18 against a real watchdog in preview mode, fix what fails, and confirm `npm run lint` reports zero warnings and coverage is at or above `main`
 
 ---
 
@@ -606,6 +606,16 @@ skill) and run one programme at a time. Six deltas across US1 and US3; no new st
 - [X] T268 [US9] `src/rollup/brief.js` (`bulletsFromDraft` passes `prefixHosts: true`; `layoutText` lists each body item's `prefix` and `budget` and says the project is written by code) and `prompts/rollup.md` (the instruction)
 - [X] T269 [US1] `src/verify/checks/bullet_length.js`: the first line's budget is 120 minus the item's prefix, computed from `ctx.layout` and `ctx.items` through `childPrefixes`; the reason names the prefix
 - [X] T270 [US9] Record the revision, verifying rather than rewriting what /speckit-plan wrote: spec.md header revision 26, FR-015 and FR-069; data-model.md the Bullet `text` and `children` rows; contracts/slack-payload.md; quickstart.md section 17; plan.md revision 26 delta; research.md R-31 and smoke test S-47; then run lint, tests, coverage, `npm run replay:eval` and `node scripts/scan-secrets.js`
+
+## Phase 31: The security requirements catch up with the code (revision 27, 2026-09-22)
+
+**Purpose**: Apply research.md R-32: the requirements say what the code does at the trust boundaries, egress and Slack scopes become requirements, the failure notice redacts the error it quotes, the duplicated scenario is renumbered and the checklist gains items for the surfaces added since it was written. Tests first for the one code change (constitution II).
+
+- [X] T271 [P] [US1] Tests first: new `test/publish/redact.spec.js` (`redactText` replaces Slack, Anthropic and Grafana tokens, bearer strings, e-mail addresses and phone-shaped runs with `[redacted]` and leaves hosts, versions, counts and timestamps; empty input gives an empty string), `test/cli/run.spec.js` (a failure whose message quotes a token and an address posts a notice with `[redacted]` and neither value)
+- [X] T272 [US1] `src/publish/redact.js` (`redactText` over `SECRET_PATTERNS`, `EMAIL_PATTERN` and `phoneMatches` from `src/verify/patterns.js`) and `src/cli/commands/run.js` (the failure notice text passes through it)
+- [X] T273 [US1] Spec: header revision 27; FR-002, FR-008, FR-016, FR-024, FR-044, FR-045, FR-046, FR-054 amended; FR-083 and FR-084 added; SC-004 and the patient-data assumption amended; User Story 1 scenarios 6 and 7 renumbered 7 and 8
+- [X] T274 [US1] `specs/001-watchdog-slack-loop/checklists/security.md`: CHK035 to CHK044 appended, unchecked, for the surfaces of revisions 24 to 26; `contracts/slack-payload.md` scopes row; data-model.md "Secrets and personal data"
+- [X] T275 [US1] Record the revision (plan.md revision 27 delta, research.md R-32, quickstart.md section 18), then run lint, tests, coverage, `npm run replay:eval` and `node scripts/scan-secrets.js`; the reviewer ticks the checklist, never the agent
 
 ## Dependencies & Execution Order
 

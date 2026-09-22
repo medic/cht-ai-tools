@@ -10,7 +10,7 @@ to Slack unless the step says so.
 ## Prerequisites
 
 - Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
-- A Chromium for rendering: `npx playwright-core install chromium-headless-shell`, or set
+- No browser is needed since revision 24; `npx playwright-core install chromium-headless-shell` only for `smoke/render.js --png`, or set
   `AGENT_WATCHDOG_CHROMIUM_PATH` to a system Chromium.
 - Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY` (or, with
   `AGENT_WATCHDOG_ENGINE=cli`, a `claude` login and the key left blank); a Grafana service-account
@@ -164,8 +164,8 @@ agent-watchdog run --date <date>
 ```
 
 Only against the configured `#agents` channel with `AGENT_WATCHDOG_DRY_RUN=false`. Expected: one
-parent message from `agent-watchdog` with at most five bullets, the image, and the footer; one
-threaded reply per item; `publication.json` holds `ts` and permalinks; exit 0. A second run for the
+parent message from `agent-watchdog` with at most five bullets and the footer; the report shared into
+the thread and one threaded reply per high item and alert group (revisions 24 and 25); `publication.json` holds `ts` and permalinks; exit 0. A second run for the
 same date exits 75 unless `--force` is given, and a forced run links the superseded post.
 
 ## 12. Feedback acknowledged (User Story 7)
@@ -191,8 +191,8 @@ by host pattern, one `.dev` host ignored. For a preview against a real watchdog,
 
 Expected: `rollup/layout.json` holds at most five slots; a programme with several flagged projects is
 one `group` bullet ("North Programme: 3 projects with issues") whose sub-bullets are the model's one-line
-item texts, rendered in the parent's section as indented `◦` lines and as a nested list in the report;
-every project item still has a thread reply; `discovery.json` lists ignored hosts under `ignored` and
+words behind the project code writes (revision 26), rendered in the parent's section as indented `◦` lines and as a nested list in the report;
+every high project item still has a thread reply (revision 25); `discovery.json` lists ignored hosts under `ignored` and
 they appear nowhere else; the gate report shows `bullet_count`, `bullet_length` and `thread_order`
 passing against the layout. `node smoke/grafana.js --hosts` prints every discovered host with its
 group, which is how the placeholder patterns in `projects.yaml` get replaced; `node smoke/slack.js --yes`
@@ -213,7 +213,7 @@ alerting endpoints unreachable posts nothing but leaves an "Alerts unavailable" 
 ## 14. Thread economy and the report (revision 23)
 
 Preview a recorded day with many items (the alerts-day fixture, or a hosted preview) and open
-`rollup/payload.json`: `replies` holds one entry per body item (the layout's `body_items`, at most
+`rollup/payload.json`: `replies` held one entry per body item until revision 25, now one per high item (section 16; at most
 twenty-five) and one per alert group, `report` names `rollup/report.html` with a code-built
 `initial_comment`, and the parent's footer counts the items that are only in the report. Open
 `rollup/report.html`: every item is numbered by rank with its id, related items sit under the item they
@@ -227,9 +227,9 @@ Preview one programme: `agent-watchdog run --dry-run --group "North Programme"` 
 label; `--project` still names single hosts). `discovery.json` still lists every project, but only the
 programme's projects have a directory, the brief's bullets, standing and housekeeping lines cover only
 them, and `alerts.classified.json` stays whole. Open `rollup/report.html`: items are numbered by rank
-with the host and metric first and persistence, confidence and identity on a labelled line under them;
+with the host and metric first (the labelled meta line of revision 24 was replaced by the original header in revision 25, section 16);
 each item, standing host and alert group links its hosted panel or alert list; the footer links the
-prompts, the configuration and the trace and repeats the citation line; evidence shows at most three
+specification (the prompts until revision 25), the configuration and the trace and repeats the citation line; evidence shows at most three
 decimals. Run the same preview with `AGENT_WATCHDOG_REPORT_LINKS=none` and the report carries no
 link. `rollup/brief.png` is no longer written and the payload's `image` is null.
 
@@ -256,3 +256,11 @@ bullet reads `north-a: <the change in words>` and a single-project bullet reads
 and neither carries a metric key. `rollup/prompt.md` shows the layout the model received with a
 `prefix` and a `budget` for every body item. A draft whose line would exceed 120 characters with the
 prefix is refused by the gate with the prefix named in the reason.
+
+## 18. A failure notice that quotes nothing it should not (revision 27)
+
+Make a run fail after startup with an error whose message carries a token, for example by pointing
+`AGENT_WATCHDOG_GRAFANA_URL` at a host that answers with an error page quoting the request. The failure
+notice in Slack reads `agent-watchdog run <id> failed at stage <stage>: ...` with every secret, e-mail
+address and phone-shaped run replaced by `[redacted]`; the same message is in the log untouched by the
+gate but with secret-named keys redacted.

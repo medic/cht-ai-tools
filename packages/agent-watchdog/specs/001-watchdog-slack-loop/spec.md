@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 26)
+**Status**: Draft (revision 27)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -39,8 +39,8 @@ quiet day and verify the one-line post.
    executes, **Then** a single-line post states all is quiet and how many projects and panels
    were checked, and no thread replies are created.
 3. **Given** more items qualify than five bullets can hold, **When** the run executes, **Then**
-   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, each body
-   item has its own threaded reply, and the remainder appear only in the run's report, shared into
+   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, each high
+   item has its own threaded reply (revision 25), and the remainder appear only in the run's report, shared into
    the thread as its first reply, where every item is numbered by rank so a note can cite it
    (revision 23; until then every item had a reply, which reached 159 replies under one post).
 4. **Given** the run falls inside a configured expected-load window (month-end, sync week),
@@ -52,11 +52,11 @@ quiet day and verify the one-line post.
    revision the model is asked for names only the checks that failed, and no rejection is caused by
    a value the run already computed, so a pass is not spent re-deriving a fact the harness holds
    (revision 18).
-6. **Given** a draft brief contains a number that does not match the computed data, a project
+7. **Given** a draft brief contains a number that does not match the computed data, a project
    name that is not a monitored project, or a link that does not resolve, **When** the run
    reaches publication, **Then** the draft is rejected, the reasons are returned for revision,
    and nothing is posted until a draft passes or the run degrades to the deterministic brief.
-7. **Given** the run is configured for two analysis passes, **When** the first pass has produced
+8. **Given** the run is configured for two analysis passes, **When** the first pass has produced
    its items, **Then** a second pass receives those items and the candidates the first pass did
    not select, re-examines the data, asks the documentation service any new or clarifying
    questions the first answers raised, and emits revised items with a recorded reason for every
@@ -115,7 +115,7 @@ run the full pipeline in preview mode to obtain the would-be post as structured 
 **Acceptance Scenarios**:
 
 1. **Given** a posted brief, **When** the reader follows its footer, **Then** they reach the
-   prompts, the deployment configuration where dashboard priority order and the expected-load
+   feature's specification, the deployment configuration where dashboard priority order and the expected-load
    calendar are edited, and the run's trace, and they see the run's cost in currency.
 2. **Given** a maintainer reorders the priority list or adds a dashboard, **When** the next run
    executes, **Then** the analysis reflects the new order, and the agent may still examine
@@ -335,8 +335,9 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 
 1. **Given** `projects.yaml` declares groups by host pattern, **When** several projects of one
    group have flagged items, **Then** the body shows one bullet for the group, "North: 5 projects
-   with issues", with one sub-bullet per project item in rank order, and each project item still
-   has its own thread reply.
+   with issues", with one sub-bullet per project item in rank order, each starting with the
+   project written by code, and each high-severity project item still has its own thread reply
+   (revisions 25 and 26).
 2. **Given** a host matches the ignore list, **When** the run executes, **Then** it is discovered
    and counted as ignored but neither analysed, nor charged for model usage, nor named in the post.
 3. **Given** a host matches no group, **When** the brief is composed, **Then** it is reported under
@@ -590,7 +591,9 @@ Discovery and collection
 - **FR-001**: The system MUST discover the set of monitored CHT projects from the hosted
   watchdog's metrics store on every run, without a hard-coded list.
 - **FR-002**: The system MUST read metrics with a read-only credential and MUST NOT require write
-  access to any system.
+  access to any monitored CHT system or to the metrics store. Its only writes are to the one
+  configured Slack conversation (posts, the report share, reactions), to its tracing backend and
+  to its own data volume (revision 27, the scope the constitution states).
 - **FR-003**: The system MUST derive the metrics it examines from the dashboards in the configured
   priority list, in that order, and MAY examine additional metrics the analysis judges relevant.
 - **FR-004**: For each metric and project the system MUST collect the current window and its
@@ -608,7 +611,8 @@ Analysis
 - **FR-008**: The system MUST use the cht-watchdog skill, its own memory, the merged pattern
   cards, and the CHT documentation search service — which covers the documentation, the
   community forum, and GitHub issues and pull requests — as reference material. Reference lookups
-  MUST be read-only.
+  MUST be read-only. The curated memory, when read back into a session or a roll-up, is untrusted
+  data like any fetched text (FR-044): delimited, labelled and never obeyed (revision 27).
 - **FR-009**: Every flagged item MUST include: a stable identity, the project, a severity, metric
   evidence (values and windows), why it matters now, a suggested check, a structured reference to
   the dashboard view (dashboard, panel, project, window) from which the link is built, a
@@ -626,7 +630,7 @@ Analysis
   verification rejects a metric that is not another item of the same findings (revision 20). An
   item related to a higher-ranked item of the same run and project is presented under that item:
   the report nests it, the higher item's thread reply names it with the relation and its rank,
-  and, unless it is a body item itself, it takes no thread reply of its own (revision 23). A relation
+  and, unless it is a high item itself, it takes no thread reply of its own (revisions 23 and 25). A relation
   that names the item's own metric is empty rather than wrong: code drops it when the items are
   normalised and the pass is not rejected for it (revision 24; one run's revisions carried 21 such
   reasons after a prompt sentence against it changed nothing).
@@ -750,6 +754,18 @@ Verification gate
   model converted matches; a range literal of a collected expression (`24h` from `rate(x[24h])`) is
   a run identifier when written bare; and the brief's gate is handed the run's candidates, so a
   cited candidate's value counts in a bullet as it does in an item.
+  The checks are a closed list fixed in code and named in the data model ("Verification Report":
+  `schema`, `projects_known`, `metrics_known`, `candidates_known`, `numbers_match`, `dates_match`,
+  `relates_to`, `links_built`, `links_allowlisted`, `links_resolve`, `severity_rules`, `bullet_count`,
+  `bullet_length`, `secrets_absent`, `personal_data_absent`, `pattern_cards_known`), as are the
+  secret and personal-data patterns and the link allow-list; adding one is a code change by pull
+  request. A link that times out or errors during resolution is unresolved and fails the check; a
+  redirect is followed only when its target is on the allow-list, otherwise the link fails. Personal
+  data means e-mail addresses, telephone numbers, person names known to the run (owners and
+  feedback authors) and Slack user ids; hostnames are not personal data but are masked in
+  proposals. The scan applies to every published text whatever its source: a secret or personal
+  datum quoted from a tool result, a memory or a metric label is refused like one the model wrote
+  (revision 27).
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -807,10 +823,12 @@ Publishing
   identity set apart at the end, and never repeats the rank in words; the confidence stands on a
   line of its own beneath the rank. Evidence keeps the window names as the run records them. The
   wording of items is the model's and is not restyled.
-- **FR-023**: Retired in revision 24 (the brief image; see FR-019). Until then: the brief image MUST
-  be rendered from that same report so image and text never diverge.
+- **FR-023**: Retired in revision 24: the brief image, a screenshot of the report's summary, is no
+  longer rendered or posted (see FR-019); no run uses a browser.
 - **FR-024**: On failure the system MUST post a one-line failure notice with the trace link and
-  exit non-zero.
+  exit non-zero. The notice is code text, never model output, so it does not pass the verification
+  gate; the error message it quotes MUST be passed through the secret and personal-data patterns
+  first, with any match redacted (revision 27).
 - **FR-025**: In preview mode the system MUST produce every artefact of a real run and emit the
   exact message payload (post, thread replies, report share) as structured data instead of
   posting.
@@ -1039,10 +1057,23 @@ Persistence and reproducibility
 Security and trust boundaries
 
 - **FR-044**: All externally fetched text MUST be treated as untrusted data: delimited and
-  labelled when shown to the model, never executed as instructions, escaped when rendered.
-- **FR-045**: Secrets MUST NOT appear in posts, run records, logs or the public repository.
-- **FR-046**: The tools available to the model MUST be read-only and enumerated; no shell, no
-  arbitrary web access, and file writes only into the current run's directory.
+  labelled when shown to the model, never executed as instructions, escaped when rendered. Text
+  that itself contains the delimiter is stripped of it before it is wrapped, so fetched content
+  cannot close the delimiter early. Proposal files are Markdown for a human reviewer, scrubbed of
+  identifiers by code (FR-033); the preview payload is JSON built by code, so neither needs
+  template escaping (revision 27).
+- **FR-045**: Secrets MUST NOT appear in posts, run records, logs or the public repository. Run
+  records include every prompt, tool result, session ledger and verification report the run
+  stores, which the end-of-run scan covers with the same patterns as the gate; logs redact the
+  values of secret-named keys and never carry the model runtime's raw transcript (revision 27).
+- **FR-046**: The tools available to the model MUST be read-only and enumerated: the run's own
+  `get_windows`, `query_metric`, `read_pattern_card` and `get_item_history`, and the documentation
+  service's `search_docs` and `get_sources` (its `ask_question` is denied by default so provenance
+  stays first-hand; contracts/agent-definition.md). The
+  documentation service is one enumerated tool over a fixed corpus, not web access. The model has
+  no shell, no HTTP tool and no tool that writes or executes anything; the system, not the model,
+  writes the run's files, and only under the current run's directory and the data volume (revision
+  27, replacing wording that read as if the model could write files).
 
 Operations
 
@@ -1076,7 +1107,20 @@ Configuration
   expected-load calendar, prompts, output schema — MUST live in versioned configuration files,
   not in environment variables.
 - **FR-054**: Safety rails — the tool allow-list, disabled shell and web access, permission
-  handling, and the verification gate — MUST NOT be configurable at runtime.
+  handling, the verification gate, and the hard upper bounds in code on turns, cost, passes,
+  retries and concurrency — MUST NOT be configurable at runtime; the environment may set a value
+  only below those bounds (revision 27).
+- **FR-083**: Network egress from the container MUST be restricted to the enumerated endpoints:
+  the hosted watchdog's Grafana, Slack, the model API, the tracing backend, the documentation
+  service, and the hosts of the footer's specification and configuration links for the gate's link
+  resolution; every other destination is refused (revision 27, promoted from the plan; the
+  container revision enforces it).
+- **FR-084**: The Slack app MUST hold exactly the bot scopes the posting needs: `chat:write`,
+  `files:write`, `reactions:read`, `reactions:write`, `channels:history` for a public channel,
+  `groups:history` if the channel is private, and `im:write` with `im:history` when the configured
+  conversation is a direct message. The bot's membership of the configured conversation is a
+  deployment precondition: a post refused for it fails the run loudly (exit 74) with the reason in
+  the log, never silently (revision 27).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.
@@ -1143,7 +1187,9 @@ Configuration
   verified by replay.
 - **SC-004**: Zero published numbers, project names or links fail verification; every published
   brief has a stored verification report with all checks passing or an explicit degradation
-  notice.
+  notice. The report is the gate's own record; the replay evaluation over the committed fixtures
+  is the independent oracle, and a manual sample of published items against the stored windows is
+  part of each calibration review (revision 27).
 - **SC-005**: Cost per run is visible on every post from day one; after the first two weeks of
   measured runs a target is set and thereafter the 30-day median stays within it.
 - **SC-006**: A maintainer can replay thirty days of stored runs against a changed prompt in under
@@ -1176,7 +1222,9 @@ Configuration
 
 - Medic's hosted CHT Watchdog scrapes every participating project into a single metrics store,
   and the project URL is available as a label on every metric.
-- The monitoring endpoints it scrapes are public and carry no patient data; host metrics exposed
+- The monitoring endpoints it scrapes are public and carry no patient data (if a label value ever
+  carries one, it reaches no post: metric keys and labels are published text and pass the
+  personal-data scan like any other, FR-016); host metrics exposed
   by partners likewise carry no health data.
 - A dedicated Slack channel and app exist for the brief; readers of that channel are Medic staff.
 - The CHT documentation search service (cht-docs-mcp, kapa-backed) indexes the documentation, the
@@ -1231,7 +1279,8 @@ Configuration
 - Q: Is feedback handled in real time? → A: No. Reactions and notes are read at the start of the
   next run; no always-on component.
 - Q: How does a reader react to one item rather than the whole brief? → A: each flagged item is
-  its own threaded reply.
+  its own threaded reply until revision 25; since then a reply is for a high item or an alert group,
+  every other item lives in the report shared into the thread.
 - Q: Are partner emails part of this feature? → A: No; separate feature with its own privacy
   requirements.
 - Q: Are dashboard panel images embedded? → A: No. Items carry structured dashboard references
@@ -1244,7 +1293,7 @@ Configuration
   across all projects.
 - Q: How many items in the post body? → A: at most five top-level bullets, each with up to eight
   one-line sub-bullets (revised from three in revision 9, FR-010, FR-015); further items go to the
-  thread, and every project item keeps its own thread reply.
+  thread, and every high-severity project item keeps its own thread reply (revision 25).
 - Q: Where do reference lookups come from? → A: the CHT documentation search service
   (cht-docs-mcp): documentation, community forum, GitHub issues and pull requests.
 - Q: Can the agent be run outside production? → A: Yes. Any contributor can run every stage and
@@ -1416,7 +1465,7 @@ Configuration
 
 Decisions already taken during design that belong in the plan, listed so they are not re-litigated:
 
-- Engine: the Claude Agent SDK for TypeScript is the analysis engine in production, with
+- Engine: the Claude Agent SDK for TypeScript, consumed from CommonJS JavaScript, is the analysis engine in production, with
   `claude -p` as the identical local face; both are configured from one source (skill directory,
   MCP configuration, hooks JSON, output schema, system-prompt file). Production uses bare mode
   semantics: no filesystem settings discovery, explicit allow-listed tools, shell and web tools

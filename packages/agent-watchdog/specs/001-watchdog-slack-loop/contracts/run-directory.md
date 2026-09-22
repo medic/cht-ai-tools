@@ -75,7 +75,7 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 | `agent` | `candidates.json` less its standing conditions (revision 23), `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
 | `rollup` | all `findings.pass<last>.json`, every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
 | `render` | `brief.json`, `items.ranked.json`, `standing.json`, `alert-groups.json`, `discovery.json` | `report.html` (the image `brief.png` was retired in revision 24) |
-| `publish` | `brief.json`, `report.html`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share, body-item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
+| `publish` | `brief.json`, `report.html`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share, high-item and alert-group replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 
 Rules:
 
