@@ -133,7 +133,7 @@ describe('render/report: ranks, identities, related items and standing condition
   });
 });
 
-describe('render/report: the document a reader opens (FR-022, revision 24)', () => {
+describe('render/report: the original design with its links, one footer and rounding (FR-022, revision 25)', () => {
   const { roundForReading } = require('../../src/render/report');
   const first = makeItem({ rank: 1, placement: 'body' });
   const second = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });
@@ -167,29 +167,67 @@ describe('render/report: the document a reader opens (FR-022, revision 24)', () 
     standing, alertGroups,
   };
 
+  it('heads each item with its number, severity, host, metric and persistence, the id apart, never "rank N"', () => {
+    const html = renderReport({ ...base, links: internal });
+    const head = html.slice(html.indexOf('class="head"'), html.indexOf('class="confidence"'));
+    expect(head).to.include('#1').and.include('HIGH').and.include('alpha.example.org')
+      .and.include('cht_sentinel_backlog_count').and.include('new today').and.include(first.item_id);
+    expect(head).to.not.match(/rank 1/);
+    expect(html).to.not.match(/rank \d/);
+    expect(html).to.not.include('Items by rank').and.not.include('Persistence');
+  });
+
+  it('puts the confidence on its own line under the number', () => {
+    const html = renderReport({ ...base, links: internal });
+    const confidence = html.slice(html.indexOf('class="confidence"'), html.indexOf('class="evidence"'));
+    expect(confidence).to.include('confidence 85%');
+    expect(html.indexOf('class="head"')).to.be.lessThan(html.indexOf('class="confidence"'));
+  });
+
+  it('keeps the window names as the run records them and rounds evidence values and notes', () => {
+    const noted = makeItem({
+      rank: 1, placement: 'body',
+      evidence: [
+        { window: 'current', value: 912, unit: 'count' },
+        { window: 'previous_day', value: 300, unit: 'count' },
+        {
+          window: 'trailing_14d', value: 811.25, unit: 'count',
+          note: 'mean of trailing daily values; stddev 3.2031234756093934',
+        },
+      ],
+    });
+    const html = renderReport({ ...base, items: [noted], links: internal });
+    expect(html).to.include('previous_day').and.include('trailing_14d');
+    expect(html).to.not.include('previous day');
+    expect(html).to.include('stddev 3.203').and.not.include('3.2031234756093934');
+    expect(html).to.include('1,200.457');
+  });
+
   it('links each item, standing host and alert group and the footer when links are internal', () => {
     const html = renderReport({ ...base, links: internal });
     expect(html).to.include('href="https://watchdog.example.org/d/oa2OfL-Vk/cht-admin-overview?');
     expect(html).to.include('var-cht_instance=alpha.example.org');
     expect(html).to.include('var-cht_instance=beta.example.org');
     expect(html).to.include('/alerting/list?search=');
-    expect(html).to.include('href="https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts"');
+    expect(html).to.include('href="https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop"');
+    expect(html).to.include('>specs</a>');
     expect(html).to.include('href="https://github.com/medic/medic-infrastructure"');
     expect(html).to.include('href="https://langfuse.example.org/trace/t1"');
+    expect(html).to.include('run 2026-09-18').and.include('$0.12');
     expect(html).to.match(/cite an item/i);
-    expect(html).to.include('$0.12');
+    expect(html).to.not.include('prompts');
   });
 
   it('names everything and links nothing when links are none', () => {
     const html = renderReport({ ...base, links: { mode: 'none', grafanaUrl: 'https://watchdog.example.org', runStart } });
     expect(html).to.not.include('href=');
     expect(html).to.include('beta.example.org').and.include('North Programme').and.include('Sentinel Backlog');
-    expect(html).to.include('trace').and.include('prompts');
+    expect(html).to.include('trace').and.include('specs');
   });
 
-  it('lists the alert groups the brief covered with their instances', () => {
+  it('lists the alert groups the brief covered with their instances, in a card like the standing conditions', () => {
     const html = renderReport({ ...base, links: internal });
-    expect(html).to.include('Alerts');
+    expect(html).to.include('<h2>Alerts</h2>');
     expect(html).to.include('north-a.example.org').and.include('north-b.example.org');
     expect(html).to.include('2 firing');
   });
@@ -207,21 +245,11 @@ describe('render/report: the document a reader opens (FR-022, revision 24)', () 
     const html = renderReport({ ...base, items: [long], links: internal });
     expect(html).to.include('3.98σ').and.include('0.000813 docs/day');
     expect(html).to.not.include('3.980246763660453');
-    expect(html).to.include('1,200.457');
   });
 
-  it('puts rank, severity, host and metric in the header and the rest on a labelled meta line', () => {
+  it('stays self-contained in the original design: summary and item cards, no script, no external asset', () => {
     const html = renderReport({ ...base, links: internal });
-    const header = html.slice(html.indexOf('class="item-head"'), html.indexOf('class="item-meta"'));
-    expect(header).to.include('#1').and.include('HIGH').and.include('alpha.example.org')
-      .and.include('cht_sentinel_backlog_count');
-    const meta = html.slice(html.indexOf('class="item-meta"'), html.indexOf('class="evidence"'));
-    expect(meta).to.include('new today').and.include('85%').and.include(first.item_id);
-    expect(meta).to.match(/confidence/i).and.match(/id/i);
-  });
-
-  it('stays self-contained: no external asset, no script, no triple-stash, and the design read in the header', () => {
-    const html = renderReport({ ...base, links: internal });
+    expect(html).to.include('id="brief-summary"').and.include('<section class="item">');
     expect(html).to.not.match(/<script|src="http|@import|fonts\.googleapis/);
     expect(html).to.not.include('{{{');
     expect(fs.readFileSync(path.join(TEMPLATES, 'report.hbs'), 'utf8')).to.match(/Design read/i);

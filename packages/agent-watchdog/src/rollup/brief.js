@@ -70,8 +70,8 @@ const splitRollupTemplate = (text) => {
   };
 };
 
-const checkedText = (discovery, candidates) => {
-  const counts = checkedCounts(discovery, candidates.length);
+const checkedText = (discovery, candidates, analysedProjects = null) => {
+  const counts = checkedCounts(discovery, candidates.length, analysedProjects);
   const noun = counts.candidates === 1 ? 'candidate' : 'candidates';
   return `${counts.projects} projects, ${counts.panels} panels, ${counts.candidates} ${noun}`;
 };
@@ -117,13 +117,13 @@ const itemForPrompt = (item) => ({
 const buildUserPrompt = ({
   ctx, items, expectedLoadNotice, referenceSourcesUnavailable, memory, feedbackUnmatched, rejections,
   discovery = { projects: [], dashboards: [] }, candidates = [], feedback = [], feedbackBrief = null,
-  userTemplate = DEFAULT_USER_TEMPLATE, layout = null,
+  userTemplate = DEFAULT_USER_TEMPLATE, layout = null, analysedProjects = null,
 }) => {
   const values = {
     date: ctx.date,
     items: untrusted('ranked-items', JSON.stringify(items.map(itemForPrompt), null, 2)),
     layout: layoutText(layout || buildLayout(items, { groupOf: groupOfProjects(discovery) })),
-    checked: checkedText(discovery, candidates),
+    checked: checkedText(discovery, candidates, analysedProjects),
     expected_load_notice: expectedLoadNotice
       ? `${expectedLoadNotice} Include this notice in the brief.`
       : 'No expected-load window is active.',
@@ -284,14 +284,14 @@ const bulletsFromDraft = ({ draft, layout, items, alertGroups = [], staleAfterDa
 
 const briefFromDraft = ({
   ctx, draft, layout, items, discovery, candidates, expectedLoadNotice, referenceSourcesUnavailable, footer,
-  notices = [], alertGroups = [], staleAfterDays = 14,
+  notices = [], alertGroups = [], staleAfterDays = 14, analysedProjects = null,
 }) => ({
   run_id: ctx.runId,
   kind: 'brief',
   headline: draft.headline,
   bullets: bulletsFromDraft({ draft, layout, items, alertGroups, staleAfterDays }),
   expected_load_notice: draft.expected_load_notice || expectedLoadNotice || null,
-  checked: checkedCounts(discovery, candidates.length),
+  checked: checkedCounts(discovery, candidates.length, analysedProjects),
   degradation_notice: referenceSourcesUnavailable ? REFERENCE_UNAVAILABLE_NOTICE : null,
   notices: [...notices],
   image: null,
@@ -302,6 +302,7 @@ const briefFromDraft = ({
 /** A day with firing alerts and no flagged item: the alert bullets by code, no model call (FR-066). */
 const alertsOnlyBrief = ({
   ctx, layout, alertGroups, staleAfterDays, discovery, candidates, footer, expectedLoadNotice, notices,
+  analysedProjects = null,
 }) => {
   const firing = alertGroups.reduce((sum, g) => sum + g.firing, 0);
   const projects = new Set(alertGroups.flatMap((g) => g.hosts || [])).size;
@@ -312,7 +313,7 @@ const alertsOnlyBrief = ({
     headline: `Alerts only: ${firing} firing across ${across}, no metric changes to flag`,
     bullets: assembleBullets({ layout, textFor: () => '', hostFor: () => '', alertGroups, staleAfterDays }),
     expected_load_notice: expectedLoadNotice || null,
-    checked: checkedCounts(discovery, candidates.length),
+    checked: checkedCounts(discovery, candidates.length, analysedProjects),
     degradation_notice: null,
     notices: [...notices],
     image: null,
@@ -356,7 +357,40 @@ const analysisCutOff = (analysis) => {
   };
 };
 
-/** Projects whose every pass the gate rejected (revision 22), with the reason named most often, or null. */
+// What each gate check refuses, in words a reader of the brief can act on (FR-056, revision 25); an unmapped check
+// is spelt as itself.
+const CHECK_PHRASES = Object.freeze({
+  personal_data_absent: 'digits that looked like a phone number',
+  numbers_match: 'a number that matched no computed value',
+  links_resolve: 'a link that did not resolve',
+  links_allowlisted: 'a link to a host outside the allow-list',
+  links_built: 'a link the model wrote itself',
+  relates_to: 'a relation to no other item',
+  severity_rules: 'a severity the candidates did not justify',
+  projects_known: 'a host that is not a discovered project',
+  metrics_known: 'a metric the run did not collect',
+  candidates_known: 'a candidate the run did not compute',
+  dates_match: 'a date outside the run',
+  schema: 'output that failed the schema',
+  secrets_absent: 'text that looked like a secret',
+  pattern_cards_known: 'a pattern card that does not exist',
+  bullet_count: 'too many bullets',
+  bullet_length: 'a bullet too long',
+  thread_order: 'a thread order that did not match the items',
+});
+
+const MAX_NAMED_HOSTS = 3;
+
+/** Up to three hosts by name, then the count of the rest. */
+const hostList = (hosts) => {
+  const named = hosts.slice(0, MAX_NAMED_HOSTS);
+  const rest = hosts.length - named.length;
+  return rest > 0 ? `${named.join(', ')} and ${rest} more` : named.join(', ');
+};
+
+/**
+ * Projects whose every pass the gate rejected (revision 22), by host, with the reason named most often, or null.
+ */
 const analysisRejected = (analysis) => {
   const rejected = analysis && Array.isArray(analysis.rejected) ? analysis.rejected : [];
   if (!rejected.length) {
@@ -367,7 +401,12 @@ const analysisRejected = (analysis) => {
     counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
   }
   const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-  return { count: rejected.length, total: analysis.projects || rejected.length, reason };
+  return {
+    count: rejected.length,
+    total: analysis.projects || rejected.length,
+    reason,
+    hosts: rejected.map((entry) => hostOf(entry.project_url)),
+  };
 };
 
 /**
@@ -388,11 +427,12 @@ const shortfalls = (analysis) => {
     found.push({ notice: text, reason: text });
   }
   // A first pass refused on every attempt leaves no items; with one pass by default the project would otherwise
-  // read as quiet, so it is named with the check that refused it most (FR-056, revision 22).
+  // read as quiet, so it is named by host with what the gate refused, in words (FR-056, revisions 22 and 25).
   const rejected = analysisRejected(analysis);
   if (rejected) {
-    const text = `model findings were rejected by the gate on ${rejected.count} of ${rejected.total} projects `
-      + `(commonest reason: ${rejected.reason})`;
+    const text = `no findings for ${rejected.count} of ${rejected.total} projects (${hostList(rejected.hosts)}): `
+      + 'the verification gate refused the model\'s analysis on every attempt, mostly for '
+      + (CHECK_PHRASES[rejected.reason] || rejected.reason);
     found.push({ notice: text, reason: text });
   }
   return found;
@@ -402,6 +442,7 @@ const composeBrief = async ({
   ctx, items, discovery, changes, candidates, allCandidates = candidates, memory = null, feedbackUnmatched = [],
   expectedLoadNotice = null, referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [],
   feedbackBrief = null, layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
+  analysedProjects = null,
 }) => {
   // `candidates` are the ones the model was handed; `allCandidates` include the standing conditions code handled,
   // which the counts still cover (FR-014, revision 23).
@@ -409,7 +450,8 @@ const composeBrief = async ({
   // when they left nothing to publish although candidates exist (revision 13, 16).
   const short = shortfalls(analysis);
   const notices = [...givenNotices, ...short.map((s) => `Analysis incomplete: ${s.notice}`)];
-  const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices };
+  // `analysedProjects` counts the projects of a restricted run in what was checked (FR-066, revision 25).
+  const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices, analysedProjects };
   // The stage computes the layout from the ranked items, the projects' groups and the alert groups; a caller
   // without one gets the same rule applied here, so the prompt, the gate and the assembled bullets always agree.
   const bodyLayout = layout || buildLayout(items, { groupOf: groupOfProjects(discovery), alertGroups });
@@ -424,7 +466,7 @@ const composeBrief = async ({
     const brief = alertGroups.length
       ? alertsOnlyBrief({
         ctx, layout: bodyLayout, alertGroups, staleAfterDays, discovery, candidates: allCandidates, footer,
-        expectedLoadNotice, notices,
+        expectedLoadNotice, notices, analysedProjects,
       })
       : buildHeartbeat({ ...base, candidatesCount: allCandidates.length });
     return { brief, drafts: [], degraded: false, memoryUpdate: null, proposals: [], calls: [] };
@@ -450,7 +492,7 @@ const composeBrief = async ({
   });
 
   // What the model was given, for the gate (FR-016, revision 23): the run-wide texts and each item's own entry.
-  const givenText = [layoutText(bodyLayout), checkedText(discovery, allCandidates)];
+  const givenText = [layoutText(bodyLayout), checkedText(discovery, allCandidates, analysedProjects)];
   const itemTexts = new Map(items.map((item) => [item.item_id, JSON.stringify(itemForPrompt(item), null, 2)]));
 
   // One session for every attempt (FR-017, revision 23): the items are sent once and cached; a retry carries only
@@ -480,7 +522,7 @@ const composeBrief = async ({
         ? buildUserPrompt({
           ctx, items, expectedLoadNotice, referenceSourcesUnavailable, memory, feedbackUnmatched, rejections: [],
           discovery, candidates: allCandidates, feedback, feedbackBrief, userTemplate: split.userTemplate,
-          layout: bodyLayout,
+          layout: bodyLayout, analysedProjects,
         })
         : revisionPrompt({ attempt: attempt - 1, draft: previousDraft, failing, reasons: last.reasons });
       await recordPrompt(ctx, attempt, userPrompt);
@@ -502,6 +544,8 @@ const composeBrief = async ({
         items,
         discovery,
         changes: asChangeList(changes),
+        // The gate sees the run's candidates, so a cited candidate's value counts in a bullet (revision 25).
+        candidates: allCandidates,
         runId: ctx.runId,
         attempt,
         resolveLinks: ctx.resolveLinks,
@@ -515,7 +559,7 @@ const composeBrief = async ({
       if (report.outcome === 'accepted') {
         const brief = briefFromDraft({
           ctx, draft, layout: bodyLayout, items, discovery, candidates: allCandidates, expectedLoadNotice,
-          referenceSourcesUnavailable, footer, notices, alertGroups, staleAfterDays,
+          referenceSourcesUnavailable, footer, notices, alertGroups, staleAfterDays, analysedProjects,
         });
         const validated = schemas.Brief.safeParse(brief);
         if (!validated.success) {
@@ -544,6 +588,7 @@ const composeBrief = async ({
 };
 
 module.exports = {
+  CHECK_PHRASES,
   composeBrief, buildUserPrompt, bulletsFromDraft, alertsOnlyBrief, splitRollupTemplate, failingParts, mergeDraft,
   revisionPrompt, BUILT_IN_TEMPLATE, DEFAULT_USER_TEMPLATE, REFERENCE_UNAVAILABLE_NOTICE,
 };

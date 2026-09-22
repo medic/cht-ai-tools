@@ -116,7 +116,7 @@ const makeDiscovery = (overrides = {}) => ({
 });
 
 const footer = () => ({
-  prompts_url: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts',
+  specs_url: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop',
   config_url: 'https://github.com/medic/medic-infrastructure',
   trace_url: 'https://langfuse.example.org/trace/t1',
   cost_usd: 0.1234,
@@ -142,7 +142,7 @@ const makeConfig = (overrides = {}) => ({
     maxTurns: 20, maxBudgetUsdProject: 2, maxBudgetUsdRun: 25, modelTimeoutMs: 900000, verifyMaxRetries: 2, passes: 2,
   },
   endpoints: {
-    promptsUrl: footer().prompts_url,
+    specsUrl: footer().specs_url,
     configUrl: footer().config_url,
     grafanaUrl: 'https://watchdog.example.org',
     slackChannelId: 'C123',

@@ -5,7 +5,7 @@ const { loadConfig } = require('../../src/config/load');
 const { makeItem, makeBrief } = require('../rollup/factories');
 
 const DEFAULTS_DIR = path.join(__dirname, '..', '..', 'config', 'defaults');
-const PROMPTS_URL = 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts';
+const SPECS_URL = 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop';
 const CONFIG_URL = 'https://github.com/medic/medic-infrastructure/tree/main/agent-watchdog';
 const TRACE_URL = 'https://langfuse.example.org/trace/t1';
 
@@ -20,7 +20,7 @@ const env = {
   AGENT_WATCHDOG_SLACK_CHANNEL_ID: 'C123',
   AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp',
   LANGFUSE_BASE_URL: 'https://langfuse.example.org',
-  AGENT_WATCHDOG_PROMPTS_URL: PROMPTS_URL,
+  AGENT_WATCHDOG_SPECS_URL: SPECS_URL,
   AGENT_WATCHDOG_CONFIG_URL: CONFIG_URL,
   AGENT_WATCHDOG_DATA_DIR: '/tmp/agent-watchdog-footer-spec',
   AGENT_WATCHDOG_CONFIG_DIR: DEFAULTS_DIR,
@@ -29,16 +29,16 @@ const env = {
 describe('publish/footer', () => {
   const { config } = loadConfig({ env, command: 'run', withPolicy: false });
 
-  it('carries the prompts and configuration links from the environment, the trace URL and the cost', () => {
+  it('carries the specification and configuration links from the environment, the trace URL and the cost', () => {
     const footer = buildFooter({ config, traceUrl: TRACE_URL, costUsd: 0.123456789 });
     expect(footer).to.deep.equal({
-      prompts_url: PROMPTS_URL, config_url: CONFIG_URL, trace_url: TRACE_URL, cost_usd: 0.123457,
+      specs_url: SPECS_URL, config_url: CONFIG_URL, trace_url: TRACE_URL, cost_usd: 0.123457,
     });
   });
 
   it('defaults the trace to null and the cost to zero', () => {
     expect(buildFooter({ config })).to.deep.equal({
-      prompts_url: PROMPTS_URL, config_url: CONFIG_URL, trace_url: null, cost_usd: 0,
+      specs_url: SPECS_URL, config_url: CONFIG_URL, trace_url: null, cost_usd: 0,
     });
   });
 
@@ -50,14 +50,18 @@ describe('publish/footer', () => {
     expect(formatCost(undefined)).to.equal('$0.00');
   });
 
-  it('renders the three links and the cost in currency, omitting the trace link when there is none', () => {
-    const text = footerText(buildFooter({ config, traceUrl: TRACE_URL, costUsd: 0.1234 }));
+  it('renders the one footer line of post and report: specs, configuration, trace, cost, run id (revision 25)', () => {
+    const text = footerText(buildFooter({ config, traceUrl: TRACE_URL, costUsd: 0.1234 }), { runId: '2026-09-18' });
     expect(text).to.equal(
-      `<${PROMPTS_URL}|prompts> · <${CONFIG_URL}|configuration> · <${TRACE_URL}|trace> · cost $0.12`,
+      `<${SPECS_URL}|specs> · <${CONFIG_URL}|configuration> · <${TRACE_URL}|trace> · cost $0.12 · run 2026-09-18`,
     );
     const offline = footerText(buildFooter({ config, costUsd: 2 }));
     expect(offline).to.not.include('|trace>');
     expect(offline).to.include('cost $2.00');
+    expect(offline).to.not.include('run ');
+    const withMore = footerText(buildFooter({ config, costUsd: 2 }), { runId: 'r1', furtherItems: 3 });
+    expect(withMore.endsWith('cost $2.00 · run r1 · 3 more items in the report (thread)')).to.equal(true);
+    expect(text).to.not.include('prompts');
   });
 
   it('puts the footer in the last context block of the parent message', () => {
@@ -72,7 +76,8 @@ describe('publish/footer', () => {
     });
     const last = payload.parent.blocks[payload.parent.blocks.length - 1];
     expect(last.type).to.equal('context');
-    expect(last.elements[0].text).to.include(`<${PROMPTS_URL}|prompts>`);
+    expect(last.elements[0].text).to.include(`<${SPECS_URL}|specs>`);
+    expect(last.elements[0].text).to.include('run 2026-09-18');
     expect(last.elements[0].text).to.include(`<${CONFIG_URL}|configuration>`);
     expect(last.elements[0].text).to.include(`<${TRACE_URL}|trace>`);
     expect(last.elements[0].text).to.include('cost $0.50');

@@ -112,8 +112,9 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       expect(northSection.split('\n').slice(1)).to.have.length(3);
       expect(northSection.split('\n').slice(1).every((line) => line.startsWith('   ◦ '))).to.equal(true);
       expect(payload.parent.text).to.match(/• \S+ North Programme: 3 projects with issues\n {3}◦ /);
-      // Every project item is a body item here, so each has its own thread reply (FR-020, revision 23).
-      expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(ranked.map((i) => i.item_id).sort());
+      // Replies for the high items only; the rest live in the report shared into the thread (FR-020, revision 25).
+      const highIds = ranked.filter((i) => i.severity === 'high').map((i) => i.item_id).sort();
+      expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(highIds);
       expect(JSON.stringify(payload)).to.not.include('cht-dev');
       expect(r.slack.chat.postMessage.callCount).to.equal(1 + payload.replies.length);
       const report = fs.readFileSync(path.join(r.root, 'rollup', 'report.html'), 'utf8');
@@ -148,8 +149,10 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
     expect(layout.slots).to.have.length(5);
     expect(layout.thread_items).to.have.length(2);
     const payload = r.read('rollup/payload.json');
-    expect(payload.replies).to.have.length(7);
-    expect(payload.report).to.include({ items: 9, replied: 7 });
+    // Replies for the high items only (FR-020, revision 25); every item is in the report.
+    const high = ranked.filter((i) => i.severity === 'high').length;
+    expect(payload.replies).to.have.length(high);
+    expect(payload.report).to.include({ items: 9, replied: high });
     expect(payload.report.initial_comment).to.include('9 items, 7 with a reply');
     const footer = payload.parent.blocks[payload.parent.blocks.length - 1].elements[0].text;
     expect(footer).to.include('2 more items in the report');

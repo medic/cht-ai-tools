@@ -1,7 +1,8 @@
 'use strict';
 // The report (FR-022): the document a reader opens from the thread. A filled template, never generated per run;
 // every value escaped; each reference to an alert, dashboard or panel linked or merely named by the run's link
-// setting, and every decimal rounded for reading (revision 24).
+// setting, and every decimal rounded for reading (revision 24). The template is the original design, kept at the
+// operator's request after a redesign was tried (revision 25).
 const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
@@ -43,7 +44,7 @@ const sparklineSvg = (samples, width = 240, height = 40) => {
   }).join(' ');
   const svg = `<svg class="sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" `
     + `role="img" aria-label="trend of ${values.length} samples">`
-    + `<polyline fill="none" stroke="#37352F" stroke-width="1.5" points="${points}"/></svg>`;
+    + `<polyline fill="none" stroke="#4b5563" stroke-width="2" points="${points}"/></svg>`;
   return new Handlebars.SafeString(svg);
 };
 
@@ -86,8 +87,6 @@ const samplesFor = (windowsByMetric, item) => {
 const rankOf = (item) => (item.rank === null || item.rank === undefined ? Number.MAX_SAFE_INTEGER : item.rank);
 
 const relationText = (relation) => String(relation || '').replace(/_/g, ' ');
-
-const windowLabel = (window) => String(window || '').replace(/_/g, ' ');
 
 /**
  * Items nested under the higher-ranked item they relate to (FR-009, revision 23), by that item's id; an item whose
@@ -163,8 +162,9 @@ const itemView = (item, windowsByMetric, linker, related = []) => ({
   confidence_pct: Math.round((item.confidence || 0) * 100),
   why_now: roundProse(item.why_now),
   suggested_check: roundProse(item.suggested_check),
+  // Window names as the run records them (`previous_day`, `trailing_14d`); values and notes rounded for reading.
   evidence: (item.evidence || []).map((e) => ({
-    window: windowLabel(e.window), value: roundForReading(e.value), unit: e.unit || '', note: e.note || '',
+    window: e.window, value: roundForReading(e.value), unit: e.unit || '', note: roundProse(e.note || ''),
   })),
   samples: samplesFor(windowsByMetric, item),
 });
@@ -225,7 +225,7 @@ const alertsView = (alertGroups, linker) => (alertGroups || []).map((group) => {
 
 const footerView = (footer, linker) => ({
   links: linker.internal,
-  prompts_url: footer.prompts_url || null,
+  specs_url: footer.specs_url || null,
   config_url: footer.config_url || null,
   trace_url: footer.trace_url || null,
   trace_text: footer.trace_url ? 'recorded' : 'none',

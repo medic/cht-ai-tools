@@ -63,9 +63,10 @@ describe('perf: fifty projects at concurrency 3 (Edge Cases, FR-013)', function 
     expect(r.err.text()).to.not.include('run.scan_findings');
     const brief = r.read('rollup/brief.json');
     expect(brief.bullets).to.have.length(5);
-    // Replies for the body items only (FR-020, revision 23); the report shared into the thread holds every item.
+    // Replies for the high items only, at most twenty-five (FR-020, revision 25); the report holds every item.
     const payload = r.read('rollup/payload.json');
-    expect(payload.replies).to.have.length(r.read('rollup/layout.json').body_items.length);
+    const high = r.read('rollup/items.ranked.json').filter((i) => i.severity === 'high').length;
+    expect(payload.replies).to.have.length(Math.min(25, high));
     expect(payload.report.items).to.equal(r.read('rollup/items.ranked.json').length);
 
     // FR-072: a cold volume fetches four windows per metric; the next day reuses the previous-day window and the

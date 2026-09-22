@@ -31,3 +31,22 @@ describe('verify/format', () => {
     expect(codeSpans('no spans')).to.deep.equal([]);
   });
 });
+
+describe('verify/format: numerals read one at a time, unit words as units (FR-016, revision 25)', () => {
+  const { extractNumbers, extractNumbersEverywhere } = require('../../src/verify/format');
+
+  it('reads a comma as a thousands separator only in groups of three after a first group of up to three digits', () => {
+    expect(extractNumbersEverywhere('[[1789538400,390778880],[1789624800,451162112]]'))
+      .to.deep.equal(['1789538400', '390778880', '1789624800', '451162112']);
+    expect(extractNumbersEverywhere('rose to 1,604,078,240 bytes')).to.deep.equal(['1,604,078,240']);
+    expect(extractNumbersEverywhere('[1789538400,0.0008130081300813008]'))
+      .to.deep.equal(['1789538400', '0.0008130081300813008']);
+    expect(extractNumbers('values 912,300 and 1,234')).to.deep.equal(['912,300', '1,234']);
+    expect(extractNumbers('read 1789538400,390778880 bytes')).to.deep.equal(['1789538400', '390778880']);
+  });
+
+  it('attaches days and hours written as words the way the letter suffixes already are', () => {
+    expect(extractNumbers('up for 7.5 days and 24 hours, then 3 h and 2d')).to.deep.equal(['7.5d', '24h', '3', '2d']);
+    expect(extractNumbers('one day of 14 samples')).to.deep.equal(['14']);
+  });
+});

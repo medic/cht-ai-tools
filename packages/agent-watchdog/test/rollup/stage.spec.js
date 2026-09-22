@@ -101,6 +101,26 @@ describe('cli/stages/rollup', () => {
     },
   });
 
+  it('counts the analysed projects in what was checked when the run was restricted (FR-066, revision 25)', async () => {
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    await stage.run({ ...ctx, flags: { project: ['https://alpha.example.org'] } });
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.checked.projects).to.equal(1);
+    expect(brief.checked.candidates).to.equal(1);
+  });
+
   it('gathers the last pass of every project, ranks, composes and writes the rollup files', async () => {
     const item = makeItem();
     const ctx = ctxWith({

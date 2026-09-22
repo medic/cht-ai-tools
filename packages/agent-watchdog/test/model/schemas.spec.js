@@ -42,7 +42,7 @@ describe('model/schemas', () => {
 
   it('validates a Brief with at most five bullets of at most eight sub-bullets (FR-010, FR-015)', () => {
     const bullet = (i) => ({ item_id: `${i}`.padStart(12, 'a'), text: 'one line' });
-    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2, 3, 4, 5].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { prompts_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
+    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2, 3, 4, 5].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { specs_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
     const parsed = schemas.Brief.parse(brief);
     expect(parsed.bullets).to.have.length(5);
     // A bare { item_id, text } bullet is an item bullet with no sub-bullets.

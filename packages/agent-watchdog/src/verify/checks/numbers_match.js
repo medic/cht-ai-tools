@@ -17,13 +17,17 @@ const isNil = (value) => value === null || value === undefined;
 
 const ratio = (a, b) => (isNil(a) || isNil(b) || b === 0 ? null : a / b);
 
+// A metric whose key ends in `_seconds` holds seconds, so a duration the model converted ("7.5 days") matches
+// (revision 25); `_seconds_total` rates and everything else stay counts.
+const levelUnitOf = (metric) => (/_seconds(?![\w])/.test(String(metric || '')) ? 's' : 'count');
+
 const changeValues = (change) => [
-  { value: change.current_value, unit: 'count' },
-  { value: change.previous_day_value, unit: 'count' },
-  { value: change.previous_week_value, unit: 'count' },
-  { value: change.previous_cycle_value, unit: 'count' },
-  { value: change.trailing_mean, unit: 'count' },
-  { value: change.trailing_stddev, unit: 'count' },
+  { value: change.current_value, unit: levelUnitOf(change.metric) },
+  { value: change.previous_day_value, unit: levelUnitOf(change.metric) },
+  { value: change.previous_week_value, unit: levelUnitOf(change.metric) },
+  { value: change.previous_cycle_value, unit: levelUnitOf(change.metric) },
+  { value: change.trailing_mean, unit: levelUnitOf(change.metric) },
+  { value: change.trailing_stddev, unit: levelUnitOf(change.metric) },
   { value: change.pct_change_vs_previous_day, unit: 'percent' },
   { value: change.deviation_sigma, unit: 'ratio' },
   { value: change.monotonic_rise_hours, unit: 'h' },
@@ -59,10 +63,11 @@ const matches = (token, allowed) => {
     const v = Number(value);
     const percentLike = unit === 'percent' || unit === '%';
     if (suffix === '%') {
+      // A percentage matches by magnitude: the direction ("fell", "rose") is in the words around it (revision 25).
       if (percentLike) {
-        return token === formatValue(v, 'percent') || close(numeric, v, decimals);
+        return token === formatValue(v, 'percent') || close(Math.abs(numeric), Math.abs(v), decimals);
       }
-      return unit === 'x' && close(numeric, v * 100, decimals);
+      return unit === 'x' && close(Math.abs(numeric), Math.abs(v) * 100, decimals);
     }
     if (suffix === 'h') {
       if (unit === 'h' || unit === 'hours' || unit === 'hour') {
@@ -146,6 +151,29 @@ const panelIds = (ctx) => {
 
 const PANEL_REFERENCE = /\bpanels?[\s-]*(\d+)\b/gi;
 
+const RANGE_LITERAL = /\[(\d+[hd])\]/g;
+
+/**
+ * The range literals of every collected metric key and panel expression (`24h` from `rate(x[24h])`), which a model
+ * writes bare ("no restart in 24h"): identifiers the run gave it, not figures (revision 25).
+ */
+const rangeTokens = (ctx) => {
+  const tokens = new Set();
+  const discovery = (ctx && ctx.discovery) || {};
+  const texts = [...(discovery.metrics || [])];
+  for (const dashboard of discovery.dashboards || []) {
+    for (const panel of flatPanels(dashboard)) {
+      texts.push(panel.expr, panel.metric);
+    }
+  }
+  for (const text of texts) {
+    for (const match of String(text || '').matchAll(RANGE_LITERAL)) {
+      tokens.add(match[1]);
+    }
+  }
+  return tokens;
+};
+
 /**
  * Remove the run's own identifiers from prose before its numbers are checked (revision 22): a collected metric key
  * or panel expression written out ("rate(x[24h]) * 60 * 60 * 24" carries 24h, 60, 60 and 24) and a reference to a
@@ -216,13 +244,35 @@ const derivedValues = (allowed) => {
   return derived;
 };
 
-const checkText = (where, text, allowed, spanForms, reasons, ctx, given = new Set()) => {
+/**
+ * A token with a decimal point or a percent sign that rounds a numeral the model was given, within the token's own
+ * decimals, is that numeral (`2.48` for `2.484518`, `+32.7%` for `32.656`); an integer must still equal one exactly,
+ * because the given text holds thousands of integers (revision 25).
+ */
+const roundsGiven = (token, givenNumbers) => {
+  const { numeric, suffix, decimals } = parseToken(token);
+  if (!Number.isFinite(numeric) || (decimals === 0 && suffix !== '%')) {
+    return false;
+  }
+  return givenNumbers.some((g) => (suffix === '%'
+    ? close(Math.abs(numeric), Math.abs(g), decimals)
+    : close(numeric, g, decimals)));
+};
+
+const givenNumbersOf = (given) => [...given].map(Number).filter((n) => Number.isFinite(n));
+
+const checkText = (where, text, allowed, spanForms, reasons, ctx, given = new Set(), ranges = new Set()) => {
   let derived = null;
+  let givenNumbers = null;
   for (const token of extractNumbers(stripRunIdentifiers(text, ctx))) {
-    if (WINDOW_NAME_TOKENS.has(token) || given.has(bareValue(token))) {
+    if (WINDOW_NAME_TOKENS.has(token) || ranges.has(token) || given.has(bareValue(token))) {
       continue;
     }
     if (matches(token, allowed)) {
+      continue;
+    }
+    givenNumbers = givenNumbers || givenNumbersOf(given);
+    if (roundsGiven(token, givenNumbers)) {
       continue;
     }
     derived = derived || derivedValues(allowed);
@@ -242,6 +292,7 @@ const check = (ctx) => {
   const reasons = [];
   const spanForms = knownSpanForms(ctx);
   const runGiven = givenNumerals(ctx.givenText || []);
+  const ranges = rangeTokens(ctx);
   if (ctx.mode === 'brief') {
     const byId = new Map((ctx.items || []).map((item) => [item.item_id, item]));
     (ctx.draft.bullets || []).forEach((bullet, i) => {
@@ -253,19 +304,21 @@ const check = (ctx) => {
       // A bullet may quote its own item's prompt entry and the run-wide counts, never a neighbour's numbers.
       const own = ctx.itemTexts && typeof ctx.itemTexts.get === 'function' ? ctx.itemTexts.get(bullet.item_id) : null;
       const given = new Set([...runGiven, ...givenNumerals(own ? [own] : [])]);
-      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx, given);
+      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx, given, ranges);
     });
   } else {
     (ctx.items || []).forEach((item, i) => {
       const allowed = allowedValues(item, ctx);
-      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx, runGiven);
-      checkText(`items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx, runGiven);
+      checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx, runGiven, ranges);
+      checkText(
+        `items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx, runGiven, ranges,
+      );
     });
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
 module.exports = {
-  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, derivedValues,
-  WINDOW_NAME_TOKENS,
+  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, derivedValues, rangeTokens,
+  roundsGiven, levelUnitOf, WINDOW_NAME_TOKENS,
 };

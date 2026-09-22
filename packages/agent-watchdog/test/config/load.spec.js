@@ -14,7 +14,7 @@ const baseEnv = () => ({
   AGENT_WATCHDOG_SLACK_CHANNEL_ID: 'C123',
   AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp',
   LANGFUSE_BASE_URL: 'https://langfuse.example.org',
-  AGENT_WATCHDOG_PROMPTS_URL: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts',
+  AGENT_WATCHDOG_SPECS_URL: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop',
   AGENT_WATCHDOG_CONFIG_URL: 'https://github.com/medic/medic-infrastructure',
   AGENT_WATCHDOG_DATA_DIR: '/tmp/agent-watchdog-test-data',
   AGENT_WATCHDOG_CONFIG_DIR: DEFAULTS_DIR,
@@ -234,5 +234,25 @@ describe('config/load: the report link setting (FR-022, revision 24)', () => {
     }
     expect(error.code).to.equal(78);
     expect(error.keys).to.include('AGENT_WATCHDOG_REPORT_LINKS');
+  });
+});
+
+describe('config/load: the specification link (FR-019, revision 25)', () => {
+  it('reads AGENT_WATCHDOG_SPECS_URL into endpoints.specsUrl and requires it for a run', () => {
+    const { config } = loadConfig({ env: baseEnv(), command: 'run' });
+    expect(config.endpoints.specsUrl).to.equal(
+      'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop',
+    );
+    expect(config.endpoints).to.not.have.property('promptsUrl');
+    const env = baseEnv();
+    delete env.AGENT_WATCHDOG_SPECS_URL;
+    let error;
+    try {
+      loadConfig({ env, command: 'run' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).to.be.instanceOf(ConfigError);
+    expect(error.keys).to.include('AGENT_WATCHDOG_SPECS_URL');
   });
 });

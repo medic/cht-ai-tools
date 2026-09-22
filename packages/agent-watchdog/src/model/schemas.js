@@ -311,7 +311,7 @@ const Brief = z.object({
   report: z.object({ path: z.string(), slack_file_id: z.string().nullable(), ts: z.string().nullable() })
     .strict().nullable().default(null),
   footer: z.object({
-    prompts_url: z.string(),
+    specs_url: z.string(),
     config_url: z.string(),
     trace_url: z.string().nullable(),
     cost_usd: z.number(),

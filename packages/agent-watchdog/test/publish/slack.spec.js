@@ -43,7 +43,8 @@ describe('publish/slack', () => {
   let dir;
   let imagePath;
   const item = makeItem({ rank: 1, placement: 'body' });
-  const second = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'body' });
+  // Both items high: a reply is for high items only since revision 25, and these tests exercise the posting mechanics.
+  const second = makeItem({ metric: 'cht_conflict_count', severity: 'high', rank: 2, placement: 'body' });
   const brief = makeBrief({ bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }] });
   const payloadFor = (b = brief) => buildPayload({
     brief: b,

@@ -644,6 +644,10 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-40 | On the hosted watchdog the current windows fetched equal `discovery.metrics` (69, not 74) and the candidate count falls by the reference-line candidates (about 140 of 1,189) | The leak only shows against the live dashboards' second targets |
 | S-41 | On a full hosted run the sessions that retry are at most a quarter of those that ran, no revision prompt refuses a numeral that is a difference, ratio or percent change of two computed values, no revision names a signed decimal as a phone number, and no pass is rejected for a `relates_to` naming its own metric | The derived values the model writes only show at scale |
 | S-42 | A hosted brief posts without an image block and without a private file upload before the parent, and the thread's first reply is the report share | The absence of the upload is only observed against the Slack app |
+| S-43 | A hosted post's footer reads `specs · configuration · trace · cost · run <id> · N more items in the report (thread)` with the specification link opening the feature's `specs/` directory, and the shared report opens in the original design with its panel, standing and alert links working | The rendering of the footer and of a shared HTML file is only seen in Slack |
+| S-44 | On a hosted run no revision prompt refuses a numeral that appears in a `get_windows` result or in the candidates the model was given, every phone-number reason names the digits it refused, and no project is rejected on all attempts for a byte count | The refused strings only occur at scale against the live data |
+| S-45 | A hosted `--group` brief and report say "Checked 30 projects" for a programme of thirty, and the heartbeat headline counts the same | Only the hosted volume has programmes |
+| S-46 | A hosted brief threads a reply for each high item and each alert group and none for a medium or low item, and the report share's comment counts the replies | Only the live thread shows the count |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1666,3 +1670,61 @@ also turns `=` into `&#x3D;`, which browsers accept but which hides the query a 
 and the URLs come from configuration and the run's structured references, never from model text. (3) A
 renderer given no link setting links nothing; the stage always passes the configured mode, so the default
 of `internal` lives in the configuration alone and the older tests that expect no `href` stay true.
+
+## R-30. The first run on one programme, and the operator's reading of it
+
+**Evidence** (the run record of 2026-09-20-f7, `--group` on one programme of thirty projects, the first run on revision 24, read
+on 2026-09-21). 30 projects selected of 90 discovered; 2 dark hosts skipped as standing and named in the
+housekeeping line; 28 sessions, 29 items (16 medium, 13 low, no high), $8.55, 24 minutes (collect 3,
+sessions 17, roll-up 3 with two drafts). Reference lines were not fetched (69 metrics, 276 windows per
+project). The report linked all 29 items to their panels, 13 alert lists and the two standing hosts, and
+rounded `4.308294733275791` to `4.308` in prose while an evidence note still read `stddev
+3.2031234756093934`. The brief's checked line read "Checked 90 projects" over a run of 30. The layout
+filled two of five slots (one alerts bullet, one group bullet of eight) and put 21 of 29 items in the
+thread; the thread carried 8 item replies and 2 alert replies. 16 of 30 projects raised a memory-growth
+candidate on the API process (7 with heap-used jumps of +130% to +242% day over day), 10 ended with an
+item, 27 of the 30 run CHT 5.1.0, and the roll-up's headline named "6+ sites" because the per-project
+sessions cannot see breadth.
+
+**The gate, traced one refusal at a time.** 16 of 28 sessions were revised, 20 revision prompts, 50
+reasons: 34 numbers, 9 phone, 4 reference URLs, 3 code spans. (1) Five byte counts (`390778880`,
+`451162112`, `491905024`, `731226112`, `810487808`) and `1,604,078,240` were refused although every one
+appeared in a `get_windows` result the model had read: the result's `[1789538400,390778880]` is
+tokenised as one numeral because the comma reads as a thousands separator, so the given set held a
+merged number and not the value. (2) Nine phone-number reasons, two projects rejected on all three
+attempts ($1.10, 13% of spend): the model quoted the byte counts of related memory metrics from the
+candidates it was given; the phone check knows the item's own allowed values but not the given text,
+and its reason names a path and no digits, so the model could not tell what to remove. (3) Rounded and
+signed values of related metrics (`+32.7%`, `2.48`, `63.8%` for a computed `-63.79`) were refused
+because a related candidate's value counts only when cited; the model's learned repair is to copy the
+full-precision figure, which is why the accepted texts carry sixteen-digit decimals. (4) `7.5` was
+refused five times: an uptime of 645,829 seconds written as "7.5 days"; a unit word is not read as a
+unit, and the uptime metric's values carry the unit `count`. (5) The brief's first draft was refused for
+`+198.0%`, a cited candidate's `197.9758` that the brief's gate never sees because the roll-up hands it
+no candidates, and for a bare `24h`, the range literal of every rate expression. **Decisions:** the
+tokeniser reads a comma as a separator only in thousands groups; the phone check applies the given-text
+exemption and names the digits; a decimal or percent token that rounds a given numeral within its own
+decimals is that numeral, and a percentage matches by magnitude; `days` and `hours` after a numeral are
+its unit and a `_seconds` metric holds seconds; range literals of collected expressions join the
+identifier sets; the roll-up hands its candidates to the brief's gate. Each is a code rule with a test
+on the run's own refused strings.
+
+**The operator's reading.** The revision-24 redesign was set aside: the original report and post are
+kept, with the links, the alerts section and the rounding retained (the design skill was used once and
+plays no further part); the report's footer becomes the one footer of post and report, linking the
+specification rather than the prompts (`AGENT_WATCHDOG_SPECS_URL` replaces `AGENT_WATCHDOG_PROMPTS_URL`;
+Slack keeps its count of items only in the report); an item's header drops "rank N" beside "#N" and
+moves the confidence to a line of its own under the rank; thread replies are for high items and alert
+groups only (this run would have threaded 2 replies instead of 10); and the notice "model findings were
+rejected by the gate on 2 of 28 projects (commonest reason: personal_data_absent)" is rewritten to name
+the hosts and say in words what was refused. The notice had appeared on every hosted brief since
+revision 22 because the gate defects above rejected a project or three on every run; the fixes should
+make it rare, and when it appears a reader will know what it means.
+
+**Rejected or deferred here**: programme-wide metric patterns detected by code, on the model of the
+alert patterns, so a memory rise on sixteen projects of one programme is one line and one cause rather
+than sixteen sessions (a delta of its own, with this run as its evidence); a minimum magnitude for the
+`monotonic` rule (a clock skew flat at 217 seconds for a week read as a 10.7-hour rise from a one-second
+tick); a reply-severity setting (one line when a calibration period wants medium replies); the layout of
+a one-programme run (two bullets, three empty slots; the per-programme story's concern); and the model's
+missing `relates_to` between a conflict count and its rate on one host (a prompt matter, if it recurs).

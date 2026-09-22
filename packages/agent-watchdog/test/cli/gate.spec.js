@@ -6,7 +6,7 @@ const config = {
   endpoints: {
     grafanaUrl: 'https://watchdog.example.org',
     langfuseBaseUrl: 'https://langfuse.example.org',
-    promptsUrl: 'https://github.com/medic/cht-ai-tools',
+    specsUrl: 'https://github.com/medic/cht-ai-tools',
     configUrl: 'https://github.com/medic/medic-infrastructure',
     docsMcpUrl: 'https://docs-mcp.example.org/mcp',
   },

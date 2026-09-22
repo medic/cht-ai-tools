@@ -257,6 +257,8 @@ const run = async (ctx) => {
     changes,
     candidates: forModelCandidates,
     allCandidates: candidates,
+    // What was checked counts the analysed projects when the run was restricted (FR-066, revision 25).
+    analysedProjects: analysed ? analysed.size : null,
     analysis,
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],

@@ -1,7 +1,7 @@
 'use strict';
 const { EMAIL_PATTERN, phoneMatches } = require('../patterns');
 const { walkStrings } = require('../walk');
-const { allowedValues } = require('./numbers_match');
+const { allowedValues, givenNumerals } = require('./numbers_match');
 
 const NAME = 'personal_data_absent';
 
@@ -30,9 +30,28 @@ const computedIntegersFor = (ctx, path) => {
   return new Set(allowedValues(item, ctx).map((a) => String(Math.round(Number(a.value)))));
 };
 
-/** Phone-shaped runs in the text that are not a computed value for the item the text belongs to. */
-const phoneNumbersIn = (text, computed) => phoneMatches(text)
-  .filter((match) => !computed.has(match.replace(/\D/g, '')));
+/**
+ * The numerals the model was given, as bare integers (revision 25): for findings every prompt and tool result of the
+ * session (`givenText`); for a bullet the run-wide texts and its own item's entry (`itemTexts`), never a neighbour's.
+ * A digit run the model read is a value it copied, not a telephone number, whatever its length.
+ */
+const givenIntegersFor = (ctx, path) => {
+  const texts = [...(ctx.givenText || [])];
+  const inBullet = BULLET_PATH.exec(path);
+  if (inBullet && ctx.draft && ctx.itemTexts && typeof ctx.itemTexts.get === 'function') {
+    const bullet = (ctx.draft.bullets || [])[Number(inBullet[1])];
+    const own = bullet ? ctx.itemTexts.get(bullet.item_id) : null;
+    if (own) {
+      texts.push(own);
+    }
+  }
+  return givenNumerals(texts);
+};
+
+/** The digits of each phone-shaped run in the text that is neither a computed value for its item nor a given one. */
+const phoneNumbersIn = (text, computed, given = new Set()) => phoneMatches(text)
+  .map((match) => match.replace(/\D/g, ''))
+  .filter((digits) => !computed.has(digits) && !given.has(digits));
 
 // Identifier fields hold hashes and ids the code derived; an all-digit hex id is not a phone number.
 const ID_FIELD = /\.(candidate_ids?|item_id|thread_order|dashboard_uid|session_id|pattern_card)(\[\d+\])?$/;
@@ -57,8 +76,9 @@ const check = (ctx) => {
     if (EMAIL_PATTERN.test(text)) {
       reasons.push(`e-mail address at ${path}`);
     }
-    if (phoneNumbersIn(text, computedIntegersFor(ctx, path)).length) {
-      reasons.push(`phone number at ${path}`);
+    // The reason names the digits, so a revision can find what to remove (revision 25).
+    for (const digits of phoneNumbersIn(text, computedIntegersFor(ctx, path), givenIntegersFor(ctx, path))) {
+      reasons.push(`phone number ${digits} at ${path}`);
     }
   });
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };

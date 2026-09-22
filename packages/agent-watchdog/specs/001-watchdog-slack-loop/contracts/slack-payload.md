@@ -40,18 +40,19 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    three spaces and `◦`, at most eight, since Slack has no nested lists; the indentation's rendering
    is smoke test S-16), a `context` block with the expected-load or degradation notice when present,
    one `context` block per code-added notice (for example a project new since the previous run), and a
-   `context` footer with the prompts, configuration and trace links, the cost in currency and the
-   count of items only in the report.
+   `context` footer identical to the report's footer line (revision 25): the specification,
+   configuration and trace links, the cost in currency and the run id, then the count of items only
+   in the report.
 3. **Share the report into the thread** with `files.uploadV2({ file, filename: 'report-<run_id>.html',
    title, channel_id, thread_ts: <parent ts>, initial_comment })` (revision 23): an upload given a
    channel and a thread posts the file as the thread's first reply, readable by every channel member,
    where the private image upload of step 1 is readable by the bot alone. `initial_comment` is built
    by code and states the item count, how many items have replies and how to cite an item in a note
    (`#<rank>`, or host and metric) with a thumbs as the verdict. The file id and the share's `ts` are
-   recorded (smoke test S-31). Then **post one threaded reply per body item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
+   recorded (smoke test S-31). Then **post one threaded reply per high-severity item** with `chat.postMessage({ channel, thread_ts: <parent ts>,
    text, blocks, metadata: { event_type: 'agent_watchdog.item', event_payload } })`, highest rank
-   first, at most twenty-five (items beyond the body are in the report only and the parent's footer
-   says how many, FR-020 revision 23), then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
+   first, at most twenty-five (medium and low items are in the report only and the parent's footer
+   says how many, FR-020 revision 25; until then every body item had a reply), then **one threaded reply per alert group** (`templates/slack/alert-group.hbs`:
    the rule titles, at most fifty instances with host and days firing, the count of the rest, and
    the code-built link to the filtered alert list) with `metadata.event_type: 'agent_watchdog.alerts'`,
    in body order (FR-066). A reply is fitted into one 3,000-character section by code and a link is

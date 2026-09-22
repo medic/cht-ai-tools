@@ -433,7 +433,8 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     const out = await composeBrief({ ...base(engine, gate), items: [], candidates: [makeCandidate()], analysis });
     expect(engine.openSession.called).to.equal(false);
     expect(out.degraded).to.equal(true);
-    const text = 'model findings were rejected by the gate on 1 of 3 projects (commonest reason: numbers_match)';
+    const text = 'no findings for 1 of 3 projects (alpha.example.org): the verification gate refused the model\'s '
+      + 'analysis on every attempt, mostly for a number that matched no computed value';
     expect(out.brief.degradation_notice).to.include(text);
     expect(out.brief.notices.filter((n) => n === `Analysis incomplete: ${text}`)).to.have.length(1);
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
@@ -577,10 +578,52 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     const call = gate.verifyBrief.firstCall.args[0];
+    // The brief's gate sees the run's candidates, so a cited candidate's value counts in a bullet (revision 25).
+    expect(call.candidates).to.deep.equal(base().candidates);
     expect(call.givenText.some((text) => text.includes('Computed by code'))).to.equal(true);
     expect(call.givenText.some((text) => text.includes('3 projects'))).to.equal(true);
     expect(call.itemTexts).to.be.instanceOf(Map);
     expect(call.itemTexts.get(items[0].item_id)).to.include('"rank": 1').and.include(items[0].item_id);
     expect(call.itemTexts.get(items[0].item_id)).to.not.include(items[1].item_id);
+  });
+});
+
+describe('rollup/brief: the incomplete-analysis notice in words, and the analysed count (revision 25)', () => {
+  const items = rankItems({ items: [makeItem()] });
+  const base = () => ({
+    discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()], memory: '', feedbackUnmatched: [],
+    expectedLoadNotice: null, referenceSourcesUnavailable: false, footer: footer(),
+  });
+  const rejected = (urls, reason) => ({
+    projects: 30, failed: [], errors: [], incomplete: [], rejected: urls.map((url) => ({ project_url: url, reason })),
+  });
+
+  it('names the rejected hosts and says what the check refused in plain words', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const analysis = rejected(['https://north-a.example.org', 'https://north-b.example.org'], 'personal_data_absent');
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base(), analysis });
+    expect(out.brief.notices).to.include('Analysis incomplete: no findings for 2 of 30 projects (north-a.example.org, '
+      + 'north-b.example.org): the verification gate refused the model\'s analysis on every attempt, mostly for digits '
+      + 'that looked like a phone number');
+    expect(out.brief.notices.join(' ')).to.not.include('commonest reason').and.not.include('personal_data_absent');
+  });
+
+  it('lists three hosts and counts the rest, and spells an unknown check as itself', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const urls = ['a', 'b', 'c', 'd', 'e'].map((h) => `https://${h}.example.org`);
+    const analysis = rejected(urls, 'odd_check');
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base(), analysis });
+    const notice = out.brief.notices.find((n) => n.includes('no findings'));
+    expect(notice).to.include('5 of 30 projects (a.example.org, b.example.org, c.example.org and 2 more)');
+    expect(notice).to.include('mostly for odd_check');
+  });
+
+  it('counts the analysed projects in what was checked when told', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base(), analysedProjects: 2 });
+    expect(out.brief.checked).to.deep.equal({ projects: 2, panels: 3, candidates: 1 });
   });
 });

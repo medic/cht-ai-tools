@@ -56,9 +56,9 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_SLACK_CHANNEL_ID` | string | Channel id of `#agents` (FR-047). One channel only (Out of Scope). |
 | `AGENT_WATCHDOG_DOCS_MCP_URL` | URL | The documentation search service endpoint. |
 | `LANGFUSE_BASE_URL` | URL | Tracing backend. The Langfuse v5 SDK reads this name; the earlier `LANGFUSE_HOST` was never read by any Langfuse SDK (research.md R-8). |
-| `AGENT_WATCHDOG_PROMPTS_URL` | URL | Footer link to prompts in `cht-ai-tools`. |
+| `AGENT_WATCHDOG_SPECS_URL` | URL | Footer link to this feature's specification in `cht-ai-tools` (`specs/001-watchdog-slack-loop`); replaced `AGENT_WATCHDOG_PROMPTS_URL` in revision 25 (FR-019). |
 | `AGENT_WATCHDOG_CONFIG_URL` | URL | Footer link to deployment configuration in `medic-infrastructure`. |
-| `AGENT_WATCHDOG_REPORT_LINKS` | enum `internal\|none` | Default `internal` (revision 24, FR-022): whether the one-page report links its dashboard panels, alert lists, prompts, configuration and trace (`internal`) or names them alone (`none`, for readers without access to the hosted watchdog). Links are built by code from structured references; the model never writes one. |
+| `AGENT_WATCHDOG_REPORT_LINKS` | enum `internal\|none` | Default `internal` (revision 24, FR-022): whether the one-page report links its dashboard panels, alert lists, specification, configuration and trace (`internal`) or names them alone (`none`, for readers without access to the hosted watchdog). Links are built by code from structured references; the model never writes one. |
 
 ## Storage and retention
 

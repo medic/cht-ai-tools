@@ -30,7 +30,7 @@ const envFor = (dataDir) => ({
   AGENT_WATCHDOG_SLACK_CHANNEL_ID: 'C123',
   AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp',
   LANGFUSE_BASE_URL: 'https://langfuse.example.org',
-  AGENT_WATCHDOG_PROMPTS_URL: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts',
+  AGENT_WATCHDOG_SPECS_URL: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop',
   AGENT_WATCHDOG_CONFIG_URL: 'https://github.com/medic/medic-infrastructure',
   AGENT_WATCHDOG_DATA_DIR: dataDir,
   AGENT_WATCHDOG_CONFIG_DIR: DEFAULTS_DIR,

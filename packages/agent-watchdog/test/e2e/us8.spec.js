@@ -127,7 +127,9 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       expect(alertReplies.map((r) => r.alert_key).sort())
         .to.deep.equal(classified.groups.map((g) => g.alert_key).sort());
       const ranked = day1.read('rollup/items.ranked.json');
-      expect(payload.replies.filter((r) => r.item_id)).to.have.length(layout.body_items.length);
+      // Replies for the high items only (FR-020, revision 25).
+      expect(payload.replies.filter((r) => r.item_id))
+        .to.have.length(ranked.filter((i) => i.severity === 'high').length);
       expect(payload.report.items).to.equal(ranked.length);
       const backlogReply = alertReplies.find((r) => r.alert_key === 'North Programme/backlog');
       expect(backlogReply.metadata).to.deep.equal({

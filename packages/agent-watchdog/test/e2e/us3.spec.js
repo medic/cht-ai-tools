@@ -68,7 +68,7 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
     const env = envFor(dataDir);
     const brief = r.read('rollup/brief.json');
     expect(brief.footer).to.include({
-      prompts_url: env.AGENT_WATCHDOG_PROMPTS_URL,
+      specs_url: env.AGENT_WATCHDOG_SPECS_URL,
       config_url: env.AGENT_WATCHDOG_CONFIG_URL,
       trace_url: 'https://langfuse.example.org/trace/t1',
     });
@@ -78,7 +78,7 @@ describe('e2e: User Story 3, steering, auditing and running it yourself', functi
     const footerBlock = payload.parent.blocks[payload.parent.blocks.length - 1];
     expect(footerBlock.type).to.equal('context');
     const text = footerBlock.elements[0].text;
-    expect(text).to.include(`<${env.AGENT_WATCHDOG_PROMPTS_URL}|prompts>`);
+    expect(text).to.include(`<${env.AGENT_WATCHDOG_SPECS_URL}|specs>`);
     expect(text).to.include(`<${env.AGENT_WATCHDOG_CONFIG_URL}|configuration>`);
     expect(text).to.include('<https://langfuse.example.org/trace/t1|trace>');
     expect(text).to.match(/cost \$\d+\.\d{2}/);

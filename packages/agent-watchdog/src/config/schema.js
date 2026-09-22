@@ -258,8 +258,9 @@ const VARIABLES = [
     required: forModel,
   },
   {
-    env: 'AGENT_WATCHDOG_PROMPTS_URL',
-    path: 'endpoints.promptsUrl',
+    // The footer's first link: this feature's specification (revision 25; the prompts until then).
+    env: 'AGENT_WATCHDOG_SPECS_URL',
+    path: 'endpoints.specsUrl',
     schema: url,
     required: forRun,
   },

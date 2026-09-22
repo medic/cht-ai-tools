@@ -628,3 +628,42 @@ programme at a time. Where each lands:
 Deliberately not planned: the backlog threshold from the panel's reference line (research.md R-29);
 removing Chromium from the container; a per-programme channel or recipient; rounding inside Slack
 replies; dropping FR-082's markers from the report.
+
+### Revision 25 delta: the original report design with its links, one footer for post and report, threads for what needs a person, a gate that reads what it was given (FR-015, FR-016, FR-019, FR-020, FR-022, FR-056, FR-066)
+
+Planned on 2026-09-21 from the first run on revision 24, one programme of 30 projects (research.md
+R-30): the links, the rounding, the standing floor and the group filter all did what was asked, and the
+operator set the redesign aside in favour of the original report and post, asked for one footer on both
+with the specification linked instead of the prompts, a cleaner item header, thread replies for high
+items and alert groups only, and a notice that says in words what "rejected by the gate (commonest
+reason: personal_data_absent)" means. The run's 50 gate refusals were traced one by one; every class has
+a deterministic cause and a code fix. Where each lands:
+
+| Change | Story | Requirements |
+|---|---|---|
+| Report returns to the original design, keeping links, the alerts section and rounding; header without "rank N", confidence on its own line; evidence notes rounded | US1 | FR-015, FR-022 |
+| One footer: specs, configuration, trace, cost, run id (Slack adds the count of items only in the report); `AGENT_WATCHDOG_SPECS_URL` replaces `AGENT_WATCHDOG_PROMPTS_URL` | US1 | FR-019, FR-022, contracts/environment.md, contracts/slack-payload.md |
+| Thread replies for high items and alert groups only | US1 | FR-020 |
+| The incomplete-analysis notice names hosts and says what was refused in words | US1 | FR-056 |
+| The gate: comma rule in the tokeniser, phone check with the given-text exemption and the digits in its reason, roundings of given numerals, percent by magnitude, unit words and `_seconds` metrics, range literals, candidates for the brief's gate | US1 | FR-016 |
+| Checked counts of a restricted run cover the analysed projects | US3 | FR-066 |
+
+- **I**: no new dependency. The template is the revision-23 file with links and the alerts card
+  added; the tokeniser change is a regular expression.
+- **II**: tests first for every delta: the header, footer and window names of the report; the Slack
+  footer and the renamed setting; the replies rule; the notice text; each tokeniser and gate rule on
+  the refused strings of the run; the checked counts under a filter.
+- **III**: more arithmetic and parsing move into code: the gate reads JSON numbers as numbers, unit
+  words as units, roundings as roundings, so the model stops copying sixteen-digit decimals to pass.
+- **IV**: nothing new stored. The footer key is renamed (`specs_url`); no artefact is added.
+- **V**: no new stage.
+- **VI**: the brief still flags, and now says what it flags in words a reader can act on.
+- **VII**: the template, the payload templates and the checks change by pull request with their tests;
+  no prompt changes.
+- **VIII**: one audience per output, unchanged. The post and the report share one footer.
+  Result: PASS.
+
+Deliberately not planned (research.md R-30): programme-wide metric patterns detected by code (the
+run's memory-growth finding on 16 of 30 projects is the evidence for a delta of its own); a minimum
+magnitude for the `monotonic` rule; a reply-severity setting; the one-programme layout; the model's
+missing `relates_to` between a count and its rate.

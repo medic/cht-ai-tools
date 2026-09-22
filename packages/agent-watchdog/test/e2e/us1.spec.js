@@ -52,9 +52,10 @@ describe('e2e: User Story 1, the daily brief', function () {
 
     const payload = r.read('rollup/payload.json');
     expect(payload.parent.metadata.event_type).to.equal('agent_watchdog.brief');
-    // Replies for the body items only; every item is in the report shared into the thread (FR-020, revision 23).
-    const layout = r.read('rollup/layout.json');
-    expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal([...layout.body_items].sort());
+    // Replies for the high items only; every item is in the report shared into the thread (FR-020, revision 25).
+    const highIds = ranked.filter((i) => i.severity === 'high').map((i) => i.item_id).sort();
+    expect(highIds.length).to.be.greaterThan(0);
+    expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(highIds);
     expect(payload.report)
       .to.include({ path: 'rollup/report.html', items: ranked.length, replied: payload.replies.length });
     const publication = r.read('rollup/publication.json');

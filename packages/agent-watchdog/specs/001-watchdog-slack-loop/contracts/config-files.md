@@ -8,7 +8,7 @@ Structured, reviewed policy lives in versioned files (FR-053). Two locations:
 2. **Agent definition**, versioned with the code in this package and shipped in the image:
    `prompts/`, `skill/cht-watchdog/`, `schema/`, `templates/`. Prompts are code (constitution II);
    changing them is a pull request in `cht-ai-tools` with the replay diff attached. The footer
-   link `AGENT_WATCHDOG_PROMPTS_URL` points here.
+   link `AGENT_WATCHDOG_SPECS_URL` points at the feature's `specs/` directory beside them (revision 25).
 
 Every file is parsed with the `yaml` package (YAML 1.2, no custom tags), validated with zod at
 startup, and its SHA-256 recorded in `run.json` under `versions.config_hash` (a hash over the

@@ -361,7 +361,7 @@ The published post for a run (FR-019 to FR-025).
 | `expected_load_notice` | string or null | Present when a window was active (FR-007). |
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
-| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23). Empty on most days. |
+| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23); the incomplete-analysis notices, which name the rejected projects by host (up to three, then the count) and the refusing check in plain words (FR-056, revision 25). Empty on most days. |
 | `image` | object or null | Retired in revision 24 (FR-019): always null. Until then `{ path, slack_file_id }`, a screenshot of the report's summary. |
 | `report` | object or null | `{ path, slack_file_id, ts }`: the one-page report shared into the thread as its first reply (FR-022, revision 23); null for a heartbeat or failure; `slack_file_id` and `ts` null in preview. |
 
@@ -373,10 +373,13 @@ and the citation line. Every reference is a link built by code from the structur
 thread replies use (`dashboard_ref`, the standing record's `panel_ref`, the alert group's hosts and
 titles) when `AGENT_WATCHDOG_REPORT_LINKS` is `internal`, and a name alone when it is `none`. Numbers
 are rounded for reading at render time (at most three decimals; three significant figures below one),
-in the evidence tables, the standing values and long decimals inside an item's prose; the stored item
-is untouched. The template is designed under the plan's design skill with its design read in the header;
-markers follow FR-082.
-| `footer` | object | `{ prompts_url, config_url, trace_url, cost_usd }` (FR-019). |
+in the evidence tables, the standing values, the evidence notes and long decimals inside an item's
+prose; the stored item is untouched. The template is the original design (revision 25): boxed summary
+and item cards, severity chips, window names as recorded, an item header of rank, severity, host,
+metric, persistence and identity with the confidence on its own line beneath the rank; markers follow
+FR-082. The footer line (specs, configuration, trace, cost, run id) is the same line the Slack post
+carries (FR-019).
+| `footer` | object | `{ specs_url, config_url, trace_url, cost_usd }` (FR-019; `specs_url` replaced `prompts_url` in revision 25). |
 | `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
 
 ### Bullet
@@ -617,7 +620,14 @@ because they read one spelling only.
   value, so "+27" for 845 against 818 and "-56%" for a fall the model worked out pass, and the run's
   revisions no longer refuse correct subtraction. Pairing every unit let almost any two-digit numeral
   through, which is why the pairs are counts alone. A numeral in none of the sets that matches no
-  computed or derived value fails, as before.
+  computed or derived value fails, as before. Revision 25 (research.md R-30): the tokeniser reads a
+  comma as a thousands separator only in groups of three after a first group of one to three digits,
+  so `1789538400,390778880` in a tool result is two given numbers; a token with a decimal point or a
+  percent sign that rounds a given numeral within its own decimals is that numeral; a percentage
+  matches by magnitude; a numeral followed by `days` or `hours` carries the unit, and a metric whose
+  key ends in `_seconds` has values in seconds; the range literals of collected expressions (`24h`)
+  join the identifier sets; and the brief's gate receives the run's candidates, so a cited
+  candidate's observed and threshold values count in a bullet.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
@@ -625,7 +635,7 @@ because they read one spelling only.
   filter and resolve by confirming every title and host exists in the collected Alert Rules and
   Instances, research.md R-14; FR-070),
   `forum.communityhealthtoolkit.org`, `github.com/medic/`, the tracing host, and the hosts of
-  `AGENT_WATCHDOG_PROMPTS_URL` and `AGENT_WATCHDOG_CONFIG_URL`.
+  `AGENT_WATCHDOG_SPECS_URL` and `AGENT_WATCHDOG_CONFIG_URL`.
 - Secrets and personal data (FR-016, FR-045): reject on patterns for Slack tokens (`xox[abp]-`),
   Anthropic keys (`sk-ant-`), Grafana tokens (`glsa_`), bearer strings, e-mail addresses and
   phone numbers. A run of nine or more digits that equals, as an integer, a value the number check
@@ -634,7 +644,10 @@ because they read one spelling only.
   rejected (revision 22). A phone-shaped match whose whitespace- or bracket-separated parts are each
   a decimal number, a date or a time is a list of values, not a phone number, and a host-like token
   that is the leading two or more labels of a discovered host names that project (`projects_known`;
-  revision 23). A decimal may carry a leading sign (revision 24). Partner-facing scans are out of scope here (feature 002).
+  revision 23). A decimal may carry a leading sign (revision 24). A run of digits equal to a numeral
+  in the text the model was given (its prompts and tool results; for a bullet, its item's own entry)
+  is a number it read, not a phone number, and the reason names the digits refused (revision 25).
+  Partner-facing scans are out of scope here (feature 002).
 - Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
   delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
   forbidden by lint rule in templates.

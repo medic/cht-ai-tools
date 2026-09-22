@@ -232,3 +232,18 @@ each item, standing host and alert group links its hosted panel or alert list; t
 prompts, the configuration and the trace and repeats the citation line; evidence shows at most three
 decimals. Run the same preview with `AGENT_WATCHDOG_REPORT_LINKS=none` and the report carries no
 link. `rollup/brief.png` is no longer written and the payload's `image` is null.
+
+## 16. One footer, threads for what needs a person, a notice in words (revision 25)
+
+Preview a run (`agent-watchdog run --dry-run`) with `AGENT_WATCHDOG_SPECS_URL` set (it replaced
+`AGENT_WATCHDOG_PROMPTS_URL`; the run refuses to start without it). The post's footer reads `specs ·
+configuration · trace · cost $X · run <id> · N more items in the report (thread)`, and the report's footer
+is the same line with the citation sentence under it. `rollup/payload.json` carries one reply per high
+item and one per alert group and none for a medium or low item; the report share's comment counts them.
+Open `rollup/report.html`: the original design, each item headed `#N SEV host · metric · new today` with
+its id set apart and `confidence NN%` on the next line, window names as recorded (`previous_day`), the
+panel, standing and alert links of revision 24, evidence notes rounded. Restrict the run with `--group`
+and the checked line counts the programme's projects, not every project discovered. When a project's
+analysis was refused on every attempt the notice reads `Analysis incomplete: no findings for 1 of 3
+projects (host): the verification gate refused the model's analysis on every attempt, mostly for digits
+that looked like a phone number`.

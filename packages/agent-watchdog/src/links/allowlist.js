@@ -6,7 +6,7 @@ const STATIC_ENTRIES = [
   { host: 'github.com', pathPrefix: '/medic/' },
 ];
 
-const CONFIG_ENDPOINTS = ['grafanaUrl', 'langfuseBaseUrl', 'promptsUrl', 'configUrl', 'docsMcpUrl'];
+const CONFIG_ENDPOINTS = ['grafanaUrl', 'langfuseBaseUrl', 'specsUrl', 'configUrl', 'docsMcpUrl'];
 
 const hostOf = (url) => {
   try {

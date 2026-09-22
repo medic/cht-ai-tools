@@ -16,7 +16,7 @@ const config = {
   endpoints: {
     grafanaUrl: 'https://watchdog.example.org',
     langfuseBaseUrl: 'https://langfuse.example.org',
-    promptsUrl: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts',
+    specsUrl: 'https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop',
     configUrl: 'https://github.com/medic/medic-infrastructure',
     docsMcpUrl: 'https://docs-mcp.example.org/mcp',
   },

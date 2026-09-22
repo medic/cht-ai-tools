@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 24)
+**Status**: Draft (revision 25)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -672,8 +672,8 @@ Analysis
   most eight sub-bullets of one line each; these structural limits are checked by the verification
   gate. No separate writing or voice skill is applied. Numbers the report renders are rounded for
   reading: at most three decimals, and three significant figures below one, applied by code at render
-  time to the values it formats and to long decimals inside an item's prose; the stored item keeps
-  the full value the gate verified (revision 24).
+  time to the values it formats, to long decimals inside an item's prose and to the notes on its
+  evidence lines (revision 25); the stored item keeps the full value the gate verified (revision 24).
 
 Analysis passes
 
@@ -682,7 +682,11 @@ Analysis passes
   (the default was two until revision 22, when measured review passes were found to change little
   at close to half the model spend, research.md R-27). A project whose first pass was rejected by
   the gate on every attempt MUST be named in the brief's incomplete-analysis notice with the
-  commonest failing check, so it is never read as a quiet project (revision 22).
+  commonest failing check, so it is never read as a quiet project (revision 22). The notice names
+  the projects by host (up to three, then the count of the rest) and says in plain words what the
+  check refused, for example "digits that looked like a phone number", never the check's code name
+  alone (revision 25, after the notice appeared on every hosted brief and no reader could tell what
+  it meant).
   The first pass produces items. Each later pass receives the previous pass's items and the
   candidates it did not select, re-examines the computed data, MAY ask the documentation service
   new or clarifying questions prompted by earlier answers, looks specifically for anything
@@ -730,6 +734,20 @@ Verification gate
   value** the model computed correctly and MUST NOT be reported as unmatched: code verifies the
   arithmetic rather than forbidding it (revision 24; every one of one run's 127 refused numerals was
   such a value). A decimal with a leading sign is a value, not a phone number (revision 24).
+  Revision 25, from a run whose refusals were traced one by one (research.md R-30): a comma joins
+  digits into one numeral only as a thousands separator, groups of three after a first group of one
+  to three digits, so `1789538400,390778880` in a tool result is two numbers the model was given
+  and not one it never saw; the phone-number check MUST apply the same given-text exemption as the
+  number check, so a byte count copied from the candidates or a tool result is never a phone
+  number, and its reason MUST name the digits it refused so a revision can act on it; a numeral
+  with a decimal point or a percent sign that rounds a numeral the model was given, within its own
+  decimals, is that numeral (`2.48` for `2.484518`, `+32.7%` for `32.656`), and a percentage
+  matches a computed or given percentage by magnitude because the direction is in the words around
+  it; a numeral followed by a unit word (`7.5 days`, `24 hours`) carries that unit as the letter
+  suffixes already do, and a metric whose key ends in `_seconds` holds seconds, so a duration the
+  model converted matches; a range literal of a collected expression (`24h` from `rate(x[24h])`) is
+  a run identifier when written bare; and the brief's gate is handed the run's candidates, so a
+  cited candidate's value counts in a bullet as it does in an item.
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -751,17 +769,21 @@ Verification gate
 Publishing
 
 - **FR-019**: The system MUST post one message per run to the configured Slack channel containing
-  a headline, at most five bullets (FR-010), and a footer with a link to the prompts, a link to the
-  deployment configuration, a link to the run's trace, the run's cost in currency, and the count of
-  items only in the report. The brief image (a screenshot of the report's summary, uploaded privately
-  and shown as an image block) was retired in revision 24: the report shared into the thread is the
-  artefact a reader opens, and the image was a picture of the message it sat under.
-- **FR-020**: The system MUST post each **body** item, a bullet or a sub-bullet of the five-slot
-  layout, as its own threaded reply so it can receive reactions independently, highest rank first
-  and at most twenty-five, after the run's report (FR-022) and before the alert-group replies
-  (FR-066); items beyond the body appear in the report only, and the parent's footer says how many.
-  Until revision 23 every item had a reply, which reached 159 replies under one post (research.md
-  R-28).
+  a headline, at most five bullets (FR-010), and a footer identical to the report's (revision 25):
+  a link to the feature's specification (`specs`, which replaced the prompts link), a link to the
+  deployment configuration, a link to the run's trace, the run's cost in currency and the run id,
+  followed by the count of items only in the report. The brief image (a screenshot of the report's
+  summary, uploaded privately and shown as an image block) was retired in revision 24: the report
+  shared into the thread is the artefact a reader opens, and the image was a picture of the message
+  it sat under.
+- **FR-020**: The system MUST post each **high**-severity item as its own threaded reply so it can
+  receive reactions independently, highest rank first and at most twenty-five, after the run's
+  report (FR-022) and before the alert-group replies (FR-066); medium and low items, in the body or
+  not, appear in the report only, where a note can cite them by rank, and the parent's footer says
+  how many items are only there (revision 25: a reply is for what needs a person today, and a
+  programme's run with no high item threads only its report and its alert groups). Until revision 23
+  every item had a reply, which reached 159 replies under one post (research.md R-28); from revision
+  23 to 24 every body item had one.
 - **FR-021**: On a quiet day the system MUST post a one-line heartbeat stating what was checked.
 - **FR-022**: The system MUST render a one-page report per run containing every flagged item and
   evidence charts drawn from the collected data, and store it with the run. The report MUST number
@@ -775,11 +797,14 @@ Publishing
   structured references as the thread replies, or a name alone, according to one setting
   (`AGENT_WATCHDOG_REPORT_LINKS`, `internal` by default, `none` for readers without access to the
   hosted watchdog, which a later story of per-project or per-programme reports will need); the model
-  never writes a link. Its footer MUST carry the prompts, configuration and trace links, the cost and
-  the citation line. Its layout MUST be designed once under the design skill the plan names, with the
-  design read recorded in the template header: an item's header names rank, severity, host and metric,
-  and its persistence, confidence and identity follow on a labelled line of their own; the wording of
-  items is the model's and is not restyled.
+  never writes a link. Its footer MUST carry the specification, configuration and trace links, the
+  cost, the run id and the citation line, and the Slack post's footer is the same line (FR-019). Its
+  layout is the original design (revision 25): the revision-24 redesign under a design skill was
+  tried on one hosted run and set aside, the operator preferring the original's directness. An
+  item's header names its rank as a number, its severity, host, metric and persistence, with its
+  identity set apart at the end, and never repeats the rank in words; the confidence stands on a
+  line of its own beneath the rank. Evidence keeps the window names as the run records them. The
+  wording of items is the model's and is not restyled.
 - **FR-023**: Retired in revision 24 (the brief image; see FR-019). Until then: the brief image MUST
   be rendered from that same report so image and text never diverge.
 - **FR-024**: On failure the system MUST post a one-line failure notice with the trace link and
@@ -870,7 +895,9 @@ Alerts and groups
   rather than derived a second time (revision 19). A run MAY be restricted by project (`--project`)
   or by programme (`--group`, every discovered project of a group label), and every stage and the
   presentation scope MUST resolve the restriction through one helper so they agree on the set
-  (revision 24); the post still goes to the one configured channel.
+  (revision 24); the post still goes to the one configured channel. What the brief and the report
+  say was checked MUST count the projects the run analysed, not every project discovered, so a
+  restricted run never reads "Checked 90 projects" over 30 (revision 25).
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -1222,7 +1249,8 @@ Configuration
   only the model's inputs are kept long-term.
 - Q: Is a writing or voice skill applied to the bullets? → A: No. The audience is technical
   operations staff; metric names, values, windows and PromQL are the style, and emoji are fine as
-  status markers. The design skill is used only to design the report template.
+  status markers. A design skill was used once, to redesign the report template in revision 24, and
+  the original design was kept in revision 25.
 - Q: What is configurable through the environment? → A: per-environment scalars (model, effort,
   bounds, endpoints, paths, retention, logging, engine, preview) and secrets; structured policy
   stays in versioned files; safety rails are not configurable.
@@ -1411,10 +1439,11 @@ Decisions already taken during design that belong in the plan, listed so they ar
 - Metrics are read through the hosted Grafana's datasource proxy rather than an exposed metrics
   store.
 - Rendering: the report template is filled, never generated per run, with no external asset,
-  script or network dependency; it was designed once with the design-taste-frontend skill and
-  redesigned in revision 24 under its minimalist and redesign variants (design read recorded in the
-  template header), and that skill plays no part in the daily run or in the wording of the brief. The
-  brief image, a screenshot of the report's summary in a headless browser, was retired in revision 24.
+  script or network dependency; it was designed once with the design-taste-frontend skill, redesigned
+  in revision 24 under its minimalist and redesign variants, and returned to the original design in
+  revision 25 with the links, the alerts section and the rounding kept; no skill plays a part in the
+  daily run or in the wording of the brief. The brief image, a screenshot of the report's summary in a
+  headless browser, was retired in revision 24.
 - Storage: run artefacts on a 10 Gi persistent volume under `runs/<date>/<project>/` with memory,
   feedback, proposals and the corpus index beside them; raw corpus material outside the public
   repository; retention split as in FR-040.

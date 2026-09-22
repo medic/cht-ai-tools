@@ -86,7 +86,9 @@ describe('cli/stages/render', () => {
     const linked = fs.readFileSync(path.join(runDir.root, 'rollup', 'report.html'), 'utf8');
     expect(linked).to.include('href="https://watchdog.example.org/d/oa2OfL-Vk/cht-admin-overview?');
     expect(linked).to.include('var-cht_instance=beta.example.org');
-    expect(linked).to.include('href="https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts"');
+    expect(linked).to.include(
+      'href="https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop"',
+    );
     const none = ctx(fakeLauncher());
     none.config = { ...makeConfig(), publish: { reportLinks: 'none' } };
     await stage.run(none);

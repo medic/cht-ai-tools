@@ -53,7 +53,7 @@ The image contains no secrets, no configuration policy files and no run data.
 | `api.anthropic.com`, 443 | the agent runtime's model calls |
 | host of `LANGFUSE_BASE_URL`, 443 | tracing |
 | host of `AGENT_WATCHDOG_DOCS_MCP_URL`, 443 | documentation search |
-| hosts of `AGENT_WATCHDOG_PROMPTS_URL` and `AGENT_WATCHDOG_CONFIG_URL`, 443 | footer link resolution by the gate |
+| hosts of `AGENT_WATCHDOG_SPECS_URL` and `AGENT_WATCHDOG_CONFIG_URL`, 443 | footer link resolution by the gate |
 | `docs.communityhealthtoolkit.org`, `forum.communityhealthtoolkit.org`, `github.com`, 443 | resolving reference links that appeared in tool results |
 
 No inbound ports. No DNS names beyond the above are contacted; the runtime's telemetry and

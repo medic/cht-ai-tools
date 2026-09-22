@@ -147,3 +147,32 @@ describe('verify/checks/personal_data_absent: signed decimals (FR-016, revision 
     expect(check(phone).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/personal_data_absent: given digits are not a phone number (FR-016, revision 25)', () => {
+  const { check } = require('../../../src/verify/checks/personal_data_absent');
+  const { baseContext, briefContext } = require('../helpers/context');
+
+  it('passes a long digit run that appears in the given text and fails one that does not, naming the digits', () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].why_now = 'virtual memory sits at 22408192000 bytes';
+    const refused = check(ctx);
+    expect(refused.status).to.equal('fail');
+    expect(refused.reasons[0]).to.equal('phone number 22408192000 at $.items[0].why_now');
+    ctx.givenText = ['"evidence": [{"window": "current", "value": 22408192000, "unit": "count"}]'];
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('exempts a bullet only what its own item was given', () => {
+    const ctx = briefContext();
+    ctx.draft.bullets[0].text = 'alpha 22408192000 bytes';
+    expect(check(ctx).status).to.equal('fail');
+    ctx.itemTexts = new Map([[ctx.draft.bullets[0].item_id, 'value 22408192000']]);
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('names the digits of a real phone number in its reason', () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].suggested_check = 'call +254 712 345 678';
+    expect(check(ctx).reasons[0]).to.equal('phone number 254712345678 at $.items[0].suggested_check');
+  });
+});

@@ -17,8 +17,8 @@ const ITEM_EVENT = 'agent_watchdog.item';
 const ALERTS_EVENT = 'agent_watchdog.alerts';
 // An alert group's thread reply lists at most this many instances and the count of the rest (FR-066).
 const MAX_ALERT_INSTANCES = 50;
-// Thread replies are for body items only, highest rank first and at most this many (FR-020, revision 23); every item
-// is in the report, shared into the thread, where a note can cite it by rank.
+// Thread replies are for high items only, highest rank first and at most this many (FR-020, revision 25; body items
+// from revision 23); every item is in the report, shared into the thread, where a note can cite it by rank.
 const MAX_ITEM_REPLIES = 25;
 const SECTION_MAX = 3000;
 // Alert replies are fitted into one section: instance counts tried in this order, pattern hosts named up to this.
@@ -53,12 +53,19 @@ const truncate = (text, max) => (text.length <= max ? text : `${text.slice(0, ma
 
 const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
-const footerText = (footer, { furtherItems = 0 } = {}) => {
-  const parts = [link(footer.prompts_url, 'prompts'), link(footer.config_url, 'configuration')];
+/**
+ * The one footer line of the post and the report (FR-019, revision 25): specification, configuration and trace links,
+ * the cost, the run id; the post adds how many items are only in the report.
+ */
+const footerText = (footer, { runId = null, furtherItems = 0 } = {}) => {
+  const parts = [link(footer.specs_url, 'specs'), link(footer.config_url, 'configuration')];
   if (footer.trace_url) {
     parts.push(link(footer.trace_url, 'trace'));
   }
   parts.push(`cost ${formatCost(footer.cost_usd)}`);
+  if (runId) {
+    parts.push(`run ${runId}`);
+  }
   if (furtherItems > 0) {
     parts.push(`${plural(furtherItems, 'more item')} in the report (thread)`);
   }
@@ -79,7 +86,7 @@ const bulletText = (bullet, severityOf) => [
   ...(bullet.children || []).map((child) => `${SUB_BULLET_PREFIX}${mrkdwn(child.text)}`),
 ].join('\n');
 
-const parentBlocks = (brief, severityOf, { furtherItems = 0 } = {}) => {
+const parentBlocks = (brief, severityOf, { runId = null, furtherItems = 0 } = {}) => {
   const headline = withMarker(headlineMarker(brief), brief.headline);
   const headerText = { type: 'plain_text', text: truncate(headline, HEADER_MAX), emoji: true };
   const blocks = [{ type: 'header', text: headerText }];
@@ -95,7 +102,7 @@ const parentBlocks = (brief, severityOf, { furtherItems = 0 } = {}) => {
   for (const notice of brief.notices || []) {
     blocks.push(context(`_${mrkdwn(markedNotice(notice))}_`));
   }
-  blocks.push(context(footerText(brief.footer, { furtherItems })));
+  blocks.push(context(footerText(brief.footer, { runId, furtherItems })));
   return blocks;
 };
 
@@ -322,13 +329,12 @@ const briefMetadata = ({ runId, date, kind }) => ({
  * Build the payload for a brief.
  * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel,
  *   digest (from buildDigest, or null); unmatched notes travel inside the digest since User Story 7;
- *   alertGroups (in body order) with alertLinks (Map alert_key -> { group, rules, all }) and staleAfterDays (US8);
- *   layout (rollup/layout.json) whose body_items select the items that get a reply (FR-020, revision 23); without
- *   one, every item not placed in the thread does
+ *   alertGroups (in body order) with alertLinks (Map alert_key -> { group, rules, all }) and staleAfterDays (US8).
+ *   Replies go to the high items (FR-020, revision 25); the layout decides the bullets in the roll-up, not here.
  */
 const buildPayload = ({
   brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null, alertGroups = [],
-  alertLinks = new Map(), staleAfterDays = 14, alertCategories = {}, layout = null,
+  alertLinks = new Map(), staleAfterDays = 14, alertCategories = {},
 }) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
@@ -353,10 +359,9 @@ const buildPayload = ({
     };
   }
 
-  const bodyIds = layout && Array.isArray(layout.body_items) ? new Set(layout.body_items) : null;
-  const isBody = (item) => (bodyIds ? bodyIds.has(item.item_id) : item.placement !== 'thread');
   const ranked = [...items].sort(rankOrder);
-  const replied = ranked.filter(isBody).slice(0, MAX_ITEM_REPLIES);
+  // A reply is for what needs a person today: the high items, highest rank first (FR-020, revision 25).
+  const replied = ranked.filter((item) => item.severity === 'high').slice(0, MAX_ITEM_REPLIES);
   const furtherItems = ranked.length - replied.length;
 
   const text = truncate(template('parent')({
@@ -379,7 +384,7 @@ const buildPayload = ({
     parent: {
       channel,
       text,
-      blocks: parentBlocks(brief, severityOf, { furtherItems }),
+      blocks: parentBlocks(brief, severityOf, { runId, furtherItems }),
       unfurl_links: false,
       unfurl_media: false,
       metadata,

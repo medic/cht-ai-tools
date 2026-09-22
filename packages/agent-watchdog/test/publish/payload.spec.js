@@ -44,7 +44,8 @@ describe('publish/payload', () => {
     expect(types.filter((t) => t === 'context')).to.have.length(2);
     expect(payload.parent.blocks[1].text.text).to.include('912 vs 300 &amp; climbing');
     const footer = payload.parent.blocks[payload.parent.blocks.length - 1].elements[0].text;
-    expect(footer).to.include('<https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/prompts|prompts>');
+    expect(footer).to.include('<https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop|specs>');
+    expect(footer).to.include('run 2026-09-18');
     expect(footer).to.include('cost $0.12');
     expect(payload.parent.text).to.include('Sentinel backlog tripled on alpha');
     expect(payload.parent.text.length).to.be.at.most(4000);
@@ -56,13 +57,14 @@ describe('publish/payload', () => {
     expect(payload.image, 'the brief image was retired in revision 24').to.equal(null);
   });
 
-  it('adds one threaded reply per item in rank order with escaped text, the dashboard link and item metadata', () => {
+  it('adds one threaded reply per high item in rank order with escaped text, the dashboard link and metadata', () => {
     const payload = buildPayload(args);
-    expect(payload.replies).to.have.length(2);
+    // The low item has no reply since revision 25; it is in the report shared into the thread.
+    expect(payload.replies).to.have.length(1);
     expect(payload.replies[0].item_id).to.equal(item.item_id);
     expect(payload.replies[0].text).to.include('Backlog &lt;3x &amp; rising&gt;');
     expect(payload.replies[0].text).to.include('|dashboard>');
-    expect(payload.replies[1].text).to.not.include('|dashboard>');
+    expect(payload.replies.some((r) => r.item_id === second.item_id)).to.equal(false);
     expect(payload.replies[0].metadata).to.deep.equal({
       event_type: 'agent_watchdog.item',
       event_payload: {
@@ -414,7 +416,7 @@ describe('publish/payload: alert-group replies (FR-066, User Story 8)', () => {
   });
 });
 
-describe('publish/payload: replies for body items only, the report in the thread, related items (revision 23)', () => {
+describe('publish/payload: replies for high items only, the report in the thread, related items (revision 25)', () => {
   const { MAX_ITEM_REPLIES } = require('../../src/publish/payload');
   const body = makeItem({ rank: 1, placement: 'body' });
   const threadItem = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });
@@ -430,15 +432,24 @@ describe('publish/payload: replies for body items only, the report in the thread
     audience: 'internal', channel: 'C123', layout,
   });
 
-  it('builds a reply for each body item of the layout, in rank order, and none for a thread item', () => {
+  it('builds a reply for each high item, in rank order, and none for a medium or low item', () => {
     const payload = buildPayload(args());
     expect(payload.replies.map((r) => r.item_id)).to.deep.equal([body.item_id]);
   });
 
-  it('falls back to the items\' placement when no layout is given', () => {
-    const withoutLayout = { ...args() };
-    delete withoutLayout.layout;
-    expect(buildPayload(withoutLayout).replies.map((r) => r.item_id)).to.deep.equal([body.item_id]);
+  it('threads a high item even when the layout put it in the thread, and no medium body item (revision 25)', () => {
+    const mediumBody = makeItem({ metric: 'cht_conflict_count', severity: 'medium', rank: 1, placement: 'body' });
+    const highThread = makeItem({
+      metric: 'cht_replication_limit_count', severity: 'high', rank: 2, placement: 'thread',
+    });
+    const payload = buildPayload({
+      ...args(), items: [mediumBody, highThread],
+      brief: makeBrief({ bullets: [{ item_id: mediumBody.item_id, text: 'alpha 912 vs 300' }], report }),
+      layout: { body_items: [mediumBody.item_id], thread_items: [highThread.item_id] },
+    });
+    expect(payload.replies.map((r) => r.item_id)).to.deep.equal([highThread.item_id]);
+    const footer = payload.parent.blocks[payload.parent.blocks.length - 1].elements[0].text;
+    expect(footer).to.include('1 more item in the report');
   });
 
   it('caps the item replies at twenty-five, a constant in code', () => {
@@ -466,13 +477,14 @@ describe('publish/payload: replies for body items only, the report in the thread
     expect(payload.report.initial_comment).to.match(/👍|:\+1:/);
   });
 
-  it('says in the footer how many items are only in the report', () => {
+  it('says in the footer how many items are only in the report, after the run id', () => {
     const payload = buildPayload(args());
     const footer = payload.parent.blocks[payload.parent.blocks.length - 1].elements[0].text;
-    expect(footer).to.include('2 more items in the report');
+    expect(footer).to.include('run 2026-09-18 · 2 more items in the report');
     const all = buildPayload({ ...args(), items: [body], layout: { body_items: [body.item_id], thread_items: [] } });
     const footerAll = all.parent.blocks[all.parent.blocks.length - 1].elements[0].text;
     expect(footerAll).to.not.include('more items');
+    expect(footerAll.endsWith('run 2026-09-18')).to.equal(true);
   });
 
   it('carries no report when the brief has none, nor on a heartbeat or a failure', () => {
@@ -484,7 +496,7 @@ describe('publish/payload: replies for body items only, the report in the thread
     expect(heartbeat.report).to.equal(null);
   });
 
-  it('names the lower-ranked items that relate to a body item in that item\'s reply, with relation and rank', () => {
+  it('names the lower-ranked items that relate to a high item in that item\'s reply, with relation and rank', () => {
     const payload = buildPayload(args());
     expect(payload.replies[0].text).to.include('Related: `cht_outbound_push_backlog_count` (same cause) #3');
     const unrelated = buildPayload({ ...args(), items: [body, threadItem] });

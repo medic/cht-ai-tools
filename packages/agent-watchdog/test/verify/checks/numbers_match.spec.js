@@ -186,3 +186,63 @@ describe('verify/checks/numbers_match: derived values (FR-016, revision 24)', ()
     expect(derivedValues(many).length).to.be.at.most(60 * 59 * 3);
   });
 });
+
+describe('verify/checks/numbers_match: given numerals, roundings, units and ranges (FR-016, revision 25)', () => {
+  const { check, rangeTokens } = require('../../../src/verify/checks/numbers_match');
+  const { baseContext } = require('../helpers/context');
+
+  it('accepts a numeral the model read in a tool result written as a JSON pair', () => {
+    const ctx = baseContext();
+    ctx.items[0].why_now = 'Backlog is 912 against 300 yesterday; the heap read 390778880 bytes at one point.';
+    expect(check(ctx).status).to.equal('fail');
+    ctx.givenText = ['{"values":[[1789538400,390778880],[1789624800,451162112]]}'];
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('accepts a decimal or percentage that rounds a given numeral within its own decimals, nothing looser', () => {
+    const ctx = baseContext();
+    ctx.givenText = ['deviation_sigma 2.484518611472874, pct_change_vs_previous_day 32.656142204706285'];
+    ctx.items[0].why_now = 'Backlog is 912 against 300 yesterday, 2.48 sigma up and +32.7% higher.';
+    expect(check(ctx).status).to.equal('pass');
+    const loose = baseContext();
+    loose.givenText = ['deviation_sigma 2.484518611472874'];
+    loose.items[0].why_now = 'Backlog is 912 against 300 yesterday, 2.2 sigma up.';
+    const result = check(loose);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons.join(' ')).to.include('2.2');
+  });
+
+  it('matches a percentage by magnitude when the direction is in the words', () => {
+    const ctx = baseContext();
+    ctx.changes[0].pct_change_vs_previous_day = -63.79150010454017;
+    ctx.items[0].why_now = 'Backlog is 912 against 300 yesterday and fell 63.8% on the day.';
+    expect(check(ctx).status).to.equal('pass');
+  });
+
+  it('reads days written as a word, and a _seconds metric in seconds', () => {
+    const ctx = baseContext();
+    ctx.items[0].metric = 'cht_date_uptime_seconds';
+    ctx.changes[0].metric = 'cht_date_uptime_seconds';
+    ctx.changes[0].current_value = 645829.189155882;
+    ctx.items[0].evidence = [{ window: 'current', value: 645829.189155882, unit: 'count' }];
+    ctx.items[0].why_now = 'The API has been up for 7.5 days without a restart.';
+    expect(check(ctx).status).to.equal('pass');
+    const hours = baseContext();
+    hours.items[0].why_now = 'Backlog is 912 against 300 yesterday; the rise ran 7 hours.';
+    expect(check(hours).status).to.equal('pass');
+  });
+
+  it('treats the range literal of a collected expression as an identifier when written bare', () => {
+    const ctx = baseContext();
+    ctx.discovery.dashboards[0].panels.push({
+      id: 7, title: 'DB Conflicts Rate', metric: 'rate(cht_conflict_count[24h]) * 60 * 60 * 24',
+      expr: 'rate(cht_conflict_count{instance=~"$cht_instance"}[24h]) * 60 * 60 * 24',
+    });
+    expect([...rangeTokens(ctx)]).to.include('24h');
+    ctx.items[0].why_now = 'Backlog is 912 against 300 yesterday, with no restart in 24h.';
+    expect(check(ctx).status).to.equal('pass');
+    const unknown = baseContext();
+    unknown.items[0].why_now = 'Backlog is 912 against 300 yesterday, with no restart in 36h.';
+    expect(check(unknown).status).to.equal('fail');
+  });
+});

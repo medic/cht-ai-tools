@@ -123,3 +123,26 @@ describe('rollup/deterministic-brief: alert bullets (User Story 8)', () => {
     expect(brief.bullets[1].children).to.have.length(1);
   });
 });
+
+describe('rollup/deterministic-brief: what was checked counts the analysed projects (FR-066, revision 25)', () => {
+  const { checkedCounts } = require('../../src/rollup/deterministic-brief');
+
+  it('counts the analysed projects when the run was restricted, and every discovered project otherwise', () => {
+    expect(checkedCounts(makeDiscovery(), 4, 2)).to.deep.equal({ projects: 2, panels: 3, candidates: 4 });
+    expect(checkedCounts(makeDiscovery(), 4)).to.deep.equal({ projects: 3, panels: 3, candidates: 4 });
+    expect(checkedCounts(makeDiscovery(), 4, null)).to.deep.equal({ projects: 3, panels: 3, candidates: 4 });
+  });
+
+  it('says so in the heartbeat headline and the degraded brief', () => {
+    const quiet = buildHeartbeat({
+      runId: '2026-09-18', discovery: makeDiscovery(), candidatesCount: 0, footer: footer(), analysedProjects: 2,
+    });
+    expect(quiet.headline).to.equal('All quiet: 2 projects and 3 panels checked, no candidates');
+    expect(quiet.checked.projects).to.equal(2);
+    const degraded = buildDeterministicBrief({
+      runId: '2026-09-18', candidates: [makeCandidate()], discovery: makeDiscovery(), reason: 'r', footer: footer(),
+      analysedProjects: 1,
+    });
+    expect(degraded.checked.projects).to.equal(1);
+  });
+});

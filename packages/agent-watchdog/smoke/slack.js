@@ -98,7 +98,7 @@ const main = async () => {
     degradation_notice: null,
     image: null,
     footer: {
-      prompts_url: config.endpoints.promptsUrl,
+      specs_url: config.endpoints.specsUrl,
       config_url: config.endpoints.configUrl,
       trace_url: null,
       cost_usd: 0,

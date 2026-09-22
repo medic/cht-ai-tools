@@ -42,7 +42,9 @@ const brief = {
   degradation_notice: null,
   notices: [],
   image: null,
-  footer: { prompts_url: 'https://github.com/medic/cht-ai-tools', config_url: 'https://github.com/medic', trace_url: null, cost_usd: 0.42 },
+  footer: {
+    specs_url: 'https://github.com/medic/cht-ai-tools', config_url: 'https://github.com/medic', trace_url: null, cost_usd: 0.42,
+  },
   publication: null,
 };
 const item = (id, host, metric, value, before) => ({

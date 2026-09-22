@@ -30,8 +30,12 @@ const plain = (value) => (value === null ? 'n/a' : String(Number(value.toFixed(2
 const panelCount = (discovery) => (discovery.dashboards || [])
   .reduce((total, dashboard) => total + (dashboard.panels ? dashboard.panels.length : 0), 0);
 
-const checkedCounts = (discovery, candidatesCount) => ({
-  projects: (discovery.projects || []).length,
+/**
+ * What was checked: the projects the run analysed when it was restricted (`analysedProjects`, FR-066 revision 25),
+ * else every project discovered; the panels of every dashboard; the candidates computed.
+ */
+const checkedCounts = (discovery, candidatesCount, analysedProjects = null) => ({
+  projects: Number.isInteger(analysedProjects) ? analysedProjects : (discovery.projects || []).length,
   panels: panelCount(discovery),
   candidates: candidatesCount,
 });
@@ -48,9 +52,9 @@ const baseBrief = ({ runId, footer, expectedLoadNotice, notices = [] }) => ({
 });
 
 const buildHeartbeat = ({
-  runId, discovery, candidatesCount = 0, footer, expectedLoadNotice = null, notices = [],
+  runId, discovery, candidatesCount = 0, footer, expectedLoadNotice = null, notices = [], analysedProjects = null,
 }) => {
-  const checked = checkedCounts(discovery, candidatesCount);
+  const checked = checkedCounts(discovery, candidatesCount, analysedProjects);
   return {
     ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
     kind: 'heartbeat',
@@ -92,7 +96,7 @@ const candidateText = (candidate) => {
  */
 const buildDeterministicBrief = ({
   runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [], alertGroups = [],
-  staleAfterDays = 14,
+  staleAfterDays = 14, analysedProjects = null,
 }) => {
   const groupOf = groupOfProjects(discovery);
   const byKey = new Map();
@@ -119,7 +123,7 @@ const buildDeterministicBrief = ({
     kind: 'degraded',
     headline: `Watchdog brief (degraded): ${candidates.length} candidates across ${projects} projects`,
     bullets,
-    checked: checkedCounts(discovery, candidates.length),
+    checked: checkedCounts(discovery, candidates.length, analysedProjects),
     degradation_notice: `Degraded brief: ${reason}. `
       + 'Bullets list computed candidates only, without model interpretation.',
   };
