@@ -107,7 +107,8 @@ record is marked acknowledged.
 ## Text rules enforced by the gate before publishing
 
 - Headline: one line. Bullets: at most five top-level, each at most two lines of at most 120
-  characters with at most eight one-line sub-bullets (spec revision 9, FR-010, FR-015); numbers
+  characters with at most eight one-line sub-bullets, each starting with the project's short host
+  written by code and an item bullet with its full host (revision 26, FR-069); numbers
   formatted by the shared formatter; no URLs in bullet or sub-bullet text (links live in the footer
   and the thread replies, including the alert-list links).
 - Every string is rendered through Handlebars templates under `templates/slack/` with escaping on;

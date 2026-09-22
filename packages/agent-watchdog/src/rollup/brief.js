@@ -10,7 +10,8 @@ const { briefSchema, toJsonSchemas } = require('../agent/output-schema');
 const { normaliseUsage } = require('../agent/turn-mapper');
 const { schemas } = require('../model/schemas');
 const { buildDeterministicBrief, buildHeartbeat, checkedCounts, hostOf } = require('./deterministic-brief');
-const { buildLayout, groupOfProjects, assembleBullets } = require('./layout');
+const { buildLayout, groupOfProjects, assembleBullets, childPrefixes } = require('./layout');
+const { MAX_LINE_CHARS } = require('../verify/checks/bullet_length');
 const { fill, wrapUntrusted, sanitiseData } = require('../agent/prompt-assembly');
 
 const BUILT_IN_TEMPLATE = [
@@ -89,14 +90,33 @@ const feedbackText = (feedback, feedbackBrief) => {
 };
 
 // The layout is code-built data the model must follow, so it travels as a fenced JSON block, not as untrusted text.
-const layoutText = (layout) => [
-  'Computed by code. Write exactly one bullet per item listed here, in this order; the programme line of a group',
-  'slot is written by code. An item with "one_line": true is a sub-bullet of its programme and must be a single line.',
-  'Slots of kind "alerts" are written by code alone: write no bullet for them.',
-  '```json',
-  JSON.stringify(layout.slots, null, 2),
-  '```',
-].join('\n');
+/**
+ * The body layout as the model reads it: the slots, then the project code writes in front of each body line and the
+ * characters the model has left for that line (FR-069, revision 26).
+ */
+const layoutText = (layout, hostFor = null) => {
+  const prefixes = hostFor ? childPrefixes(layout, hostFor) : new Map();
+  const lines = [
+    'Computed by code. Write exactly one bullet per item listed here, in this order; the programme line of a group',
+    'slot is written by code. An item with "one_line": true is a sub-bullet of its programme and must be a single',
+    'line.',
+    'Slots of kind "alerts" are written by code alone: write no bullet for them.',
+    '```json',
+    JSON.stringify(layout.slots, null, 2),
+    '```',
+  ];
+  if (prefixes.size) {
+    lines.push(
+      'Code writes the project in front of each of these lines; do not repeat it. Describe the change in words an',
+      'engineer can act on, with its values, without metric keys or PromQL (the thread reply and the report carry',
+      'them), and keep your first line within the budget given:',
+    );
+    for (const [id, prefix] of prefixes) {
+      lines.push(`- ${id}: prefix "${prefix}", budget ${MAX_LINE_CHARS - prefix.length} characters`);
+    }
+  }
+  return lines.join('\n');
+};
 
 const itemForPrompt = (item) => ({
   item_id: item.item_id,
@@ -122,7 +142,10 @@ const buildUserPrompt = ({
   const values = {
     date: ctx.date,
     items: untrusted('ranked-items', JSON.stringify(items.map(itemForPrompt), null, 2)),
-    layout: layoutText(layout || buildLayout(items, { groupOf: groupOfProjects(discovery) })),
+    layout: layoutText(
+      layout || buildLayout(items, { groupOf: groupOfProjects(discovery) }),
+      (id) => hostById(items).get(id) || '',
+    ),
     checked: checkedText(discovery, candidates, analysedProjects),
     expected_load_notice: expectedLoadNotice
       ? `${expectedLoadNotice} Include this notice in the brief.`
@@ -270,15 +293,20 @@ const recordPrompt = async (ctx, attempt, prompt) => {
  * Assemble the Bullet entities from the model's per-item lines and the code-built layout (FR-010, FR-069): a group
  * slot becomes one code-written programme line with the model's one-line items as sub-bullets.
  */
+/** Each item's host by id, for the prefixes code writes and the project count of a group line. */
+const hostById = (items) => new Map((items || []).map((item) => [item.item_id, hostOf(item.project_url)]));
+
 const bulletsFromDraft = ({ draft, layout, items, alertGroups = [], staleAfterDays = 14 }) => {
   const texts = new Map(draft.bullets.map((bullet) => [bullet.item_id, bullet.text]));
-  const hosts = new Map(items.map((item) => [item.item_id, hostOf(item.project_url)]));
+  const hosts = hostById(items);
+  // The project is written by code in front of every body line; the model wrote the words (FR-069, revision 26).
   return assembleBullets({
     layout,
     textFor: (id) => texts.get(id) || '',
     hostFor: (id) => hosts.get(id) || id,
     alertGroups,
     staleAfterDays,
+    prefixHosts: true,
   });
 };
 
@@ -492,7 +520,8 @@ const composeBrief = async ({
   });
 
   // What the model was given, for the gate (FR-016, revision 23): the run-wide texts and each item's own entry.
-  const givenText = [layoutText(bodyLayout), checkedText(discovery, allCandidates, analysedProjects)];
+  const hostFor = (id) => hostById(items).get(id) || '';
+  const givenText = [layoutText(bodyLayout, hostFor), checkedText(discovery, allCandidates, analysedProjects)];
   const itemTexts = new Map(items.map((item) => [item.item_id, JSON.stringify(itemForPrompt(item), null, 2)]));
 
   // One session for every attempt (FR-017, revision 23): the items are sent once and cached; a retry carries only

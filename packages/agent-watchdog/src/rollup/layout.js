@@ -189,33 +189,96 @@ const alertsBullet = (slot, alertGroups, staleAfterDays) => {
 };
 
 /**
+ * A project's short name for a sub-bullet (FR-069, revision 26): the host's first label, or two labels when another
+ * member of the same programme shares the first, so `bomet.echis.go.ke` reads `bomet` and two `cht.*` hosts keep
+ * their second label.
+ */
+const shortHostLabel = (host, siblings = []) => {
+  const labels = String(host || '').toLowerCase().split('.');
+  const first = labels[0];
+  const clash = siblings.some((other) => other !== host && String(other || '').toLowerCase().split('.')[0] === first);
+  return clash && labels.length > 1 ? `${labels[0]}.${labels[1]}` : first;
+};
+
+const PREFIX_SEPARATOR = ': ';
+
+/**
+ * The project written by code in front of every body line (FR-069, revision 26): a group member's short host, a
+ * single-project bullet's full host, each with the separator. Keyed by item id; alert slots have none.
+ */
+const childPrefixes = (layout, hostFor) => {
+  const prefixes = new Map();
+  for (const slot of (layout && layout.slots) || []) {
+    if (slot.kind === 'alerts') {
+      continue;
+    }
+    const ids = slot.item_ids || [];
+    if (slot.kind === 'group') {
+      const hosts = ids.map(hostFor);
+      ids.forEach((id, i) => prefixes.set(id, `${shortHostLabel(hosts[i], hosts)}${PREFIX_SEPARATOR}`));
+    } else {
+      ids.forEach((id) => prefixes.set(id, `${String(hostFor(id) || '').toLowerCase()}${PREFIX_SEPARATOR}`));
+    }
+  }
+  return prefixes;
+};
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A host the model wrote anyway at the start of its line, as the full host or the short label, followed by a colon,
+ * a dash, a middle dot or a space, is dropped so code's prefix is not doubled.
+ */
+const stripLeadingHost = (text, host, short) => {
+  const names = [host, short].filter(Boolean).map((name) => escapeRegExp(String(name)));
+  if (!names.length) {
+    return String(text || '');
+  }
+  const pattern = new RegExp(`^\\s*(?:${names.join('|')})(?:\\s*(?::|-|–|—|·)\\s*|\\s+)`, 'i');
+  return String(text || '').replace(pattern, '');
+};
+
+/**
  * Build Bullet entities from a layout document. `textFor(id)` gives an entry's line (the model's for items, code's
- * for candidates); `hostFor(id)` its project host, to count the projects behind a group line. Alert bullets are
- * entirely code-built from the Alert Groups (FR-066).
+ * for candidates); `hostFor(id)` its project host, to count the projects behind a group line and, with
+ * `prefixHosts`, to write the project in front of each line (FR-069, revision 26). Alert bullets are entirely
+ * code-built from the Alert Groups (FR-066).
  */
 const assembleBullets = ({
-  layout, textFor, hostFor, alertGroups = [], staleAfterDays = 14,
-}) => layout.slots.map((slot) => {
-  if (slot.kind === 'alerts') {
-    return alertsBullet(slot, alertGroups, staleAfterDays);
-  }
-  if (slot.kind === 'group') {
-    const children = slot.item_ids.map((id) => ({ item_id: id, text: textFor(id) }));
-    const projects = new Set(slot.item_ids.map(hostFor)).size;
-    return {
-      kind: 'group',
-      item_id: null,
-      group: slot.group,
-      text: groupBulletText({ label: slot.group, projects, issues: children.length }),
-      children,
-      alert_key: null,
-    };
-  }
-  const [id] = slot.item_ids;
-  return { kind: 'item', item_id: id, group: slot.group, text: textFor(id), children: [], alert_key: null };
-});
+  layout, textFor, hostFor, alertGroups = [], staleAfterDays = 14, prefixHosts = false,
+}) => {
+  const prefixes = prefixHosts ? childPrefixes(layout, hostFor) : new Map();
+  const lineFor = (id) => {
+    const prefix = prefixes.get(id);
+    if (!prefix) {
+      return textFor(id);
+    }
+    const host = hostFor(id);
+    return `${prefix}${stripLeadingHost(textFor(id), host, prefix.slice(0, -PREFIX_SEPARATOR.length))}`;
+  };
+  return layout.slots.map((slot) => {
+    if (slot.kind === 'alerts') {
+      return alertsBullet(slot, alertGroups, staleAfterDays);
+    }
+    if (slot.kind === 'group') {
+      const children = slot.item_ids.map((id) => ({ item_id: id, text: lineFor(id) }));
+      const projects = new Set(slot.item_ids.map(hostFor)).size;
+      return {
+        kind: 'group',
+        item_id: null,
+        group: slot.group,
+        text: groupBulletText({ label: slot.group, projects, issues: children.length }),
+        children,
+        alert_key: null,
+      };
+    }
+    const [id] = slot.item_ids;
+    return { kind: 'item', item_id: id, group: slot.group, text: lineFor(id), children: [], alert_key: null };
+  });
+};
 
 module.exports = {
+  shortHostLabel, childPrefixes, stripLeadingHost, PREFIX_SEPARATOR,
   layoutEntries, toLayoutDocument, buildLayout, interleaveAlerts, groupOfProjects, slotByKey, groupBulletText,
   alertsBulletText, alertCategoryLine, assembleBullets, BODY_SLOTS, MAX_CHILDREN, UNGROUPED, WATCHDOG,
 };

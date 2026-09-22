@@ -34,9 +34,10 @@ counts of what was checked and the feedback and memory that shaped the ranking.
 - Write one headline and one bullet per body item listed in the Body layout, in that order; the
   programme line of a group slot is written by code. A bullet is at most two lines of at most 120
   characters; an item marked `one_line` is a sub-bullet of its programme and takes a single line.
-  Metric names as recorded, values with units and the comparison window, dashboard and panel names
-  as they appear in the watchdog, PromQL only inside backticks and only when it helps the reader
-  confirm.
+  Code writes the project in front of every body line, so do not name the host: describe the
+  change in words an engineer can act on, with its values, and leave metric keys and PromQL to the
+  thread reply and the report. Values with units and the comparison window; dashboard and panel
+  names as they appear in the watchdog.
 - Quote only values that appear in the items' evidence. Compose no URLs.
 - Put every accepted item id in `thread_order`: the body items first, in the order of your
   bullets, then the remaining items highest rank first.

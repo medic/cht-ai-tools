@@ -391,8 +391,8 @@ One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
 | `kind` | enum | `item` \| `group` \| `alerts`. |
 | `item_id` | string or null | Required when `kind` is `item`; null otherwise. |
 | `group` | string or null | Project Group label; required for `group` and `alerts`. |
-| `text` | string | At most 2 lines of at most 120 characters, no URLs. Written by the model for `item`; built by code for `group` ("<label>: <n> projects with issues") and `alerts` ("<label> alerts: <n> firing, <m> stale for more than <d> days"). |
-| `children` | Child[] | At most 8. `{ item_id or null, text }`, one line of at most 120 characters each. For `group`: one per member item in rank order, text written by the model as that item's one-line bullet. For `alerts`: one per category, built by code with the count, the oldest start and the stale count. Empty for `item`. |
+| `text` | string | At most 2 lines of at most 120 characters, no URLs. For `item`: the full host written by code, then the model's description (revision 26); built by code for `group` ("<label>: <n> projects with issues") and `alerts` ("<label> alerts: <n> firing, <m> stale for more than <d> days"). |
+| `children` | Child[] | At most 8. `{ item_id or null, text }`, one line of at most 120 characters each. For `group`: one per member item in rank order, its text the project's short host written by code (`bomet: `, two labels when two members share the first) followed by the model's one-line description in words; the model is told the prefix and its remaining budget and never repeats the host (FR-069, revision 26). For `alerts`: one per category, built by code with the count, the oldest start and the stale count. Empty for `item`. |
 | `alert_key` | string or null | For `alerts`: `<group>/<category>` of the group when the bullet holds one category, else `<group>`; the thread reply and its link are built from the Alert Groups it covers (FR-070). |
 
 **Layout rule** (code, before the roll-up call; the result is `rollup/layout.json` and the prompt

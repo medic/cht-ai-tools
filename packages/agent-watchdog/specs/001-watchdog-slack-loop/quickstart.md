@@ -247,3 +247,12 @@ and the checked line counts the programme's projects, not every project discover
 analysis was refused on every attempt the notice reads `Analysis incomplete: no findings for 1 of 3
 projects (host): the verification gate refused the model's analysis on every attempt, mostly for digits
 that looked like a phone number`.
+
+## 17. The project first on every body line (revision 26)
+
+Preview a run whose programme has several flagged projects. Every sub-bullet under the programme
+bullet reads `north-a: <the change in words>` and a single-project bullet reads
+`alpha.example.org: <the change in words>`; the host is written by code, the words are the model's,
+and neither carries a metric key. `rollup/prompt.md` shows the layout the model received with a
+`prefix` and a `budget` for every body item. A draft whose line would exceed 120 characters with the
+prefix is refused by the gate with the prefix named in the reason.

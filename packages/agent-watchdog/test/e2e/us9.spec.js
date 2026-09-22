@@ -83,7 +83,8 @@ describe('e2e: User Story 9, grouped briefing for programmes', function () {
       expect(north.children.map((c) => c.item_id).sort()).to.deep.equal(northItems.map((i) => i.item_id).sort());
       for (const child of north.children) {
         expect(child.text.split('\n')).to.have.length(1);
-        expect(child.text).to.match(/north-[abc]\.example\.org/);
+        // The project is written by code as the member's short host (FR-069, revision 26).
+        expect(child.text).to.match(/^north-[abc]: /);
       }
       expect(northItems.every((i) => i.placement === 'body' && i.slot !== null)).to.equal(true);
       const south = brief.bullets.find((b) => b.group === 'South Programme');

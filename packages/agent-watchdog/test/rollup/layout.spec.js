@@ -230,3 +230,76 @@ describe('rollup/layout: alert groups (FR-066, User Story 8)', () => {
     expect(single[0].alert_key).to.equal('South Programme/messaging');
   });
 });
+
+describe('rollup/layout: the project written by code in front of every body line (FR-069, revision 26)', () => {
+  const { childPrefixes, shortHostLabel, stripLeadingHost } = require('../../src/rollup/layout');
+  const hosts = {
+    aaaaaaaaaaaa: 'north-a.example.org', bbbbbbbbbbbb: 'north-b.example.org', cccccccccccc: 'alpha.example.org',
+  };
+  const hostFor = (id) => hosts[id];
+  const layout = {
+    slots: [
+      {
+        slot: 1, kind: 'group', group: 'North Programme', item_ids: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'], alert_keys: [],
+        one_line: true,
+      },
+      { slot: 2, kind: 'item', group: 'Other', item_ids: ['cccccccccccc'], alert_keys: [], one_line: false },
+      {
+        slot: 3, kind: 'alerts', group: 'North Programme', item_ids: [], alert_keys: ['North Programme/backlog'],
+        one_line: false,
+      },
+    ],
+    body_items: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc'], thread_items: [],
+    one_line: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'],
+    body_alerts: ['North Programme/backlog'], thread_alerts: [],
+  };
+
+  it('names a group member by its first label, two labels on a clash, and a single project by its full host', () => {
+    expect(shortHostLabel('bomet.echis.example', ['bomet.echis.example', 'kisii.echis.example'])).to.equal('bomet');
+    expect(shortHostLabel('cht.north.example.org', ['cht.north.example.org', 'cht.south.example.org']))
+      .to.equal('cht.north');
+    const prefixes = childPrefixes(layout, hostFor);
+    expect([...prefixes.entries()]).to.deep.equal([
+      ['aaaaaaaaaaaa', 'north-a: '], ['bbbbbbbbbbbb', 'north-b: '], ['cccccccccccc', 'alpha.example.org: '],
+    ]);
+  });
+
+  it('prefixes the assembled children and item bullets, never the alerts, and only when asked', () => {
+    const texts = {
+      aaaaaaaaaaaa: 'backlog 912 vs 300', bbbbbbbbbbbb: 'backlog 400 vs 100', cccccccccccc: 'conflicts up',
+    };
+    const alertGroups = [{
+      alert_key: 'North Programme/backlog', group: 'North Programme', category: 'backlog', importance: 'high',
+      firing: 1, stale: 0, new: 0, hosts: ['north-a.example.org'], titles: ['Sentinel Backlog'],
+      oldest_started_at: '2026-09-17T06:00:00Z', instances: [], patterns: [],
+    }];
+    const args = { layout, textFor: (id) => texts[id], hostFor, alertGroups, staleAfterDays: 14 };
+    const prefixed = assembleBullets({ ...args, prefixHosts: true });
+    expect(prefixed[0].children.map((c) => c.text))
+      .to.deep.equal(['north-a: backlog 912 vs 300', 'north-b: backlog 400 vs 100']);
+    expect(prefixed[1].text).to.equal('alpha.example.org: conflicts up');
+    expect(prefixed[2].kind).to.equal('alerts');
+    expect(prefixed[2].children[0].text).to.not.include(': :');
+    const plain = assembleBullets(args);
+    expect(plain[0].children.map((c) => c.text)).to.deep.equal(['backlog 912 vs 300', 'backlog 400 vs 100']);
+    expect(plain[1].text).to.equal('conflicts up');
+  });
+
+  it('does not write the project twice when the model named it first, in either form and any case', () => {
+    expect(stripLeadingHost('North-a: backlog 912', 'north-a.example.org', 'north-a')).to.equal('backlog 912');
+    expect(stripLeadingHost('north-a.example.org — backlog 912', 'north-a.example.org', 'north-a'))
+      .to.equal('backlog 912');
+    expect(stripLeadingHost('north-a backlog 912', 'north-a.example.org', 'north-a')).to.equal('backlog 912');
+    expect(stripLeadingHost('backlog 912 on north-a', 'north-a.example.org', 'north-a'))
+      .to.equal('backlog 912 on north-a');
+    const texts = {
+      aaaaaaaaaaaa: 'North-a: backlog 912 vs 300', bbbbbbbbbbbb: 'backlog 400',
+      cccccccccccc: 'alpha.example.org: conflicts up',
+    };
+    const bullets = assembleBullets({
+      layout, textFor: (id) => texts[id], hostFor, alertGroups: [], prefixHosts: true,
+    });
+    expect(bullets[0].children[0].text).to.equal('north-a: backlog 912 vs 300');
+    expect(bullets[1].text).to.equal('alpha.example.org: conflicts up');
+  });
+});

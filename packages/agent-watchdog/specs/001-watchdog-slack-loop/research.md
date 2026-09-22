@@ -648,6 +648,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-44 | On a hosted run no revision prompt refuses a numeral that appears in a `get_windows` result or in the candidates the model was given, every phone-number reason names the digits it refused, and no project is rejected on all attempts for a byte count | The refused strings only occur at scale against the live data |
 | S-45 | A hosted `--group` brief and report say "Checked 30 projects" for a programme of thirty, and the heartbeat headline counts the same | Only the hosted volume has programmes |
 | S-46 | A hosted brief threads a reply for each high item and each alert group and none for a medium or low item, and the report share's comment counts the replies | Only the live thread shows the count |
+| S-47 | On a hosted brief every sub-bullet of a programme starts with its project's short host and every single-project bullet with its full host, none repeats the host, and the model's lines describe the change without metric keys | The model's wording under the new instruction only shows live |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1728,3 +1729,29 @@ than sixteen sessions (a delta of its own, with this run as its evidence); a min
 tick); a reply-severity setting (one line when a calibration period wants medium replies); the layout of
 a one-programme run (two bullets, three empty slots; the per-programme story's concern); and the model's
 missing `relates_to` between a conflict count and its rate on one host (a prompt matter, if it recurs).
+
+## R-31. Sub-bullets that named no project
+
+**Evidence** (the run record of 2026-09-20-f8, the first full run on revision 25, read on 2026-09-22).
+90 projects, 125 items (1 high, 78 medium, 46 low), $23.29, thread of 1 item reply and 11 alert-group
+replies. The programme bullet "eCHIS Kenya: 6 projects with 8 issues" carried sub-bullets such as
+`up{job="cht"}=0 (target_down); same state as previous_day and previous_week` and two lines beginning
+`cht_couchdb_doc_total{db="sentinel"}` from two different projects, none naming a project; the
+single-project bullet for another programme began `cht_outbound_push_backlog_count at 4669` with no
+host either. The run before (f7) had begun each sub-bullet with "Lumbini-ne:", "Bajhang-ne:". Nothing
+in code decides this: `prompts/rollup.md` asks for "metric names as recorded" and a single line, FR-069
+asks for "one sub-bullet per project item" without saying the project must be named, and the first
+draft of f8 was refused for ten sub-bullets over 120 characters, so the second draft cut words to fit
+while keeping the metric key the prompt demands. The host was what went. **Decision:** the project is
+written by code, in front of every body line: the host's first label for a sub-bullet (`bomet: `), two
+labels when two projects of the group share the first, the full host for a single-project bullet; the
+layout text tells the model the prefix and the characters it has left, and asks for the change in words
+without metric keys or PromQL, which the thread reply and the report already carry; the length check
+counts the prefix; a host the model writes anyway at the start of its line is stripped, not doubled.
+The deterministic brief's lines already carry the host and are left alone.
+
+**Rejected or deferred here**: one thread reply per programme bullet, a code-built ticket with the
+group's counts, a line for members that share a metric and one section per member without a reply of
+its own (the operator asked for it; the next revision); unit scaling in the gate (`827 MB` for
+826,957,824 bytes, which f8's first draft was refused for as `826,957`); one alert reply per programme
+rather than per category (f8's thread was 11 alert replies to 1 item reply).

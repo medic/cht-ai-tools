@@ -296,11 +296,33 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     const [group, single] = out.brief.bullets;
     expect(group).to.deep.include({ kind: 'group', item_id: null, group: 'North Programme', alert_key: null });
     expect(group.text).to.equal('North Programme: 2 projects with issues');
+    // The project is written by code in front of every body line (FR-069, revision 26).
     expect(group.children).to.deep.equal([
-      { item_id: items[0].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
-      { item_id: items[2].item_id, text: 'cht_sentinel_backlog_count 912 vs 300 yesterday' },
+      { item_id: items[0].item_id, text: 'north-a: cht_sentinel_backlog_count 912 vs 300 yesterday' },
+      { item_id: items[2].item_id, text: 'north-b: cht_sentinel_backlog_count 912 vs 300 yesterday' },
     ]);
     expect(single).to.deep.include({ kind: 'item', item_id: items[1].item_id, group: 'Other', children: [] });
+    expect(single.text).to.equal('alpha.example.org: cht_sentinel_backlog_count 912 vs 300 yesterday');
+  });
+
+  it('tells the model each body line\'s prefix and budget, and never writes a host twice (revision 26)', async () => {
+    const draft = draftFor(items);
+    draft.bullets = draft.bullets.map((b) => (b.item_id === items[0].item_id
+      ? { ...b, text: 'North-a: backlog 912 vs 300 yesterday' }
+      : b));
+    const engine = engineWith(successResult(draft));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const out = await composeBrief(inputs(engine, gate));
+    const prompt = engine.session.turn.firstCall.args[0];
+    expect(prompt).to.include(`- ${items[0].item_id}: prefix "north-a: ", budget 111 characters`);
+    expect(prompt).to.include(`- ${items[1].item_id}: prefix "alpha.example.org: ", budget 101 characters`);
+    expect(prompt).to.match(/without metric keys or PromQL/);
+    expect(out.brief.bullets[0].children[0].text).to.equal('north-a: backlog 912 vs 300 yesterday');
+    const given = gate.verifyBrief.firstCall.args[0].givenText;
+    expect(given.some((text) => text.includes('prefix "north-a: "'))).to.equal(true);
+    const promptPath = require('node:path').join(__dirname, '..', '..', 'prompts', 'rollup.md');
+    const rollupPrompt = require('node:fs').readFileSync(promptPath, 'utf8');
+    expect(rollupPrompt).to.match(/Code writes the project in front of every body line/);
   });
 
   it('builds the layout itself from the discovery when the caller passes none', async () => {
@@ -514,11 +536,13 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     expect(revision).to.match(/copy|verbatim/i);
     expect(revision).to.not.include('first-0 912 vs 300');
     const verified = gate.verifyBrief.secondCall.args[0].draft;
+    // The gate sees the model's lines; the brief carries them behind the project code writes (revision 26).
     expect(verified.bullets.map((b) => b.text)).to.deep.equal(['first-0 912 vs 300', 'second-1 12 conflicts']);
     expect(verified.headline).to.equal('first headline');
     expect(out.drafts[1].draft).to.deep.equal(verified);
     expect(out.brief.headline).to.equal('first headline');
-    expect(out.brief.bullets.map((b) => b.text)).to.deep.equal(['first-0 912 vs 300', 'second-1 12 conflicts']);
+    expect(out.brief.bullets.map((b) => b.text))
+      .to.deep.equal(['alpha.example.org: first-0 912 vs 300', 'alpha.example.org: second-1 12 conflicts']);
   });
 
   it('takes the new headline when the headline failed, and the whole new draft when no bullet is named', async () => {
@@ -531,7 +555,8 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     gate.verifyBrief.onCall(1).resolves(accepted);
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.brief.headline).to.equal('second headline');
-    expect(out.brief.bullets.map((b) => b.text)).to.deep.equal(['first-0', 'first-1']);
+    expect(out.brief.bullets.map((b) => b.text))
+      .to.deep.equal(['alpha.example.org: first-0', 'alpha.example.org: first-1']);
 
     const whole = engineWith(
       successResult(draftWith(['first-0', 'first-1'])),
@@ -541,7 +566,8 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     gate2.verifyBrief.onCall(0).resolves(rejectedWith(['draft has 2 bullets but the layout has 3']));
     gate2.verifyBrief.onCall(1).resolves(accepted);
     const out2 = await composeBrief({ ctx: makeCtx({ engine: whole, gate: gate2 }), items, ...base() });
-    expect(out2.brief.bullets.map((b) => b.text)).to.deep.equal(['second-0', 'second-1']);
+    expect(out2.brief.bullets.map((b) => b.text))
+      .to.deep.equal(['alpha.example.org: second-0', 'alpha.example.org: second-1']);
   });
 
   it('writes the roll-up prompt and its revisions to rollup/prompt.md when given a run directory', async () => {

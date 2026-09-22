@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 25)
+**Status**: Draft (revision 26)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -667,7 +667,9 @@ Analysis
   run in which 42 of 43 high items were the chronic backlog through its `monotonic` candidates).
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
-  they appear in the watchdog, PromQL where it helps the reader confirm. Emoji are permitted as
+  they appear in the watchdog, PromQL where it helps the reader confirm; except in the body's
+  sub-bullets and single-project bullets, which start with the project written by code and describe
+  the change in words (FR-069, revision 26). Emoji are permitted as
   status and severity markers. At most five bullets of at most two lines each, each bullet with at
   most eight sub-bullets of one line each; these structural limits are checked by the verification
   gate. No separate writing or voice skill is applied. Numbers the report renders are rounded for
@@ -911,7 +913,15 @@ Alerts and groups
   incur model usage or be named in any post. Hosts matching no group belong to "Other".
 - **FR-069**: When a group has more than one flagged project, the body MUST show one bullet for the
   group naming the count, with one sub-bullet per project item in rank order; a group with one
-  flagged project shows that item as today. Every project item keeps its own thread reply.
+  flagged project shows that item as today. Every sub-bullet MUST start with its project, written by
+  code from the item's host as the host's first label (`bomet: `), or two labels when two projects
+  of the group share the first; a single-project bullet starts with the full host the same way. The
+  model writes what follows: the change in words a technical reader can act on, with its values,
+  without metric keys or PromQL, which the thread reply and the report carry; the prompt tells it
+  the project is written for it and the characters it has left, and the length check counts the
+  prefix. A project the model names anyway at the start of its line is not written twice (revision
+  26, after one run's sub-bullets read as raw metric expressions with no project). High items keep
+  their own thread reply (FR-020).
 - **FR-070**: Links to alerts MUST be built by code from the collected rule definitions and labels
   to the watchdog's alert list, and MUST pass the same allow-list and resolution checks as
   dashboard links.

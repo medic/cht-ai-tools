@@ -667,3 +667,30 @@ Deliberately not planned (research.md R-30): programme-wide metric patterns dete
 run's memory-growth finding on 16 of 30 projects is the evidence for a delta of its own); a minimum
 magnitude for the `monotonic` rule; a reply-severity setting; the one-programme layout; the model's
 missing `relates_to` between a count and its rate.
+
+### Revision 26 delta: the project first on every body line, written by code (FR-015, FR-069)
+
+Planned on 2026-09-22 from the first full run on revision 25 (research.md R-31): the programme
+bullet "eCHIS Kenya: 6 projects with 8 issues" carried eight sub-bullets that began with metric
+expressions and named no project, where the run before had begun each with "Lumbini-ne:". Nothing in
+code decided that; the prompt asks for metric names and a single line, and after the gate refused ten
+over-long sub-bullets the model cut the host to fit. One delta, the operator's request for a demo:
+code writes the project in front of every body line and the model describes the change in words.
+The programme thread reply the operator also asked for is the next revision.
+
+| Change | Story | Requirements |
+|---|---|---|
+| Sub-bullets and item bullets start with the project written by code; the model writes words, not metric keys; the prompt gives the prefix and the budget; the length check counts the prefix; a host the model wrote anyway is not doubled | US1, US9 | FR-015, FR-069 |
+
+- **I**: no new dependency.
+- **II**: tests first: the assembled bullets, the prefixes and the collision rule, the length budget,
+  the prompt text and the composed brief.
+- **III**: the project name moves from the model's discretion into code.
+- **IV**: nothing new stored; the stored bullet text now carries the prefix code wrote.
+- **V**: no new stage.
+- **VI**, **VIII**: unchanged.
+- **VII**: `prompts/rollup.md` changes by pull request with its test.
+  Result: PASS.
+
+Deliberately not planned (research.md R-31): the programme thread reply (next revision); unit scaling
+in the gate (`827 MB` for 826,957,824 bytes); an alert reply per programme rather than per category.
