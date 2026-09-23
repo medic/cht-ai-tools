@@ -7,7 +7,11 @@ a zod schema; a bad or missing required value exits 78 naming the key with its v
 (FR-051, FR-052, FR-055). Precedence: flag, environment, configuration-file default.
 
 `.env.example` in the package root is the source of truth for names and defaults; this table adds
-type, requiredness and consumer.
+type, requiredness and consumer. Its format is one `KEY=value` per line with comments on their own
+lines: Docker Compose's `env_file` keeps text after `#` on a value line as part of the value while
+Node's `--env-file` drops it, so an inline comment would give the two readers different values
+(revision 31; `test/config/env-example.spec.js` holds the format, and that the file names exactly the
+variables the schema reads).
 
 ## Secrets (environment only, never in files or run records)
 

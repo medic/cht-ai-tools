@@ -76,6 +76,23 @@ No inbound ports. DNS is the one further egress the pod needs. The runtime's tel
 checks are disabled by the baked environment. The `check <cht-url>` command contacts the host an
 operator names and is exempt from the guard; the platform policy refuses it inside the container.
 
+## Running it locally with Compose (revision 31)
+
+`compose.yaml` at the package root runs the same image under the same constraints on a contributor's
+machine: user `10001:10001`, read-only root, every capability dropped, `no-new-privileges`, a `/tmp`
+tmpfs, a PID limit, the CPU and memory limits above, and `init` for the runtime's subprocesses. Secrets
+and endpoints come from the operator's own `.env` (`env_file`), never from the file; that `.env` keeps
+comments on their own lines like `.env.example`, because Compose keeps text after `#` on a value line as
+part of the value; `AGENT_WATCHDOG_DATA_DIR`,
+`AGENT_WATCHDOG_CONFIG_DIR` and `AGENT_WATCHDOG_CORPUS_RAW_DIR` are pinned to the container paths. The
+data volume is named `agent-watchdog-data`, the local analogue of the claim; `AGENT_WATCHDOG_COMPOSE_DATA=./data`
+binds a host directory instead, which must be writable by uid 10001. The policy files come from
+`config/local` (or `AGENT_WATCHDOG_COMPOSE_CONFIG_DIR`), read-only; a file missing there falls back to the
+package default. The default command previews (`run --dry-run`); the `offline` profile runs the same image
+with no network at all, for `replay` and single stages (FR-041, FR-043). What the cluster's network policy
+enforces has no local equivalent: the package refuses its own requests outside the egress list, and the
+runtime subprocess and the Slack SDK are not filtered on a contributor's machine.
+
 ## Exit codes and logs
 
 Exit codes per [exit-codes.md](./exit-codes.md). Logs are JSON lines on stderr; command results

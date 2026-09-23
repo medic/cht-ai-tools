@@ -305,3 +305,13 @@ platform will: root filesystem read-only, every capability dropped, no privilege
 placeholder configuration, exits 69 for `check https://example.invalid` and renders the fixture report under
 `/tmp`. The reference manifests under `deploy/` show the CronJob's security context, mounts, limits and
 deadline and an egress policy whose names are that list; `npm test` keeps them in step with the contract.
+
+## 22. The same container on your machine (revision 31)
+
+`docker compose build` builds the image as CI does; `docker compose run --rm agent-watchdog --version` runs it as the
+CronJob will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/data` a named volume. Your `.env`
+supplies secrets and endpoints (comments on their own lines, as in `.env.example`: Compose keeps text after `#`
+on a value line as part of the value, Node drops it); `config/local` supplies the policy files. `docker compose run --rm agent-watchdog run
+--dry-run --date <date> > payload.json` previews without posting; `docker compose run --rm agent-watchdog run --date
+<date>` posts. `docker compose --profile offline run --rm offline replay --date <date>` replays with no network at all.
+Read an artefact back with `docker compose run --rm --entrypoint cat agent-watchdog /data/runs/<id>/rollup/report.html`.

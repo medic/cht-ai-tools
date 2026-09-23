@@ -59,6 +59,18 @@ agent-watchdog distill [--all] [--item <relative-path>]                       # 
 agent-watchdog purge --dry-run                                                # what retention would remove; runs first in every run
 ```
 
+The same image, on your machine, under the CronJob's constraints (user 10001, read-only root, no
+capabilities, `/data` a named volume, `/tmp` a tmpfs), with your `.env` (comments on their own lines, as in
+`.env.example`, because Compose keeps text after `#` on a value line) and `config/local`
+([`compose.yaml`](compose.yaml), [`contracts/container.md`](specs/001-watchdog-slack-loop/contracts/container.md)):
+
+```sh
+docker compose build
+docker compose run --rm agent-watchdog run --dry-run --date 2026-09-18 > payload.json      # nothing posted
+docker compose run --rm agent-watchdog egress --format hosts                                # the destinations a run contacts
+docker compose --profile offline run --rm offline replay --date 2026-09-18 > diff.json      # no network at all
+```
+
 Your own policy files go under `config/local/`, which git ignores: point `AGENT_WATCHDOG_CONFIG_DIR`
 at it and any file you leave out falls back to `config/defaults/`. A `projects.yaml` there with your
 real programme groups and ignore list is what makes a preview run against the hosted watchdog read
@@ -239,6 +251,7 @@ Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour onl
 The image runs as user `10001:10001` with a read-only root filesystem and writes only to `/data` (the
 volume) and `/tmp`; it carries no browser, no secrets, no policy files and no run data, and exposes no
 port ([`contracts/container.md`](specs/001-watchdog-slack-loop/contracts/container.md), FR-086).
+[`compose.yaml`](compose.yaml) runs it the same way on a contributor's machine.
 `agent-watchdog egress` prints every destination a run contacts, from the effective configuration, for the
 platform's network policy, and a run refuses any other destination itself before a connection is made
 (FR-083). [`deploy/`](deploy/README.md) holds reference manifests with placeholder hosts: the CronJob with its

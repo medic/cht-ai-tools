@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 30)
+**Status**: Draft (revision 31)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -1187,7 +1187,10 @@ Configuration
   platform ends it. Reference manifests for the CronJob, its configuration and the egress policy MUST
   ship with the package, checked by tests against these requirements and against the egress list
   the package emits (FR-083); the deployment repository owns the manifests it applies. The built
-  image MUST pass its contract checks in CI under these constraints (revision 30).
+  image MUST pass its contract checks in CI under these constraints (revision 30). A Compose file MUST
+  let a contributor run the same image on their own machine under the same constraints, with their
+  own environment file and policy files, previewing by default and offering a run with no network at
+  all for replay and single stages (revision 31).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.

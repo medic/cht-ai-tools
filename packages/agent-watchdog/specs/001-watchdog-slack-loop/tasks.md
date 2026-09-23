@@ -900,3 +900,12 @@ US3 can proceed in parallel, then US4, US5 and US6.
 - [X] T298 [US3] `deploy/README.md`, `deploy/cronjob.example.yaml` (ConfigMap and CronJob), `deploy/networkpolicy.example.yaml` (default-deny egress with DNS, Cilium FQDN policy), placeholders only, reference for `medic-infrastructure`
 - [X] T299 [US3] Checklist items CHK045 to CHK050 appended for the reviewer (markers untouched)
 - [X] T300 [US3] Record the revision: spec.md header revision 30, FR-083, FR-086, SC-017, User Story 3 scenario 8 and the Dependencies; plan.md the security row, the dependency table and the revision 30 delta; research.md R-35 and smoke tests S-11, S-50, S-51; contracts/container.md, environment.md, cli.md and exit-codes.md; quickstart.md section 21; README and AGENTS; then run lint, tests, coverage, `npm run replay:eval`, `node scripts/scan-secrets.js` and `smoke/container.js` where Docker is available
+
+## Phase 35: The same container on a contributor's machine (revision 31, 2026-09-23)
+
+**Purpose**: A local Compose setup that runs the image as the CronJob does (research.md R-36, FR-086), previewing by default, with the operator's own `.env` and policy files and nothing secret in the repository.
+
+- [X] T301 [P] [US3] Tests first: `test/container/compose.spec.js` (the build with its arguments, the hardened service settings, the named data volume and the read-only policy mount, the limits, `.env` as the only source of secrets with the container paths pinned, the preview default, the `offline` profile with no network, the file kept out of the image)
+- [X] T302 [US3] `compose.yaml` (the anchored service, the `offline` profile, the named volume), `.dockerignore`
+- [X] T303 [US3] One `.env` for both readers: `test/config/env-example.spec.js` (comments on their own lines, every schema variable named and nothing else), `.env.example` reformatted, the format stated in contracts/environment.md
+- [X] T304 [US3] Record the revision: spec.md header revision 31 and FR-086; contracts/container.md; quickstart.md section 22; README; plan.md revision 31 delta; research.md R-36; verified with `docker compose config`, `build`, `--version`, `egress`, `check` (exit 69), the `offline` profile and a preview `purge` stage against the named volume

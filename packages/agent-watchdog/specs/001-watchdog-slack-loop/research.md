@@ -1898,3 +1898,32 @@ the slim Debian image already has no browser or package use at run time); wrappi
 Grafana for a contributor's local watchdog (the configured origin is allowed whatever its scheme, so a local
 `http://127.0.0.1:3000` works); a plain Kubernetes `NetworkPolicy` for FQDNs (it selects CIDRs only, so the
 FQDN example is Cilium's and the platform substitutes its own engine).
+
+## R-36. The same container on a contributor's machine
+
+**Evidence**: the operator asked, after revision 30, for a local Compose setup "in a similar type of setup".
+Docker Compose v2 applies `deploy.resources.limits` (CPU, memory and PIDs; the legacy `pids_limit` key
+cannot stand beside it) to `run` and `up`, honours `read_only`, `cap_drop`, `security_opt`, `tmpfs`, `init`
+and `user`, and interpolates `${VAR:-default}` in volume
+specifications, so one file can name a volume by default and bind a host directory when asked. A bind mount
+keeps the host's ownership, so a `./data` owned by the contributor is not writable by uid 10001 without a
+`chown`; a fresh named volume is initialised from the image's `/data`, which the image owns for that user.
+`environment` entries override `env_file`, so the container paths can be pinned while the operator's `.env`
+keeps its local ones. One difference bit at once: Compose's `env_file` reader keeps text after `#` on a value
+line as part of the value (`AGENT_WATCHDOG_MODEL_FEEDBACK=   # optional …` read as the comment text and failed the
+model-id validation with exit 78), while Node's `--env-file` drops it, so the same `.env` gave the two readers
+different values. Verified locally on 2026-09-23 with Docker Compose 2.39, once the comments moved to their own
+lines: `docker compose config`, `build`, `--version`, `egress --format hosts` (nine hosts), `check
+https://example.invalid` (exit 69), the `offline` profile, and `run --dry-run --stage purge` writing the run
+directory into the named volume as the fixed user under the read-only root.
+
+**Decisions**: `compose.yaml` at the package root, one anchored service definition used twice, `agent-watchdog`
+previewing by default and `offline` with `network_mode: none`; a named volume `agent-watchdog-data` by default
+and `AGENT_WATCHDOG_COMPOSE_DATA` for a bind; `config/local` (or `AGENT_WATCHDOG_COMPOSE_CONFIG_DIR`) mounted
+read-only at `/etc/agent-watchdog`, a missing file falling back to the package default as `loadPolicy` already
+does; secrets only through `env_file: .env`; `compose.yaml` in `.dockerignore`; `.env.example` reformatted with every
+comment on its own line and a test (`test/config/env-example.spec.js`) that holds the format and that the file
+names exactly the variables the schema reads, so Compose and Node read one `.env` alike. **Rejected**: a local stand-in
+for the network policy (Docker filters no destination by name, and an `internal` network would block the model
+API too); a compose-managed Grafana or Slack; running as the host user (it would let a run write to the
+application files a real deployment keeps read-only).

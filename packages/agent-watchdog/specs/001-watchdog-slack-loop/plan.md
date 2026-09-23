@@ -805,3 +805,18 @@ Deliberately not planned: wrapping the Slack SDK's transport or the agent runtim
 policy covers them; the guard is the package's own belt); a per-request proxy inside the image; a
 distroless base (the runtime binary needs glibc and the image needs no shell change for a CronJob today);
 signing the image (a release concern in `medic-infrastructure`).
+
+### Revision 31 delta: the same container on a contributor's machine (FR-086)
+
+Planned on 2026-09-23 from the operator's request after revision 30: a local Compose setup that runs the image
+the way the CronJob does. `compose.yaml` at the package root builds the image with the version and revision
+arguments and runs it as user `10001:10001`, root read-only, every capability dropped, `no-new-privileges`, a
+`/tmp` tmpfs, a PID limit, `init`, the CPU and memory limits of the contract, secrets and endpoints from the
+operator's `.env`, the container paths pinned, the data volume named like the claim (a bind mount by choice),
+the policy files from `config/local` read-only; it previews by default and has an `offline` profile with no
+network for replay and single stages. `test/container/compose.spec.js` pins every setting and that no secret or
+real host is in the file (FR-086, US3 scenario 5). Compose's `env_file` reader keeps text after `#` on a value
+line as part of the value where Node's `--env-file` drops it, so `.env.example` now keeps every comment on its
+own line and `test/config/env-example.spec.js` holds the format (research.md R-36). **I** no dependency, **II** tests first, **III** to **VIII**
+unchanged. Result: PASS. Not planned: a local stand-in for the cluster's network policy (Docker filters no
+destination by name; the package's own guard applies), and a local Grafana or Slack.
