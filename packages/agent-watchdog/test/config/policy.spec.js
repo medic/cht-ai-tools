@@ -180,7 +180,7 @@ describe('config/policy: programme groups and the ignore list (FR-068, User Stor
     expect(matchesGlob('north-ab.example.org', 'north-?.example.org')).to.equal(false);
     expect(matchesGlob('north.example.org', '*north*')).to.equal(true);
     expect(matchesGlob('xnorthx.example.org:8443', '*north*')).to.equal(true);
-    expect(matchesGlob('kenya.example.org', '*north*')).to.equal(false);
+    expect(matchesGlob('east.example.org', '*north*')).to.equal(false);
   });
 });
 

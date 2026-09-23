@@ -74,8 +74,19 @@ describe('feedback/ingest: influence window (FR-060)', () => {
       note: 'quiet until 15 September', horizon: '2026-09-15', source_ts: '1757400000.000100',
     })]);
     const doc = await ingest(dataDir, 30);
-    expect(doc.by_item[ALPHA].horizon).to.equal('2026-10-01');
-    expect(doc.horizons.filter((h) => h.horizon === '2026-09-15')).to.deep.equal([]);
+    // The notes on one item are one conversation (FR-085, revision 29): the later note restated the expectation
+    // as "until 15 September", so once that date has passed nothing holds the item back, however long the
+    // earlier note's horizon was; a later note that extends the horizon wins the same way.
+    expect(doc.by_item[ALPHA].horizon).to.equal(null);
+    expect(doc.horizons).to.deep.equal([]);
+    await appendRecords(dataDir, [record({
+      feedback_id: 'eeeeeeeeeeee', date: '2026-09-17', kind: 'note', verdict: null, run_id: '2026-09-16',
+      note: 'still migrating, until 15 October now', horizon: '2026-10-15', source_ts: '1758000001.000100',
+    })]);
+    const extended = await ingest(dataDir, 30);
+    expect(extended.by_item[ALPHA].horizon).to.equal('2026-10-15');
+    expect(extended.horizons.map((h) => [h.horizon, h.author_count, h.source]))
+      .to.deep.equal([['2026-10-15', 1, 'stored']]);
   });
 });
 

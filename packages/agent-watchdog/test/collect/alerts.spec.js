@@ -98,7 +98,7 @@ describe('collect/alerts', () => {
 
     it('strips a scrape port from the instance label so the host matches its project (revision 17)', () => {
       const { hostOfLabels } = require('../../src/collect/alerts');
-      expect(hostOfLabels({ instance: 'samburu.south.example.org:9100' })).to.equal('samburu.south.example.org');
+      expect(hostOfLabels({ instance: 'a.south.example.org:9100' })).to.equal('a.south.example.org');
       expect(hostOfLabels({ instance: 'https://north-a.example.org' })).to.equal('north-a.example.org');
       expect(hostOfLabels({ instance: 'North-A.example.org:443' })).to.equal('north-a.example.org');
       expect(hostOfLabels({})).to.equal(null);

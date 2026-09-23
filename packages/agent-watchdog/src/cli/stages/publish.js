@@ -4,8 +4,11 @@ const { requireInputs } = require('./index');
 const { buildPayload } = require('../../publish/payload');
 const { createSlackPublisher } = require('../../publish/slack');
 const { buildDigest } = require('../../publish/digest');
+const { provenanceFor } = require('../../publish/provenance');
 const { readUnacknowledged, markAcknowledged, feedbackFile } = require('../../feedback/store');
 const { buildAlertsLinks } = require('../../links/build');
+const { hostOf } = require('../../rollup/deterministic-brief');
+const identity = require('../../model/identity');
 
 const name = 'publish';
 const inputs = ['rollup/brief.json'];
@@ -58,6 +61,35 @@ const suppressedFor = async (runDir, discovery) => {
   return out;
 };
 
+/**
+ * Where each acknowledged item's feedback acted (FR-085): read from the run directory for every item with a record
+ * to acknowledge, by its project's slug from the discovery or from its host.
+ */
+const provenanceMap = async ({ runDir, records, byItem, items, discovery }) => {
+  const run = await runDir.readRun();
+  const slugByUrl = new Map(((discovery && discovery.projects) || []).map((p) => [p.url, p.slug]));
+  const idsByItem = new Map();
+  for (const record of records) {
+    if (record.target === 'item' && record.item_id) {
+      if (!idsByItem.has(record.item_id)) {
+        idsByItem.set(record.item_id, new Set());
+      }
+      idsByItem.get(record.item_id).add(record.feedback_id);
+    }
+  }
+  const out = new Map();
+  for (const [itemId, feedbackIds] of idsByItem) {
+    const entry = lookup(byItem, itemId) || items.find((item) => item.item_id === itemId) || {};
+    const url = entry.project_url || null;
+    if (!url) {
+      continue;
+    }
+    const slug = slugByUrl.get(url) || identity.projectSlug(hostOf(url));
+    out.set(itemId, await provenanceFor({ runDir, run, project: { url, slug }, itemId, feedbackIds }));
+  }
+  return out;
+};
+
 /** Alert Groups in body order (the layout's body alerts, then the thread's), or none when alerting was unavailable. */
 const orderedAlertGroups = (classified, layout) => {
   if (!classified || !classified.available) {
@@ -106,6 +138,7 @@ const run = async (ctx) => {
     retention: {
       records_path: (ingested && ingested.records_path) || feedbackFile(dataDir), influence_days: influenceDays,
     },
+    provenance: await provenanceMap({ runDir, records: unacknowledged, byItem, items, discovery }),
   });
 
   const classified = runDir.exists('alerts.classified.json') ? await runDir.readJson('alerts.classified.json') : null;

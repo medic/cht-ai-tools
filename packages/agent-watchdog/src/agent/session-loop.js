@@ -159,17 +159,15 @@ const runProjectSession = async ({
     addUsage(usage, turnUsage);
     costUsd += result.total_cost_usd || 0;
     referenceUnavailable = referenceUnavailable || Boolean(turn.referenceUnavailable);
-    calls.push({
-      pass, attempt, subtype: result.subtype || null, usage: turnUsage, cost_usd: result.total_cost_usd || 0,
-      num_turns: result.num_turns ?? null, duration_ms: result.duration_ms ?? null,
-    });
     await recordToolCalls(pass, attempt, turn.toolCalls);
     allToolCalls.push(...(turn.toolCalls || []));
     for (const denial of (result.permission_denials || [])) {
       refusedTools.push(denial.tool_name || 'unknown');
     }
+    // The tracer's observation id, when it gives one, lets a later digest link this generation (FR-085).
+    let observationId = null;
     if (tracer && typeof tracer.generation === 'function') {
-      tracer.generation({
+      const observation = tracer.generation({
         name: `${slug} pass ${pass}${attempt > 1 ? ` revision ${attempt - 1}` : ''}`,
         model: config.model.name,
         input: prompt,
@@ -179,7 +177,12 @@ const runProjectSession = async ({
         durationMs: result.duration_ms ?? null,
         metadata: { project_url: project.url, pass, attempt, subtype: result.subtype || null },
       });
+      observationId = observation && typeof observation.id === 'string' && observation.id ? observation.id : null;
     }
+    calls.push({
+      pass, attempt, subtype: result.subtype || null, usage: turnUsage, cost_usd: result.total_cost_usd || 0,
+      num_turns: result.num_turns ?? null, duration_ms: result.duration_ms ?? null, observation_id: observationId,
+    });
     return turn;
   };
 

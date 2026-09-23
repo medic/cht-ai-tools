@@ -671,8 +671,8 @@ missing `relates_to` between a count and its rate.
 ### Revision 26 delta: the project first on every body line, written by code (FR-015, FR-069)
 
 Planned on 2026-09-22 from the first full run on revision 25 (research.md R-31): the programme
-bullet "eCHIS Kenya: 6 projects with 8 issues" carried eight sub-bullets that began with metric
-expressions and named no project, where the run before had begun each with "Lumbini-ne:". Nothing in
+bullet "North Programme: 6 projects with 8 issues" carried eight sub-bullets that began with metric
+expressions and named no project, where the run before had begun each with "North-a:". Nothing in
 code decided that; the prompt asks for metric names and a single line, and after the gate refused ten
 over-long sub-bullets the model cut the host to fit. One delta, the operator's request for a demo:
 code writes the project in front of every body line and the model describes the change in words.
@@ -749,3 +749,32 @@ link with quoted lines for feedback provenance. Where each lands:
 
 Deliberately not planned: the feedback sequencing and provenance (revision 29, FR-085); the report's
 summary keeps the body bullets only.
+
+### Revision 29 delta: feedback read as one conversation, and a digest that shows where it acted (FR-029, FR-061, FR-062, FR-085)
+
+Planned on 2026-09-23 from the operator's request recorded in research.md R-33 and the clarification
+answered with revision 28 ("trace link plus quoted lines"): when several people write about one item in
+sequence, the later note clarifies or corrects the earlier one, and the people who wrote should see the
+next day how their words were used. Where each lands:
+
+| Change | Story | Requirements |
+|---|---|---|
+| The horizon applied to an item is the last one its thread states; one horizon per item, never a superseded one; a note without a date reaches the model with its thread's earlier notes as context | US2 | FR-029, FR-085 |
+| The unreviewed notes of one item are reviewed together in thread order, one call, one classification, at most one proposal whose evidence names every note | US7 | FR-061, FR-085 |
+| The digest says per item how the feedback was used: the exact lines quoted from the project's `prompt.pass1.md` with the run's trace link, or the suppression it caused, or that it was not used | US7 | FR-062, FR-085 |
+| The session record keeps the tracer's observation id per call, so the trace link can point at the pass-1 generation | US7 | FR-049, FR-085 |
+
+- **I**: no new dependency. **II**: tests first for the sequence rule, the ingester, the parser, the review,
+  the provenance reader, the digest, the publish stage, the session record and User Story 7 end to end.
+- **III**: the clarified whole is code (last stated wins); the model only reads a dateless note with its
+  context and classifies the thread. **IV**: nothing new stored; `feedback.digest.json` items gain
+  `provenance`, `session.json` calls gain `observation_id`. **V**: no new stage. **VI**: the review still
+  writes proposals for a person; nothing is applied. **VII**: `prompts/feedback-parse.md`,
+  `prompts/feedback-review.md` and `templates/slack/feedback-digest.hbs` change by pull request with their
+  tests. **VIII**: the digest stays one audience, the thread's authors.
+  Result: PASS.
+
+Deliberately not planned: retracting a proposal when a later thread corrects the note that produced it (the
+proposal file is a person's to close); a horizon cancelled by a dateless "resolved" note (the parser returns
+null, the earlier horizon stands until its date); serving run files over the web (the trace link and the
+quoted lines are the operator's chosen answer).

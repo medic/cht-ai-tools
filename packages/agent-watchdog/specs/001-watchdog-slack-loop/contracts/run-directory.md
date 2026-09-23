@@ -25,7 +25,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── verification.pass<n>.json  # in-analysis gate report for pass n                 [kept]
 │       │   ├── tool-calls.jsonl           # every tool call and result, untrusted, for replay  [kept]
 │       │   ├── passes.json                # per-pass diff, convergence, failed-turn errors (FR-058) [kept]
-│       │   └── session.json               # runtime session id, model, usage per call          [kept]
+│       │   └── session.json               # session id, model, usage and trace observation per call (revision 29) [kept]
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
 │       │   ├── layout.json                # body layout: slots, sub-bullets, alert bullets      [kept]
@@ -37,7 +37,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── brief.json                 # final Brief (brief, heartbeat, degraded, failure)  [kept]
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
-│       │   ├── feedback.digest.json       # the feedback digest as built (FR-062)             [kept]
+│       │   ├── feedback.digest.json       # the digest as built, each item's provenance (FR-062, FR-085) [kept]
 │       │   └── publication.json           # channel, ts, permalinks, the report share's file id  [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]

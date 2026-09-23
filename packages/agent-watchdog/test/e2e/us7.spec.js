@@ -17,7 +17,7 @@ const DAY2 = '2026-09-19';
 const DAY3 = '2026-10-25';
 const PACKAGE_ROOT = path.join(__dirname, '..', '..');
 const REVIEWED = ['prompts', 'skill', 'schema', 'agent', path.join('config', 'defaults')];
-const AUTHORS = /\b(U1|U2|U3|U4|U5|U9|U0123ABCD)\b|<@/;
+const AUTHORS = /\b(U1|U2|U3|U4|U5|U6|U9|U0123ABCD)\b|<@/;
 
 const readJsonl = (file) => (fs.existsSync(file)
   ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
@@ -98,14 +98,17 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     const gamma = items.find((i) => i.project_url === 'https://gamma.example.org');
     expect(publication.replies.some((r) => r.item_id), 'no item replies since revision 28').to.equal(false);
 
-    // One reaction on the brief and five notes: a thumbs-down expectation with a horizon, a project fact, a wording
-    // complaint with a mention in it, a thumbs-up citing gamma's number in the report, and one note nobody can match.
-    const NOTE_AUTHORS = ['U1', 'U4', 'U5', 'U2', 'U9'];
+    // One reaction on the brief and six notes in thread order: on alpha a thumbs-down expectation with a horizon
+    // and, from a second person, a correction of that horizon (FR-085); on gamma a project fact and a thumbs-up,
+    // both citing its number in the report; a wording complaint with a mention in it that names no item; and one
+    // note nobody can match.
+    const NOTE_AUTHORS = ['U1', 'U6', 'U4', 'U2', 'U5', 'U9'];
     const noteTexts = [
       '👎 alpha.example.org sentinel backlog: known migration, expected until 1 October',
-      'alpha.example.org cht_sentinel_backlog_count is normally around 300, that is its usual baseline',
-      'gamma.example.org: the bullet wording is too long, put the window first <@U0123ABCD>',
+      'alpha.example.org sentinel backlog: correction, the migration ends sooner, expected until 25 September',
+      `#${gamma.rank} is normally 1 all day long, that is its usual baseline`,
       `#${gamma.rank} 👍 confirmed`,
+      'the bullet wording is too long, put the window first <@U0123ABCD>',
       'is anyone looking at the other one?',
     ];
     const { slack, noteMessages } = slackWithFeedback({
@@ -122,7 +125,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(day2.error, day2.error && day2.error.stack).to.equal(undefined);
     expect(day2.read('run.json').status).to.equal('published');
     const records = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(records).to.have.length(6);
+    expect(records).to.have.length(7);
 
     // Scenario 1: one digest in the new brief's thread naming each item's effect and the retention statement.
     const payload2 = day2.read('rollup/payload.json');
@@ -131,8 +134,16 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(digest.acknowledged.sort()).to.deep.equal(records.map((r) => r.feedback_id).sort());
     const alphaEffect = digest.items.find((i) => i.item_id === alpha.item_id);
     const gammaEffect = digest.items.find((i) => i.item_id === gamma.item_id);
-    expect(alphaEffect).to.include({ effect: 'suppressed', until: '2026-10-01' });
+    // Scenario 8 (FR-085): the two notes on alpha are one conversation, so the corrected horizon is the one applied.
+    expect(alphaEffect).to.include({ effect: 'suppressed', until: '2026-09-25' });
     expect(gammaEffect.effect).to.equal('confidence_up');
+    const ingested = day2.read('feedback.ingested.json');
+    const alphaHorizons = ingested.horizons.filter((h) => h.item_id === alpha.item_id);
+    expect(alphaHorizons.map((h) => h.horizon)).to.deep.equal(['2026-09-25']);
+    expect(alphaHorizons[0].author_count).to.equal(2);
+    expect(day2.read('alpha-example-org/suppressed.json').every((s) => s.horizon === '2026-09-25')).to.equal(true);
+    expect(records.filter((r) => r.item_id === alpha.item_id && r.kind === 'note').map((r) => r.horizon).sort())
+      .to.deep.equal(['2026-09-25', '2026-10-01']);
     expect(digest.brief).to.include({ up: 1 });
     expect(digest.retention.records_path.endsWith('feedback.jsonl')).to.equal(true);
     expect(digest.retention.influence_days).to.equal(30);
@@ -144,7 +155,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
       .find((c) => c.args[0].metadata && c.args[0].metadata.event_type === 'agent_watchdog.feedback_digest');
     expect(digestPost, 'digest posted').to.not.equal(undefined);
     expect(digestPost.args[0].thread_ts).to.equal(publication2.ts);
-    expect(digestPost.args[0].metadata.event_payload).to.include({ run_id: DAY2, acknowledged: 6 });
+    expect(digestPost.args[0].metadata.event_payload).to.include({ run_id: DAY2, acknowledged: 7 });
     expect(readJsonl(path.join(dataDir, 'corpus', 'outcomes', `${DAY2}.jsonl`)).length).to.be.greaterThan(0);
 
     // Scenario 2: the notes with a lesson became proposals for their destination; the digest names them; and
@@ -155,23 +166,52 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(annotation, 'project annotation proposal').to.not.equal(undefined);
     expect(prompt, 'prompt proposal').to.not.equal(undefined);
     expect(annotation.body).to.include('```yaml').and.include('projects:').and.include('notes:');
-    expect(annotation.body).to.not.include('alpha.example.org');
-    expect(annotation.flags.some((f) => f.kind === 'hostname' && f.excerpt === 'alpha.example.org')).to.equal(true);
+    expect(annotation.body).to.not.include('gamma.example.org');
+    expect(annotation.flags.some((f) => f.kind === 'hostname' && f.excerpt === 'gamma.example.org')).to.equal(true);
     expect(JSON.stringify(annotation)).to.not.match(AUTHORS);
     expect(digest.proposals.map((p) => p.type).sort()).to.deep.equal(['project_annotation', 'prompt']);
     for (const p of digest.proposals) {
       expect(payload2.digest.text).to.include(p.proposal_id);
     }
+    // The notes of one item were reviewed together (FR-085): alpha's two share a classification, gamma's two share
+    // the annotation proposal, whose evidence names both.
     const reviewed = records.filter((r) => r.kind === 'note');
     expect(reviewed.map((r) => r.classification).sort())
-      .to.deep.equal(['expectation', 'none', 'none', 'project_annotation', 'prompt']);
+      .to.deep.equal(['expectation', 'expectation', 'none', 'project_annotation', 'project_annotation', 'prompt']);
     expect(reviewed.filter((r) => r.proposal_id).map((r) => r.classification).sort())
-      .to.deep.equal(['project_annotation', 'prompt']);
+      .to.deep.equal(['project_annotation', 'project_annotation', 'prompt']);
+    expect(annotation.evidence.map((e) => e.feedback_id).sort())
+      .to.deep.equal(reviewed.filter((r) => r.item_id === gamma.item_id).map((r) => r.feedback_id).sort());
     expect(reviewedHashes()).to.deep.equal(before);
 
-    // Scenario 3: the reaction never reached the model; one call per note.
+    // Scenario 8 (FR-085): the digest says where the feedback acted. Alpha's candidates were held back before
+    // analysis; gamma was analysed, so its lines are quoted exactly from its prompt with the run's trace link.
+    expect(payload2.digest.text).to.include(
+      '↳ applied before analysis: candidates suppressed until 2026-09-25 (alpha-example-org/suppressed.json)',
+    );
+    expect(payload2.digest.text).to.match(new RegExp(
+      '↳ in today\'s analysis prompt for gamma\\.example\\.org \\(gamma-example-org/prompt\\.pass1\\.md, '
+      + '\\d+ of \\d+ lines quoted\\) · <https://langfuse\\.example\\.org/trace/t1\\|trace>',
+    ));
+    const gammaPrompt = fs.readFileSync(path.join(day2.root, 'gamma-example-org', 'prompt.pass1.md'), 'utf8');
+    const quoted = payload2.digest.text.split('\n').filter((l) => l.startsWith('> ') && !l.startsWith('> …'));
+    expect(quoted.length).to.be.at.least(4);
+    for (const line of quoted) {
+      expect(gammaPrompt, line).to.include(line.slice(2));
+    }
+    expect(payload2.digest.text).to.include(`"note": "#${gamma.rank} 👍 confirmed",`);
+    expect(digest.items.find((i) => i.item_id === gamma.item_id).provenance).to.include({
+      applied: 'prompt', prompt_path: 'gamma-example-org/prompt.pass1.md', records: 2,
+      trace_url: 'https://langfuse.example.org/trace/t1',
+    });
+    expect(digest.items.find((i) => i.item_id === alpha.item_id).provenance).to.include({
+      applied: 'suppressed', suppressed_until: '2026-09-25', suppressed_path: 'alpha-example-org/suppressed.json',
+    });
+
+    // Scenario 3: the reaction never reached the model; one call per item thread, one per note on no item.
     const reviewCalls = day2.engine.calls.singleTurns.filter((c) => c.name === 'feedback-review');
-    expect(reviewCalls).to.have.length(5);
+    expect(reviewCalls).to.have.length(4);
+    expect(reviewCalls.filter((c) => /Note 1 of 2 \(earliest\)/.test(c.userPrompt))).to.have.length(2);
     for (const call of reviewCalls) {
       expect(call.userPrompt).to.include('<untrusted source="feedback-note">');
       expect(call.userPrompt).to.not.match(AUTHORS);
@@ -216,7 +256,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(ranked3.find((i) => i.project_url === 'https://gamma.example.org').confidence).to.equal(gamma.confidence);
     expect(ranked3.some((i) => i.project_url === 'https://alpha.example.org'), 'horizon passed').to.equal(true);
     const stillThere = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(stillThere).to.have.length(6);
+    expect(stillThere).to.have.length(7);
     expect(stillThere.every((r) => r.acknowledged_run_id === DAY2)).to.equal(true);
 
     // SC-013: a purge dated a year later leaves the file byte for byte.

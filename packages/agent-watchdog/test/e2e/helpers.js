@@ -190,10 +190,11 @@ const createScriptedEngine = ({
     return `${kept.join('\n')}\n`;
   };
 
-  // Feedback review (User Story 7): classify a note from its wording, the way a careful reviewer would.
+  // Feedback review (User Story 7): classify a note, or the notes of one item read together (revision 29), from
+  // their wording, the way a careful reviewer would.
   const classifyNote = (userPrompt) => {
-    const match = /<untrusted source="feedback-note">\n([\s\S]*?)\n<\/untrusted>/.exec(userPrompt);
-    const note = (match ? match[1] : '').toLowerCase();
+    const blocks = [...userPrompt.matchAll(/<untrusted source="feedback-note">\n([\s\S]*?)\n<\/untrusted>/g)];
+    const note = blocks.map((m) => m[1]).join('\n').toLowerCase();
     const host = (/host: ([a-z0-9.-]+)/.exec(userPrompt) || [])[1] || 'one project';
     if (/\buntil\b|\bexpected\b/.test(note)) {
       return { classification: 'expectation', title: 'Temporary expectation', lesson: 'A stated horizon.',

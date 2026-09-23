@@ -336,7 +336,7 @@ controller; CHT docs pages under https://docs.communityhealthtoolkit.org/hosting
 - Instances are the `- targets:` list in `cht-instances.yml`. The `cht` job probes json_exporter
   with `target=<url>/api/v2/monitoring?connected_user_interval=30` and rewrites the `instance`
   label to the bare host (scheme, `www.` and trailing slash stripped), so `instance` is
-  `gamma.dev.medicmobile.org`, not a URL. A second job, `cht-express-metrics`, scrapes
+  `gamma.dev.example.org`, not a URL. A second job, `cht-express-metrics`, scrapes
   `https://<host>/api/v1/express-metrics` for the `cht_api_*` metrics (CHT 4.3.0 or later).
 - `up{job="cht", instance="<host>"}` is 0 when json_exporter cannot fetch the monitoring endpoint
   (it answers HTTP 503), so it is the scrape-target-down signal; the watchdog's own provisioned
@@ -651,6 +651,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-46 | A hosted brief threads a reply for each high item and each alert group and none for a medium or low item, and the report share's comment counts the replies | Only the live thread shows the count |
 | S-47 | On a hosted brief every sub-bullet of a programme starts with its project's short host and every single-project bullet with its full host, none repeats the host, and the model's lines describe the change without metric keys | The model's wording under the new instruction only shows live |
 | S-48 | A hosted post shows its whole headline, at most two programme bullets of at most three project lines, no alert bullet, and its thread holds the report share, one reply per remaining programme with two or more flagged projects, one Other reply and one alerts reply whose links open the filtered alert lists | The thread's shape and Slack's rendering of a bold section headline are only seen live |
+| S-49 | After two people write in sequence about one item under a hosted post, the next day's digest shows the item suppressed until the corrected horizon or quotes the lines from the project's `prompt.pass1.md`, and its trace link opens the run in Langfuse at the pass-1 generation | Langfuse's `?observation=` deep link and the SDK's observation id are only verified against the hosted instance |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1079,11 +1080,11 @@ claude-opus-4.8 …`) answered in 464 ms with `{ type: 'result', subtype: 'succe
 total_cost_usd: 0, result: "There's an issue with the selected model (claude-opus-4.8). It may not
 exist or you may not have access to it. Run --model to pick a different model." }`. The headless
 guide (docs) states the rule: "When a failure happens inside the run, such as missing authentication,
-Claude Code prints the failure as the result on stdout." The same payload showed: the eCHIS Kenya
+Claude Code prints the failure as the result on stdout." The same payload showed: one programme's
 client-errors reply at 3,999 characters cut to 2,999 with an ellipsis inside the second link; `Low
-Disk Space` instances on `samburu.echis.go.ke:9100` and `interop.echis.go.ke:9100` under "Other"
-because the port defeated the `*.echis.go.ke` pattern; "Resolved since the previous run: Message
-Delivery (2h) on training-3.echis.go.ke" for a host the ignore list drops; and seven `API Server
+Disk Space` instances on `a.south.example.org:9100` and `b.south.example.org:9100` under "Other"
+because the port defeated the `*.south.example.org` pattern; "Resolved since the previous run: Message
+Delivery (2h) on training.south.example.org" for a host the ignore list drops; and seven `API Server
 Down` alerts stale for 74 days on hosts with `cht_version: null` counted as alerts, not housekeeping,
 because dead hosts were derived only from the analysed project's changes.
 
@@ -1185,7 +1186,7 @@ characters, and `not_selected` is read: `src/agent/prompt-assembly.js` feeds it 
 `prompts/pass-review.md`, so it cannot be dropped, only asked for more sparingly.
 
 **Three problems, from the run's own record.** First, the brief carried five alert bullets covering
-eCHIS Kenya (50 firing), Mali and eCHIS Uganda, plus a housekeeping line for seven hosts and a
+the largest programme (50 firing) and two smaller ones, plus a housekeeping line for seven hosts and a
 resolved line for another project, while the run had analysed one project. `contracts/cli.md`
 defines `--project` as restricting analysis with discovery still running, so this is the contract
 working as written and the contract being wrong for a reader.
@@ -1736,16 +1737,16 @@ missing `relates_to` between a conflict count and its rate on one host (a prompt
 
 **Evidence** (the run record of 2026-09-20-f8, the first full run on revision 25, read on 2026-09-22).
 90 projects, 125 items (1 high, 78 medium, 46 low), $23.29, thread of 1 item reply and 11 alert-group
-replies. The programme bullet "eCHIS Kenya: 6 projects with 8 issues" carried sub-bullets such as
+replies. The programme bullet "North Programme: 6 projects with 8 issues" carried sub-bullets such as
 `up{job="cht"}=0 (target_down); same state as previous_day and previous_week` and two lines beginning
 `cht_couchdb_doc_total{db="sentinel"}` from two different projects, none naming a project; the
 single-project bullet for another programme began `cht_outbound_push_backlog_count at 4669` with no
-host either. The run before (f7) had begun each sub-bullet with "Lumbini-ne:", "Bajhang-ne:". Nothing
+host either. The run before (f7) had begun each sub-bullet with "North-a:", "North-b:". Nothing
 in code decides this: `prompts/rollup.md` asks for "metric names as recorded" and a single line, FR-069
 asks for "one sub-bullet per project item" without saying the project must be named, and the first
 draft of f8 was refused for ten sub-bullets over 120 characters, so the second draft cut words to fit
 while keeping the metric key the prompt demands. The host was what went. **Decision:** the project is
-written by code, in front of every body line: the host's first label for a sub-bullet (`bomet: `), two
+written by code, in front of every body line: the host's first label for a sub-bullet (`north-a: `), two
 labels when two projects of the group share the first, the full host for a single-project bullet; the
 layout text tells the model the prefix and the characters it has left, and asks for the change in words
 without metric keys or PromQL, which the thread reply and the report already carry; the length check
@@ -1824,3 +1825,35 @@ section).
 item already); a configurable count of body programmes (two is the answer until a run argues otherwise);
 reactions on a programme reply as a verdict (ambiguous across its projects; the digest lists them as
 unmatched, as it does for the parent).
+
+## R-34. Feedback read as one conversation, and a digest that shows where it acted
+
+**Evidence**: the operator's request recorded with R-33: several people comment on one item in sequence,
+the later note clarifying the earlier one, and they want to know the following day how the feedback was
+incorporated, with a link to the prompt that carried it. Until revision 28 each note was parsed and reviewed
+alone: two notes on one item that stated two horizons pushed two `horizons` entries and the earlier, longer
+one kept suppressing after a correction shortened it; two notes with one lesson produced two proposals; and
+the digest named the effect ("suppressed until", "confidence raised") but not where the words went.
+
+**Decisions**. The clarified whole is a code rule, not a model judgement: the notes of one item, in thread
+order, are one sequence; the last note that states a horizon sets it, the last that states an expected
+maximum sets that; the ingester writes one horizon per item and never a superseded one, `by_item[].horizon`
+follows the same rule over every stored note, and each record keeps its own parse for audit. A note that
+states no date reaches the model with the earlier notes of its thread as context, so "make that the 25th"
+can be read. The review takes the unreviewed notes of one item together in one call and classifies the
+whole; every note of the thread gets the classification and the one proposal, whose evidence and source line
+name every note, so a correction never yields a second, contradicting proposal. Provenance is read back from
+what the run wrote, not stored twice: the digest quotes, for each item, the `kind`, `verdict`, `note` and
+`horizon` lines of that item's records exactly as they stand in the feedback block of the project's
+`prompt.pass1.md` (each quoted line is checked to occur in the file; at most eight are shown, then the count
+of the rest), and links the run's trace, pointing at the project's pass-1 generation when the tracer
+returned its observation id, which the session record now keeps per call; when the project was not analysed
+because the horizon held its candidates back, the digest names the suppression and its file; otherwise it
+says the feedback was not used today. The trace link and the quoted lines are the operator's chosen answer,
+because run files are not web-served.
+
+**Rejected or deferred**: one classification per note with the thread as context (two calls can still write
+two contradicting proposals, and neither call knows what the other produced); retracting an earlier
+proposal when a later note corrects it (a proposal is a person's to close); a leaner feedback block in the
+analysis prompt (would change what every analysis reads, out of scope here); cancelling a horizon on a
+dateless "resolved" note (the parser returns null and the earlier horizon stands until its date).

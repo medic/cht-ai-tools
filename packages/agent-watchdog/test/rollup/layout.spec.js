@@ -136,7 +136,7 @@ describe('rollup/layout', () => {
   });
 
   it('names a group member by its first label, two on a clash, and never writes a host the model wrote twice', () => {
-    expect(shortHostLabel('bomet.echis.example', ['bomet.echis.example', 'kisii.echis.example'])).to.equal('bomet');
+    expect(shortHostLabel('a.north.example', ['a.north.example', 'b.north.example'])).to.equal('a');
     expect(shortHostLabel('cht.north.example.org', ['cht.north.example.org', 'cht.south.example.org']))
       .to.equal('cht.north');
     expect(stripLeadingHost('North-a: backlog 912', 'north-a.example.org', 'north-a')).to.equal('backlog 912');

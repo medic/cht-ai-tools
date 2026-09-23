@@ -1,12 +1,13 @@
 'use strict';
 // The feedback digest (FR-062, data-model.md "Feedback Digest"): one code-built thread reply per run that
-// acknowledges every feedback record no earlier digest covered, says what each changed today, names the
-// proposals written from notes, and states where the records live and for how long they adjust ranking.
-// It names no person: authors are counted, never shown, and Slack mentions inside notes are masked.
+// acknowledges every feedback record no earlier digest covered, says what each changed today and where it acted
+// (FR-085, revision 29: the lines it put into the project's prompt, quoted, with the trace link, or the suppression
+// it caused), names the proposals written from notes, and states where the records live and for how long they
+// adjust ranking. It names no person: authors are counted, never shown, and Slack mentions are masked.
 const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
-const { mrkdwn } = require('./payload');
+const { mrkdwn, link } = require('./payload');
 const { hostOf } = require('../rollup/deterministic-brief');
 const { maskPeople } = require('../corpus/scrub');
 
@@ -22,6 +23,7 @@ const DESTINATIONS = {
 
 const handlebars = Handlebars.create();
 handlebars.registerHelper('mrkdwn', (value) => mrkdwn(value));
+handlebars.registerHelper('link', (url, label) => link(url, label));
 let compiled = null;
 const template = () => {
   if (!compiled) {
@@ -107,6 +109,62 @@ const tallyText = (entry) => {
   return parts.length ? parts.join(', ') : 'no new reactions';
 };
 
+// At most this many of an item's quoted prompt lines appear in the digest; the rest are counted (FR-085).
+const QUOTE_MAX_LINES = 8;
+const NO_PROVENANCE = Object.freeze({
+  applied: 'none', prompt_path: null, records: 0, lines: [], lines_total: 0, trace_url: null, suppressed_until: null,
+  suppressed_path: null,
+});
+
+/** The provenance view of one item: what the template and the blocks render, with people masked in the quotes. */
+const provenanceView = (entry, host) => {
+  if (!entry) {
+    return { has_suppressed: false, has_prompt: false, has_trace: false, quoted: [], has_more: false, has_none: false };
+  }
+  const held = entry.suppressed_until !== null && entry.suppressed_until !== undefined;
+  const quotedAll = (entry.lines || []).map((line) => maskPeople(line));
+  const quoted = quotedAll.slice(0, QUOTE_MAX_LINES);
+  const rest = quotedAll.length - quoted.length;
+  const hasPrompt = entry.records > 0;
+  return {
+    has_suppressed: held,
+    suppressed_text: held
+      ? `applied before analysis: candidates suppressed until ${entry.suppressed_until} (${entry.suppressed_path})`
+      : '',
+    has_prompt: hasPrompt,
+    prompt_text: hasPrompt
+      ? `in today's analysis prompt for ${host} (${entry.prompt_path}, ${quoted.length} of ${entry.lines_total} `
+        + 'lines quoted)'
+      : '',
+    has_trace: hasPrompt && Boolean(entry.trace_url),
+    trace_url: entry.trace_url || null,
+    quoted,
+    has_more: rest > 0,
+    more_text: rest > 0 ? `… ${rest} more of these lines in ${entry.prompt_path}` : '',
+    has_none: !held && !hasPrompt,
+    none_text: `not used today: ${host} was not analysed and nothing was suppressed`,
+  };
+};
+
+/** The provenance lines as the blocks carry them, escaped like the template does. */
+const provenanceLines = (view) => {
+  const lines = [];
+  if (view.has_suppressed) {
+    lines.push(`  ↳ ${mrkdwn(view.suppressed_text)}`);
+  }
+  if (view.has_prompt) {
+    lines.push(`  ↳ ${mrkdwn(view.prompt_text)}${view.has_trace ? ` · ${link(view.trace_url, 'trace')}` : ''}`);
+    lines.push(...view.quoted.map((line) => `> ${mrkdwn(line)}`));
+    if (view.has_more) {
+      lines.push(`> ${mrkdwn(view.more_text)}`);
+    }
+  }
+  if (view.has_none) {
+    lines.push(`  ↳ ${mrkdwn(view.none_text)}`);
+  }
+  return lines;
+};
+
 const lookup = (byItem, itemId) => {
   if (!byItem) {
     return undefined;
@@ -140,11 +198,13 @@ const countInto = (target, record) => {
  * @param {object} [options.review] { classified: [...], unclassified: [...] } from the feedback review
  * @param {Array<string|{ note: string }>} [options.unmatched] notes that matched no item
  * @param {{ records_path: string, influence_days: number }} options.retention
+ * @param {Map<string, object>|null} [options.provenance] per item id, where the feedback acted
+ *   (src/publish/provenance.js); an item without an entry reads as not used; null leaves the digest as before
  * @returns {{ digest: object, text: string, blocks: object[], metadata: object } | null}
  */
 const buildDigest = ({
   runId, date, records = [], byItem = {}, items = [], adjustments = [], suppressed = [], review = null,
-  unmatched = [], retention,
+  unmatched = [], retention, provenance = null,
 }) => {
   if (!records.length) {
     return null;
@@ -168,18 +228,36 @@ const buildDigest = ({
     }
   }
   const digestAlerts = [...perAlert.values()];
-  const digestItems = [...perItem.values()].map((entry) => ({
-    ...entry,
-    ...identityOf(entry.item_id, byItem, items),
-    ...effectFor({ itemId: entry.item_id, adjustments, suppressed }),
-  }));
+  const provenanceOf = (itemId) => {
+    if (!provenance) {
+      return undefined;
+    }
+    const found = provenance instanceof Map ? provenance.get(itemId) : provenance[itemId];
+    return found || { ...NO_PROVENANCE, lines: [] };
+  };
+  const digestItems = [...perItem.values()].map((entry) => {
+    const item = {
+      ...entry,
+      ...identityOf(entry.item_id, byItem, items),
+      ...effectFor({ itemId: entry.item_id, adjustments, suppressed }),
+    };
+    const where = provenanceOf(entry.item_id);
+    return where === undefined ? item : { ...item, provenance: where };
+  });
   const classified = (review && Array.isArray(review.classified)) ? review.classified : [];
-  const proposals = classified.filter((c) => c.proposal_id).map((c) => ({
+  // The notes of one thread share a proposal (FR-085): each proposal once, with its first classification's destination.
+  const seenProposals = new Set();
+  const withProposal = classified.filter((c) => {
+    if (!c.proposal_id || seenProposals.has(c.proposal_id)) {
+      return false;
+    }
+    seenProposals.add(c.proposal_id);
+    return true;
+  });
+  const proposals = withProposal.map((c) => ({
     proposal_id: c.proposal_id, type: c.classification, path: c.proposal_path || null,
   }));
-  const destinations = classified.filter((c) => c.proposal_id).map((c) => (
-    c.destination || DESTINATIONS[c.classification] || c.classification
-  ));
+  const destinations = withProposal.map((c) => c.destination || DESTINATIONS[c.classification] || c.classification);
   const unmatchedNotes = (unmatched || [])
     .map((n) => (typeof n === 'string' ? n : n && n.note))
     .filter(Boolean)
@@ -206,6 +284,7 @@ const buildDigest = ({
     summary_text: `${plural(reactions, 'reaction')}, ${plural(notes, 'note')}`,
     items: digestItems.map((entry) => ({
       host: entry.host, metric: entry.metric, tally_text: tallyText(entry), effect_text: effectText(entry),
+      provenance: provenanceView(entry.provenance, entry.host),
     })),
     has_brief: brief.up + brief.down + brief.notes > 0,
     brief_text: tallyText(brief),
@@ -227,9 +306,10 @@ const buildDigest = ({
   const section = (body) => ({ type: 'section', text: { type: 'mrkdwn', text: body } });
   const itemLines = [
     `Feedback from yesterday: ${mrkdwn(view.summary_text)}`,
-    ...view.items.map((i) => (
-      `• ${mrkdwn(i.host)} \`${mrkdwn(i.metric)}\`: ${mrkdwn(i.tally_text)}; ${mrkdwn(i.effect_text)}`
-    )),
+    ...view.items.flatMap((i) => [
+      `• ${mrkdwn(i.host)} \`${mrkdwn(i.metric)}\`: ${mrkdwn(i.tally_text)}; ${mrkdwn(i.effect_text)}`,
+      ...provenanceLines(i.provenance),
+    ]),
     ...(view.has_brief ? [`• the brief itself: ${mrkdwn(view.brief_text)}`] : []),
   ];
   const blocks = [section(itemLines.join('\n'))];
@@ -258,4 +338,7 @@ const buildDigest = ({
   return { digest, text, blocks, metadata };
 };
 
-module.exports = { buildDigest, effectFor, effectText, tallyText, maskPeople, DIGEST_EVENT, DESTINATIONS };
+module.exports = {
+  buildDigest, effectFor, effectText, tallyText, maskPeople, provenanceView, DIGEST_EVENT, DESTINATIONS,
+  QUOTE_MAX_LINES,
+};

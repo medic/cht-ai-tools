@@ -1,6 +1,21 @@
 Feedback from yesterday: {{mrkdwn summary_text}}
 {{#each items}}
 • {{mrkdwn host}} `{{mrkdwn metric}}`: {{mrkdwn tally_text}}; {{mrkdwn effect_text}}
+{{#if provenance.has_suppressed}}
+  ↳ {{mrkdwn provenance.suppressed_text}}
+{{/if}}
+{{#if provenance.has_prompt}}
+  ↳ {{mrkdwn provenance.prompt_text}}{{#if provenance.has_trace}} · {{link provenance.trace_url 'trace'}}{{/if}}
+{{#each provenance.quoted}}
+> {{mrkdwn this}}
+{{/each}}
+{{#if provenance.has_more}}
+> {{mrkdwn provenance.more_text}}
+{{/if}}
+{{/if}}
+{{#if provenance.has_none}}
+  ↳ {{mrkdwn provenance.none_text}}
+{{/if}}
 {{/each}}
 {{#if has_brief}}
 • the brief itself: {{mrkdwn brief_text}}

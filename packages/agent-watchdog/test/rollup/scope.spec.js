@@ -126,15 +126,15 @@ describe('rollup/scope: the brief and its replies describe the same alerts', () 
     const whole = {
       available: true,
       groups: [
-        { alert_key: 'MoH Nepal/messaging', firing: 7, hosts: ['a.example.org', 'b.example.org'] },
+        { alert_key: 'North Programme/messaging', firing: 7, hosts: ['a.example.org', 'b.example.org'] },
         { alert_key: 'Other/database', firing: 1, hosts: ['c.example.org'] },
       ],
     };
     const scoped = {
       available: true,
-      groups: [{ alert_key: 'MoH Nepal/messaging', firing: 1, hosts: ['a.example.org'] }],
+      groups: [{ alert_key: 'North Programme/messaging', firing: 1, hosts: ['a.example.org'] }],
     };
-    const layout = { body_alerts: ['MoH Nepal/messaging'], thread_alerts: [] };
+    const layout = { body_alerts: ['North Programme/messaging'], thread_alerts: [] };
     // Given the scoped groups the stage wrote, the reply describes one firing alert, as the bullet does.
     expect(orderedAlertGroups(scoped, layout).map((g) => g.firing)).to.deep.equal([1]);
     // Given the whole record it would describe seven, which is the defect.

@@ -141,10 +141,11 @@ describe('feedback/ingest', () => {
     expect(bareThumbs).to.include({ target: 'brief', item_id: null, matched: false, verdict: 'up' });
     expect(doc.unmatched).to.deep.equal([unmatched, bareThumbs]);
 
-    expect(doc.horizons).to.have.length(2);
+    // Two notes on alpha state the same horizon: one entry for the thread, both authors counted (FR-085).
+    expect(doc.horizons).to.have.length(1);
     expect(doc.horizons[0]).to.include({
       item_id: ALPHA, project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', pattern_card: null,
-      horizon: '2026-10-01', expected_max: null, observed_value: 912, author_count: 1, source_run_id: '2026-09-17',
+      horizon: '2026-10-01', expected_max: null, observed_value: 912, author_count: 2, source_run_id: '2026-09-17',
     });
 
     expect(doc.by_item[ALPHA]).to.include({
@@ -297,7 +298,8 @@ describe('cli/stages/feedback', () => {
     const doc = await runDir.readJson('feedback.ingested.json');
     expect(doc.records.length).to.be.greaterThan(0);
     expect(doc.projects['https://alpha.example.org']).to.be.an('array');
-    expect(result).to.include({ records: doc.records.length, unmatched: 2, horizons: 2, sources: 1 });
+    // The two notes on alpha share one horizon since revision 29 (FR-085).
+    expect(result).to.include({ records: doc.records.length, unmatched: 2, horizons: 1, sources: 1 });
     expect(fs.existsSync(path.join(dataDir, 'feedback.jsonl'))).to.equal(true);
   });
 
@@ -328,10 +330,12 @@ describe('cli/stages/feedback', () => {
     expect(doc.review.classified.every((c) => c.classification === 'none')).to.equal(true);
     expect(doc.review.unclassified).to.deep.equal([]);
     expect(doc.review.skipped_reactions).to.be.greaterThan(0);
-    expect(doc.review.calls.length).to.equal(doc.review.classified.length);
+    // Four notes, three calls: the two on alpha are one thread (FR-085), the two on no item one call each.
+    expect(doc.review.classified).to.have.length(4);
+    expect(doc.review.calls).to.have.length(3);
     expect(result.reviewed).to.equal(doc.review.classified.length);
     const reviewCalls = engine.singleTurn.getCalls().filter((c) => c.args[0].name === 'feedback-review');
-    expect(reviewCalls.length).to.equal(doc.review.classified.length);
+    expect(reviewCalls.length).to.equal(doc.review.calls.length);
     const stored = (await readAll(dataDir)).filter((r) => r.kind === 'note');
     expect(stored.every((r) => r.classification === 'none')).to.equal(true);
   });
@@ -447,5 +451,106 @@ describe('feedback/ingest: reactions and notes on alert-group replies (FR-066, U
     expect(Object.keys(doc.by_item)).to.deep.equal([]);
     expect(doc.unmatched).to.deep.equal([]);
     expect((await readAll(dataDir)).filter((r) => r.target === 'alert_group')).to.have.length(3);
+  });
+});
+
+describe('feedback/ingest: the notes on one item are one conversation (FR-085, revision 29)', () => {
+  const PARENT = PARENT_TS;
+  const parent = {
+    type: 'message', ts: PARENT, thread_ts: PARENT, bot_id: 'B001', text: 'brief',
+    metadata: {
+      event_type: 'agent_watchdog.brief', event_payload: { run_id: '2026-09-17', date: '2026-09-17', kind: 'brief' },
+    },
+  };
+  const messageOf = (ts, user, text) => ({ type: 'message', ts, thread_ts: PARENT, user, text });
+  const clientWith = (messages) => ({
+    conversations: {
+      replies: sinon.stub().resolves({
+        ok: true, messages: [parent, ...messages], has_more: false, response_metadata: { next_cursor: '' },
+      }),
+      history: sinon.stub().resolves({
+        ok: true, messages: [], has_more: false, response_metadata: { next_cursor: '' },
+      }),
+    },
+    reactions: { get: sinon.stub().resolves({ ok: true, type: 'message', message: { reactions: [] } }) },
+  });
+  const storedNote = (overrides) => ({
+    feedback_id: 'a1a1a1a1a1a1', date: '2026-09-17', run_id: '2026-09-16', target: 'item', item_id: ALPHA,
+    alert_key: null, kind: 'note', verdict: null, note: 'expected until 1 October', horizon: '2026-10-01',
+    author: 'U1', matched: true, source_ts: '1758002500.000001', acknowledged_run_id: '2026-09-17',
+    classification: 'expectation', proposal_id: null, ...overrides,
+  });
+  let dataDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await RunDir.create(dataDir, '2026-09-18');
+    await seedRun(dataDir, '2026-09-17');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const FIRST_NOTE = 'alpha.example.org sentinel backlog: known migration, expected until 1 October';
+
+  it('applies the last horizon the thread states, once, while every record keeps its own', async () => {
+    const client = clientWith([
+      messageOf('1758090000.000001', 'U1', FIRST_NOTE),
+      messageOf('1758090000.000002', 'U7', '#1 correction: the migration ends sooner, expected until 25 September'),
+      messageOf('1758090000.000003', 'U8', '#1 thanks, noted'),
+    ]);
+    const doc = await ingest(dataDir, client);
+    const notes = doc.records.filter((r) => r.kind === 'note');
+    expect(notes.map((r) => r.horizon)).to.deep.equal(['2026-10-01', '2026-09-25', null]);
+    expect(notes.every((r) => r.item_id === ALPHA && r.matched)).to.equal(true);
+    expect(doc.horizons).to.have.length(1);
+    expect(doc.horizons[0]).to.include({
+      item_id: ALPHA, project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count',
+      horizon: '2026-09-25', author_count: 3, source_run_id: '2026-09-17', observed_value: 912,
+    });
+    expect(doc.horizons[0].note).to.include('correction');
+    expect(doc.by_item[ALPHA].horizon).to.equal('2026-09-25');
+    expect(doc.by_item[ALPHA].notes).to.have.length(3);
+  });
+
+  it('never pushes a stored horizon a later stored note corrected, and follows the correction in by_item', async () => {
+    await appendRecords(dataDir, [
+      storedNote({}),
+      storedNote({
+        feedback_id: 'a2a2a2a2a2a2', source_ts: '1758002500.000002', author: 'U7',
+        note: 'correction: until 20 September', horizon: '2026-09-20',
+      }),
+    ]);
+    const doc = await ingest(dataDir, clientWith([]));
+    expect(doc.horizons.map((h) => h.horizon)).to.deep.equal(['2026-09-20']);
+    expect(doc.horizons[0]).to.include({ item_id: ALPHA, source: 'stored', author_count: 2 });
+    expect(doc.by_item[ALPHA].horizon).to.equal('2026-09-20');
+    // A correction that has already passed leaves no horizon at all, however long the first note's was.
+    await appendRecords(dataDir, [storedNote({
+      feedback_id: 'a3a3a3a3a3a3', source_ts: '1758002500.000003', author: 'U9', note: 'ended, until 2026-09-10',
+      horizon: '2026-09-10',
+    })]);
+    const later = await ingest(dataDir, clientWith([]));
+    expect(later.horizons).to.deep.equal([]);
+    expect(later.by_item[ALPHA].horizon).to.equal(null);
+  });
+
+  it('hands a dateless note to the model with the earlier notes of its thread as untrusted context', async () => {
+    const engine = {
+      singleTurn: sinon.stub().resolves({
+        structuredOutput: { horizon: '2026-09-25', expected_max: null, item_reference: null },
+        result: { subtype: 'success' },
+      }),
+    };
+    const client = clientWith([
+      messageOf('1758090000.000001', 'U1', FIRST_NOTE),
+      messageOf('1758090000.000002', 'U7', '#1 make that the 25th'),
+    ]);
+    const doc = await ingest(dataDir, client, { engine });
+    expect(engine.singleTurn).to.have.been.calledOnce;
+    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    expect(prompt).to.include(`<untrusted source="earlier-notes">\n1. ${FIRST_NOTE}\n</untrusted>`);
+    expect(prompt.indexOf('earlier-notes')).to.be.lessThan(prompt.indexOf('<untrusted source="slack-note">'));
+    expect(prompt).to.not.match(/\bU[17]\b/);
+    expect(doc.horizons.map((h) => h.horizon)).to.deep.equal(['2026-09-25']);
+    expect(doc.records.filter((r) => r.kind === 'note').map((r) => r.horizon))
+      .to.deep.equal(['2026-10-01', '2026-09-25']);
   });
 });

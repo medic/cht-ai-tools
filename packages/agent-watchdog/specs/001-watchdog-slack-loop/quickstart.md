@@ -276,3 +276,19 @@ categories, new and stale counts and a link, then the link to every firing alert
 resolved lines. `rollup/layout.json` has `slots`, `replies` and `entries` (each project line's lead id, the
 items it covers, its prefix and budget). A draft with a headline over two lines, more than one line per
 entry, or a line that exceeds its budget is refused with the reason naming the entry.
+
+## 20. A thread read as one conversation, and the digest that shows where it acted (revision 29)
+
+Leave two notes on one item in yesterday's thread, the second correcting the first ("expected until 1
+October", then "correction: expected until 25 September"), and run the next day. `feedback.ingested.json`
+`horizons` holds one entry for the item with the corrected date and `author_count: 2`; the project's
+`suppressed.json` names that date; `feedback.jsonl` keeps each note with its own `horizon`. The review made
+one `feedback-review` call for the two notes (`feedback.ingested.json` `review.calls` has one entry for
+them), and both records carry the same `classification` and, when a lesson was found, the same `proposal_id`. In the digest (`rollup/feedback.digest.json` and the
+payload's `digest.text`) each item has a line saying how the feedback was used: for a project that was
+analysed, `in today's analysis prompt for <host> (<slug>/prompt.pass1.md, N of M lines quoted)` with the
+run's trace link and the quoted `"kind"`, `"verdict"`, `"note"` and `"horizon"` lines exactly as they stand
+in that file; for a project whose candidates the horizon held back, `applied before analysis: candidates
+suppressed until <date> (<slug>/suppressed.json)`; otherwise `not used today`. Every quoted line can be found
+verbatim in the prompt file, and the trace link opens the run in Langfuse at the project's pass-1
+generation when the tracer returned its id.

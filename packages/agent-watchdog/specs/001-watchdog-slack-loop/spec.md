@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 28)
+**Status**: Draft (revision 29)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -274,6 +274,12 @@ confidence.
 7. **Given** proposals produced from feedback that nobody has adopted, **When** the weekly
    calibration report runs, **Then** it lists them with their age, so the reminder lives in one
    place and the feedback itself never expires.
+8. **Given** two people who write in sequence about one item, the second correcting the first's
+   horizon, **When** the next run reads the thread, **Then** the candidate is suppressed until the
+   corrected horizon only, the two notes are reviewed together as one whole with at most one
+   proposal, and the digest says for that item how the feedback was used: the exact lines it put
+   into the project's analysis prompt, quoted, with a link to the run's trace, or the suppression it
+   caused before analysis (FR-085, revision 29).
 
 ### User Story 8 - Alerts in the brief (Priority: P2)
 
@@ -861,7 +867,8 @@ Feedback
   note and author, in an append-only record that is never purged (FR-059).
 - **FR-029**: Feedback MUST influence subsequent runs: repeatedly dismissed patterns rank lower,
   confirmed patterns rank higher, and notes that state an expectation are honoured until their
-  stated horizon. Ranking influence counts only records within the configured influence window
+  stated horizon, which is the horizon an item's thread states last when several notes state one
+  (FR-085, revision 29). Ranking influence counts only records within the configured influence window
   (FR-060). The feedback read that day, with author identifiers removed, MUST be part of the
   roll-up's context so the memory update can reflect it (User Story 2, scenario 1).
 - **FR-030**: Confirmed and dismissed items, with their notes, MUST be appended to the knowledge
@@ -877,8 +884,10 @@ Feedback review and acknowledgement
   stated in a note is honoured until its date regardless of the window; the history the analysis
   can read and the corpus outcomes are unaffected by the window.
 - **FR-061**: Each run MUST review the feedback it read that day. Reactions are tallied by code
-  and never sent to the model for classification. Each note is classified by one bounded,
-  schema-validated model call into one of: expectation or horizon (already handled by FR-029),
+  and never sent to the model for classification. The notes left on one item are read together in
+  thread order and classified by one bounded, schema-validated model call as the clarified whole
+  (FR-085, revision 29; a note matched to no item is classified alone) into one of: expectation or
+  horizon (already handled by FR-029),
   project annotation, skill, prompt, threshold, pattern card, or no reusable lesson. Every
   classification other than the first and the last MUST produce a proposal (FR-032, FR-033) that
   names its destination and states the lesson in pattern-level terms; the system MUST NOT apply
@@ -889,7 +898,10 @@ Feedback review and acknowledgement
   in the thread of the brief or heartbeat published that day and built by code from structured
   fields: per item the effect applied today, the proposals written with destination and path,
   and one statement that the records are kept permanently at their path and influence ranking
-  for the configured window. The digest MUST name no person, MUST acknowledge each record once
+  for the configured window. Since revision 29 it also says, per item, how the feedback was used
+  (FR-085): the exact lines it put into the project's analysis prompt, quoted, with a link to the
+  run's trace; or the suppression it caused before analysis; or that it was not used today. The
+  digest MUST name no person, MUST acknowledge each record once
   (the acknowledgement is stored on the record with the run that posted it), MUST be part of
   the preview payload, and MUST be omitted when there is nothing new to acknowledge. Notes that
   could not be matched to an item are listed in the digest for a human to clarify, which replaces
@@ -948,7 +960,7 @@ Alerts and groups
 - **FR-069**: When a group has more than one flagged project, the body MUST show one bullet for the
   group naming the count, with one sub-bullet per project item in rank order; a group with one
   flagged project shows that item as today. Every sub-bullet MUST start with its project, written by
-  code from the item's host as the host's first label (`bomet: `), or two labels when two projects
+  code from the item's host as the host's first label (`north-a: `), or two labels when two projects
   of the group share the first; a single-project bullet starts with the full host the same way. The
   model writes what follows: the change in words a technical reader can act on, with its values,
   without metric keys or PromQL, which the report carries; the prompt tells it the project is
@@ -1148,7 +1160,9 @@ Configuration
   was used: the digest names the item, quotes the exact lines the feedback put into that project's
   analysis prompt and links the session's trace where those lines can be seen, so a reader can
   follow a note from the thread to the point in the pipeline where it acted. Specified in revision
-  28 after the operator asked for it; implemented in revision 29.
+  28 after the operator asked for it; implemented in revision 29: the horizon applied to an item is the
+  last one its thread states, the notes of one item are reviewed in one call as the clarified whole,
+  and the digest carries each item's provenance (User Story 7, scenario 8).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.
@@ -1456,7 +1470,7 @@ Configuration
   turn without structured output, so six turns were "revised" for nothing and the brief called it a
   quiet day. Now a result the runtime marks as an error fails the project's analysis with the
   runtime's message, and model ids are validated at startup. The same output showed four more
-  defects, all fixed: the Kenya client-errors reply was cut mid-link (replies are now fitted without
+  defects, all fixed: one programme's client-errors reply was cut mid-link (replies are now fitted without
   cutting a link); two node-exporter hosts with `:9100` fell into "Other" (the port is stripped);
   a resolved line named an ignored training host (episodes on ignored hosts are left alone); and
   stale API-down alerts on dead hosts were not housekeeping in a preview (discovery's target health

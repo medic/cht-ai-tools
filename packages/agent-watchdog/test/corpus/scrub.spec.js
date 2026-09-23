@@ -23,7 +23,7 @@ describe('corpus/scrub (FR-033)', () => {
   });
 
   it('masks discovered hosts and other project-like hosts but leaves allowed hosts alone', () => {
-    const input = 'Seen on Alpha.example.org and cht.moh.go.ke; see https://docs.communityhealthtoolkit.org/x and github.com/medic';
+    const input = 'Seen on Alpha.example.org and cht.south.example.org; see https://docs.communityhealthtoolkit.org/x and github.com/medic';
     const { text, flags } = scrub(input, {
       hosts: ['alpha.example.org'],
       allowedHosts: ['docs.communityhealthtoolkit.org', 'github.com'],
@@ -31,7 +31,7 @@ describe('corpus/scrub (FR-033)', () => {
     expect(text).to.equal('Seen on [hostname] and [hostname]; see https://docs.communityhealthtoolkit.org/x and github.com/medic');
     expect(flags).to.deep.equal([
       { kind: 'hostname', excerpt: 'Alpha.example.org' },
-      { kind: 'hostname', excerpt: 'cht.moh.go.ke' },
+      { kind: 'hostname', excerpt: 'cht.south.example.org' },
     ]);
   });
 

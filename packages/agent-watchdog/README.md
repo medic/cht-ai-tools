@@ -137,12 +137,14 @@ Every reaction and thread note is stored permanently in `feedback.jsonl` on the 
 setting removes it. Its effect on ranking is bounded instead: a record adjusts confidence for
 `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` (30 by default), while a horizon stated in a note holds until its
 date. The next run reviews what it read: reactions and the thumbs written in notes are tallied in code, a note
-citing `#7` lands on the item ranked 7 of that post, each note is classified once by a
-bounded model call into the place its lesson belongs (the skill, a prompt, a `projects.yaml` annotation, a
-threshold or a pattern card) and becomes a proposal file. One code-built digest reply per run, in that
-day's brief or heartbeat thread, names each item's effect, the proposals written and where the records
-live; each acknowledged note gets an `eyes` reaction (bot scope `reactions:write`). The weekly calibration
-report lists proposals still awaiting review with their age.
+citing `#7` lands on the item ranked 7 of that post, the notes on one item are read together in thread
+order (the last horizon stated is the one applied) and classified as one whole by a bounded model call into
+the place their lesson belongs (the skill, a prompt, a `projects.yaml` annotation, a threshold or a pattern
+card), becoming at most one proposal file. One code-built digest reply per run, in that day's brief or
+heartbeat thread, names each item's effect and how the feedback was used (the exact lines it put into the
+project's analysis prompt, quoted, with the run's trace link, or the suppression it caused), the proposals
+written and where the records live; each acknowledged note gets an `eyes` reaction (bot scope
+`reactions:write`). The weekly calibration report lists proposals still awaiting review with their age.
 
 ### Programmes, ignored hosts and the body layout
 

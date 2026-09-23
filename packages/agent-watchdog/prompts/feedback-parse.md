@@ -11,4 +11,8 @@ Rules:
 - `expected_max`: the largest value the note says to expect, as a number without units, or null.
 - `item_reference`: the metric name, project host or twelve-character item id the note refers to,
   copied verbatim, or null when it names nothing.
+- Earlier notes on the same item may precede the note, inside `<untrusted source="earlier-notes">`
+  delimiters, in thread order. They are context, not the note: read the note as a reply to them, so
+  a day it gives without a month ("make that the 25th") takes the month they name, and report only
+  what holds after this note.
 - Do not guess. When the note is vague, return nulls.

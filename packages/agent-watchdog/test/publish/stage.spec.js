@@ -134,6 +134,18 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
       influence: { days: 30, window_start: '2026-08-19' },
       records_path: `${dataDir}/feedback.jsonl`,
     });
+    // What the run wrote for the project (FR-085): the prompt with the feedback block, the session record with the
+    // tracer's observation id, and the run record with the trace link.
+    const { wrapUntrusted, sanitiseData } = require('../../src/agent/prompt-assembly');
+    const given = sanitiseData([record(), noteRecord], { dropIdentities: true });
+    const block = wrapUntrusted('feedback', JSON.stringify(given, null, 2));
+    await runDir.writeText(
+      'alpha-example-org/prompt.pass1.md', `# Pass 1\n\n## Feedback on earlier briefs for this project\n\n${block}\n`,
+    );
+    await runDir.writeJson('alpha-example-org/session.json', {
+      session_id: 's1', calls: [{ pass: 1, attempt: 1, observation_id: 'obs1' }],
+    });
+    await runDir.writeJson('run.json', { run_id: '2026-09-18', trace_url: 'https://langfuse.example.org/trace/t1' });
   });
   afterEach(() => removeDir(dataDir));
 
@@ -158,8 +170,18 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     expect(out.payload.digest.text).to.include('confidence raised');
     expect(out.payload.digest.text).to.not.include('U0123ABCD');
     expect(out.payload.digest.acknowledged.sort()).to.deep.equal(['f1f1f1f1f1f1', 'f2f2f2f2f2f2']);
+    // Provenance (FR-085): the lines the feedback put into the project's prompt, quoted, with the trace link.
+    expect(out.payload.digest.text).to.include('↳ in today\'s analysis prompt for alpha.example.org '
+      + '(alpha-example-org/prompt.pass1.md, 8 of 26 lines quoted) · <https://langfuse.example.org/trace/t1?observation=obs1|trace>');
+    expect(out.payload.digest.text).to.include('> "note": "looks right, thanks [person]",');
+    expect(out.payload.digest.text).to.include('> "verdict": "up",');
     const entity = await runDir.readJson('rollup/feedback.digest.json');
     expect(entity.items[0]).to.include({ item_id: item.item_id, up: 1, notes: 1, effect: 'confidence_up' });
+    expect(entity.items[0].provenance).to.include({
+      applied: 'prompt', prompt_path: 'alpha-example-org/prompt.pass1.md', records: 2, lines_total: 26,
+      trace_url: 'https://langfuse.example.org/trace/t1?observation=obs1',
+    });
+    expect(entity.items[0].provenance.lines).to.have.length(8);
     expect(entity.publication).to.equal(null);
     expect(slack.chat.postMessage.called).to.equal(false);
     expect(slack.reactions.add.called).to.equal(false);

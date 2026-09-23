@@ -131,6 +131,96 @@ describe('publish/digest (FR-062)', () => {
   });
 });
 
+describe('publish/digest: how the feedback was used (FR-085, revision 29)', () => {
+  const alpha = makeItem({ item_id: 'aaaaaaaaaaaa' });
+  const gamma = makeItem({ item_id: 'bbbbbbbbbbbb', project_url: 'https://gamma.example.org', metric: 'up{job="cht"}' });
+  const byItem = {
+    aaaaaaaaaaaa: { project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', up: 0, down: 1 },
+    bbbbbbbbbbbb: { project_url: 'https://gamma.example.org', metric: 'up{job="cht"}', up: 1, down: 0 },
+  };
+  const records = [
+    record({
+      feedback_id: 'f2f2f2f2f2f2', kind: 'note', verdict: 'down', horizon: '2026-09-25', note: 'until 25 September',
+    }),
+    record({
+      feedback_id: 'f3f3f3f3f3f3', item_id: 'bbbbbbbbbbbb', kind: 'note', verdict: 'up', note: '#2 👍 <@U0123ABCD>',
+    }),
+  ];
+  const held = {
+    applied: 'suppressed', prompt_path: null, records: 0, lines: [], lines_total: 0, trace_url: null,
+    suppressed_until: '2026-09-25', suppressed_path: 'alpha-example-org/suppressed.json',
+  };
+  const quoted = {
+    applied: 'prompt', prompt_path: 'gamma-example-org/prompt.pass1.md', records: 1,
+    lines: ['"kind": "note",', '"verdict": "up",', '"note": "#2 👍 <@U0123ABCD>",', '"horizon": null,'], lines_total: 17,
+    trace_url: 'https://langfuse.example.org/trace/t1?observation=obs1', suppressed_until: null, suppressed_path: null,
+  };
+  const build = (provenance, overrides = {}) => buildDigest({
+    runId: '2026-09-19', date: '2026-09-19', records, byItem, items: [alpha, gamma],
+    suppressed: [{ candidate_id: 'c1', item_id: 'aaaaaaaaaaaa', horizon: '2026-09-25', reason: 'r' }],
+    adjustments: [{ item_id: 'bbbbbbbbbbbb', direction: 'up', after: 1 }], retention: RETENTION, provenance,
+    ...overrides,
+  });
+
+  it('says per item where the feedback acted: the suppression, or the quoted prompt lines with the trace link', () => {
+    const { digest, text, blocks } = build(new Map([['aaaaaaaaaaaa', held], ['bbbbbbbbbbbb', quoted]]));
+    expect(text).to.include(
+      '↳ applied before analysis: candidates suppressed until 2026-09-25 (alpha-example-org/suppressed.json)',
+    );
+    expect(text).to.include('↳ in today\'s analysis prompt for gamma.example.org (gamma-example-org/prompt.pass1.md, '
+      + '4 of 17 lines quoted) · <https://langfuse.example.org/trace/t1?observation=obs1|trace>');
+    // The quoted lines follow, as a block quote, with people masked and mrkdwn escaped (FR-062).
+    expect(text).to.include('\n> "kind": "note",\n> "verdict": "up",\n> "note": "#2 👍 [person]",\n> "horizon": null,');
+    expect(text).to.not.include('U0123ABCD');
+    expect(digest.items.find((i) => i.item_id === 'bbbbbbbbbbbb').provenance).to.deep.equal(quoted);
+    expect(digest.items.find((i) => i.item_id === 'aaaaaaaaaaaa').provenance).to.deep.equal(held);
+    const first = blocks[0].text.text;
+    expect(first).to.include('> "verdict": "up",');
+    expect(first).to.include('suppressed until 2026-09-25 (alpha-example-org/suppressed.json)');
+    expect(first).to.not.include('U0123ABCD');
+  });
+
+  it('says when the feedback was not used, caps the quote at eight lines, and lists a shared proposal once', () => {
+    const many = {
+      ...quoted, lines: Array.from({ length: 12 }, (_, i) => `"note": "line ${i}",`), lines_total: 60,
+      trace_url: 'https://langfuse.example.org/trace/t1',
+    };
+    const review = {
+      classified: [
+        {
+          feedback_id: 'f2f2f2f2f2f2', classification: 'prompt', proposal_id: '2026-09-19-prompt-window-first',
+          proposal_path: '/data/proposals/p.md',
+        },
+        {
+          feedback_id: 'f3f3f3f3f3f3', classification: 'prompt', proposal_id: '2026-09-19-prompt-window-first',
+          proposal_path: '/data/proposals/p.md',
+        },
+      ],
+      unclassified: [],
+    };
+    const { digest, text } = build(new Map([['bbbbbbbbbbbb', many]]), { review, suppressed: [] });
+    expect(text).to.include('↳ not used today: alpha.example.org was not analysed and nothing was suppressed');
+    expect(text).to.include('8 of 60 lines quoted');
+    expect(text.match(/^> /gm)).to.have.length(9);
+    expect(text).to.include('> … 4 more of these lines in gamma-example-org/prompt.pass1.md');
+    expect(text).to.not.include('line 8');
+    expect(digest.proposals).to.deep.equal([
+      { proposal_id: '2026-09-19-prompt-window-first', type: 'prompt', path: '/data/proposals/p.md' },
+    ]);
+    expect(text.split('/data/proposals/p.md')).to.have.length(2);
+    expect(digest.items.find((i) => i.item_id === 'aaaaaaaaaaaa').provenance).to.deep.equal({
+      applied: 'none', prompt_path: null, records: 0, lines: [], lines_total: 0, trace_url: null,
+      suppressed_until: null, suppressed_path: null,
+    });
+  });
+
+  it('writes no provenance line when none was computed, so older callers read as before', () => {
+    const { digest, text } = build(undefined);
+    expect(text).to.not.include('↳');
+    expect(digest.items.every((i) => i.provenance === undefined)).to.equal(true);
+  });
+});
+
 describe('publish/digest: alert-group feedback (User Story 8)', () => {
   it('acknowledges reactions and notes on alert groups in their own lines, naming no person', () => {
     const records = [

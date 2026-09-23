@@ -144,15 +144,23 @@ const promptText = (definition) => {
 };
 
 /**
- * Deterministic parse first; the model only when no horizon was found and an engine is available.
+ * Deterministic parse first; the model only when no horizon was found and an engine is available. `earlierNotes`
+ * are the earlier notes of the same item's thread (FR-085, revision 29): untrusted context the model reads the
+ * note against, so "make that the 25th" resolves; the deterministic parse never needs them.
  * Returns { horizon, expected_max, item_reference, source }.
  */
-const parseNoteWithModel = async ({ text, noteDate, engine = null, model, definition = null }) => {
+const parseNoteWithModel = async ({
+  text, noteDate, engine = null, model, definition = null, earlierNotes = [],
+}) => {
   const deterministic = parseHorizon(text, { noteDate });
   if (deterministic.horizon || !engine) {
     return { ...deterministic, item_reference: null, source: 'deterministic' };
   }
-  const userPrompt = `Note date: ${noteDate}\n\n${wrapUntrusted('slack-note', text)}`;
+  const context = earlierNotes.length
+    ? 'Earlier notes on the same item, in thread order:\n'
+      + `${wrapUntrusted('earlier-notes', earlierNotes.map((earlier, i) => `${i + 1}. ${earlier}`).join('\n'))}\n\n`
+    : '';
+  const userPrompt = `Note date: ${noteDate}\n\n${context}The note to read:\n${wrapUntrusted('slack-note', text)}`;
   try {
     const turn = await engine.singleTurn({
       systemPrompt: [promptText(definition)],

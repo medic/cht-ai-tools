@@ -1,5 +1,6 @@
-// FR-061: reactions are tallied by code; each note is classified once by a bounded, schema-validated model call
-// into the place its lesson belongs, and every lesson becomes a proposal that a human reviews.
+// FR-061: reactions are tallied by code; the notes on one item are classified together, once, by a bounded,
+// schema-validated model call into the place their lesson belongs, and every lesson becomes a proposal that a
+// human reviews (FR-085, revision 29: one call per item thread).
 const fs = require('node:fs');
 const path = require('node:path');
 const { reviewFeedback, splitPrompt, validateProjectsFragment, OUTPUT_SCHEMA } = require('../../src/feedback/review');
@@ -30,12 +31,17 @@ const reaction = (id, verdict) => ({
   feedback_id: id, date: '2026-09-18', run_id: '2026-09-17', target: 'item', item_id: ALPHA, kind: 'reaction',
   verdict, note: null, horizon: null, author: 'U04AB12CD', matched: true, source_ts: '1758000009.000100',
 });
-const byItem = {
-  [ALPHA]: {
-    project_url: URL, metric: 'cht_sentinel_backlog_count', pattern_card: null, up: 1, down: 2, retracted: 0,
-    notes: [], verdict: 'dismissed', horizon: null,
-  },
-};
+// Notes on different items are different conversations (revision 29), so the tests that review several notes at
+// once give each its own item; every item reads as alpha's sentinel backlog.
+const OTHER_ITEMS = [
+  '1aaaaaaaaaaa', '2bbbbbbbbbbb', '3ccccccccccc', '4ddddddddddd', '5eeeeeeeeeee', '6ffffffffff1', '7ffffffffff2',
+  '8aaaaaaaaaaa', '9bbbbbbbbbbb', '0ccccccccccc', '2b2b2b2b2b2b',
+];
+const entryFor = () => ({
+  project_url: URL, metric: 'cht_sentinel_backlog_count', pattern_card: null, up: 1, down: 2, retracted: 0,
+  notes: [], verdict: 'dismissed', horizon: null,
+});
+const byItem = Object.fromEntries([ALPHA, ...OTHER_ITEMS].map((id) => [id, entryFor()]));
 const answer = (classification, extra = {}) => ({
   structuredOutput: {
     classification,
@@ -81,6 +87,8 @@ describe('feedback/review (FR-061)', () => {
     expect(system).to.include('project_annotation');
     expect(system).to.not.include('{{note}}');
     expect(user).to.include('{{item}}').and.include('{{note}}');
+    expect(user.startsWith('## Notes')).to.equal(true);
+    expect(system).to.match(/thread order/i);
     expect(PROMPT).to.include('AGENT_WATCHDOG_MODEL_FEEDBACK');
     expect(OUTPUT_SCHEMA.properties.classification.enum).to.include.members(['expectation', 'none', 'skill']);
   });
@@ -128,7 +136,7 @@ describe('feedback/review (FR-061)', () => {
       answer('expectation'), answer('skill'), answer('prompt'), answer('threshold'), answer('pattern_card'),
     ]);
     const records = ['1aaaaaaaaaaa', '2bbbbbbbbbbb', '3cccccccccccc'.slice(0, 12), '4ddddddddddd', '5eeeeeeeeeee']
-      .map((id, i) => note(id, `note ${i}`, { source_ts: `17580000${i}0.000100` }));
+      .map((id, i) => note(id, `note ${i}`, { source_ts: `17580000${i}0.000100`, item_id: id }));
     const out = await review(records, engine);
     expect(out.classified.map((c) => c.classification))
       .to.deep.equal(['expectation', 'skill', 'prompt', 'threshold', 'pattern_card']);
@@ -145,7 +153,7 @@ describe('feedback/review (FR-061)', () => {
     const skill = proposals.find((p) => p.type === 'skill');
     expect(skill.body).to.include('Source: feedback 2bbbbbbbbbbb on item');
     expect(skill.body).to.not.include('U04AB12CD');
-    expect(skill.evidence[0]).to.include({ feedback_id: '2bbbbbbbbbbb', item_id: ALPHA, up: 1, down: 2 });
+    expect(skill.evidence[0]).to.include({ feedback_id: '2bbbbbbbbbbb', item_id: '2bbbbbbbbbbb', up: 1, down: 2 });
   });
 
   it('accepts a valid projects.yaml fragment for a project annotation and downgrades a bad one to prose', async () => {
@@ -159,8 +167,8 @@ describe('feedback/review (FR-061)', () => {
       answer('project_annotation', { projects_yaml: bad, title: 'Second annotation' }),
     ]);
     const out = await review([
-      note('6ffffffffff1', 'baseline is 200 here'),
-      note('7ffffffffff2', 'and again', { source_ts: '1758000072.000100' }),
+      note('6ffffffffff1', 'baseline is 200 here', { item_id: '6ffffffffff1' }),
+      note('7ffffffffff2', 'and again', { source_ts: '1758000072.000100', item_id: '7ffffffffff2' }),
     ], engine);
     const proposals = await readProposals(dataDir);
     expect(proposals).to.have.length(2);
@@ -190,9 +198,9 @@ describe('feedback/review (FR-061)', () => {
         .onThirdCall().resolves({ ...answer('none'), structuredOutput: { classification: 'made-up' } }),
     };
     const out = await review([
-      note('8aaaaaaaaaaa', 'one', { source_ts: '1758000081.000100' }),
-      note('9bbbbbbbbbbb', 'two', { source_ts: '1758000082.000100' }),
-      note('0cccccccccccc'.slice(0, 12), 'three', { source_ts: '1758000083.000100' }),
+      note('8aaaaaaaaaaa', 'one', { source_ts: '1758000081.000100', item_id: '8aaaaaaaaaaa' }),
+      note('9bbbbbbbbbbb', 'two', { source_ts: '1758000082.000100', item_id: '9bbbbbbbbbbb' }),
+      note('0cccccccccccc'.slice(0, 12), 'three', { source_ts: '1758000083.000100', item_id: '0ccccccccccc' }),
     ], engine);
     expect(out.classified).to.deep.equal([]);
     expect(out.unclassified.sort()).to.deep.equal(['0ccccccccccc', '8aaaaaaaaaaa', '9bbbbbbbbbbb']);
@@ -205,6 +213,96 @@ describe('feedback/review (FR-061)', () => {
     const engine = engineWith([answer('none')]);
     await review([note('1bbbbbbbbbbb', 'general remark', { target: 'brief', item_id: null, matched: false })], engine);
     expect(engine.singleTurn.firstCall.args[0].userPrompt).to.include('no matched item');
+  });
+});
+
+describe('feedback/review: the notes on one item are one conversation (FR-085, revision 29)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    quiet.warns.length = 0;
+    dataDir = tempDir();
+    await ensureDataLayout(dataDir);
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const review = async (records, engine) => {
+    await appendRecords(dataDir, records);
+    return reviewFeedback({
+      dataDir, runDir, runId: '2026-09-18', date: '2026-09-18', records: await readAll(dataDir), byItem, engine, config,
+      promptText: PROMPT, hosts: ['alpha.example.org'], persons: ['U04AB12CD', 'U04AB12CE'], logger: quiet,
+    });
+  };
+
+  it('reviews the unreviewed notes of one item in one call, in thread order, and shares the outcome', async () => {
+    const engine = engineWith([
+      answer('project_annotation', { projects_yaml: 'projects:\n  alpha.example.org:\n    notes: baseline 200\n' }),
+      answer('none'),
+    ]);
+    const out = await review([
+      note('2bbbbbbbbbbb', 'second, the correction <@U04AB12CE>', {
+        source_ts: '1758000002.000100', author: 'U04AB12CE',
+      }),
+      note('1aaaaaaaaaaa', 'first, baseline is 200 here', { source_ts: '1758000001.000100' }),
+      note('3ccccccccccc', 'unrelated remark on another item', {
+        item_id: '3ccccccccccc', source_ts: '1758000003.000100',
+      }),
+    ], engine);
+    expect(engine.singleTurn).to.have.been.calledTwice;
+    const thread = engine.singleTurn.firstCall.args[0].userPrompt;
+    expect(thread).to.include(
+      'Note 1 of 2 (earliest):\n<untrusted source="feedback-note">\nfirst, baseline is 200 here\n</untrusted>',
+    );
+    expect(thread).to.include(
+      'Note 2 of 2 (latest):\n<untrusted source="feedback-note">\nsecond, the correction [person]\n</untrusted>',
+    );
+    expect(thread.indexOf('first, baseline')).to.be.lessThan(thread.indexOf('second, the correction'));
+    expect(thread).to.not.match(/U04AB12C/);
+    expect(out.classified.map((c) => c.feedback_id)).to.deep.equal(['1aaaaaaaaaaa', '2bbbbbbbbbbb', '3ccccccccccc']);
+    const alphaOut = out.classified.filter((c) => c.item_id === ALPHA);
+    expect(alphaOut.every((c) => c.classification === 'project_annotation')).to.equal(true);
+    expect(new Set(alphaOut.map((c) => c.proposal_id)).size).to.equal(1);
+    expect(alphaOut[0].proposal_id).to.match(/^2026-09-18-project_annotation-/);
+    const stored = await readAll(dataDir);
+    expect(stored.filter((r) => r.item_id === ALPHA).every((r) => (
+      r.classification === 'project_annotation' && r.proposal_id === alphaOut[0].proposal_id
+    ))).to.equal(true);
+    expect(stored.find((r) => r.item_id === '3ccccccccccc')).to.include({ classification: 'none', proposal_id: null });
+    const proposals = await readProposals(dataDir);
+    expect(proposals).to.have.length(1);
+    expect(proposals[0].evidence.map((e) => e.feedback_id)).to.deep.equal(['1aaaaaaaaaaa', '2bbbbbbbbbbb']);
+    expect(proposals[0].body).to.include('Source: feedback 1aaaaaaaaaaa, 2bbbbbbbbbbb on item');
+    expect(proposals[0].body).to.not.match(/U04AB12C/);
+    expect(out.calls).to.have.length(2);
+    expect(engine.singleTurn.secondCall.args[0].userPrompt).to.include('unrelated remark');
+    expect(engine.singleTurn.secondCall.args[0].userPrompt).to.not.include('Note 1 of');
+  });
+
+  it('keeps one call per note on no item, and leaves a whole thread unclassified together', async () => {
+    const engine = {
+      singleTurn: sinon.stub()
+        .onFirstCall().rejects(new Error('boom'))
+        .onSecondCall().resolves(answer('none'))
+        .onThirdCall().resolves(answer('none')),
+    };
+    const out = await review([
+      note('1aaaaaaaaaaa', 'first on alpha', { source_ts: '1758000001.000100' }),
+      note('2bbbbbbbbbbb', 'second on alpha', { source_ts: '1758000002.000100' }),
+      note('4ddddddddddd', 'a remark on the brief', {
+        target: 'brief', item_id: null, matched: false, source_ts: '1758000004.000100',
+      }),
+      note('5eeeeeeeeeee', 'another remark on the brief', {
+        target: 'brief', item_id: null, matched: false, source_ts: '1758000005.000100',
+      }),
+    ], engine);
+    expect(engine.singleTurn).to.have.been.calledThrice;
+    expect(out.unclassified.sort()).to.deep.equal(['1aaaaaaaaaaa', '2bbbbbbbbbbb']);
+    expect(out.classified.map((c) => c.feedback_id)).to.deep.equal(['4ddddddddddd', '5eeeeeeeeeee']);
+    // One warning for the thread, naming every note it holds.
+    const failed = quiet.warns.filter((w) => w.event === 'feedback.review_failed');
+    expect(failed).to.have.length(1);
+    expect(failed[0].feedback_id).to.equal('1aaaaaaaaaaa,2bbbbbbbbbbb');
   });
 });
 
@@ -223,7 +321,8 @@ describe('feedback/review: lessons are required only where a proposal is written
 
   it('classifies a note as none or expectation even when the lesson is empty', async () => {
     await appendRecords(dataDir, [
-      note('1a1a1a1a1a1a', 'thanks, that was useful'), note('2b2b2b2b2b2b', 'expected until 1 October'),
+      note('1a1a1a1a1a1a', 'thanks, that was useful'),
+      note('2b2b2b2b2b2b', 'expected until 1 October', { item_id: '2b2b2b2b2b2b' }),
     ]);
     const records = await readAll(dataDir);
     const engine = engineWith([

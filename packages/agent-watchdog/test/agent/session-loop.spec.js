@@ -369,7 +369,9 @@ describe('agent/session-loop', () => {
   });
 
   it('records a generation per turn on the tracer and every tool call to tool-calls.jsonl', async () => {
-    const tracer = { generation: sinon.stub() };
+    // The tracer's observation id, when it gives one, is kept on the session record so a digest can link the
+    // generation (FR-085, revision 29); a tracer that returns nothing leaves null.
+    const tracer = { generation: sinon.stub().onFirstCall().returns({ id: 'obs1' }).onSecondCall().returns(undefined) };
     const engine = createFakeEngine({ responses: [
       { structuredOutput: findings([modelItem()]), toolCalls: [{ tool_name: 'mcp__cht-docs__search_docs', tool_input: { query: 'sentinel' }, tool_response: 'Source: https://docs.communityhealthtoolkit.org/x' }] },
       { structuredOutput: findings([modelItem()], { pass: 2 }) },
@@ -378,6 +380,8 @@ describe('agent/session-loop', () => {
     await run(engine, { tracer, gate: gateSpy });
     expect(tracer.generation).to.have.callCount(2);
     expect(tracer.generation.firstCall.args[0]).to.include({ model: 'claude-fable-5-1', costUsd: 0.01 });
+    const session = JSON.parse(fs.readFileSync(path.join(runDir.root, project.slug, 'session.json'), 'utf8'));
+    expect(session.calls.map((c) => c.observation_id)).to.deep.equal(['obs1', null]);
     const lines = fs.readFileSync(path.join(runDir.root, project.slug, 'tool-calls.jsonl'), 'utf8').trim().split('\n');
     expect(lines).to.have.length(1);
     expect(JSON.parse(lines[0])).to.include({ pass: 1, tool_name: 'mcp__cht-docs__search_docs' });

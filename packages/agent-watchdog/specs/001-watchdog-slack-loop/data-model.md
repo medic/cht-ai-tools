@@ -392,7 +392,7 @@ One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
 | `group` | string or null | Project Group label; required for `group` and `alerts`. |
 | `text` | string | At most 2 lines of at most 120 characters, no URLs. For `item`: the full host written by code, then the model's description covering every Item of the project (revisions 26 and 28); built by code for `group` ("<label>: <n> projects with <m> issues", counting the whole programme). |
 | `item_ids` | string[] | Every Item an `item` bullet's line covers, the lead first (revision 28); empty for `group`. |
-| `children` | Child[] | At most 4 (revision 28; 8 before). `{ item_id or null, item_ids, text }`: for `group`, one per project entry for at most three projects in rank order, `item_id` the entry's lead and `item_ids` every Item the line covers, its text the project's short host written by code (`bomet: `, two labels when two members share the first) followed by the model's description of all that project's issues in at most two lines (FR-069, revisions 26 and 28), then one code-written line counting the projects beyond three (`item_id` null). `alerts` bullets no longer exist in the body (revision 28). Empty for `item`. |
+| `children` | Child[] | At most 4 (revision 28; 8 before). `{ item_id or null, item_ids, text }`: for `group`, one per project entry for at most three projects in rank order, `item_id` the entry's lead and `item_ids` every Item the line covers, its text the project's short host written by code (`north-a: `, two labels when two members share the first) followed by the model's description of all that project's issues in at most two lines (FR-069, revisions 26 and 28), then one code-written line counting the projects beyond three (`item_id` null). `alerts` bullets no longer exist in the body (revision 28). Empty for `item`. |
 | `alert_key` | string or null | For `alerts`: `<group>/<category>` of the group when the bullet holds one category, else `<group>`; the thread reply and its link are built from the Alert Groups it covers (FR-070). |
 
 **Layout rule** (code, before the roll-up call; the result is `rollup/layout.json`, revision 28): group the
@@ -440,9 +440,9 @@ The once-per-run thread reply that acknowledges new feedback (FR-062, US7). Stor
 |---|---|---|
 | `run_id` | string | |
 | `acknowledged` | string[] | `feedback_id` values acknowledged by this digest; each appears in exactly one digest ever. |
-| `items` | object[] | Per item with new feedback: `{ item_id, host, metric, up, down, notes, effect }` where `effect` is `confidence_up` \| `confidence_down` \| `suppressed` \| `none` and, when suppressed, `until` the horizon date. |
+| `items` | object[] | Per item with new feedback: `{ item_id, host, metric, up, down, notes, effect }` where `effect` is `confidence_up` \| `confidence_down` \| `suppressed` \| `none` and, when suppressed, `until` the horizon date. Since revision 29 (FR-085) also `provenance`: `{ applied, prompt_path, records, lines, lines_total, trace_url, suppressed_until, suppressed_path }` where `applied` is `prompt` \| `suppressed` \| `both` \| `none`; `lines` are the exact `kind`, `verdict`, `note` and `horizon` lines the item's records put into the feedback block of `<slug>/prompt.pass1.md` (each verified to occur in the file), `lines_total` how many lines those records took, `trace_url` the run's trace, pointing at the pass-1 generation when the tracer gave its id, and `suppressed_until` the horizon that held the item's candidates back before analysis. |
 | `brief` | object | `{ up, down, notes }` for reactions on the parent post. |
-| `proposals` | object[] | `{ proposal_id, type, path }` written from this feedback. |
+| `proposals` | object[] | `{ proposal_id, type, path }` written from this feedback, each once: the notes of one item thread share one proposal (revision 29). |
 | `unclassified` | integer | Notes whose classification call failed; retried next run. |
 | `retention` | object | `{ records_path, influence_days }`: where the records live permanently and how long they adjust ranking. |
 | `reactions` | object[] | `{ source_ts, name: 'eyes', ok }` per acknowledged note after posting; empty in preview. |
@@ -465,18 +465,27 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `kind` | enum | `reaction` \| `note`. |
 | `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions. For a note, `up` or `down` when the note carries a thumbs (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:` or the emoji), else null; a note's verdict counts in the tallies like a reaction on the item it cites (revision 23). A removed reaction is recorded as `retracted` (Edge Cases). |
 | `note` | string or null | Thread reply text, verbatim, untrusted. |
-| `horizon` | string or null | Date parsed from the note by the feedback-parsing stage, when one is stated (US2 scenario 1). |
+| `horizon` | string or null | Date parsed from the note by the feedback-parsing stage, when one is stated (US2 scenario 1): the note's own statement. The horizon applied to the item is its thread's clarified whole, the last horizon the notes state in thread order (FR-085, revision 29). |
 | `author` | string | Slack user id. Never rendered into partner-facing output. |
 | `matched` | boolean | False when a note names no item; surfaced next run (US2 scenario 4). |
 | `source_ts` | string | Slack message timestamp the feedback was read from. |
 | `acknowledged_run_id` | string or null | Run whose digest acknowledged this record; set once, by the run that posted it, never in preview (FR-062). |
-| `classification` | enum or null | For notes: `expectation` \| `project_annotation` \| `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `none`; null until reviewed, and still null after a failed classification call so the next run retries (FR-061). Reactions are never classified. |
-| `proposal_id` | string or null | Proposal written from this note, when its classification produced one (FR-061). |
+| `classification` | enum or null | For notes: `expectation` \| `project_annotation` \| `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `none`; null until reviewed, and still null after a failed classification call so the next run retries (FR-061). Reactions are never classified. The unreviewed notes of one item are reviewed together in thread order and share the classification of the clarified whole (FR-085, revision 29). |
+| `proposal_id` | string or null | Proposal written from this note, when its classification produced one (FR-061); shared by the notes of one item thread reviewed together, whose ids the proposal's evidence and source line all carry (revision 29). |
 
 Records are kept permanently (FR-059); `purge` never removes or compacts `feedback.jsonl`. Only
 the ranking tallies apply the influence window (FR-060): a record older than
 `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` counts for nothing, while its horizon, if any, holds until
 its date.
+
+**Thread order and the clarified whole (FR-085, revision 29).** The notes on one item are one conversation:
+in thread order (the run whose post they sit under, then `source_ts`), the last note that states a horizon sets
+the horizon applied, the last that states an expected maximum sets that, and every author is counted. The
+ingester writes one such horizon per item into `feedback.ingested.json` `horizons` (`author_count` is the
+number of authors in the thread, `note` the note that set the horizon), never a superseded one, and
+`by_item[].horizon` follows the same rule over every stored note of the item. A note that states no date and
+reaches the model is parsed with the earlier notes of its thread as context. Each record keeps its own
+`horizon` for audit.
 
 ### Memory
 

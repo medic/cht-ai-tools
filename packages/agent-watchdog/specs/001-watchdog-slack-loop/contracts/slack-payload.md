@@ -69,9 +69,13 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    threaded reply under the parent it published that day, brief or heartbeat, with
    `metadata: { event_type: 'agent_watchdog.feedback_digest', event_payload: { run_id, date, acknowledged } }`.
    Its text is built by code from `rollup/feedback.digest.json` through
-   `templates/slack/feedback-digest.hbs`: per item the effect applied today, the proposals written
-   with destination and path, and one retention sentence naming where the records live permanently
-   and how many days they adjust ranking. It names no person. Then `reactions.add({ channel,
+   `templates/slack/feedback-digest.hbs`: per item the effect applied today and, since revision 29
+   (FR-085), how the feedback was used: the exact `kind`, `verdict`, `note` and `horizon` lines it put
+   into the project's `prompt.pass1.md`, quoted (at most eight, then the count of the rest) with the
+   run's trace link, or the suppression it caused before analysis with the file that records it, or
+   that it was not used today; then the proposals written with destination and path, and one
+   retention sentence naming where the records live permanently and how many days they adjust
+   ranking. It names no person. Then `reactions.add({ channel,
    timestamp: <note ts>, name: 'eyes' })` for each acknowledged note; `already_reacted` is not an
    error, any other failure is logged and never fails the run. Nothing is posted or reacted to in
    preview mode.
@@ -142,6 +146,10 @@ using the `ts` values recorded in that run's `publication.json`:
    recorded as unmatched; a thumbs written in the note (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:`
    or the emoji) is the note's verdict and counts like a reaction on the item it cites. Since
    revision 28 this is the only way to give a verdict on one item, as no item has a reply of its own.
+   The notes on one item are read together in thread order (revision 29, FR-085): the horizon applied
+   is the last one the thread states, each note's own parse is stored, a note without a date reaches
+   the model with the earlier notes of its thread as context, and the review classifies the thread as
+   one whole with at most one proposal.
 4. Only when a run's `publication.json` is missing does the ingester fall back to
    `conversations.history({ channel, oldest, latest, include_all_metadata: true })` and identify
    posts by their `agent_watchdog.brief` metadata.

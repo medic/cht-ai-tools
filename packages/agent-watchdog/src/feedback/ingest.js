@@ -7,6 +7,7 @@ const identity = require('../model/identity');
 const { appendRecords, readAll } = require('./store');
 const { matchNote, matchAlertNote, noteVerdict } = require('./match');
 const { parseNoteWithModel } = require('./parse-notes');
+const { threadOrder, clarifiedWhole } = require('./sequence');
 
 const BRIEF_EVENT = 'agent_watchdog.brief';
 const ITEM_EVENT = 'agent_watchdog.item';
@@ -121,14 +122,6 @@ const applyRecord = (counts, record) => {
   }
 };
 
-/** A horizon stated in any stored note holds until its date, whatever the window (FR-060). */
-const applyHorizon = (counts, record, observedDate) => {
-  if (record.kind === 'note' && record.horizon && record.horizon >= observedDate
-    && (!counts.horizon || record.horizon > counts.horizon)) {
-    counts.horizon = record.horizon;
-  }
-};
-
 const isoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 /** The first date whose records still adjust ranking: `influenceDays` before the run date, inclusive. */
@@ -186,6 +179,9 @@ const ingestFeedback = async ({
   const candidates = [];
   const horizons = [];
   const sources = [];
+  // What today's parse found for each new note, and each matched item's current value, for the horizons below.
+  const parsedToday = new Map();
+  const observedByItem = new Map();
 
   const runIds = await previousRuns(dataDir, runId, { since, lookbackRuns });
   for (const sourceId of runIds) {
@@ -294,14 +290,16 @@ const ingestFeedback = async ({
     const knownItems = items.length
       ? items
       : itemReplies.map((r) => ({ item_id: r.item_id, ...(itemMeta.get(r.item_id) || {}) }));
+    // Match every note first, so the notes on one item can be read together in thread order (FR-085).
+    const entries = [];
     for (const message of notes) {
       const feedbackId = identity.feedbackId(message.ts, message.user, 'note', null);
       const stored = existingIds.has(feedbackId) ? previous.find((r) => r.feedback_id === feedbackId) : null;
       if (stored) {
         // A note already on record keeps the horizon fixed when it was first read: re-parsing "until 1 October"
-        // a year later would move it, and re-parsing costs a model call for nothing. Stored horizons that have
-        // not passed are carried by the stored-record path below.
+        // a year later would move it, and re-parsing costs a model call for nothing.
         candidates.push(stored);
+        entries.push({ message, feedbackId, stored, item: null, alertKey: null, itemId: stored.item_id || null });
         continue;
       }
       const { item } = matchNote({ text: message.text, items: knownItems });
@@ -309,9 +307,32 @@ const ingestFeedback = async ({
       const { alertKey } = item
         ? { alertKey: null }
         : matchAlertNote({ text: message.text, alertGroups: alertReplies });
+      entries.push({ message, feedbackId, stored: null, item, alertKey, itemId: item ? item.item_id : null });
+    }
+    const threads = new Map();
+    for (const entry of entries) {
+      if (entry.itemId) {
+        if (!threads.has(entry.itemId)) {
+          threads.set(entry.itemId, []);
+        }
+        threads.get(entry.itemId).push(entry);
+      }
+    }
+    for (const entry of entries) {
+      if (entry.stored) {
+        continue;
+      }
+      const { message, feedbackId, item, alertKey } = entry;
+      // The earlier notes of the same thread are the parser's context for a note that states no date of its own.
+      const thread = entry.itemId ? threads.get(entry.itemId) : [];
+      const earlierNotes = thread.slice(0, thread.indexOf(entry)).map((e) => e.message.text);
       const parsed = await parseNoteWithModel({
-        text: message.text, noteDate: observedDate, engine, model, definition,
+        text: message.text, noteDate: observedDate, engine, model, definition, earlierNotes,
       });
+      parsedToday.set(feedbackId, parsed);
+      if (item) {
+        observedByItem.set(item.item_id, evidenceValue(item));
+      }
       let target = 'brief';
       if (item) {
         target = 'item';
@@ -322,21 +343,10 @@ const ingestFeedback = async ({
         feedback_id: feedbackId,
         date: observedDate, run_id: sourceId, target, item_id: item ? item.item_id : null, alert_key: alertKey || null,
         // The note's own thumbs is its verdict (revision 23); the id stays keyed on the note alone, so re-reading it
-        // finds the stored record.
+        // finds the stored record. The horizon is the note's own statement; the one applied is the thread's (below).
         kind: 'note', verdict: noteVerdict(message.text), note: message.text, horizon: parsed.horizon,
         author: message.user, matched: Boolean(item || alertKey), source_ts: message.ts,
       });
-      if (item && parsed.horizon) {
-        const meta = itemMeta.get(item.item_id) || {};
-        horizons.push({
-          item_id: item.item_id,
-          project_url: item.project_url || meta.project_url || null,
-          metric: item.metric || meta.metric || null,
-          pattern_card: item.pattern_card === undefined ? (meta.pattern_card || null) : item.pattern_card,
-          horizon: parsed.horizon, expected_max: parsed.expected_max, observed_value: evidenceValue(item),
-          note: message.text, author_count: 1, source_run_id: sourceId,
-        });
-      }
     }
     sources.push({ run_id: sourceId, parent_ts: parentTs, replies: itemReplies.length, notes: notes.length, fallback });
     logger.info('feedback.source', {
@@ -355,7 +365,7 @@ const ingestFeedback = async ({
   const brief = { up: 0, down: 0, notes: [] };
   const projects = {};
   const metaFor = createMetaLookup(dataDir, itemMeta);
-  const knownHorizons = new Set(horizons.map((h) => `${h.item_id}|${h.horizon}`));
+  const itemNotes = new Map();
   for (const record of all) {
     const inWindow = record.date >= windowStart;
     if (record.target === 'alert_group' && record.alert_key) {
@@ -376,25 +386,44 @@ const ingestFeedback = async ({
       if (inWindow) {
         applyRecord(counts, record);
       }
-      applyHorizon(counts, record, observedDate);
       const projectUrl = counts.project_url;
       if (projectUrl) {
         (projects[projectUrl] = projects[projectUrl] || []).push(record);
       }
-      // A stored note whose horizon has not passed keeps suppressing (FR-060), even once its post is out of the
-      // look-back and the record out of the window; today's parse of the same note wins when both exist.
-      const key = `${record.item_id}|${record.horizon}`;
-      if (record.kind === 'note' && record.horizon && record.horizon >= observedDate && !knownHorizons.has(key)) {
-        knownHorizons.add(key);
-        horizons.push({
-          item_id: record.item_id, project_url: counts.project_url, metric: counts.metric,
-          pattern_card: counts.pattern_card, horizon: record.horizon, expected_max: null, observed_value: null,
-          note: record.note, author_count: 1, source_run_id: record.run_id, source: 'stored',
-        });
+      if (record.kind === 'note') {
+        if (!itemNotes.has(record.item_id)) {
+          itemNotes.set(record.item_id, []);
+        }
+        itemNotes.get(record.item_id).push(record);
       }
     } else if (inWindow) {
       applyRecord(brief, record);
     }
+  }
+  // The notes on one item are one conversation (FR-085, revision 29): in thread order over every stored note, the
+  // last stated horizon is the one applied, on the item's tallies and as the one horizon the analysis suppresses
+  // by; a statement a later note corrected is never pushed, and a horizon that has passed holds nothing back
+  // (FR-060: a stored horizon keeps suppressing until its date, whatever the influence window).
+  for (const [itemId, records] of itemNotes) {
+    const ordered = threadOrder(records);
+    const whole = clarifiedWhole(ordered.map((record) => ({
+      ...record,
+      expected_max: parsedToday.has(record.feedback_id) ? parsedToday.get(record.feedback_id).expected_max : null,
+    })));
+    const counts = byItem[itemId];
+    const active = Boolean(whole.horizon) && whole.horizon >= observedDate;
+    counts.horizon = active ? whole.horizon : null;
+    if (!active) {
+      continue;
+    }
+    const setter = [...ordered].reverse().find((record) => record.horizon === whole.horizon) || null;
+    horizons.push({
+      item_id: itemId, project_url: counts.project_url, metric: counts.metric, pattern_card: counts.pattern_card,
+      horizon: whole.horizon, expected_max: whole.expected_max,
+      observed_value: observedByItem.has(itemId) ? observedByItem.get(itemId) : null,
+      note: whole.note, author_count: whole.author_count, source_run_id: setter ? setter.run_id : null,
+      source: setter && parsedToday.has(setter.feedback_id) ? 'parsed' : 'stored',
+    });
   }
   for (const counts of Object.values(byItem)) {
     counts.verdict = verdictOf(counts);

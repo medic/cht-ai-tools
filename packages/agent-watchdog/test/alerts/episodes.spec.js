@@ -11,7 +11,7 @@ const { classified, alertsPolicy, RUN_START } = require('../helpers/alerts');
 const { makeItem, makeCandidate, makeProject } = require('../rollup/factories');
 
 const DAY2 = '2026-09-19T06:00:00Z';
-const NEPAL_A = 'https://north-a.example.org';
+const NORTH_A = 'https://north-a.example.org';
 
 describe('alerts/episodes', () => {
   let dataDir;
@@ -28,10 +28,10 @@ describe('alerts/episodes', () => {
       cycle_days: 30, days_before: 2, days_after: 2,
     }],
   });
-  const sentinelItem = makeItem({ project_url: NEPAL_A, why_now: 'Sentinel backlog climbed for seven hours.' });
-  const conflictItem = makeItem({ project_url: NEPAL_A, metric: 'cht_conflict_count', severity: 'low' });
-  const candidates = [makeCandidate({ project_url: NEPAL_A }), makeCandidate({
-    candidate_id: 'cccccccccccc', project_url: NEPAL_A, metric: 'cht_conflict_count', severity_floor: 'low',
+  const sentinelItem = makeItem({ project_url: NORTH_A, why_now: 'Sentinel backlog climbed for seven hours.' });
+  const conflictItem = makeItem({ project_url: NORTH_A, metric: 'cht_conflict_count', severity: 'low' });
+  const candidates = [makeCandidate({ project_url: NORTH_A }), makeCandidate({
+    candidate_id: 'cccccccccccc', project_url: NORTH_A, metric: 'cht_conflict_count', severity_floor: 'low',
   })];
 
   it('derives the episode id from the instance and the start date and the data layout has the alerts directory', () => {
@@ -67,7 +67,7 @@ describe('alerts/episodes', () => {
     const day1 = await updateEpisodes({
       dataDir, runId: '2026-09-18', date: '2026-09-18', runStart: new Date(RUN_START),
       classified: { instances: [firing, soonCleared] }, items: [sentinelItem],
-      candidatesByProject: { [NEPAL_A]: candidates },
+      candidatesByProject: { [NORTH_A]: candidates },
       discovery: { projects: [project] }, previousDiscovery: null, categories: alertsPolicy().categories,
     });
     expect(day1.opened.map((e) => e.instance_id).sort())
@@ -77,7 +77,7 @@ describe('alerts/episodes', () => {
     const opened = day1.opened.find((e) => e.instance_id === firing.instance_id);
     expect(opened).to.include({
       event: 'opened', run_id: '2026-09-18', title: 'Sentinel Backlog', host: 'north-a.example.org',
-      project_url: NEPAL_A, group: 'North Programme', category: 'backlog', importance: 'high',
+      project_url: NORTH_A, group: 'North Programme', category: 'backlog', importance: 'high',
       started_at: firing.started_at,
       cleared_at: null, duration_hours: null,
     });
