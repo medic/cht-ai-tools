@@ -2,6 +2,7 @@
 // The daily pipeline: purge, feedback, collect, analyze, agent, rollup, render, publish (contracts/cli.md).
 // Owns the run's state machine (data-model.md "Run") and the loud-failure rules (constitution V).
 const codes = require('../exit-codes');
+const { buildEgress, guardFetch, installEgressGuard } = require('../../net/egress');
 const { redactText } = require('../../publish/redact');
 const { loadConfig } = require('../../config/load');
 const { RunDir, RunExistsError, ensureDataLayout } = require('../../store/run-dir');
@@ -239,7 +240,20 @@ const finalStatus = ({ mode, rollupResult }) => {
  * Run the daily pipeline. Returns the exit code (0) or throws an ExitError / error mapped by the CLI.
  */
 module.exports = async function run({ flags = {}, env = process.env, stdout = process.stdout, logger, deps = {} }) {
-  const { config, effective, policy } = loadConfig({ env, flags, command: 'run' });
+  const loaded = loadConfig({ env, flags, command: 'run' });
+  // FR-083: for the run's duration every fetch of this process, the stages' and any library's through the global,
+  // passes the egress guard; a destination outside the allow-list is refused before a connection is made.
+  const egress = buildEgress(loaded.config);
+  const guard = installEgressGuard({ egress, logger });
+  const fetch = deps.fetch ? guardFetch(deps.fetch, egress, { logger }) : guard.fetch;
+  try {
+    return await runLoaded({ flags, env, stdout, logger, deps: { ...deps, fetch } }, loaded);
+  } finally {
+    guard.uninstall();
+  }
+};
+
+const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effective, policy }) => {
   const now = deps.now ? deps.now() : new Date();
   const date = flags.date || todayUtc(now);
   const stageOnly = flags.stage || null;
@@ -477,3 +491,5 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   }
   return codes.OK;
 };
+
+module.exports.runLoaded = runLoaded;

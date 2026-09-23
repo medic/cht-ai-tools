@@ -80,6 +80,17 @@ on stdout and exits 1 when any is unmet, 0 when all are met, 69 when the URL is 
 Prerequisites: reachable monitoring endpoint, CHT version at or above the minimum the watchdog
 supports, host-metrics exporter present when the project has opted in.
 
+### `egress`
+
+The destinations a run contacts, from the effective configuration, for the platform's network policy
+(FR-083, revision 30): host and port with the purpose of each and where it comes from (code or the
+environment variable), plus `inbound: none` and the one exempt command. Needs no secrets and no policy
+files; an endpoint left unset is left out. Exit 0.
+
+| Flag | Value | Default | Effect |
+|---|---|---|---|
+| `--format` | `json` \| `hosts` | `json` | `json` prints the document; `hosts` prints one host per line, sorted, for a policy. Anything else is a usage error (64). |
+
 ### `tools-server`
 
 Serves the enumerated read-only tools over stdio to the `claude` command-line engine; launched by the

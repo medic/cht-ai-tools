@@ -7,7 +7,7 @@ const codes = require('./exit-codes');
 const { createLogger } = require('../log/logger');
 const { writeResult } = require('./streams');
 
-const COMMANDS = ['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'tools-server'];
+const COMMANDS = ['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'egress', 'tools-server'];
 
 const OPTIONS = {
   date: { type: 'string' },
@@ -30,6 +30,7 @@ const OPTIONS = {
   'run-dir': { type: 'string' },
   replay: { type: 'boolean' },
   server: { type: 'string' },
+  format: { type: 'string' },
   'config-dir': { type: 'string' },
   'data-dir': { type: 'string' },
   'log-level': { type: 'string' },
@@ -48,6 +49,7 @@ Commands:
   calibrate     weekly calibration report and threshold proposals (--week --project)
   check <url>   readiness check for a CHT deployment
   purge         apply retention (--dry-run)
+  egress        the destinations a run contacts, for the platform's network policy (--format json|hosts)
   tools-server  serve the read-only tools over stdio for the CLI engine
                 (--run-dir --data-dir --project --server --replay)
 

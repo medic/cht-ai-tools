@@ -1,4 +1,4 @@
-// Shared end-to-end helpers: a fake Slack client, a fake browser, a scripted model that answers from the run
+// Shared end-to-end helpers: a fake Slack client, a scripted model that answers from the run
 // directory, and runCase, which drives the real run command against the fake Grafana. Nothing touches the network.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -75,17 +75,6 @@ const fakeSlack = () => {
       getPermalink: sinon.spy(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://medic.slack.com/archives/C123/p${ts}` })),
     },
   };
-};
-
-const fakeBrowserLauncher = () => {
-  const page = {
-    route: sinon.stub().resolves(),
-    setContent: sinon.stub().resolves(),
-    locator: sinon.stub().returns({ screenshot: sinon.stub().resolves(Buffer.from('fake-png')) }),
-  };
-  const context = { newPage: sinon.stub().resolves(page), close: sinon.stub().resolves() };
-  const browser = { newContext: sinon.stub().resolves(context), close: sinon.stub().resolves() };
-  return { launch: sinon.stub().resolves(browser), page, context, browser };
 };
 
 // Reads the run directory to answer like a careful model would: one item per metric with evidence
@@ -302,7 +291,6 @@ const runCase = async ({
   });
   const out = capture();
   const err = capture();
-  const browserLauncher = fakeBrowserLauncher();
   // engine: undefined → the scripted model; false → none injected, so the run command builds the configured
   // engine itself (used to drive the real CLI engine against the fake claude executable).
   const scriptedEngine = engine === false
@@ -319,7 +307,6 @@ const runCase = async ({
     deps: {
       fetch: fake.fetch,
       slack,
-      browserLauncher,
       engine: scriptedEngine,
       tracer: fakeTracer(),
       gitSha: 'e2e',
@@ -342,9 +329,9 @@ const runCase = async ({
     fs.writeFileSync(path.join(root, 'stderr.log'), err.text());
   }
   const read = (rel) => JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8'));
-  return { code, error, out, err, slack, browserLauncher, engine: scriptedEngine, fake, root, read, runId };
+  return { code, error, out, err, slack, engine: scriptedEngine, fake, root, read, runId };
 };
 
 module.exports = {
-  DATE, DEFAULTS_DIR, capture, envFor, fakeTracer, fakeSlack, fakeBrowserLauncher, createScriptedEngine, runCase,
+  DATE, DEFAULTS_DIR, capture, envFor, fakeTracer, fakeSlack, createScriptedEngine, runCase,
 };

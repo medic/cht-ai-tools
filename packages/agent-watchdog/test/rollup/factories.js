@@ -148,7 +148,7 @@ const makeConfig = (overrides = {}) => ({
     slackChannelId: 'C123',
   },
   secrets: { slackBotToken: 'xoxb-test' },
-  runtime: { chromiumPath: null },
+  runtime: { claudePath: null },
   paths: {},
   ...overrides,
 });

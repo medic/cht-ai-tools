@@ -32,8 +32,8 @@ node --env-file=.env bin/agent-watchdog.js run --dry-run --date 2026-09-18 > pay
 
 ## Commands
 
-`run`, `replay`, `distill`, `calibrate`, `check <cht-url>`, `purge [--dry-run]`, `tools-server`.
-A run is the stages `purge, feedback, collect, analyze, agent, rollup, render, publish`, in that
+`run`, `replay`, `distill`, `calibrate`, `check <cht-url>`, `purge [--dry-run]`, `egress [--format json|hosts]`,
+`tools-server`. A run is the stages `purge, feedback, collect, analyze, agent, rollup, render, publish`, in that
 order; `--stage <name>` runs one of them against the previous stage's files. Exit codes: 0 ok,
 1 failed, 64 usage, 65 missing stage input, 69 metrics source unavailable, 74 Slack unavailable,
 75 duplicate date, 78 configuration invalid. Logs are JSON lines on stderr; results go to stdout.
@@ -197,7 +197,7 @@ is written down under [`specs/001-watchdog-slack-loop/contracts/`](specs/001-wat
 |---|---|
 | [`environment.md`](specs/001-watchdog-slack-loop/contracts/environment.md) | environment variables; `.env.example` is the source of truth |
 | [`config-files.md`](specs/001-watchdog-slack-loop/contracts/config-files.md) | the mounted policy files `projects.yaml`, `dashboards.yaml`, `thresholds.yaml`, `alerts.yaml` |
-| [`container.md`](specs/001-watchdog-slack-loop/contracts/container.md) | the image: fixed non-root user, read-only root filesystem, writable `/tmp` and `/data`, entrypoint |
+| [`container.md`](specs/001-watchdog-slack-loop/contracts/container.md) | the image: fixed non-root user, read-only root filesystem, writable `/tmp` and `/data` only, no browser, entrypoint; the egress list and its enforcement; the reference manifests under [`deploy/`](deploy/README.md) |
 | [`cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md), [`exit-codes.md`](specs/001-watchdog-slack-loop/contracts/exit-codes.md) | commands, flags, streams and exit codes |
 | [`run-directory.md`](specs/001-watchdog-slack-loop/contracts/run-directory.md) | every file a run writes, which stage reads it, and what retention removes |
 | [`slack-payload.md`](specs/001-watchdog-slack-loop/contracts/slack-payload.md) | the exact Slack payload: parent, thread replies, metadata events |
@@ -216,7 +216,6 @@ Every runtime dependency carries a one-line justification (constitution V):
 | `zod` | Startup validation of configuration, entity schemas, and the source of the structured-output JSON schemas. |
 | `yaml` | The three policy files are YAML; Node has no parser. |
 | `handlebars` | Escaping templates for the report and Slack text; untrusted text is never concatenated. |
-| `playwright-core` | Retained for the container's browser and the `--png` check of `smoke/render.js`; a run renders no image since revision 24 (the brief image was a capture of the Slack message). |
 | `@langfuse/tracing`, `@langfuse/otel`, `@langfuse/client`, `@opentelemetry/sdk-node` | One trace per run with a span per stage and usage per model call; the classic `langfuse` package describes itself as a deprecated v3 client. |
 
 ## Smoke tests
@@ -227,13 +226,24 @@ Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour onl
 
 | Script | Needs | Confirms |
 |---|---|---|
-| `render.js [--out <html>] [--png]` | nothing; `--png` needs a browser: Playwright's, or `AGENT_WATCHDOG_CHROMIUM_PATH` | S-11: the report renders with its links, writing under `TMPDIR` only |
-| `container.js [--no-build] [--image <tag>]` | Docker | `contracts/container.md`: the image builds, `--version` prints the package version, `check` of an unreachable host exits 69, the report renders with `--read-only --tmpfs /tmp` |
+| `render.js [--out <html>]` | nothing | S-11: the report renders with its links, writing under `TMPDIR` only |
+| `container.js [--no-build] [--image <tag>]` | Docker | `contracts/container.md`, S-50: the image builds and, run read-only with every capability dropped, no privilege escalation, user `10001:10001` and no network where none is needed, prints its version, lists its egress, exits 69 for `check` of an unreachable host and renders the report under `/tmp` |
 | `langfuse.js` | Langfuse credentials | S-9: one trace with a stage span and a generation, `getTraceUrl`, `forceFlush` completing before exit |
 | `grafana.js [--project <host>] [--hosts] [--alerts]` | a Viewer token for the hosted watchdog | S-6, S-7: datasource proxy queries and dashboards; `--hosts` host discovery, `--alerts` the alert rules endpoint |
 | `slack.js [--yes]` | the Slack app | S-8: a private file upload, metadata and read-back; `--yes` posts a brief with a group bullet and its sub-bullets (S-16) |
 | `agent-sdk.js` | model credentials | S-1, S-2, S-4, S-5: structured output on every turn, the Stop hook per turn, the committed schemas, hooks |
 | `agent-parity.js --date <date> --project <host>` | a stored run and model credentials | S-3, S-10: both engines agree on items and gate verdicts |
+
+## Deploying
+
+The image runs as user `10001:10001` with a read-only root filesystem and writes only to `/data` (the
+volume) and `/tmp`; it carries no browser, no secrets, no policy files and no run data, and exposes no
+port ([`contracts/container.md`](specs/001-watchdog-slack-loop/contracts/container.md), FR-086).
+`agent-watchdog egress` prints every destination a run contacts, from the effective configuration, for the
+platform's network policy, and a run refuses any other destination itself before a connection is made
+(FR-083). [`deploy/`](deploy/README.md) holds reference manifests with placeholder hosts: the CronJob with its
+security context, mounts, limits and deadline, and an egress policy whose names are that list; tests keep
+them in step with the contract. `medic-infrastructure` owns what is applied.
 
 ## Releasing
 

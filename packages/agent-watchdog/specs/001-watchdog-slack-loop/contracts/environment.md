@@ -86,7 +86,6 @@ type, requiredness and consumer.
 | `AGENT_WATCHDOG_LOG_LEVEL` | enum `trace\|debug\|info\|warn\|error` | `info` | |
 | `AGENT_WATCHDOG_LOG_FORMAT` | enum `json\|pretty` | `json` | JSON lines on stderr. |
 | `MCP_TIMEOUT` | integer ms | 30000 | Read by the agent runtime: MCP server startup wait. |
-| `AGENT_WATCHDOG_CHROMIUM_PATH` | path | unset | Explicit Chromium executable for `smoke/render.js --png` only; no run renders in a browser since revision 24. Removal pending the container revision. |
 | `AGENT_WATCHDOG_CLAUDE_PATH` | path | unset | Explicit `claude` executable for `AGENT_WATCHDOG_ENGINE=cli`; when unset, `claude` is resolved on PATH. |
 
 ## Set by the container image, not by the deployment
@@ -94,8 +93,10 @@ type, requiredness and consumer.
 These are baked into the image as `ENV` and documented here so the deployment does not need to
 repeat them: `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`,
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`
-(writable scratch for the agent runtime; sessions are not persisted to it because the SDK is run
-with `persistSession: false`), `NODE_ENV=production`. See [container.md](./container.md). The runtime
+(writable scratch for the agent runtime, created by the engines at start; sessions are not persisted
+to it because the SDK is run with `persistSession: false`), `HOME=/home/watchdog`, `TMPDIR=/tmp`,
+`NODE_ENV=production`. `/data` and `/tmp` are the only writable paths (FR-086, revision 30). See
+[container.md](./container.md). The runtime
 would also look for a `claude` login under `CLAUDE_CONFIG_DIR`, so the image has none: the scheduled run
 authenticates with `ANTHROPIC_API_KEY`; login mode is for a contributor's machine.
 

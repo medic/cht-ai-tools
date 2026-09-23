@@ -9,7 +9,8 @@ module.exports = {
     ['@semantic-release/changelog', { changelogFile: 'CHANGELOG.md' }],
     ['@semantic-release/exec', {
       publishCmd: [
-        'docker build -t ghcr.io/medic/agent-watchdog:${nextRelease.version} .',
+        'docker build --build-arg VERSION=${nextRelease.version} --build-arg REVISION=${nextRelease.gitHead} '
+          + '-t ghcr.io/medic/agent-watchdog:${nextRelease.version} .',
         'docker push ghcr.io/medic/agent-watchdog:${nextRelease.version}',
       ].join(' && '),
     }],

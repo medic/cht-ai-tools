@@ -84,7 +84,7 @@ files.
 | **VI. Flag, Don't Act** | PASS | No credential can change a deployment; the code has no remediation, restart, reconfigure or ticketing path; the post says where to look. Paging stays with the existing monitoring stack (Out of Scope). |
 | **VII. Learn Only Through Review** | PASS | Memory changes automatically within `AGENT_WATCHDOG_MEMORY_MAX_TOKENS`, every change a diff. Prompts, tools, skill, priorities, calendar and thresholds change only by PR in `cht-ai-tools` or `medic-infrastructure`. Proposals (skill, prompt, threshold, pattern card) are files for review, never merges. Raw corpus stays under `AGENT_WATCHDOG_CORPUS_RAW_DIR` outside the repository; only scrubbed cards and the content-hash index are public. |
 | **VIII. One Audience per Output** | PASS | Every `render` and `publish` function takes `audience` as an explicit argument; this feature passes `internal` everywhere and may link internal tooling and name any project. The partner audience (feature 002) adds a value and its own scoping rules without inference from context. |
-| **Security Requirements** | PASS | Secrets arrive from the cluster secret manager as environment variables; none in the image or repository. The container contract requires non-root, read-only root filesystem with writable `/data` and `/tmp`, dropped capabilities, CPU and memory limits, and egress restricted to Grafana, Slack, Anthropic, Langfuse and the documentation service. Dependabot keeps dependencies current and CI fails on `npm audit --audit-level=high`. Model output is schema-validated and escaped before display. Run records live on the encrypted volume; retention is configuration. |
+| **Security Requirements** | PASS | Secrets arrive from the cluster secret manager as environment variables; none in the image or repository. The container contract requires non-root, read-only root filesystem with writable `/data` and `/tmp`, dropped capabilities, CPU and memory limits, and egress restricted to Grafana, Slack, Anthropic, Langfuse and the documentation service; since revision 30 FR-086 states these as requirements, the image is checked under them in CI, the package emits the egress list for the platform's policy and guards its own requests in process (FR-083). Dependabot keeps dependencies current and CI fails on `npm audit --audit-level=high`. Model output is schema-validated and escaped before display. Run records live on the encrypted volume; retention is configuration. |
 | **Development Workflow and Quality Gates** | PASS | CI jobs: `lint` (zero warnings), `test` with nyc coverage compared against `main`, `replay:eval` when files under `prompts/`, `skill/`, `schema/` or `src/analyze/` change, `audit`, commitlint. PR template asks for dependency justification and confirms `AGENTS.md` and `README.md` reflect changed behaviour. Releases by semantic-release; the image tag is bumped in `medic-infrastructure` by PR. |
 
 **Gate result: PASS.** No principle is violated. Five dependency choices and one evidence-based
@@ -192,7 +192,7 @@ never lives in this tree. Deployment manifests are not in this package.
 |---|---|---|
 | `yaml` dependency | Policy files (`projects.yaml`, `dashboards.yaml`, `thresholds.yaml`) are YAML per the Notes and the `.env.example`, and Node has no YAML parser | JSON policy files would be simpler but were decided against in the Notes; `yaml` 2.x is CommonJS, dependency-free and verified to load |
 | `@modelcontextprotocol/sdk` as a direct dependency | The CLI engine needs the local read-only tools served over stdio; the Agent SDK's in-process server cannot be reached from a separate `claude` process | It is already installed transitively by the Agent SDK at the same major, so the direct dependency adds no weight and pins the API we call |
-| Chromium in the container image | Retained after revision 24 retired the image (FR-023) only until the container revision removes it; nothing in a run uses it | Removing it now would widen a formatting revision into a container change; research.md R-29 defers it |
+| Chromium in the container image | Removed in revision 30 (FR-086): nothing in a run had used it since revision 24, and `playwright-core` left the dependencies with it | An unused browser in a hardened image widened its attack surface and its size for nothing a reader used (research.md R-35) |
 | Langfuse v5 as four packages (`@langfuse/tracing`, `@langfuse/otel`, `@langfuse/client`, `@opentelemetry/sdk-node`) instead of the single `langfuse` package | The classic package's own npm description calls it a deprecated v3 client and directs new work to these packages; all four load from CommonJS | One dependency instead of four would be simpler, but it builds a new system on a client the vendor has retired |
 | Native Claude Code runtime in the image (about 224 MB) | Inherent to the Agent SDK decision in the Notes; the SDK spawns the platform binary | Calling the Messages API directly would remove the runtime but discard the MCP, hooks, session and structured-output machinery the design relies on |
 | Harness-driven verification instead of `--settings` hooks on the CLI engine | `claude --bare` skips hooks by design (verified), so the CLI cannot run the gate as a hook | Running the CLI without `--bare` restores hooks but re-opens filesystem settings discovery; the harness-driven gate keeps both engines on the same code path |
@@ -778,3 +778,30 @@ Deliberately not planned: retracting a proposal when a later thread corrects the
 proposal file is a person's to close); a horizon cancelled by a dateless "resolved" note (the parser returns
 null, the earlier horizon stands until its date); serving run files over the web (the trace link and the
 quoted lines are the operator's chosen answer).
+
+### Revision 30 delta: the container locked down, and egress the package can name and refuse (FR-083, FR-086)
+
+Planned on 2026-09-23 from the operator's roadmap and the security checklist's CHK031, CHK041 and CHK042
+(research.md R-32, R-35): the container contract described the hardening as expectations of the platform,
+the browser retired in revision 24 was still in the image, and nothing in the package could name or refuse
+the destinations a run contacts. Where each lands:
+
+| Change | Story | Requirements |
+|---|---|---|
+| Container hardening stated as requirements: fixed non-root user, read-only root, `/data` and `/tmp` the only writable paths, no browser, lockfile-only install without lifecycle scripts, no port; dropped capabilities, no privilege escalation, default seccomp, no service-account token, limits, no concurrency, deadline | US3 | FR-086 |
+| The image rebuilt without Playwright and Chromium, `playwright-core` and `AGENT_WATCHDOG_CHROMIUM_PATH` removed, OCI version and revision labels from build arguments | US3 | FR-086 |
+| `src/net/egress.js`: the allow-list from the fixed destinations and the configured endpoints, an in-process guard on every `fetch` of the run, a refusal that fails closed with exit 69 naming host and port | US3 | FR-083 |
+| `agent-watchdog egress [--format json\|hosts]`: the list for the platform's policy, from the effective configuration, without secrets | US3 | FR-083 |
+| Reference manifests under `deploy/` (CronJob with its security context, mounts, limits and deadline; a default-deny egress policy with DNS; a Cilium FQDN policy) checked by tests against FR-086 and the egress list | US3 | FR-086 |
+| `smoke/container.js` runs the built image under the platform's constraints in CI (SC-017) | US3 | FR-086 |
+
+- **I**: no new dependency; one removed. **II**: tests first for the egress module, the command, the run's
+  guard, the image definition and the manifests. **III**: the allow-list is code plus configuration, never a
+  model output. **IV**: nothing new stored. **V**: no new stage; one new read-only command. **VI**: a refused
+  request fails the run, nothing is retried around the policy. **VII**: unchanged. **VIII**: unchanged.
+  Result: PASS.
+
+Deliberately not planned: wrapping the Slack SDK's transport or the agent runtime's subprocess (the platform
+policy covers them; the guard is the package's own belt); a per-request proxy inside the image; a
+distroless base (the runtime binary needs glibc and the image needs no shell change for a CronJob today);
+signing the image (a release concern in `medic-infrastructure`).

@@ -348,11 +348,6 @@ const VARIABLES = [
     default: 30000,
   },
   {
-    env: 'AGENT_WATCHDOG_CHROMIUM_PATH',
-    path: 'runtime.chromiumPath',
-    schema: text,
-  },
-  {
     env: 'AGENT_WATCHDOG_CLAUDE_PATH',
     path: 'runtime.claudePath',
     schema: text,

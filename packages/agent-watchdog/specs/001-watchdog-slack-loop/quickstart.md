@@ -10,8 +10,8 @@ to Slack unless the step says so.
 ## Prerequisites
 
 - Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
-- No browser is needed since revision 24; `npx playwright-core install chromium-headless-shell` only for `smoke/render.js --png`, or set
-  `AGENT_WATCHDOG_CHROMIUM_PATH` to a system Chromium.
+- No browser: nothing has rendered an image since revision 24, and the browser left the image and the
+  dependencies in revision 30.
 - Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY` (or, with
   `AGENT_WATCHDOG_ENGINE=cli`, a `claude` login and the key left blank); a Grafana service-account
   token with the Viewer role on the watchdog you point at (`AGENT_WATCHDOG_GRAFANA_TOKEN`,
@@ -292,3 +292,16 @@ in that file; for a project whose candidates the horizon held back, `applied bef
 suppressed until <date> (<slug>/suppressed.json)`; otherwise `not used today`. Every quoted line can be found
 verbatim in the prompt file, and the trace link opens the run in Langfuse at the project's pass-1
 generation when the tracer returned its id.
+
+## 21. The hardened image, and the egress list for the platform (revision 30)
+
+`node --env-file=.env bin/agent-watchdog.js egress` prints every destination a run contacts, host and port
+with its purpose and where it comes from; `--format hosts` prints one host per line for a network policy.
+Nothing else is contacted: a stage that tried would fail the run with exit 69 and an `egress.refused` log
+line naming the host and port (try it by pointing `AGENT_WATCHDOG_GRAFANA_URL` at one host and a stored
+`discovery.json` at another). With Docker, `node smoke/container.js` builds the image and runs it as the
+platform will: root filesystem read-only, every capability dropped, no privilege escalation, user
+`10001:10001`, and no network for the checks that need none; it prints the version, lists the egress for a
+placeholder configuration, exits 69 for `check https://example.invalid` and renders the fixture report under
+`/tmp`. The reference manifests under `deploy/` show the CronJob's security context, mounts, limits and
+deadline and an egress policy whose names are that list; `npm test` keeps them in step with the contract.

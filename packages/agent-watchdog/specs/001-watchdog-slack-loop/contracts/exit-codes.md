@@ -19,6 +19,9 @@ of a `run` is preceded by a one-line failure notice with the trace link (FR-024)
 
 Notes:
 
+- A request to a destination outside the egress allow-list (FR-083, revision 30) is refused before a
+  connection is made and surfaces as `UNAVAILABLE` (69) with the host and port in the log and the
+  failure notice, never the URL.
 - Reaching a tool, token or cost bound is not a failure: the run completes with what it has, says
   so in the post, records `bounds_hit` in `run.json`, and exits 0 (FR-012).
 - A degraded brief exits 0 with `status: degraded` so the scheduler does not retry a run that has

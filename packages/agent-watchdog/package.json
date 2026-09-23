@@ -40,7 +40,6 @@
     "@opentelemetry/sdk-node": "^0.222.0",
     "@slack/web-api": "^8.1.1",
     "handlebars": "^4.7.9",
-    "playwright-core": "^1.63.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },

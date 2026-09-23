@@ -5,18 +5,6 @@ const { RunDir } = require('../../src/store/run-dir');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 const { makeItem, makeBrief, makeDiscovery, makeConfig, quietLogger } = require('../rollup/factories');
 
-const fakeLauncher = () => {
-  const locator = { screenshot: sinon.stub().resolves(Buffer.from('PNG')) };
-  const page = {
-    route: sinon.stub().resolves(),
-    setContent: sinon.stub().resolves(),
-    locator: sinon.stub().returns(locator),
-  };
-  const context = { newPage: sinon.stub().resolves(page), close: sinon.stub().resolves() };
-  const browser = { newContext: sinon.stub().resolves(context), close: sinon.stub().resolves() };
-  return { launch: sinon.stub().resolves(browser) };
-};
-
 describe('cli/stages/render', () => {
   let dataDir;
   let runDir;
@@ -38,25 +26,23 @@ describe('cli/stages/render', () => {
   });
   afterEach(() => removeDir(dataDir));
 
-  const ctx = (launcher) => ({
+  const ctx = () => ({
     config: makeConfig(),
     logger: quietLogger(),
     runDir,
     runId: '2026-09-18',
     date: '2026-09-18',
     mode: 'scheduled',
-    deps: { browserLauncher: launcher },
+    deps: {},
   });
 
-  it('renders the report only, launches no browser, and records the report on the brief (revision 24)', async () => {
+  it('renders the report only and records it on the brief (revision 24; no browser since revision 30)', async () => {
     const written = makeBrief({ bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }] });
     await runDir.writeJson('rollup/brief.json', written);
-    const launcher = fakeLauncher();
-    const out = await stage.run(ctx(launcher));
+    const out = await stage.run(ctx());
     expect(out).to.deep.equal({ report: 'rollup/report.html', image: null });
     expect(fs.existsSync(path.join(runDir.root, 'rollup', 'report.html'))).to.equal(true);
     expect(fs.existsSync(path.join(runDir.root, 'rollup', 'brief.png'))).to.equal(false);
-    expect(launcher.launch.called).to.equal(false);
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.image).to.equal(null);
     expect(brief.report).to.deep.equal({ path: 'rollup/report.html', slack_file_id: null, ts: null });
@@ -65,7 +51,7 @@ describe('cli/stages/render', () => {
 
   it('renders the report for a heartbeat without a report share', async () => {
     await runDir.writeJson('rollup/brief.json', makeBrief({ kind: 'heartbeat', headline: 'All quiet', bullets: [] }));
-    const out = await stage.run(ctx(fakeLauncher()));
+    const out = await stage.run(ctx());
     expect(out.image).to.equal(null);
     expect(fs.existsSync(path.join(runDir.root, 'rollup', 'report.html'))).to.equal(true);
     const brief = await runDir.readJson('rollup/brief.json');
@@ -82,14 +68,14 @@ describe('cli/stages/render', () => {
       metric: 'cht_outbound_push_backlog_count', value: 12, previous_day_value: 10,
       panel_ref: { dashboard_uid: 'oa2OfL-Vk', panel_id: 2, panel_title: 'Outbound Push Backlog', ref_id: 'A' },
     }]);
-    await stage.run(ctx(fakeLauncher()));
+    await stage.run(ctx());
     const linked = fs.readFileSync(path.join(runDir.root, 'rollup', 'report.html'), 'utf8');
     expect(linked).to.include('href="https://watchdog.example.org/d/oa2OfL-Vk/cht-admin-overview?');
     expect(linked).to.include('var-cht_instance=beta.example.org');
     expect(linked).to.include(
       'href="https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop"',
     );
-    const none = ctx(fakeLauncher());
+    const none = ctx();
     none.config = { ...makeConfig(), publish: { reportLinks: 'none' } };
     await stage.run(none);
     const bare = fs.readFileSync(path.join(runDir.root, 'rollup', 'report.html'), 'utf8');
@@ -100,7 +86,7 @@ describe('cli/stages/render', () => {
   it('refuses to run without the brief', async () => {
     let error;
     try {
-      await stage.run(ctx(fakeLauncher()));
+      await stage.run(ctx());
     } catch (e) {
       error = e;
     }

@@ -2,6 +2,17 @@
 // The Claude Agent SDK engine (research.md R-2): one streaming-input query per project session, isolated
 // from filesystem settings, with no built-in tools and an enumerated MCP allow-list. Messages are mapped to
 // turn objects by src/agent/turn-mapper.js, the same mapper the command-line engine uses.
+// The runtime's configuration directory lives under the writable /tmp (FR-086): created here, since an emptyDir
+// mounted over /tmp holds nothing the image prepared. Best effort; the runtime reports its own failure otherwise.
+const ensureDir = (dir) => {
+  try {
+    require('node:fs').mkdirSync(dir, { recursive: true });
+  } catch {
+    // the runtime will say so
+  }
+  return dir;
+};
+
 const { forStructuredOutput } = require('./output-schema');
 const os = require('node:os');
 const path = require('node:path');
@@ -75,7 +86,7 @@ const createSdkEngine = ({
 
   const subprocessEnv = () => ({
     ...env,
-    CLAUDE_CONFIG_DIR: env.CLAUDE_CONFIG_DIR || path.join(os.tmpdir(), 'agent-watchdog-runtime'),
+    CLAUDE_CONFIG_DIR: ensureDir(env.CLAUDE_CONFIG_DIR || path.join(os.tmpdir(), 'agent-watchdog-runtime')),
     DISABLE_AUTOUPDATER: '1',
     DISABLE_TELEMETRY: '1',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',

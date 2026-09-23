@@ -613,7 +613,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-8 | A file uploaded privately with `files.uploadV2` renders in `#agents` through an `image` block with `slack_file.id`, and registered metadata round-trips through `conversations.replies` with `include_all_metadata` | Rendering and metadata registration are only observable live |
 | S-9 | Langfuse v5 `getTraceUrl(traceId)` returns a link that opens the run's trace, and `forceFlush` completes before exit in the container | Network behaviour |
 | S-10 | `smoke/agent-parity.js`: one recorded project through both engines produces identical `findings.pass<n>.json` after gate normalisation | The whole point of FR-050 |
-| S-11 | `smoke/render.js` inside the image with a read-only root filesystem and writable `/tmp` and `/data` only | Playwright's writable-directory needs beyond `TMPDIR` are undocumented |
+| S-11 | `smoke/render.js` inside the image with a read-only root filesystem and writable `/tmp` only (no browser since revision 30; `smoke/container.js` runs it) | Which paths a render touches is only seen with the root filesystem read-only |
 | S-12 | `semantic-release --dry-run` from the package directory analyses only commits under `packages/agent-watchdog` | Third-party plugin behaviour |
 | S-13 | `reactions.add` with `name: eyes` under the `reactions:write` scope: the reaction appears, a repeat reports `already_reacted` without failing, and a token lacking the scope logs `missing_scope` while the digest still posts (R-13) | Scope and error names not re-fetched from the Slack reference in this session |
 | S-14 | A Viewer service-account token on the hosted watchdog reads `GET /api/prometheus/grafana/api/v1/rules` and `/alerts`; the instance `state` strings and the paging parameters behind `groupNextToken` match R-14 | Grant and response casing read from source, not exercised live |
@@ -652,6 +652,8 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-47 | On a hosted brief every sub-bullet of a programme starts with its project's short host and every single-project bullet with its full host, none repeats the host, and the model's lines describe the change without metric keys | The model's wording under the new instruction only shows live |
 | S-48 | A hosted post shows its whole headline, at most two programme bullets of at most three project lines, no alert bullet, and its thread holds the report share, one reply per remaining programme with two or more flagged projects, one Other reply and one alerts reply whose links open the filtered alert lists | The thread's shape and Slack's rendering of a bold section headline are only seen live |
 | S-49 | After two people write in sequence about one item under a hosted post, the next day's digest shows the item suppressed until the corrected horizon or quotes the lines from the project's `prompt.pass1.md`, and its trace link opens the run in Langfuse at the pass-1 generation | Langfuse's `?observation=` deep link and the SDK's observation id are only verified against the hosted instance |
+| S-50 | The built image passes `smoke/container.js` under `--read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001` and `--network none` where no network is needed: `--version`, `egress --format hosts`, `check` of an unreachable host exiting 69, the report rendering under `/tmp` | Whether the runtime's start-up writes stay under `/tmp` and `/data` is only seen with the root filesystem read-only |
+| S-51 | With the deployment's egress policy applied, a scheduled run completes and a deliberate request to a host outside the list from inside the pod is refused at the network | The policy engine and its FQDN handling are the platform's |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1857,3 +1859,42 @@ two contradicting proposals, and neither call knows what the other produced); re
 proposal when a later note corrects it (a proposal is a person's to close); a leaner feedback block in the
 analysis prompt (would change what every analysis reads, out of scope here); cancelling a horizon on a
 dateless "resolved" note (the parser returns null and the earlier horizon stands until its date).
+
+## R-35. The container locked down, and egress the package can name and refuse
+
+**Evidence**. The image built for revision 29 still installed Playwright's Chromium headless shell (about
+150 MB and a `fonts-noto-color-emoji` apt install) for a render no run had made since revision 24
+(R-29); the container contract stated the hardening (non-root, read-only root, dropped capabilities,
+limits, egress) as expectations of the platform, with no test and no artefact the platform could apply;
+FR-083 enumerated the egress destinations but nothing in the package could list them for a policy or
+refuse a request outside them; and the security checklist's CHK031, CHK041 and CHK042 (R-32) asked for
+exactly that. A scan of the production dependency tree (191 packages) found one `postinstall` script,
+`protobufjs`'s version-scheme warning, and `prepare` scripts that npm never runs for installed packages, so
+`npm ci --ignore-scripts` costs nothing. Node's `fetch` is undici's, so a guard wrapping `globalThis.fetch`
+sees the package's own requests and any library that calls the global `fetch` at call time; the Slack SDK
+uses its own HTTP transport and the agent runtime is a subprocess, so neither passes the guard.
+
+**Decisions**. The hardening becomes a requirement (FR-086) and the image follows it: two stages from
+`node:22-bookworm-slim`, production dependencies from the lockfile with `--ignore-scripts`, no browser, no
+`apt-get`, the application owned by root and read-only to the fixed user `10001:10001`, `HOME`, `TMPDIR`
+and the runtime's configuration directory under `/tmp`, no `EXPOSE`, OCI version and revision labels from
+build arguments the release passes. Egress becomes something the package can state and refuse:
+`src/net/egress.js` builds the allow-list from the fixed destinations (Slack, its file host, the model API,
+the three reference-link hosts) and the configured endpoints (Grafana, Langfuse, the documentation service,
+the specification and configuration links), host and port with the purpose of each; `agent-watchdog egress`
+prints it as JSON or one host per line for the policy; and the run installs a guard on `globalThis.fetch`
+and on the `fetch` it hands its stages, which refuses a destination outside the list before any connection,
+as an `ExitError` with the unavailable-source code (69) naming host and port and never the URL, and restores
+the original `fetch` when the run ends. The platform policy stays the enforcement of record; reference
+manifests under `deploy/` (a CronJob with the security context, the three mounts, requests and limits,
+`concurrencyPolicy: Forbid` and an `activeDeadlineSeconds` ten minutes past the run timeout; a default-deny
+egress `NetworkPolicy` that allows DNS; a `CiliumNetworkPolicy` whose FQDNs are the egress list) are checked
+by tests against FR-086 and against `buildEgress` of the manifest's own configuration, so the two cannot
+drift. `smoke/container.js` runs the built image under the constraints in CI (S-50).
+
+**Rejected or deferred**: a distroless or Alpine base (the runtime's native binary is built for glibc, and
+the slim Debian image already has no browser or package use at run time); wrapping the Slack SDK's transport
+(fixed hosts, covered by the policy); an in-image proxy (a second process to harden); refusing `http:`
+Grafana for a contributor's local watchdog (the configured origin is allowed whatever its scheme, so a local
+`http://127.0.0.1:3000` works); a plain Kubernetes `NetworkPolicy` for FQDNs (it selects CIDRs only, so the
+FQDN example is Cilium's and the platform substitutes its own engine).

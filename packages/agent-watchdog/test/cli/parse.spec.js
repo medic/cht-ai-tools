@@ -1,5 +1,5 @@
 const { Writable } = require('node:stream');
-const { main, parseCommandLine, COMMANDS } = require('../../src/cli/index');
+const { main, parseCommandLine, COMMANDS, USAGE } = require('../../src/cli/index');
 const codes = require('../../src/cli/exit-codes');
 
 const capture = () => {
@@ -10,7 +10,10 @@ const capture = () => {
 
 describe('cli/parse', () => {
   it('knows the contract commands', () => {
-    expect(COMMANDS).to.include.members(['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'tools-server']);
+    expect(COMMANDS).to.include.members([
+      'run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'egress', 'tools-server',
+    ]);
+    expect(USAGE).to.match(/egress\s+the destinations a run contacts/);
   });
 
   it('parses a repeatable --group beside --project and documents it in the usage text (revision 24)', async () => {

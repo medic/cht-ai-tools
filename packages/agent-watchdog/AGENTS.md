@@ -40,12 +40,14 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 `src/cli/stages/` (`purge`, `feedback`, `collect`, `analyze`, `agent`, `rollup`, `render`,
 `publish`). Each stage reads the previous stage's files under the run directory and writes its own
 (`specs/001-watchdog-slack-loop/contracts/run-directory.md`). Shared modules: `src/config/`,
-`src/log/`, `src/store/`, `src/model/`, `src/trace/`.
+`src/log/`, `src/store/`, `src/model/`, `src/trace/`, `src/net/` (the egress allow-list and the guard every
+`fetch` of a run passes, FR-083).
 
 ## Commands and exit codes
 
 `run [--date --project --stage --engine --dry-run --force --since]`, `replay`, `distill`,
-`calibrate`, `check <cht-url>`, `purge [--dry-run]`, `tools-server`. Exit codes: 0 ok, 1 failed, 64 usage,
+`calibrate`, `check <cht-url>`, `purge [--dry-run]`, `egress [--format json|hosts]`, `tools-server`.
+Exit codes: 0 ok, 1 failed, 64 usage,
 65 missing stage input, 69 metrics source unavailable, 74 Slack unavailable, 75 duplicate date,
 78 configuration invalid. Logs are JSON lines on stderr; results go to stdout. `purge` applies
 retention (raw 14 days, kept 30, durable never) and runs implicitly as the first stage of every `run`.

@@ -1,0 +1,63 @@
+# Reference only (deploy/README.md): egress restricted to what `agent-watchdog egress` lists (FR-083). Placeholder
+# hosts. The NetworkPolicy denies every egress except DNS; the CiliumNetworkPolicy allows the named destinations on
+# 443. A cluster without Cilium substitutes its own name-based egress mechanism.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-watchdog-egress-deny
+  namespace: agent-watchdog
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-watchdog
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-watchdog-egress-allow
+  namespace: agent-watchdog
+spec:
+  endpointSelector:
+    matchLabels:
+      app: agent-watchdog
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Exactly `agent-watchdog egress --format hosts` for the ConfigMap in cronjob.example.yaml.
+    - toFQDNs:
+        - matchName: api.anthropic.com
+        - matchName: docs-mcp.example.org
+        - matchName: docs.communityhealthtoolkit.org
+        - matchName: files.slack.com
+        - matchName: forum.communityhealthtoolkit.org
+        - matchName: github.com
+        - matchName: langfuse.example.org
+        - matchName: slack.com
+        - matchName: watchdog.example.org
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

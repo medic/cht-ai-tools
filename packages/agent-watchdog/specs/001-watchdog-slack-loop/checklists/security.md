@@ -81,6 +81,15 @@
 - [ ] CHK043 - Is it stated which run artefacts the end-of-run scan covers (prompts, tool results, session ledgers, verification reports) and that it shares the gate's pattern set? [Consistency, Spec §FR-045]
 - [ ] CHK044 - Is "personal data" defined once, and does the definition cover what the gate, the proposal scrubber and the Slack-id rule each handle? [Consistency, Spec §FR-016, §FR-033]
 
+## Surfaces added for the container revision (appended 2026-09-23, revision 30)
+
+- [ ] CHK045 - Is the coverage of the in-process egress guard stated (the package's own `fetch` requests and libraries that call the global `fetch`), and is it stated which traffic it cannot see (the agent runtime subprocess, the Slack SDK's transport) so the platform's network policy is known to be the enforcement of record? [Completeness, Spec §FR-083]
+- [ ] CHK046 - Is the refusal of a destination outside the allow-list specified as observable behaviour: fail closed, the exit code, the log event naming host and port and never the URL, and the failure notice? [Clarity, Spec §FR-083, contracts/exit-codes.md]
+- [ ] CHK047 - Are the writable paths enumerated exhaustively (`/data`, `/tmp`) and is everything the agent runtime writes at start placed under them, so `readOnlyRootFilesystem` cannot break a run? [Completeness, Spec §FR-086]
+- [ ] CHK048 - Is the image's build-time network need (the npm registry) distinguished from run-time egress, and is the dependency install pinned to the lockfile with lifecycle scripts disabled? [Consistency, Spec §FR-086, contracts/container.md]
+- [ ] CHK049 - Are the reference manifests under `deploy/` declared as reference only, with the owning repository named and the test that keeps them in step with the code, so two sources of truth cannot diverge silently? [Dependency, contracts/container.md]
+- [ ] CHK050 - Is the `check` command's contact with an operator-given CHT host reconciled with FR-083 (exempt from the in-process guard, refused by the platform policy inside the container)? [Consistency, Spec §FR-048, §FR-083]
+
 ## Notes
 
 - Mark items `[x]` only after review confirms the requirement-quality criterion is satisfied

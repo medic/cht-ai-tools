@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 29)
+**Status**: Draft (revision 30)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -136,6 +136,12 @@ run the full pipeline in preview mode to obtain the would-be post as structured 
    interface rather than through this package, **When** the same skill, tools, prompts and
    output schema are supplied, **Then** the resulting items validate against the same schema and
    the verification gate accepts or rejects them on the same grounds.
+8. **Given** a platform team preparing the network policy for the scheduled container, **When**
+   they run `agent-watchdog egress` with the deployment's configuration, **Then** they receive
+   every destination a run contacts, host and port with its purpose, and nothing else; and **Given**
+   a run whose code or configuration would reach any other destination, **When** it tries, **Then**
+   the request is refused before a connection is made, the run fails with exit 69 and the log names
+   the host and port (FR-083, revision 30).
 
 ### User Story 4 - Self-improvement under review (Priority: P3)
 
@@ -1145,9 +1151,17 @@ Configuration
   only below those bounds (revision 27).
 - **FR-083**: Network egress from the container MUST be restricted to the enumerated endpoints:
   the hosted watchdog's Grafana, Slack, the model API, the tracing backend, the documentation
-  service, and the hosts of the footer's specification and configuration links for the gate's link
-  resolution; every other destination is refused (revision 27, promoted from the plan; the
-  container revision enforces it).
+  service, the hosts of the footer's specification and configuration links for the gate's link
+  resolution, and the reference-link hosts the gate resolves; every other destination is refused
+  (revision 27, promoted from the plan). Enforcement (revision 30): the platform's network policy is
+  the enforcement of record for everything in the container, the agent runtime's subprocess and the
+  Slack and tracing libraries included, and the package MUST emit the list it needs, host and port
+  with the purpose of each, from the effective configuration (`agent-watchdog egress`); in the
+  process itself every outbound request the package makes through `fetch`, and every library call
+  through the global `fetch`, MUST pass an egress guard that refuses a destination outside the list
+  before any connection is made, fails the run closed with the unavailable-source exit code (69), and
+  logs the host and port, never the URL. The `check` command, which contacts the CHT host an operator
+  names, is exempt from the guard; inside the container the platform policy refuses it.
 - **FR-084**: The Slack app MUST hold exactly the bot scopes the posting needs: `chat:write`,
   `files:write`, `reactions:read`, `reactions:write`, `channels:history` for a public channel,
   `groups:history` if the channel is private, and `im:write` with `im:history` when the configured
@@ -1163,6 +1177,17 @@ Configuration
   28 after the operator asked for it; implemented in revision 29: the horizon applied to an item is the
   last one its thread states, the notes of one item are reviewed in one call as the clarified whole,
   and the digest carries each item's provenance (User Story 7, scenario 8).
+- **FR-086**: The container image MUST run as a fixed non-root user with a read-only root filesystem
+  and write only to the data volume and `/tmp`, under which the agent runtime's own configuration
+  directory lives; it MUST carry no browser, no secret, no policy file and no run data, MUST install
+  its production dependencies from the lockfile alone with lifecycle scripts disabled, and MUST
+  expose no port. The deployment MUST drop every capability, forbid privilege escalation, apply the
+  runtime's default seccomp profile, mount no service-account token, state CPU and memory requests
+  and limits, forbid concurrent runs and give a run its own timeout plus ten minutes before the
+  platform ends it. Reference manifests for the CronJob, its configuration and the egress policy MUST
+  ship with the package, checked by tests against these requirements and against the egress list
+  the package emits (FR-083); the deployment repository owns the manifests it applies. The built
+  image MUST pass its contract checks in CI under these constraints (revision 30).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.
@@ -1259,6 +1284,11 @@ Configuration
   metric per project and no trailing query, verified by query counts against the fake watchdog; a
   single failed query never fails a run, verified by test; the hosted collection stage completes
   within fifteen minutes at the default concurrency, read from the stage timings of the run record.
+- **SC-017**: The built image passes its contract checks in CI with the root filesystem read-only,
+  every capability dropped, privilege escalation forbidden, the fixed non-root user and no network:
+  `--version` prints the package version, `egress` lists the destinations, `check` of an unreachable
+  host exits 69 and the report renders writing under `/tmp` alone; and the reference manifests agree
+  with FR-086 and with the egress list, verified by test (revision 30).
 
 ## Assumptions
 
@@ -1294,6 +1324,9 @@ Configuration
 - Grafana-managed alerting on the hosted watchdog, readable with the same Viewer service-account
   token as the metrics; which alerting endpoints that role can read is verified before
   implementation (User Story 8).
+- A cluster network policy engine that can restrict egress by destination name, fed by
+  `agent-watchdog egress`; the reference policy under `deploy/` uses Cilium's FQDN selectors and
+  the platform substitutes its own mechanism (FR-083, FR-086, revision 30).
 
 ## Out of Scope
 

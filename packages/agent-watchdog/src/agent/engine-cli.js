@@ -48,6 +48,12 @@ const subprocessEnv = (env, { apiKey = null } = {}) => {
   if (apiKey) {
     child.ANTHROPIC_API_KEY = apiKey;
     child.CLAUDE_CONFIG_DIR = env.CLAUDE_CONFIG_DIR || DEFAULT_CONFIG_DIR;
+    // Under the writable /tmp (FR-086); best effort, the runtime reports its own failure otherwise.
+    try {
+      fs.mkdirSync(child.CLAUDE_CONFIG_DIR, { recursive: true });
+    } catch {
+      // the runtime will say so
+    }
   } else {
     // Print mode uses a key whenever the variable is present, even blank (as `--env-file` leaves it), which
     // would hide the login; the configuration directory stays where the login is.
