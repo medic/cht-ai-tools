@@ -12,8 +12,9 @@ const readJsonl = (file) => (fs.existsSync(file)
   ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
   : []);
 
-// A Slack client whose thread and reactions come from day one's publication.
-const slackWithFeedback = ({ publication, items, notes, reactionsByTs }) => {
+// A Slack client whose thread and reactions come from day one's publication. Since revision 28 the thread's replies
+// are code-built (programme, Other, alerts): a reaction on them is not feedback on an item, and they are never notes.
+const slackWithFeedback = ({ publication, notes, reactionsByTs }) => {
   const slack = fakeSlack();
   const parent = {
     type: 'message',
@@ -24,20 +25,17 @@ const slackWithFeedback = ({ publication, items, notes, reactionsByTs }) => {
     reply_count: publication.replies.length + notes.length,
     metadata: { event_type: 'agent_watchdog.brief', event_payload: { run_id: DAY1, date: DAY1, kind: 'brief' } },
   };
-  const replies = publication.replies.map((reply) => {
-    const item = items.find((i) => i.item_id === reply.item_id);
-    return {
-      type: 'message',
-      ts: reply.ts,
-      thread_ts: publication.ts,
-      bot_id: 'B001',
-      text: `item ${reply.item_id}`,
-      metadata: {
-        event_type: 'agent_watchdog.item',
-        event_payload: { run_id: DAY1, item_id: reply.item_id, project_url: item.project_url, metric: item.metric },
-      },
-    };
-  });
+  const replies = publication.replies.map((reply) => ({
+    type: 'message',
+    ts: reply.ts,
+    thread_ts: publication.ts,
+    bot_id: 'B001',
+    text: `${reply.kind} ${reply.group || ''}`.trim(),
+    metadata: {
+      event_type: reply.kind === 'alerts' ? 'agent_watchdog.alerts' : 'agent_watchdog.programme',
+      event_payload: { run_id: DAY1, date: DAY1, kind: reply.kind, group: reply.group },
+    },
+  }));
   const noteMessages = notes.map((note, i) => ({
     type: 'message',
     ts: `1700000100.00000${i + 1}`,
@@ -78,30 +76,29 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     removeDir(dataDir);
   });
 
-  it('records reactions and notes, honours the horizon, raises confidence and appends outcomes', async () => {
-    // Day one: the brief is posted with one reply per item.
+  it('records notes with their thumbs, honours the horizon, raises confidence and appends outcomes', async () => {
+    // Day one: the brief is posted; the flagged projects are in the body, the report in the thread, and no item has
+    // a reply of its own (revision 28), so feedback on an item is a thread note citing it (FR-027).
     const day1 = await runCase({ caseName: 'seeded-anomaly', dataDir, date: DAY1 });
     expect(day1.error, day1.error && day1.error.stack).to.equal(undefined);
     const publication = day1.read('rollup/publication.json');
+    expect(publication.replies.some((r) => r.item_id), 'no item replies').to.equal(false);
     const items = day1.read('rollup/items.ranked.json');
     const alpha = items.find((i) => i.project_url === 'https://alpha.example.org');
     const gamma = items.find((i) => i.project_url === 'https://gamma.example.org');
-    const alphaReply = publication.replies.find((r) => r.item_id === alpha.item_id);
-    const gammaReply = publication.replies.find((r) => r.item_id === gamma.item_id);
-    expect(alphaReply && gammaReply, 'both items have thread replies').to.exist;
+    expect(alpha && gamma, 'both projects are flagged').to.exist;
 
-    // People react: thumbs-down plus a note on alpha, two thumbs-up on gamma, a thumbs-up on the brief,
-    // and one note nobody can match.
+    // People write in the thread: a thumbs-down note with a horizon on alpha, two thumbs-up notes on gamma citing
+    // its number in the report, a thumbs-up reaction on the brief itself, and one note nobody can match.
     const slack = slackWithFeedback({
       publication,
-      items,
       notes: [
-        { user: 'U1', text: 'alpha.example.org sentinel backlog: known migration, expected until 1 October' },
+        { user: 'U1', text: '👎 alpha.example.org sentinel backlog: known migration, expected until 1 October' },
+        { user: 'U1', text: `#${gamma.rank} :+1: confirmed, the target is down` },
+        { user: 'U2', text: `#${gamma.rank} 👍` },
         { user: 'U9', text: 'is anyone looking at the other one?' },
       ],
       reactionsByTs: {
-        [alphaReply.ts]: [{ name: '-1', users: ['U1'], count: 1 }],
-        [gammaReply.ts]: [{ name: '+1', users: ['U1', 'U2'], count: 2 }],
         [publication.ts]: [{ name: '+1', users: ['U3'], count: 1 }],
       },
     });
@@ -116,10 +113,11 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     // Scenario 1: stored with identity, verdict, note and author; horizon parsed; memory holds the note;
     // the pattern is not flagged again before the horizon.
     const records = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    const alphaDown = records.find((r) => r.item_id === alpha.item_id && r.verdict === 'down');
-    expect(alphaDown).to.include({ target: 'item', kind: 'reaction', author: 'U1', run_id: DAY1, matched: true });
     const alphaNote = records.find((r) => r.item_id === alpha.item_id && r.kind === 'note');
-    expect(alphaNote).to.include({ author: 'U1', matched: true, horizon: '2026-10-01' });
+    // The thumbs written in the note is its verdict (FR-027).
+    expect(alphaNote).to.include({
+      target: 'item', kind: 'note', verdict: 'down', author: 'U1', run_id: DAY1, matched: true, horizon: '2026-10-01',
+    });
     expect(alphaNote.note).to.include('known migration');
     const ingested = day2.read('feedback.ingested.json');
     expect(ingested.horizons.some((h) => h.item_id === alpha.item_id && h.horizon === '2026-10-01')).to.equal(true);
@@ -135,9 +133,10 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     const ranked2 = day2.read('rollup/items.ranked.json');
     expect(ranked2.some((i) => i.project_url === 'https://alpha.example.org')).to.equal(false);
 
-    // Scenario 2: two thumbs-up are both recorded and the pattern's confidence rises.
+    // Scenario 2: two thumbs-up notes are both recorded and the pattern's confidence rises.
     const gammaUps = records.filter((r) => r.item_id === gamma.item_id && r.verdict === 'up');
     expect(gammaUps.map((r) => r.author).sort()).to.deep.equal(['U1', 'U2']);
+    expect(gammaUps.every((r) => r.kind === 'note' && r.matched)).to.equal(true);
     expect(ingested.by_item[gamma.item_id]).to.include({ verdict: 'confirmed', up: 2, down: 0 });
     const gamma2 = ranked2.find((i) => i.project_url === 'https://gamma.example.org');
     expect(gamma2.confidence).to.be.greaterThan(gamma.confidence);
@@ -162,10 +161,10 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     expect(outcomes.find((o) => o.item_id === gamma.item_id)).to.include({ outcome: 'confirmed' });
     expect(outcomes.find((o) => o.item_id === alpha.item_id)).to.include({ outcome: 'dismissed' });
 
-    // Reads were driven from the stored publication, not by scanning history.
+    // Reads were driven from the stored publication, not by scanning history; the brief is the only reaction target.
     expect(slack.conversations.replies).to.have.been.calledOnce;
     expect(slack.conversations.history).to.not.have.been.called;
-    expect(slack.reactions.get.callCount).to.equal(1 + publication.replies.length);
+    expect(slack.reactions.get.callCount).to.equal(1);
   });
 
   it('re-ingesting the same feedback adds nothing and records a retraction when a reaction disappears', async () => {
@@ -174,27 +173,30 @@ describe('e2e: User Story 2, feedback that changes tomorrow\'s brief', function 
     const publication = day1.read('rollup/publication.json');
     const items = day1.read('rollup/items.ranked.json');
     const gamma = items.find((i) => i.project_url === 'https://gamma.example.org');
-    const gammaReply = publication.replies.find((r) => r.item_id === gamma.item_id);
+    const notes = [{ user: 'U1', text: `#${gamma.rank} 👍 confirmed` }];
 
     const withUp = slackWithFeedback({
-      publication, items, notes: [], reactionsByTs: { [gammaReply.ts]: [{ name: '+1', users: ['U1'], count: 1 }] },
+      publication, notes, reactionsByTs: { [publication.ts]: [{ name: '+1', users: ['U2'], count: 1 }] },
     });
     const day2 = await runCase({
       caseName: 'seeded-anomaly', dataDir, date: DAY2, runStart: `${DAY2}T06:00:00Z`, slack: withUp,
     });
     expect(day2.error, day2.error && day2.error.stack).to.equal(undefined);
     const afterDay2 = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(afterDay2.filter((r) => r.verdict === 'up')).to.have.length(1);
+    expect(afterDay2.filter((r) => r.verdict === 'up').map((r) => r.target).sort()).to.deep.equal(['brief', 'item']);
+    expect(afterDay2.find((r) => r.kind === 'note')).to.include({ item_id: gamma.item_id, author: 'U1' });
 
-    // The reaction is gone the next day: the same feedback is not duplicated and a retraction is recorded.
-    const withoutUp = slackWithFeedback({ publication, items, notes: [], reactionsByTs: {} });
+    // The next day the same note is read again and adds nothing; the reaction on the brief is gone, so a
+    // retraction is recorded.
+    const withoutUp = slackWithFeedback({ publication, notes, reactionsByTs: {} });
     const day3 = await runCase({
       caseName: 'seeded-anomaly', dataDir, date: '2026-09-20', runStart: '2026-09-20T06:00:00Z', slack: withoutUp,
     });
     expect(day3.error, day3.error && day3.error.stack).to.equal(undefined);
     const afterDay3 = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(afterDay3.filter((r) => r.verdict === 'up')).to.have.length(1);
+    expect(afterDay3.filter((r) => r.kind === 'note')).to.have.length(1);
+    expect(afterDay3.filter((r) => r.verdict === 'up')).to.have.length(2);
     const retraction = afterDay3.find((r) => r.verdict === 'retracted');
-    expect(retraction).to.include({ item_id: gamma.item_id, author: 'U1' });
+    expect(retraction).to.include({ target: 'brief', item_id: null, author: 'U2' });
   });
 });

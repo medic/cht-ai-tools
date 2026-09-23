@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 27)
+**Status**: Draft (revision 28)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -39,8 +39,9 @@ quiet day and verify the one-line post.
    executes, **Then** a single-line post states all is quiet and how many projects and panels
    were checked, and no thread replies are created.
 3. **Given** more items qualify than five bullets can hold, **When** the run executes, **Then**
-   the highest-ranked fill the five bullets, alone or as sub-bullets of their programme, each high
-   item has its own threaded reply (revision 25), and the remainder appear only in the run's report, shared into
+   the two highest-ranked programmes fill the body, each with at most three project lines, every
+   other programme with two or more flagged projects has a thread reply of its own, the remaining
+   projects share one "Other" reply, the alerts share one reply (revision 28), and every item appears in the run's report, shared into
    the thread as its first reply, where every item is numbered by rank so a note can cite it
    (revision 23; until then every item had a reply, which reached 159 replies under one post).
 4. **Given** the run falls inside a configured expected-load window (month-end, sync week),
@@ -294,19 +295,23 @@ adds nothing.
 
 **Acceptance Scenarios**:
 
-1. **Given** alerts are firing when the run executes, **When** the brief is composed, **Then** it
-   states per project group how many alerts fire, grouped by category, with the oldest start and a
-   link to the filtered alert list, for example "North Programme alerts: 15 firing, 12 about disk usage,
-   3 stale for more than 14 days".
+1. **Given** alerts are firing when the run executes, **When** the brief is composed, **Then** one
+   thread reply states per project group how many alerts fire, by category, how many are new and
+   how many stale, with a link to that group's filtered alert list and one to every firing alert,
+   for example "North Programme: 15 firing (disk usage 12, backlog 3), 2 new, 3 stale"; the post
+   body carries no alert bullet, because the alerts are the monitoring stack's own notifications
+   and the body is for what the analysis added (revision 28).
 2. **Given** an alert has been firing longer than the configured staleness threshold, **When**
    the brief is composed, **Then** it is marked stale and counted separately from new and
    persisting alerts.
-3. **Given** the reviewed alert policy assigns importance to rule titles, **When** alerts compete
-   with flagged items for the body, **Then** critical alerts rank first and unknown rules are
-   reported as uncategorised with medium importance.
-4. **Given** alerts are numerous, **When** the brief is composed, **Then** one bullet per project
-   group summarises them with one sub-bullet per category, and the full list is in that group's
-   thread reply, which can receive reactions and notes like an item.
+3. **Given** the reviewed alert policy assigns importance to rule titles, **When** the alerts
+   reply and the report list them, **Then** critical alerts come first and unknown rules are
+   reported as uncategorised with medium importance (alerts no longer compete with items for the
+   body, revision 28).
+4. **Given** alerts are numerous, **When** the brief is composed, **Then** the alerts reply
+   summarises them per project group with counts and links only, and the full list with every
+   instance is in the report's alerts section (revision 28; until then one reply per alert group
+   listed the instances).
 5. **Given** an alert started or cleared since the previous run, **When** the run completes,
    **Then** an episode record holds when it started and cleared, the expected-load window and any
    CHT version change in force at the start, the flagged items on the same project and metric in
@@ -335,16 +340,19 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
 
 1. **Given** `projects.yaml` declares groups by host pattern, **When** several projects of one
    group have flagged items, **Then** the body shows one bullet for the group, "North: 5 projects
-   with issues", with one sub-bullet per project item in rank order, each starting with the
-   project written by code, and each high-severity project item still has its own thread reply
-   (revisions 25 and 26).
+   with 7 issues", with one sub-bullet per project for the three highest-ranked projects, each
+   starting with the project written by code and covering every issue of that project in the
+   model's words, and a last line counting the projects beyond three; the programme has no reply of
+   its own when it is in the body, and a programme with two or more flagged projects that is not in
+   the body gets one thread reply in the same form (revision 28; revisions 25 and 26 before it).
 2. **Given** a host matches the ignore list, **When** the run executes, **Then** it is discovered
    and counted as ignored but neither analysed, nor charged for model usage, nor named in the post.
 3. **Given** a host matches no group, **When** the brief is composed, **Then** it is reported under
    the group "Other".
-4. **Given** five or more bullets qualify, **When** the brief is composed, **Then** at most five
-   appear, each at most two lines with at most eight sub-bullets, and the gate rejects a draft that
-   exceeds any of these limits.
+4. **Given** more than two programmes qualify, **When** the brief is composed, **Then** at most
+   two programme bullets appear in the body, each with at most three project lines of at most two
+   lines, and the gate rejects a draft that exceeds any of these limits (revision 28; five slots of
+   eight one-line sub-bullets until then).
 
 ### User Story 10 - An honest brief with metrics that mean something (Priority: P2)
 
@@ -634,9 +642,11 @@ Analysis
   that names the item's own metric is empty rather than wrong: code drops it when the items are
   normalised and the pass is not rejected for it (revision 24; one run's revisions carried 21 such
   reasons after a prompt sentence against it changed nothing).
-- **FR-010**: The system MUST rank flagged items and place at most five bullets in the post body; a
-  bullet is one item or, when a project group has several flagged projects or several alerts, one
-  group line with one sub-bullet per member (FR-069, FR-066). Revised from three in revision 9.
+- **FR-010**: The system MUST rank flagged items and place at most two programme bullets in the
+  post body, the programmes of the two highest-ranked items; a bullet is one project line when the
+  programme has one flagged project, otherwise a group line with one sub-bullet per project for at
+  most three projects in rank order and a count of the rest (FR-069). Alerts take no body bullet
+  (FR-066). Revision 28; five slots from revision 9, three before it.
 - **FR-011**: Items MUST be produced in a machine-validated structure; output that fails
   validation MUST NOT be published.
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
@@ -674,9 +684,10 @@ Analysis
   they appear in the watchdog, PromQL where it helps the reader confirm; except in the body's
   sub-bullets and single-project bullets, which start with the project written by code and describe
   the change in words (FR-069, revision 26). Emoji are permitted as
-  status and severity markers. At most five bullets of at most two lines each, each bullet with at
-  most eight sub-bullets of one line each; these structural limits are checked by the verification
-  gate. No separate writing or voice skill is applied. Numbers the report renders are rounded for
+  status and severity markers. At most two programme bullets, each with at most three project
+  lines of at most two lines of 120 characters; the headline at most two such lines; these
+  structural limits are checked by the verification gate (revision 28; five bullets of eight
+  one-line sub-bullets until then). No separate writing or voice skill is applied. Numbers the report renders are rounded for
   reading: at most three decimals, and three significant figures below one, applied by code at render
   time to the values it formats, to long decimals inside an item's prose and to the notes on its
   evidence lines (revision 25); the stored item keeps the full value the gate verified (revision 24).
@@ -787,21 +798,24 @@ Verification gate
 Publishing
 
 - **FR-019**: The system MUST post one message per run to the configured Slack channel containing
-  a headline, at most five bullets (FR-010), and a footer identical to the report's (revision 25):
+  a headline shown in full (a bold section, never Slack's 150-character header block, which cut
+  one run's headline mid-word; the gate holds a headline to at most two lines of 120 characters,
+  revision 28), at most two programme bullets (FR-010), and a footer identical to the report's (revision 25):
   a link to the feature's specification (`specs`, which replaced the prompts link), a link to the
   deployment configuration, a link to the run's trace, the run's cost in currency and the run id,
   followed by the count of items only in the report. The brief image (a screenshot of the report's
   summary, uploaded privately and shown as an image block) was retired in revision 24: the report
   shared into the thread is the artefact a reader opens, and the image was a picture of the message
   it sat under.
-- **FR-020**: The system MUST post each **high**-severity item as its own threaded reply so it can
-  receive reactions independently, highest rank first and at most twenty-five, after the run's
-  report (FR-022) and before the alert-group replies (FR-066); medium and low items, in the body or
-  not, appear in the report only, where a note can cite them by rank, and the parent's footer says
-  how many items are only there (revision 25: a reply is for what needs a person today, and a
-  programme's run with no high item threads only its report and its alert groups). Until revision 23
-  every item had a reply, which reached 159 replies under one post (research.md R-28); from revision
-  23 to 24 every body item had one.
+- **FR-020**: The thread under the post MUST hold, in order: the report share (FR-022); one reply
+  per programme not in the body that has two or more flagged projects, in rank order, each in the
+  body's form (the programme line, at most three project lines, the count of the rest); one "Other"
+  reply for every remaining project, ungrouped hosts and single-project programmes alike, in the
+  same form; and one alerts reply (FR-066). No item has a reply of its own: every item is in the
+  report, where a note cites it by rank (`#12 👍`), and the parent's footer says how many items are
+  only there (revision 28: the thread is three or four replies a person can read). History: every
+  item had a reply until revision 23 (159 under one post, research.md R-28), body items from 23 to
+  24, high items in 25 to 27.
 - **FR-021**: On a quiet day the system MUST post a one-line heartbeat stating what was checked.
 - **FR-022**: The system MUST render a one-page report per run containing every flagged item and
   evidence charts drawn from the collected data, and store it with the run. The report MUST number
@@ -900,12 +914,14 @@ Alerts and groups
   Backlog, Outbound Push Backlog and Message Delivery Rate; medium for DB Conflicts Rate, Client
   Feedback/Error Rate and Users Over Replication Limit; low for DB Fragmentation and Server Time
   Accurate.
-- **FR-066**: The brief MUST summarise firing alerts per project group and category with counts,
-  the oldest start, the number stale, and a code-built link to the filtered alert list; when a
-  group has several categories the bullet carries one sub-bullet per category. Alert bullets rank
-  with flagged items by importance, critical first. Each alert group gets one thread reply listing
-  its instances (at most fifty, with the count of the rest) that can receive reactions and notes;
-  the reply is fitted into one message block by code, and a link is never cut (revision 17). When a
+- **FR-066**: The brief MUST summarise firing alerts in one thread reply: per project group the
+  firing count with its categories, the new and stale counts, and a code-built link to that group's
+  filtered alert list, then one link to every firing alert; the alert-derived notices (housekeeping,
+  resolved since the previous run, alerts unavailable) close that reply. Alerts take no body bullet
+  and no longer rank against items: the body is for what the analysis added over the monitoring
+  stack's own notifications, and the instances are listed in the report's alerts section (revision
+  28; until then each alert group had a body bullet and a reply of its own with its instances, fitted
+  into one block, revision 17). When a
   run analyses only some of the discovered projects, the brief MUST cover only those: alert
   instances on projects it did not analyse are left out of the groups, the counts, the patterns and
   the notices, because the reader asked about those projects and cannot act on the rest. Collection,
@@ -935,11 +951,14 @@ Alerts and groups
   code from the item's host as the host's first label (`bomet: `), or two labels when two projects
   of the group share the first; a single-project bullet starts with the full host the same way. The
   model writes what follows: the change in words a technical reader can act on, with its values,
-  without metric keys or PromQL, which the thread reply and the report carry; the prompt tells it
-  the project is written for it and the characters it has left, and the length check counts the
-  prefix. A project the model names anyway at the start of its line is not written twice (revision
-  26, after one run's sub-bullets read as raw metric expressions with no project). High items keep
-  their own thread reply (FR-020).
+  without metric keys or PromQL, which the report carries; the prompt tells it the project is
+  written for it and the characters it has left, and the length check counts the prefix. A project
+  the model names anyway at the start of its line is not written twice (revision 26, after one run's
+  sub-bullets read as raw metric expressions with no project). One line per project (revision 28):
+  when a project has several flagged items the line covers all of them in at most two lines, the
+  prompt names every item the line must cover and the gate allows every one of their values; a
+  programme shows its three highest-ranked projects and counts the rest, in the body and in its
+  thread reply alike (FR-020).
 - **FR-070**: Links to alerts MUST be built by code from the collected rule definitions and labels
   to the watchdog's alert list, and MUST pass the same allow-list and resolution checks as
   dashboard links.
@@ -992,16 +1011,18 @@ Alerts and groups
   visible (`>= 0`) MUST be one metric in discovery, analysis and the brief. Added in revision 14.
 - **FR-078**: When one alert rule fires on at least three projects of a programme, on at least half
   of them, with first occurrences within two days, the brief MUST present it as one programme-wide
-  event: the category line names the rule, the count out of the programme's size and the first day,
-  and the thread lists the projects once, in one paragraph. Added in revision 14.
+  event: the report's alerts section names the rule, the count out of the programme's size and the
+  first day, and lists the projects once (revision 28; until then the category line and the group's
+  thread reply carried it). Added in revision 14.
 - **FR-079**: Every alert instance MUST carry, when one exists, the computed change of the metric
   that its category names for its project (the metric, its current and previous-day values, the
-  change), shown next to the alert in the thread; and an item's thread reply MUST name a firing
-  alert of its project whose category covers the item's metric, with its start date. Added in
-  revision 14.
+  change), shown next to the alert in the report's alerts section (in the thread until revision
+  28); the item reply that named a firing alert of its project was retired with item replies
+  (FR-020, revision 28). Added in revision 14.
 - **FR-080**: A stale alert on a host whose scrape target was down for the whole current window is
   housekeeping: left out of the alert groups and counts and named once in a housekeeping notice
-  that suggests removing the host from the watchdog or silencing the rule. The same notice MUST
+  that suggests removing the host from the watchdog or silencing the rule; the housekeeping and
+  resolved notices close the alerts reply rather than the post body (revision 28). The same notice MUST
   name, once, every host whose scrape target read zero for the whole current window, on the
   previous day and throughout the trailing fortnight (a dark host), whether or not an alert is
   stale there, so no session is spent describing a host dark for weeks (revision 23). An episode open in the
@@ -1121,6 +1142,13 @@ Configuration
   conversation is a direct message. The bot's membership of the configured conversation is a
   deployment precondition: a post refused for it fails the run loudly (exit 74) with the reason in
   the log, never silently (revision 27).
+- **FR-085**: Feedback on one item from several people in sequence MUST be read together, in thread
+  order, so a later note that clarifies or corrects an earlier one is applied as the clarified
+  whole, not as two contradicting notes; and the next run MUST tell the authors how their feedback
+  was used: the digest names the item, quotes the exact lines the feedback put into that project's
+  analysis prompt and links the session's trace where those lines can be seen, so a reader can
+  follow a note from the thread to the point in the pipeline where it acted. Specified in revision
+  28 after the operator asked for it; implemented in revision 29.
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.
@@ -1281,6 +1309,16 @@ Configuration
 - Q: How does a reader react to one item rather than the whole brief? → A: each flagged item is
   its own threaded reply until revision 25; since then a reply is for a high item or an alert group,
   every other item lives in the report shared into the thread.
+- Q: How much of the day goes in the post body? → A: The two highest-ranked programmes, each with
+  at most three project lines; everything else is in the thread and the report (revision 28).
+- Q: Which programmes get a thread reply of their own? → A: Those with two or more flagged projects
+  that are not in the body; single-project programmes and ungrouped hosts share one "Other" reply
+  (revision 28).
+- Q: How does a project with several issues read? → A: One line of at most two lines covering all
+  of them, the project written by code, the words the model's (revision 28).
+- Q: Where does "here is how your feedback was used" point? → A: The digest quotes the lines
+  inserted into the project's prompt and links the session's trace; run files are not web-served
+  (revision 28, for revision 29).
 - Q: Are partner emails part of this feature? → A: No; separate feature with its own privacy
   requirements.
 - Q: Are dashboard panel images embedded? → A: No. Items carry structured dashboard references

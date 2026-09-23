@@ -5,6 +5,7 @@ const {
   formatValue, extractNumbers, extractNumbersEverywhere, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS,
 } = require('../format');
 const { sameMetric, keyForms, flatPanels } = require('../metric-key');
+const { coveredIds } = require('../../rollup/layout');
 const { enums } = require('../../model/schemas');
 
 const NAME = 'numbers_match';
@@ -296,15 +297,17 @@ const check = (ctx) => {
   if (ctx.mode === 'brief') {
     const byId = new Map((ctx.items || []).map((item) => [item.item_id, item]));
     (ctx.draft.bullets || []).forEach((bullet, i) => {
-      const item = byId.get(bullet.item_id);
-      if (!item) {
+      // A line covers every item of its project (revision 28): it may quote any of their values and their prompt
+      // entries, plus the run-wide counts, and nothing of a neighbour's.
+      const covered = coveredIds(ctx.layout, bullet.item_id).map((id) => byId.get(id)).filter(Boolean);
+      if (!covered.length) {
         reasons.push(`bullets[${i}] refers to unknown item ${bullet.item_id}`);
         return;
       }
-      // A bullet may quote its own item's prompt entry and the run-wide counts, never a neighbour's numbers.
       const own = ctx.itemTexts && typeof ctx.itemTexts.get === 'function' ? ctx.itemTexts.get(bullet.item_id) : null;
       const given = new Set([...runGiven, ...givenNumerals(own ? [own] : [])]);
-      checkText(`bullets[${i}]`, bullet.text, allowedValues(item, ctx), spanForms, reasons, ctx, given, ranges);
+      const allowed = covered.flatMap((item) => allowedValues(item, ctx));
+      checkText(`bullets[${i}]`, bullet.text, allowed, spanForms, reasons, ctx, given, ranges);
     });
   } else {
     (ctx.items || []).forEach((item, i) => {

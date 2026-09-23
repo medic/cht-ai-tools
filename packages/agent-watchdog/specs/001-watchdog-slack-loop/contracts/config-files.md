@@ -183,6 +183,6 @@ metric key contains one of the listed names, so `cht_feedback_total` matches the
 | `skill/cht-watchdog/SKILL.md` and `references/` | The cht-watchdog skill. |
 | `skill/cht-watchdog/pattern-cards/index.md`, `*.md` | Merged pattern cards and their index (FR-038). |
 | `schema/findings.schema.json`, `schema/brief.schema.json` | Structured-output schemas ([findings.schema.json](./findings.schema.json), [brief.schema.json](./brief.schema.json)). |
-| `templates/report.hbs`, `templates/slack/*.hbs` | Handlebars templates; HTML-escaping on, triple-stash forbidden. `slack/alert-group.hbs` renders an alert group's thread reply (FR-066). |
+| `templates/report.hbs`, `templates/slack/*.hbs` | Handlebars templates; HTML-escaping on, triple-stash forbidden. `slack/programme.hbs` renders a programme or Other reply and `slack/alerts.hbs` the one alerts reply (FR-020, FR-066, revision 28). |
 | `config/defaults/*.yaml` | Fallbacks when a policy file is absent. |
 | `agent/mcp.json`, `agent/hooks.json`, `agent/tools.json` | The one configuration source both engines read ([agent-definition.md](./agent-definition.md)). |

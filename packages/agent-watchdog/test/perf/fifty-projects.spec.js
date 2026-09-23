@@ -62,11 +62,12 @@ describe('perf: fifty projects at concurrency 3 (Edge Cases, FR-013)', function 
     // SC-010: the end-of-run scan over every artefact of fifty projects raises no warning.
     expect(r.err.text()).to.not.include('run.scan_findings');
     const brief = r.read('rollup/brief.json');
-    expect(brief.bullets).to.have.length(5);
-    // Replies for the high items only, at most twenty-five (FR-020, revision 25); the report holds every item.
+    expect(brief.bullets).to.have.length(2);
+    // No item replies since revision 28: one reply per programme or Other bullet of the thread and at most one
+    // alerts reply (FR-020); the report holds every item.
     const payload = r.read('rollup/payload.json');
-    const high = r.read('rollup/items.ranked.json').filter((i) => i.severity === 'high').length;
-    expect(payload.replies).to.have.length(Math.min(25, high));
+    expect(payload.replies.filter((reply) => reply.kind !== 'alerts')).to.have.length(brief.thread.length);
+    expect(payload.replies.some((reply) => reply.item_id)).to.equal(false);
     expect(payload.report.items).to.equal(r.read('rollup/items.ranked.json').length);
 
     // FR-072: a cold volume fetches four windows per metric; the next day reuses the previous-day window and the

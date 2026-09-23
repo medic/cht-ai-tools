@@ -23,7 +23,7 @@ describe('e2e: User Story 1, the daily brief', function () {
     removeDir(dataDir);
   });
 
-  it('flags the seeded sentinel climb and the down scrape target, posts a brief with threaded replies', async () => {
+  it('flags the seeded sentinel climb and the down scrape target, posts a brief and shares the report', async () => {
     const r = await runCase({ caseName: 'seeded-anomaly', dataDir });
     expect(r.error, r.error && r.error.stack).to.equal(undefined);
     expect(r.code).to.equal(0);
@@ -39,7 +39,7 @@ describe('e2e: User Story 1, the daily brief', function () {
 
     const brief = r.read('rollup/brief.json');
     expect(brief.kind).to.equal('brief');
-    expect(brief.bullets.length).to.be.within(1, 3);
+    expect(brief.bullets.length).to.be.within(1, 2);
     const alphaBullet = brief.bullets.find((b) => b.text.includes('alpha.example.org'));
     expect(alphaBullet.text).to.include('912');
     expect(alphaBullet.text).to.match(/yesterday/);
@@ -52,12 +52,15 @@ describe('e2e: User Story 1, the daily brief', function () {
 
     const payload = r.read('rollup/payload.json');
     expect(payload.parent.metadata.event_type).to.equal('agent_watchdog.brief');
-    // Replies for the high items only; every item is in the report shared into the thread (FR-020, revision 25).
-    const highIds = ranked.filter((i) => i.severity === 'high').map((i) => i.item_id).sort();
-    expect(highIds.length).to.be.greaterThan(0);
-    expect(payload.replies.map((reply) => reply.item_id).sort()).to.deep.equal(highIds);
-    expect(payload.report)
-      .to.include({ path: 'rollup/report.html', items: ranked.length, replied: payload.replies.length });
+    // The headline is a bold section shown whole, never Slack's header block (FR-019, revision 28).
+    expect(payload.parent.blocks[0].type).to.equal('section');
+    expect(payload.parent.blocks[0].text.text).to.match(/^\*.*\*$/s);
+    // No item replies since revision 28: the thread holds the report and only programme, Other and alerts replies
+    // (FR-020, FR-022).
+    expect(payload.replies.every((reply) => ['programme', 'other', 'alerts'].includes(reply.kind))).to.equal(true);
+    expect(payload.replies.some((reply) => reply.item_id)).to.equal(false);
+    expect(payload.report).to.include({ path: 'rollup/report.html', items: ranked.length });
+    expect(payload.report).to.not.have.property('replied');
     const publication = r.read('rollup/publication.json');
     expect(publication.ts).to.be.a('string');
     expect(publication.report).to.include({ file_id: 'F0001' });

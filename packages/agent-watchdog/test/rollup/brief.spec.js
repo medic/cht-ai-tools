@@ -65,7 +65,11 @@ const makeCtx = ({ engine, gate }) => ({
 
 describe('rollup/brief composeBrief', () => {
   const items = rankItems({
-    items: [makeItem(), makeItem({ metric: 'cht_conflict_count', severity: 'low', confidence: 0.4 })],
+    // Two projects (revision 28): one entry per project, so each item is a line of its own.
+    items: [
+      makeItem(),
+      makeItem({ project_url: 'https://beta.example.org', metric: 'cht_conflict_count', severity: 'low', confidence: 0.4 }),
+    ],
   });
   const base = () => ({
     discovery: makeDiscovery(),
@@ -95,7 +99,7 @@ describe('rollup/brief composeBrief', () => {
     expect(out.calls[0]).to.include({ cost_usd: 0.02, model: 'claude-fable-5-1' });
     const call = { ...engine.openSession.firstCall.args[0], userPrompt: engine.session.turn.firstCall.args[0] };
     expect(call.outputSchema.$id).to.include('brief.schema.json');
-    expect(call.systemPrompt[0]).to.match(/one bullet per body item/i);
+    expect(call.systemPrompt[0]).to.match(/one text per entry/i);
     expect(call.userPrompt).to.include('## Body layout');
     expect(call.userPrompt.startsWith('ROLLUP TEMPLATE 2026-09-18')).to.equal(true);
     expect(call.userPrompt).to.include(items[0].item_id);
@@ -180,7 +184,7 @@ describe('rollup/brief composeBrief', () => {
     const ctx = makeCtx({ engine, gate });
     delete ctx.definition;
     await composeBrief({ ctx, items, ...base() });
-    expect(engine.openSession.firstCall.args[0].systemPrompt[0]).to.match(/bullets/i);
+    expect(engine.openSession.firstCall.args[0].systemPrompt[0]).to.match(/one text per entry/i);
   });
 });
 
@@ -210,9 +214,9 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
     await composeBrief({ ctx: ctxWith(engine), items, ...inputs() });
     const call = { ...engine.openSession.firstCall.args[0], userPrompt: engine.session.turn.firstCall.args[0] };
     expect(call.systemPrompt).to.have.length(1);
-    expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/one bullet per body item/i);
+    expect(call.systemPrompt[0]).to.match(/^## Instructions/m).and.match(/one text per entry/i);
     expect(call.userPrompt).to.include('## Body layout');
-    expect(call.userPrompt).to.include('"one_line"');
+    expect(call.userPrompt).to.include('"covers"');
     expect(call.systemPrompt[0]).to.not.include('{{');
     expect(call.systemPrompt[0]).to.not.include('## Memory condensation');
     expect(call.userPrompt).to.not.include('{{');
@@ -273,16 +277,24 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     feedbackUnmatched: [], expectedLoadNotice: null, referenceSourcesUnavailable: false, footer: footer(),
   });
 
-  it('tells the model which items are one-line sub-bullets and passes the layout to the gate', async () => {
+  it('tells the model the slots and replies, each entry with its items, prefix and budget (revision 28)', async () => {
     const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     await composeBrief(inputs(engine, gate));
     const prompt = engine.session.turn.firstCall.args[0];
     const section = prompt.slice(prompt.indexOf('## Body layout'));
     const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(section)[1]);
-    expect(json).to.deep.equal(layout.slots);
-    expect(json[0]).to.include({ kind: 'group', group: 'North Programme', one_line: true });
-    expect(json[0].item_ids).to.deep.equal([items[0].item_id, items[2].item_id]);
+    expect(json.replies).to.deep.equal([]);
+    expect(json.slots).to.have.length(2);
+    expect(json.slots[0])
+      .to.include({ kind: 'group', group: 'North Programme', projects: 2, issues: 2, more_projects: 0 });
+    expect(json.slots[0].entries).to.deep.equal([
+      { lead_id: items[0].item_id, covers: [items[0].item_id], prefix: 'north-a: ', budget: 111 },
+      { lead_id: items[2].item_id, covers: [items[2].item_id], prefix: 'north-b: ', budget: 111 },
+    ]);
+    expect(json.slots[1]).to.include({ kind: 'item', group: 'Other', projects: 1, issues: 1 });
+    expect(json.slots[1].entries[0])
+      .to.include({ lead_id: items[1].item_id, prefix: 'alpha.example.org: ', budget: 101 });
     expect(gate.verifyBrief.firstCall.args[0].layout).to.deep.equal(layout);
   });
 
@@ -298,8 +310,14 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     expect(group.text).to.equal('North Programme: 2 projects with issues');
     // The project is written by code in front of every body line (FR-069, revision 26).
     expect(group.children).to.deep.equal([
-      { item_id: items[0].item_id, text: 'north-a: cht_sentinel_backlog_count 912 vs 300 yesterday' },
-      { item_id: items[2].item_id, text: 'north-b: cht_sentinel_backlog_count 912 vs 300 yesterday' },
+      {
+        item_id: items[0].item_id, item_ids: [items[0].item_id],
+        text: 'north-a: cht_sentinel_backlog_count 912 vs 300 yesterday',
+      },
+      {
+        item_id: items[2].item_id, item_ids: [items[2].item_id],
+        text: 'north-b: cht_sentinel_backlog_count 912 vs 300 yesterday',
+      },
     ]);
     expect(single).to.deep.include({ kind: 'item', item_id: items[1].item_id, group: 'Other', children: [] });
     expect(single.text).to.equal('alpha.example.org: cht_sentinel_backlog_count 912 vs 300 yesterday');
@@ -314,15 +332,15 @@ describe('rollup/brief: the body layout and programme bullets (FR-010, FR-069, U
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const out = await composeBrief(inputs(engine, gate));
     const prompt = engine.session.turn.firstCall.args[0];
-    expect(prompt).to.include(`- ${items[0].item_id}: prefix "north-a: ", budget 111 characters`);
-    expect(prompt).to.include(`- ${items[1].item_id}: prefix "alpha.example.org: ", budget 101 characters`);
+    expect(prompt).to.include('"prefix": "north-a: "').and.include('"budget": 111');
+    expect(prompt).to.include('"prefix": "alpha.example.org: "').and.include('"budget": 101');
     expect(prompt).to.match(/without metric keys or PromQL/);
     expect(out.brief.bullets[0].children[0].text).to.equal('north-a: backlog 912 vs 300 yesterday');
     const given = gate.verifyBrief.firstCall.args[0].givenText;
-    expect(given.some((text) => text.includes('prefix "north-a: "'))).to.equal(true);
+    expect(given.some((text) => text.includes('"prefix": "north-a: "'))).to.equal(true);
     const promptPath = require('node:path').join(__dirname, '..', '..', 'prompts', 'rollup.md');
     const rollupPrompt = require('node:fs').readFileSync(promptPath, 'utf8');
-    expect(rollupPrompt).to.match(/Code writes the project in front of every body line/);
+    expect(rollupPrompt).to.match(/code writes the project in front of it/);
   });
 
   it('builds the layout itself from the discovery when the caller passes none', async () => {
@@ -349,22 +367,19 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     alertGroups, staleAfterDays: 14,
   });
 
-  it('puts the code-built alerts bullet first and hands the alert links to the gate', async () => {
+  it('gives alerts no bullet, lists the alert groups for the thread and hands the links to the gate', async () => {
     const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };
     const links = ['https://watchdog.example.org/alerting/list?search=x'];
     const out = await composeBrief({ ...base(engine, gate), alertLinks: links });
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
-    expect(out.brief.bullets.map((b) => b.kind)).to.deep.equal(['alerts', 'item']);
-    expect(out.brief.bullets[0].text).to.equal('North Programme alerts: 3 firing, 1 stale for more than 14 days');
-    expect(out.brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
-      'availability: 1 firing (API Server Down), oldest since 2026-09-17',
-      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
-    ]);
-    const prompt = engine.session.turn.firstCall.args[0];
-    expect(prompt).to.match(/kind.*alerts.*written by code/i);
+    // Alerts take no slot since revision 28: the alerts reply in the thread carries their counts (FR-066).
+    expect(out.brief.bullets.map((b) => b.kind)).to.deep.equal(['item']);
+    expect(out.brief.thread).to.deep.equal([]);
     const layoutArg = gate.verifyBrief.firstCall.args[0].layout;
-    expect(layoutArg.slots[0]).to.include({ kind: 'alerts', group: 'North Programme' });
+    expect(layoutArg.slots[0]).to.include({ kind: 'item', group: 'Other' });
+    expect(layoutArg.body_alerts).to.deep.equal([]);
+    expect(layoutArg.thread_alerts).to.deep.equal(alertGroups.map((g) => g.alert_key));
     expect(layoutArg.body_items).to.deep.equal([items[0].item_id]);
     expect(gate.verifyBrief.firstCall.args[0].extraUrls).to.deep.equal(links);
   });
@@ -385,7 +400,7 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     expect(out.brief.degradation_notice).to.include('model analysis failed on 2 of 2 projects');
     expect(out.brief.degradation_notice).to.include('--json-schema');
     const kinds = out.brief.bullets.map((b) => b.kind);
-    expect(kinds, 'alert bullets stay in the degraded layout').to.include('alerts');
+    expect(kinds, 'alerts take no bullet since revision 28').to.not.include('alerts');
     expect(kinds).to.include('item');
     const prefix = 'Analysis incomplete: model sessions failed on 2 of 2';
     const incomplete = out.brief.notices.filter((n) => n.startsWith(prefix));
@@ -481,8 +496,9 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
     expect(out.brief.kind).to.equal('brief');
     expect(out.degraded).to.equal(false);
     expect(out.brief.headline).to.equal('Alerts only: 3 firing across 2 projects, no metric changes to flag');
-    expect(out.brief.bullets).to.have.length(1);
-    expect(out.brief.bullets[0].kind).to.equal('alerts');
+    // The counts are in the alerts reply since revision 28; the post has the headline and nothing else.
+    expect(out.brief.bullets).to.deep.equal([]);
+    expect(out.brief.thread).to.deep.equal([]);
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();
     const quiet = await composeBrief({ ...base(engine, gate), items: [], candidates: [], alertGroups: [] });
     expect(quiet.brief.kind).to.equal('heartbeat');
@@ -493,7 +509,10 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
   const { RunDir } = require('../../src/store/run-dir');
   const { tempDir, removeDir } = require('../helpers/fixtures');
   const items = rankItems({
-    items: [makeItem(), makeItem({ metric: 'cht_conflict_count', severity: 'low', confidence: 0.4 })],
+    items: [
+      makeItem(),
+      makeItem({ project_url: 'https://beta.example.org', metric: 'cht_conflict_count', severity: 'low', confidence: 0.4 }),
+    ],
   });
   const base = () => ({
     discovery: makeDiscovery(), changes: {}, candidates: [makeCandidate()], memory: null, feedbackUnmatched: [],
@@ -542,7 +561,7 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     expect(out.drafts[1].draft).to.deep.equal(verified);
     expect(out.brief.headline).to.equal('first headline');
     expect(out.brief.bullets.map((b) => b.text))
-      .to.deep.equal(['alpha.example.org: first-0 912 vs 300', 'alpha.example.org: second-1 12 conflicts']);
+      .to.deep.equal(['alpha.example.org: first-0 912 vs 300', 'beta.example.org: second-1 12 conflicts']);
   });
 
   it('takes the new headline when the headline failed, and the whole new draft when no bullet is named', async () => {
@@ -556,18 +575,18 @@ describe('rollup/brief: one session that recovers instead of restarting (FR-017,
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.brief.headline).to.equal('second headline');
     expect(out.brief.bullets.map((b) => b.text))
-      .to.deep.equal(['alpha.example.org: first-0', 'alpha.example.org: first-1']);
+      .to.deep.equal(['alpha.example.org: first-0', 'beta.example.org: first-1']);
 
     const whole = engineWith(
       successResult(draftWith(['first-0', 'first-1'])),
       successResult(draftWith(['second-0', 'second-1'])),
     );
     const gate2 = { verifyBrief: sinon.stub() };
-    gate2.verifyBrief.onCall(0).resolves(rejectedWith(['draft has 2 bullets but the layout has 3']));
+    gate2.verifyBrief.onCall(0).resolves(rejectedWith(['2 bullets, the layout has 3 entries']));
     gate2.verifyBrief.onCall(1).resolves(accepted);
     const out2 = await composeBrief({ ctx: makeCtx({ engine: whole, gate: gate2 }), items, ...base() });
     expect(out2.brief.bullets.map((b) => b.text))
-      .to.deep.equal(['alpha.example.org: second-0', 'alpha.example.org: second-1']);
+      .to.deep.equal(['alpha.example.org: second-0', 'beta.example.org: second-1']);
   });
 
   it('writes the roll-up prompt and its revisions to rollup/prompt.md when given a run directory', async () => {

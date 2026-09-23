@@ -38,7 +38,9 @@ describe('cli/stages/publish', () => {
     const client = fakeClient();
     const out = await stage.run(ctx('preview', client));
     expect(out.posted).to.equal(false);
-    expect(out.payload.replies[0].text).to.include('|dashboard>');
+    // No item replies since revision 28: the body carries the project, the report the rest (FR-020).
+    expect(out.payload.replies).to.deep.equal([]);
+    expect(out.payload.parent.text).to.include('alpha 912 vs 300');
     expect(runDir.exists('rollup/payload.json')).to.equal(true);
     expect(runDir.exists('rollup/publication.json')).to.equal(false);
     expect(client.chat.postMessage.called).to.equal(false);
@@ -54,7 +56,7 @@ describe('cli/stages/publish', () => {
     const publication = await runDir.readJson('rollup/publication.json');
     expect(publication).to.include({ channel_id: 'C123', ts: '1.000', slack_file_id: null });
     expect(client.files.uploadV2.called, 'no image upload since revision 24').to.equal(false);
-    expect(publication.replies).to.have.length(1);
+    expect(publication.replies).to.deep.equal([]);
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.publication).to.deep.equal({ channel_id: 'C123', ts: '1.000', permalink: 'https://slack/p1.000' });
     expect(brief.image).to.equal(null);
@@ -240,7 +242,8 @@ describe('cli/stages/publish: the report shared into the thread (revision 23)', 
     await runDir.writeJson('discovery.json', makeDiscovery());
     await runDir.writeJson('rollup/items.ranked.json', [item]);
     await runDir.writeJson('rollup/layout.json', {
-      slots: [], body_items: [item.item_id], thread_items: [], one_line: [],
+      slots: [], replies: [], entries: {}, body_items: [item.item_id], reply_items: [], thread_items: [],
+      body_alerts: [], thread_alerts: [],
     });
     await runDir.writeJson('rollup/brief.json', makeBrief({
       bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
@@ -258,7 +261,8 @@ describe('cli/stages/publish: the report shared into the thread (revision 23)', 
   it('records the report on the preview payload and uploads nothing', async () => {
     const client = sharingClient();
     const out = await stage.run(ctx('preview', client));
-    expect(out.payload.report).to.include({ path: 'rollup/report.html', slack_file_id: null, items: 1, replied: 1 });
+    expect(out.payload.report).to.include({ path: 'rollup/report.html', slack_file_id: null, items: 1 });
+    expect(out.payload.report).to.not.have.property('replied');
     expect(client.files.uploadV2.called).to.equal(false);
   });
 

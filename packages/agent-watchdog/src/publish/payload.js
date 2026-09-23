@@ -1,29 +1,25 @@
 'use strict';
-// The exact Slack payload (contracts/slack-payload.md): built by code, escaped through templates, and the
-// same object whether previewed or posted (FR-019, FR-020, FR-025). No image since revision 24 (FR-023 retired).
+// The exact Slack payload (contracts/slack-payload.md): built by code, escaped through templates, and the same object
+// whether previewed or posted (FR-019, FR-020, FR-025, FR-066). Revision 28: the headline whole in a bold section, at
+// most two programme bullets, and a thread of programme replies, one Other reply and one alerts reply.
 const fs = require('node:fs');
 const path = require('node:path');
 const Handlebars = require('handlebars');
 const { assertAudience } = require('./audience');
-const { hostOf, plain } = require('../rollup/deterministic-brief');
 const { headlineMarker, bulletMarker, noticeMarker, withMarker, MARKERS } = require('../rollup/markers');
+const { replyKindOf } = require('../rollup/layout');
 const { formatCost } = require('./footer');
 
 const TEMPLATES = path.join(__dirname, '..', '..', 'templates', 'slack');
-const HEADER_MAX = 150;
 const TEXT_MAX = 4000;
-const BRIEF_EVENT = 'agent_watchdog.brief';
-const ITEM_EVENT = 'agent_watchdog.item';
-const ALERTS_EVENT = 'agent_watchdog.alerts';
-// An alert group's thread reply lists at most this many instances and the count of the rest (FR-066).
-const MAX_ALERT_INSTANCES = 50;
-// Thread replies are for high items only, highest rank first and at most this many (FR-020, revision 25; body items
-// from revision 23); every item is in the report, shared into the thread, where a note can cite it by rank.
-const MAX_ITEM_REPLIES = 25;
 const SECTION_MAX = 3000;
-// Alert replies are fitted into one section: instance counts tried in this order, pattern hosts named up to this.
-const INSTANCE_STEPS = Object.freeze([MAX_ALERT_INSTANCES, 40, 30, 20, 15, 10, 5, 0]);
-const MAX_PATTERN_HOSTS = 12;
+const BRIEF_EVENT = 'agent_watchdog.brief';
+const PROGRAMME_EVENT = 'agent_watchdog.programme';
+const ALERTS_EVENT = 'agent_watchdog.alerts';
+// Code-added notices that are about alerts close the alerts reply rather than the post body (FR-066, FR-080).
+const ALERT_NOTICE_PREFIXES = Object.freeze([
+  'Housekeeping:', 'Resolved since the previous run:', 'Alerts unavailable:',
+]);
 
 /** Slack mrkdwn needs exactly these three escapes for untrusted text. */
 const mrkdwn = (value) => String(value === undefined || value === null ? '' : value)
@@ -53,6 +49,8 @@ const truncate = (text, max) => (text.length <= max ? text : `${text.slice(0, ma
 
 const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
+const isAlertNotice = (notice) => ALERT_NOTICE_PREFIXES.some((prefix) => String(notice || '').startsWith(prefix));
+
 /**
  * The one footer line of the post and the report (FR-019, revision 25): specification, configuration and trace links,
  * the cost, the run id; the post adds how many items are only in the report.
@@ -74,6 +72,8 @@ const footerText = (footer, { runId = null, furtherItems = 0 } = {}) => {
 
 const context = (text) => ({ type: 'context', elements: [{ type: 'mrkdwn', text }] });
 
+const section = (text) => ({ type: 'section', text: { type: 'mrkdwn', text } });
+
 // Slack mrkdwn has no nested lists: sub-bullets are indented lines inside their bullet's section (smoke S-16).
 const SUB_BULLET_PREFIX = '   ◦ ';
 
@@ -86,12 +86,13 @@ const bulletText = (bullet, severityOf) => [
   ...(bullet.children || []).map((child) => `${SUB_BULLET_PREFIX}${mrkdwn(child.text)}`),
 ].join('\n');
 
+const bodyNotices = (brief) => (brief.notices || []).filter((notice) => !isAlertNotice(notice));
+
 const parentBlocks = (brief, severityOf, { runId = null, furtherItems = 0 } = {}) => {
-  const headline = withMarker(headlineMarker(brief), brief.headline);
-  const headerText = { type: 'plain_text', text: truncate(headline, HEADER_MAX), emoji: true };
-  const blocks = [{ type: 'header', text: headerText }];
+  // A bold section, never Slack's `header` block, which cuts text at 150 characters (FR-019, revision 28).
+  const blocks = [section(`*${mrkdwn(withMarker(headlineMarker(brief), brief.headline))}*`)];
   for (const bullet of brief.bullets) {
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: bulletText(bullet, severityOf) } });
+    blocks.push(section(bulletText(bullet, severityOf)));
   }
   if (brief.expected_load_notice) {
     blocks.push(context(`_${mrkdwn(withMarker(MARKERS.expectedLoad, brief.expected_load_notice))}_`));
@@ -99,7 +100,7 @@ const parentBlocks = (brief, severityOf, { runId = null, furtherItems = 0 } = {}
   if (brief.degradation_notice) {
     blocks.push(context(`_${mrkdwn(withMarker(MARKERS.warning, brief.degradation_notice))}_`));
   }
-  for (const notice of brief.notices || []) {
+  for (const notice of bodyNotices(brief)) {
     blocks.push(context(`_${mrkdwn(markedNotice(notice))}_`));
   }
   blocks.push(context(footerText(brief.footer, { runId, furtherItems })));
@@ -112,201 +113,133 @@ const rankOrder = (a, b) => {
   return ra - rb || a.item_id.localeCompare(b.item_id);
 };
 
+/**
+ * The comment on the report's thread share (FR-022, revisions 23 and 28): what it holds and how to cite an item in a
+ * note. `exampleRank` is the first item outside the body, so the example is an item the reader can only find there.
+ */
+const reportComment = ({ items, exampleRank = null }) => {
+  const cite = exampleRank === null
+    ? 'its number in the report'
+    : `its number in the report (e.g. #${exampleRank})`;
+  return `Full report: ${plural(items, 'item')}. To comment on an item, reply here citing ${cite} or its host and `
+    + 'metric; a 👍 or 👎 in your reply is its verdict.';
+};
+
 /** The report's entry on the payload: the file to share into the thread and its code-built comment, or null. */
-const reportEntry = ({ brief, runId, ranked, replied }) => {
+const reportEntry = ({ brief, runId, ranked, bodyIds }) => {
   if (!brief.report || !brief.report.path) {
     return null;
   }
-  const withoutReply = new Set(replied.map((item) => item.item_id));
-  const example = ranked
-    .find((item) => !withoutReply.has(item.item_id) && item.rank !== null && item.rank !== undefined);
+  const example = ranked.find((item) => !bodyIds.has(item.item_id) && item.rank !== null && item.rank !== undefined);
   return {
     filename: `report-${runId}.html`,
     title: `Watchdog report ${runId}`,
     path: brief.report.path,
     items: ranked.length,
-    replied: replied.length,
-    initial_comment: reportComment({
-      items: ranked.length, replied: replied.length, exampleRank: example ? example.rank : null,
-    }),
+    initial_comment: reportComment({ items: ranked.length, exampleRank: example ? example.rank : null }),
     slack_file_id: brief.report.slack_file_id || null,
     ts: brief.report.ts || null,
   };
 };
 
-/** The firing alert whose category covers an item's metric, as a line for the item's reply (FR-079). */
-const alertLineFor = ({ item, alertGroups, alertCategories }) => {
-  const host = hostOf(item.project_url);
-  const matching = alertGroups.flatMap((group) => (group.instances || [])
-    .filter((instance) => instance.host === host)
-    .filter(() => (alertCategories[group.category] || []).some((name) => String(item.metric).includes(name))));
-  if (!matching.length) {
-    return null;
-  }
-  const [first] = matching;
-  const rest = matching.length > 1 ? `, +${matching.length - 1} more` : '';
-  return withMarker(MARKERS.alerts,
-    `Alert firing: ${first.title} since ${String(first.started_at).slice(0, 10)} (${first.days_firing}d)${rest}`);
-};
+// A line's items: the ids it covers (revision 28), or its own item for a line stored before that.
+const idsOfLine = (line) => (line.item_ids && line.item_ids.length ? line.item_ids : [line.item_id].filter(Boolean));
 
-const rankOf = (item) => (item.rank === null || item.rank === undefined ? Number.MAX_SAFE_INTEGER : item.rank);
-
-const relationText = (relation) => String(relation || '').replace(/_/g, ' ');
-
-/** The lower-ranked items that relate to this one (FR-009, revision 23), as lines for its reply. */
-const relatedLinesFor = (item, items) => items
-  .filter((other) => other.relates_to && other.relates_to.item_id === item.item_id && rankOf(other) > rankOf(item))
-  .sort(rankOrder)
-  .map((other) => ({
-    text: `Related: \`${other.metric}\` (${relationText(other.relates_to.relation)}) #${other.rank}`,
-  }));
+/** The items a bullet's lines cover: its own for an item bullet, its children's for a group. */
+const coveredByBullet = (bullet) => [
+  ...idsOfLine(bullet),
+  ...(bullet.children || []).flatMap(idsOfLine),
+];
 
 /**
- * The comment on the report's thread share (FR-022, revision 23): what it holds and how to cite an item in a note.
- * `exampleRank` is the first item without a reply, so the example is an item the reader can only find there.
+ * One thread reply per thread bullet (FR-020, revision 28): a programme not in the body, or the Other reply, in the
+ * body's form, with the items it covers in its metadata.
  */
-const reportComment = ({ items, replied, exampleRank = null }) => {
-  const cite = exampleRank === null
-    ? 'its number in the report'
-    : `its number in the report (e.g. #${exampleRank})`;
-  return `Full report: ${plural(items, 'item')}, ${replied} with a reply in this thread. To comment on an item, reply `
-    + `here citing ${cite} or its host and metric; a 👍 or 👎 in your reply is its verdict.`;
-};
-
-const replyFor = ({ item, links, runId, alertLine = null, related = [] }) => {
-  const url = links.get(item.item_id) || null;
-  const text = template('reply')({
-    related,
-    severity_label: item.severity.toUpperCase(),
-    host: hostOf(item.project_url),
-    metric: item.metric,
-    why_now: item.why_now,
-    suggested_check: item.suggested_check,
-    has_link: Boolean(url),
-    link_url: url,
-    has_alert: Boolean(alertLine),
-    alert_text: alertLine || '',
-    persisting_text: item.persisting_days > 1 ? `persisting ${item.persisting_days} days` : 'new today',
-    confidence_text: `${Math.round((item.confidence || 0) * 100)}%`,
-  }).trim();
+const programmeReplyFor = ({ bullet, runId, date, severityOf }) => {
+  const kind = replyKindOf(bullet);
+  const text = truncate(template('programme')({
+    text: markedBullet(bullet, severityOf),
+    children: bullet.children || [],
+  }).trim(), SECTION_MAX);
   return {
-    item_id: item.item_id,
+    kind,
+    group: bullet.group,
+    item_id: null,
+    alert_key: null,
     text,
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    blocks: [section(text)],
     metadata: {
-      event_type: ITEM_EVENT,
-      event_payload: { run_id: runId, item_id: item.item_id, project_url: item.project_url, metric: item.metric },
+      event_type: PROGRAMME_EVENT,
+      event_payload: { run_id: runId, date, group: bullet.group, kind, item_ids: coveredByBullet(bullet) },
     },
   };
 };
 
-const linksFor = (alertLinks, key) => {
-  if (!alertLinks) {
-    return null;
+/**
+ * The firing alerts per programme (FR-066, revision 28): the firing count with its categories, the new and stale
+ * counts, largest programme first; the instances themselves are in the report.
+ */
+const alertsSummary = (alertGroups) => {
+  const byGroup = new Map();
+  for (const group of alertGroups || []) {
+    const label = group.group || 'Other';
+    if (!byGroup.has(label)) {
+      byGroup.set(label, { group: label, firing: 0, new: 0, stale: 0, categories: [] });
+    }
+    const entry = byGroup.get(label);
+    entry.firing += group.firing || 0;
+    entry.new += group.new || 0;
+    entry.stale += group.stale || 0;
+    entry.categories.push({ category: group.category, firing: group.firing || 0 });
   }
-  return alertLinks instanceof Map ? alertLinks.get(key) || null : alertLinks[key] || null;
+  return [...byGroup.values()]
+    .map((entry) => ({
+      ...entry,
+      categories: [...entry.categories].sort((a, b) => b.firing - a.firing || a.category.localeCompare(b.category)),
+    }))
+    .sort((a, b) => b.firing - a.firing || a.group.localeCompare(b.group));
 };
 
-// Thousands are grouped for the reader; the gate's number matching works on the stored data, not on this text.
-const grouped = (value) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Number(plain(value)));
-
-/** The metric next to an alert instance (FR-079): its current value and yesterday's, code-formatted. */
-const evidenceText = (evidence) => {
-  if (!evidence || evidence.current_value === null || evidence.current_value === undefined) {
-    return '';
-  }
-  const perDay = evidence.aggregate === 'increase' ? '/day' : '';
-  const yesterday = evidence.previous_day_value === null || evidence.previous_day_value === undefined
-    ? ''
-    : ` (yesterday ${grouped(evidence.previous_day_value)}${perDay})`;
-  return ` · ${evidence.metric} ${grouped(evidence.current_value)}${perDay} now${yesterday}`;
+const alertsLine = (entry) => {
+  const categories = entry.categories.map((c) => `${String(c.category).replace(/_/g, ' ')} ${c.firing}`).join(', ');
+  return `${entry.group}: ${entry.firing} firing (${categories}), ${entry.new} new, ${entry.stale} stale`;
 };
 
 /**
- * One thread reply per Alert Group (FR-066): programme-wide patterns as one paragraph each (FR-078), the other
- * instances oldest first with their metric (FR-079), the rest counted, code-built links.
+ * The one alerts reply (FR-066, FR-080, revision 28): per programme its counts and the link to its filtered alert
+ * list, one link to every firing alert, then the alert-derived notices. Null when there is nothing to say.
  */
-const hostList = (hosts, max) => (hosts.length <= max
-  ? hosts.join(', ')
-  : `${hosts.slice(0, max).join(', ')}, +${hosts.length - max} more`);
-
-const alertReplyFor = ({ group, links, runId, date, staleAfterDays }) => {
-  const patterns = group.patterns || [];
-  const inPattern = new Set(patterns.flatMap((p) => p.instance_ids || []));
-  const members = (group.instances || []).filter((instance) => !inPattern.has(instance.instance_id));
-  const fullLinks = links
-    ? [
-      { url: links.group, label: `all firing ${group.category} alerts for ${group.group}` },
-      ...(links.rules || []).map((rule) => ({ url: rule.url, label: rule.title })),
-    ]
-    : [];
-  const short = (links && links.short) || null;
-  let shortLinks = [];
-  if (short && (short.rules || []).length) {
-    shortLinks = short.rules.map((rule) => ({ url: rule.url, label: `${rule.title} (all projects)` }));
-  } else if (short && short.group) {
-    shortLinks = [{ url: short.group, label: 'all firing alerts' }];
+const alertsReplyFor = ({ alertGroups, alertsLinks, notices, runId, date }) => {
+  const summary = alertsSummary(alertGroups);
+  const alertNotices = (notices || []).filter(isAlertNotice).map(markedNotice);
+  if (!summary.length && !alertNotices.length) {
+    return null;
   }
-  const render = ({ instanceMax, hostMax, linkList }) => {
-    const shown = members.slice(0, instanceMax);
-    const rest = members.length - shown.length;
-    return template('alert-group')({
-      group: group.group,
-      category: group.category,
-      importance_label: String(group.importance || 'medium').toUpperCase(),
-      summary_text: `${group.firing} firing, ${group.stale} stale for more than ${staleAfterDays} days, `
-        + `${group.new} new since the previous run`,
-      patterns: patterns.map((p) => ({
-        text: withMarker(MARKERS.pattern,
-          `Programme-wide: ${p.title} on ${p.count} of ${p.of} projects, first ${p.since_min}, last ${p.since_max}`),
-        hosts: hostList(p.hosts || [], hostMax),
-      })),
-      instances: shown.map((instance) => ({
-        title: instance.title,
-        host: instance.host || 'watchdog',
-        since_text: `${String(instance.started_at).slice(0, 10)} (${instance.days_firing}d)`,
-        stale: Boolean(instance.stale),
-        new: Boolean(instance.new),
-        evidence_text: evidenceText(instance.evidence),
-      })),
-      has_rest: rest > 0,
-      rest_text: `${rest} more`,
-      links: linkList,
-    }).trim();
-  };
-  // One section block, never a link cut in two (revision 17): keep as many instances as possible; for each count
-  // try the filtered links, then the group link alone, then the links without the host filter, each with every
-  // pattern host named before the host list is elided.
-  let text = null;
-  const variants = [fullLinks, fullLinks.slice(0, 1), shortLinks];
-  for (const instanceMax of INSTANCE_STEPS) {
-    for (const linkList of variants) {
-      for (const hostMax of [Infinity, MAX_PATTERN_HOSTS]) {
-        const candidate = render({ instanceMax, hostMax, linkList });
-        if (text === null && candidate.length <= SECTION_MAX) {
-          text = candidate;
-        }
-      }
-    }
-    if (text !== null) {
-      break;
-    }
-  }
-  if (text === null) {
-    // Nothing fits even bare: keep the links whole and cut the body in front of them.
-    const linksText = shortLinks.map((l) => link(l.url, l.label)).join('\n');
-    const body = render({ instanceMax: 0, hostMax: MAX_PATTERN_HOSTS, linkList: [] });
-    const room = Math.max(0, SECTION_MAX - linksText.length - 1);
-    text = `${truncate(body, room)}\n${linksText}`.trim();
-  }
+  const byGroup = alertsLinks && alertsLinks.byGroup ? alertsLinks.byGroup : new Map();
+  const linkFor = (label) => (byGroup instanceof Map ? byGroup.get(label) : byGroup[label]) || null;
+  const firing = summary.reduce((sum, entry) => sum + entry.firing, 0);
+  const summaryText = summary.length
+    ? `${firing} firing across ${plural(summary.length, 'programme')}`
+    : 'none firing';
+  const text = truncate(template('alerts')({
+    summary_text: summaryText,
+    programmes: summary.map((entry) => ({
+      line: alertsLine(entry), has_link: Boolean(linkFor(entry.group)), link: linkFor(entry.group),
+    })),
+    has_all: Boolean(alertsLinks && alertsLinks.all && summary.length),
+    all: alertsLinks ? alertsLinks.all : null,
+    notices: alertNotices,
+  }).trim(), SECTION_MAX);
   return {
-    alert_key: group.alert_key,
+    kind: 'alerts',
+    group: null,
     item_id: null,
+    alert_key: null,
     text,
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    blocks: [section(text)],
     metadata: {
       event_type: ALERTS_EVENT,
-      event_payload: { run_id: runId, date, group: group.group, category: group.category, firing: group.firing },
+      event_payload: { run_id: runId, date, firing, programmes: summary.map((entry) => entry.group) },
     },
   };
 };
@@ -327,14 +260,13 @@ const briefMetadata = ({ runId, date, kind }) => ({
 
 /**
  * Build the payload for a brief.
- * @param {object} options brief, items (ranked), links (Map item_id -> url), runId, date, audience, channel,
- *   digest (from buildDigest, or null); unmatched notes travel inside the digest since User Story 7;
- *   alertGroups (in body order) with alertLinks (Map alert_key -> { group, rules, all }) and staleAfterDays (US8).
- *   Replies go to the high items (FR-020, revision 25); the layout decides the bullets in the roll-up, not here.
+ * @param {object} options brief (with `thread`), items (ranked), runId, date, audience, channel, digest (from
+ *   buildDigest, or null), alertGroups (the groups the roll-up briefed) and alertsLinks ({ byGroup: Map label -> url,
+ *   all: url }) from src/links/build.js
  */
 const buildPayload = ({
-  brief, items = [], links = new Map(), runId, date, audience, channel = null, digest = null, alertGroups = [],
-  alertLinks = new Map(), staleAfterDays = 14, alertCategories = {},
+  brief, items = [], runId, date, audience, channel = null, digest = null, alertGroups = [],
+  alertsLinks = { byGroup: new Map(), all: null },
 }) => {
   assertAudience(audience);
   const metadata = briefMetadata({ runId, date, kind: brief.kind });
@@ -360,9 +292,8 @@ const buildPayload = ({
   }
 
   const ranked = [...items].sort(rankOrder);
-  // A reply is for what needs a person today: the high items, highest rank first (FR-020, revision 25).
-  const replied = ranked.filter((item) => item.severity === 'high').slice(0, MAX_ITEM_REPLIES);
-  const furtherItems = ranked.length - replied.length;
+  const bodyIds = new Set(brief.bullets.flatMap(coveredByBullet));
+  const furtherItems = ranked.filter((item) => !bodyIds.has(item.item_id)).length;
 
   const text = truncate(template('parent')({
     headline: withMarker(headlineMarker(brief), brief.headline),
@@ -375,9 +306,10 @@ const buildPayload = ({
       : '',
     has_degradation_notice: Boolean(brief.degradation_notice),
     degradation_notice: brief.degradation_notice ? withMarker(MARKERS.warning, brief.degradation_notice) : '',
-    notices: (brief.notices || []).map(markedNotice),
+    notices: bodyNotices(brief).map(markedNotice),
   }).trim(), TEXT_MAX);
 
+  const alertsReply = alertsReplyFor({ alertGroups, alertsLinks, notices: brief.notices, runId, date });
   return {
     run_id: runId,
     kind: brief.kind,
@@ -392,21 +324,17 @@ const buildPayload = ({
     // The brief image was a capture of the message itself and is retired (revision 24); the field stays null so a
     // stored payload keeps its shape. The report, shared into the thread, is the document a reader opens.
     image: null,
-    report: reportEntry({ brief, runId, ranked, replied }),
+    report: reportEntry({ brief, runId, ranked, bodyIds }),
     replies: [
-      ...replied.map((item) => replyFor({
-        item, links, runId, alertLine: alertLineFor({ item, alertGroups, alertCategories }),
-        related: relatedLinesFor(item, ranked),
-      })),
-      ...alertGroups.map((group) => alertReplyFor({
-        group, links: linksFor(alertLinks, group.alert_key), runId, date, staleAfterDays,
-      })),
+      ...(brief.thread || []).map((bullet) => programmeReplyFor({ bullet, runId, date, severityOf })),
+      ...(alertsReply ? [alertsReply] : []),
     ],
     digest: digestField(digest),
   };
 };
 
 module.exports = {
-  buildPayload, alertReplyFor, reportComment, mrkdwn, link, footerText, BRIEF_EVENT, ITEM_EVENT,
-  ALERTS_EVENT, HEADER_MAX, TEXT_MAX, SUB_BULLET_PREFIX, MAX_ALERT_INSTANCES, MAX_ITEM_REPLIES,
+  buildPayload, reportComment, alertsSummary, alertsReplyFor, programmeReplyFor, isAlertNotice, mrkdwn, link,
+  footerText, BRIEF_EVENT, PROGRAMME_EVENT, ALERTS_EVENT, TEXT_MAX, SECTION_MAX, SUB_BULLET_PREFIX,
+  ALERT_NOTICE_PREFIXES,
 };

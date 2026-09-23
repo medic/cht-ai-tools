@@ -130,6 +130,8 @@ const createSlackPublisher = ({
         text: reply.text, blocks: reply.blocks, thread_ts: parent.ts, metadata: reply.metadata,
       });
       replies.push({
+        kind: reply.kind || (reply.item_id ? 'item' : 'alerts'),
+        group: reply.group || null,
         item_id: reply.item_id || null,
         alert_key: reply.alert_key || null,
         ts: posted.ts,

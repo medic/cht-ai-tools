@@ -10,17 +10,18 @@ describe('rollup/rank', () => {
     const ranked = rankItems({ items: [low, mediumLowConfidence, mediumHighConfidence, high] });
     expect(ranked.map((i) => i.metric)).to.deep.equal(['d_metric', 'b_metric', 'c_metric', 'a_metric']);
     expect(ranked.map((i) => i.rank)).to.deep.equal([1, 2, 3, 4]);
+    // One project, four items: one unit of one project fills the first slot and its line covers every item.
     expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body', 'body']);
-    expect(ranked.map((i) => i.slot)).to.deep.equal([1, 2, 3, 4]);
+    expect(ranked.map((i) => i.slot)).to.deep.equal([1, 1, 1, 1]);
   });
 
-  it('fills five body slots and sends the sixth item to the thread (FR-010, revision 9)', () => {
+  it('fills two body slots with the two highest-ranked units and sends the rest to the thread (revision 28)', () => {
     const { BODY_SLOTS } = require('../../src/rollup/rank');
-    expect(BODY_SLOTS).to.equal(5);
-    const items = ['a', 'b', 'c', 'd', 'e', 'f'].map((m) => makeItem({ metric: `${m}_metric`, severity: 'low' }));
+    expect(BODY_SLOTS).to.equal(2);
+    const items = ['a', 'b', 'c'].map((h) => makeItem({ project_url: `https://${h}.example.org`, severity: 'low' }));
     const ranked = rankItems({ items });
-    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'body', 'body', 'body', 'thread']);
-    expect(ranked[5].slot).to.equal(null);
+    expect(ranked.map((i) => i.placement)).to.deep.equal(['body', 'body', 'thread']);
+    expect(ranked[2].slot).to.equal(null);
   });
 
   it('places items of one programme in a shared slot when groupOf names their group (FR-069)', () => {

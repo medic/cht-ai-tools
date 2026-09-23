@@ -89,12 +89,11 @@ describe('e2e: User Story 6, learning from the knowledge corpus', function () {
     expect(other.suggested_check).to.not.include('sentinel log');
     // The gate accepted the pass because the card id is in the merged index.
     expect(r.read('alpha-example-org/verification.pass1.json').outcome).to.equal('accepted');
-    // The published thread reply carries the card's confirmation steps.
-    const payload = r.read('rollup/payload.json');
-    const reply = payload.replies.find((rep) => rep.item_id === sentinel.item_id);
-    expect(reply.text).to.include('Check the sentinel log for a repeated transition error.');
-    expect(r.slack.chat.postMessage.getCalls().some((c) => String(c.args[0].text).includes('sentinel log')))
-      .to.equal(true);
+    // The card's confirmation steps are in the report shared into the thread; no item reply carries them since
+    // revision 28 (FR-020, FR-022).
+    const report = fs.readFileSync(path.join(r.root, 'rollup', 'report.html'), 'utf8');
+    expect(report).to.include('Check the sentinel log for a repeated transition error.');
+    expect(r.read('rollup/payload.json').replies.some((rep) => rep.item_id)).to.equal(false);
     // Merged cards are never written by a run.
     const cardFile = path.join(skillDir, 'pattern-cards', `${CARD.card_id}.md`);
     expect(fs.readFileSync(cardFile, 'utf8')).to.equal(renderCardFile(CARD, {}));

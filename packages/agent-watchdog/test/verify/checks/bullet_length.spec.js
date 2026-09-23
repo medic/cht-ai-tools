@@ -19,18 +19,19 @@ describe('verify/checks/bullet_length', () => {
     expect(check(ctx).reasons[0]).to.include('URL');
   });
 
-  it('requires a single line from an item the layout marks as a sub-bullet (FR-015, FR-069)', () => {
+  it('lets every entry take two lines, and holds the headline to two lines of 120 (revision 28)', () => {
     const ctx = briefContext();
-    ctx.layout = { slots: [], body_items: ['a1b2c3d4e5f6'], thread_items: [], one_line: ['a1b2c3d4e5f6'] };
-    ctx.draft.bullets[0].text = 'one line only';
-    expect(check(ctx).status).to.equal('pass');
+    ctx.layout = {
+      slots: [], replies: [], entries: {}, body_items: ['a1b2c3d4e5f6'], reply_items: [], thread_items: [],
+    };
     ctx.draft.bullets[0].text = 'first line\nsecond line';
-    const result = check(ctx);
-    expect(result.status).to.equal('fail');
-    expect(result.reasons[0]).to.match(/sub-bullet.*one line/);
-    // An item that owns its slot may still take two lines.
-    ctx.layout.one_line = [];
     expect(check(ctx).status).to.equal('pass');
+    ctx.draft.headline = `${'h'.repeat(120)}\n${'i'.repeat(120)}`;
+    expect(check(ctx).status).to.equal('pass');
+    ctx.draft.headline = 'h'.repeat(121);
+    expect(check(ctx).reasons[0]).to.match(/^headline line 1 has 121 characters/);
+    ctx.draft.headline = 'one\ntwo\nthree';
+    expect(check(ctx).reasons[0]).to.match(/^headline has 3 lines/);
   });
 });
 
@@ -39,12 +40,20 @@ describe('verify/checks/bullet_length: the budget after the project code writes 
   const { briefContext } = require('../helpers/context');
   const withLayout = (ctx, kind) => {
     ctx.items = [{ ...ctx.items[0], item_id: 'a1b2c3d4e5f6', project_url: 'https://north-a.example.org' }];
+    const prefix = kind === 'group' ? 'north-a: ' : 'north-a.example.org: ';
     ctx.layout = {
       slots: [{
-        slot: 1, kind, group: 'North Programme', item_ids: ['a1b2c3d4e5f6'], alert_keys: [], one_line: kind === 'group',
+        slot: 1, kind, group: 'North Programme', item_ids: ['a1b2c3d4e5f6'],
+        entries: [{ lead_id: 'a1b2c3d4e5f6', item_ids: ['a1b2c3d4e5f6'], host: 'north-a.example.org', prefix }],
       }],
-      body_items: ['a1b2c3d4e5f6'], thread_items: [], one_line: kind === 'group' ? ['a1b2c3d4e5f6'] : [],
-      body_alerts: [], thread_alerts: [],
+      replies: [],
+      entries: {
+        a1b2c3d4e5f6: {
+          item_ids: ['a1b2c3d4e5f6'], host: 'north-a.example.org', prefix, budget: 120 - prefix.length, where: 'body',
+          group: 'North Programme',
+        },
+      },
+      body_items: ['a1b2c3d4e5f6'], reply_items: [], thread_items: [],
     };
     return ctx;
   };

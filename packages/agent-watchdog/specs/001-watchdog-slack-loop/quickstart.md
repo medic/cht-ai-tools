@@ -264,3 +264,15 @@ Make a run fail after startup with an error whose message carries a token, for e
 notice in Slack reads `agent-watchdog run <id> failed at stage <stage>: ...` with every secret, e-mail
 address and phone-shaped run replaced by `[redacted]`; the same message is in the log untouched by the
 gate but with secret-named keys redacted.
+
+## 19. The post and its three replies (revision 28)
+
+Preview a run with items in several programmes. The parent reads: the whole headline in bold, at most two
+programme bullets each with at most three project lines (`north-a: …`) and a `+N more projects in the
+report` line, then the standing and analysis notices and the footer; no alert bullet. `rollup/payload.json`
+`replies` holds, in order, one `programme` reply per remaining programme with two or more flagged projects,
+one `other` reply, and one `alerts` reply whose text has one line per programme with its firing count,
+categories, new and stale counts and a link, then the link to every firing alert, then the housekeeping and
+resolved lines. `rollup/layout.json` has `slots`, `replies` and `entries` (each project line's lead id, the
+items it covers, its prefix and budget). A draft with a headline over two lines, more than one line per
+entry, or a line that exceeds its budget is refused with the reason naming the entry.

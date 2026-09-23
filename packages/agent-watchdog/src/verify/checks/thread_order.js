@@ -1,6 +1,6 @@
 'use strict';
-// Brief only: thread_order lists every accepted item once, bullets first in order; with a body layout (User Story 9)
-// the bullets must be exactly the layout's body items.
+// Brief only: thread_order lists every accepted item once, the bullets' lead items first in order; with a layout
+// (User Story 9, revision 28) the bullets must be exactly the layout's entries, body slots then thread replies.
 const NAME = 'thread_order';
 
 const check = (ctx) => {
@@ -26,12 +26,14 @@ const check = (ctx) => {
     reasons.push('the first entries of thread_order must equal the bullets in order');
   }
   if (ctx.layout) {
-    const body = ctx.layout.body_items || [];
-    const missingBody = body.filter((id) => !bulletIds.includes(id));
-    const extraBody = bulletIds.filter((id) => !body.includes(id));
-    if (missingBody.length || extraBody.length) {
-      reasons.push('bullets do not match the body layout: '
-        + `missing ${missingBody.join(', ') || 'none'}; unexpected ${extraBody.join(', ') || 'none'}`);
+    const expected = [...(ctx.layout.body_items || []), ...(ctx.layout.reply_items || [])];
+    const missingLeads = expected.filter((id) => !bulletIds.includes(id));
+    const extraLeads = bulletIds.filter((id) => !expected.includes(id));
+    if (missingLeads.length || extraLeads.length) {
+      reasons.push('bullets do not match the layout\'s entries: '
+        + `missing ${missingLeads.join(', ') || 'none'}; unexpected ${extraLeads.join(', ') || 'none'}`);
+    } else if (expected.some((id, i) => bulletIds[i] !== id)) {
+      reasons.push('bullets must follow the layout\'s order: body slots first, then the thread replies');
     }
   }
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };

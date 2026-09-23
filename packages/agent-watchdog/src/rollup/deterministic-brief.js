@@ -1,7 +1,7 @@
 'use strict';
 // Briefs that need no model: the heartbeat (FR-021) and the degraded brief built from candidates (FR-017).
 const { itemId } = require('../model/identity');
-const { layoutEntries, toLayoutDocument, assembleBullets, groupOfProjects, interleaveAlerts } = require('./layout');
+const { buildLayout, assembleBullets, assembleThread, groupOfProjects, coveredIds } = require('./layout');
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 
@@ -96,7 +96,7 @@ const candidateText = (candidate) => {
  */
 const buildDeterministicBrief = ({
   runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [], alertGroups = [],
-  staleAfterDays = 14, analysedProjects = null,
+  analysedProjects = null,
 }) => {
   const groupOf = groupOfProjects(discovery);
   const byKey = new Map();
@@ -110,19 +110,22 @@ const buildDeterministicBrief = ({
   const pseudoItems = [...byKey.entries()].map(([key, candidate]) => ({
     item_id: key, project_url: candidate.project_url, severity: candidate.severity_floor,
   }));
-  const bullets = assembleBullets({
-    layout: toLayoutDocument(layoutEntries(interleaveAlerts(pseudoItems, alertGroups, groupOf))),
-    textFor: (key) => candidateText(byKey.get(key)),
-    hostFor: (key) => hostOf(byKey.get(key).project_url),
-    alertGroups,
-    staleAfterDays,
-  });
+  // The same layout as the model's brief (revision 28): a project's line names its lead candidate and counts the rest;
+  // candidateText carries the host, so no prefix is written.
+  const layout = buildLayout(pseudoItems, { groupOf, alertGroups });
+  const textFor = (key) => {
+    const rest = coveredIds(layout, key).length - 1;
+    return `${candidateText(byKey.get(key))}${rest > 0 ? ` and ${rest} more` : ''}`;
+  };
+  const bullets = assembleBullets({ layout, textFor });
+  const thread = assembleThread({ layout, textFor });
   const projects = new Set(candidates.map((c) => c.project_url)).size;
   return {
     ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
     kind: 'degraded',
     headline: `Watchdog brief (degraded): ${candidates.length} candidates across ${projects} projects`,
     bullets,
+    thread,
     checked: checkedCounts(discovery, candidates.length, analysedProjects),
     degradation_notice: `Degraded brief: ${reason}. `
       + 'Bullets list computed candidates only, without model interpretation.',

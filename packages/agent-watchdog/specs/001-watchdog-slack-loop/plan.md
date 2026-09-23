@@ -721,3 +721,31 @@ delta, almost entirely spec text, with one code change.
 Deliberately not planned: enforcing egress and the container hardening (the container revision, which
 FR-083 now anchors); a startup check of the bot's channel membership (it would need `channels:read`
 scopes the app does not hold; the post's own refusal is the loud failure).
+
+### Revision 28 delta: a post a person reads in one glance, a thread of three replies (FR-010, FR-015, FR-019, FR-020, FR-066, FR-069, FR-078, FR-079, FR-080, FR-085)
+
+Planned on 2026-09-22 from the operator's reading of the first full run on revision 25 (research.md R-33):
+the post's headline was cut at Slack's 150-character header limit, its body carried alert bullets that
+repeat the monitoring stack's own notifications, its sub-bullets named one metric per line so one project
+appeared several times, and its thread held one item reply and eleven alert-group replies. Four choices
+were put to the operator through `/speckit-clarify` and answered: two programmes in the body, a reply of
+its own for every programme with two or more flagged projects, one combined line per project, and a trace
+link with quoted lines for feedback provenance. Where each lands:
+
+| Change | Story | Requirements |
+|---|---|---|
+| Headline in a bold section, never truncated; gate holds it to two lines | US1 | FR-019, FR-015 |
+| Body: two programme bullets, three project lines each, a count of the rest; alerts out of the body | US1, US9 | FR-010, FR-069 |
+| One line per project covering all its items; the layout names the items a line covers; the gate allows all their values | US9 | FR-069, FR-016 |
+| Thread: report share, programme replies, one Other reply, one alerts reply; item and alert-group replies retired | US1, US8 | FR-020, FR-066, FR-078, FR-079, FR-080 |
+| Feedback sequencing and provenance specified for revision 29 | US2 | FR-085 |
+
+- **I**: no new dependency. **II**: tests first for the layout, the checks, the payload and the brief.
+- **III**: the layout, the prefixes, the counts and the alerts summary are code; the model writes only the
+  project lines and the headline. **IV**: nothing new stored; `brief.json` gains `thread`, the layout its
+  `entries` and `replies`. **V**: no new stage. **VI**, **VIII**: unchanged. **VII**: `prompts/rollup.md`
+  and the templates change by pull request with their tests.
+  Result: PASS.
+
+Deliberately not planned: the feedback sequencing and provenance (revision 29, FR-085); the report's
+summary keeps the body bullets only.

@@ -5,7 +5,7 @@ const { buildPayload } = require('../../publish/payload');
 const { createSlackPublisher } = require('../../publish/slack');
 const { buildDigest } = require('../../publish/digest');
 const { readUnacknowledged, markAcknowledged, feedbackFile } = require('../../feedback/store');
-const { buildAlertGroupLinks } = require('../../links/build');
+const { buildAlertsLinks } = require('../../links/build');
 
 const name = 'publish';
 const inputs = ['rollup/brief.json'];
@@ -82,9 +82,6 @@ const run = async (ctx) => {
   const brief = await runDir.readJson('rollup/brief.json');
   const items = runDir.exists('rollup/items.ranked.json') ? await runDir.readJson('rollup/items.ranked.json') : [];
   const discovery = runDir.exists('discovery.json') ? await runDir.readJson('discovery.json') : null;
-  const links = ctx.links && discovery
-    ? ctx.links.buildItemLinks(items, discovery, ctx.config.endpoints.grafanaUrl)
-    : new Map();
   const channel = ctx.config.endpoints.slackChannelId || null;
 
   // The feedback digest (FR-062): every record no earlier digest acknowledged, what it changed today, the
@@ -120,23 +117,19 @@ const run = async (ctx) => {
     : classified;
   const alertGroups = orderedAlertGroups(briefed, layout);
   const grafanaUrl = ctx.config.endpoints && ctx.config.endpoints.grafanaUrl;
-  const alertLinks = new Map(alertGroups
-    .map((group) => [group.alert_key, grafanaUrl ? buildAlertGroupLinks({ grafanaUrl, group }) : null]));
+  // The alerts reply links each programme's filtered alert list and every firing alert (FR-066, revision 28).
+  const alertsLinks = grafanaUrl ? buildAlertsLinks({ grafanaUrl, alertGroups }) : { byGroup: new Map(), all: null };
 
   const payload = buildPayload({
     brief,
     items,
-    links,
     runId: ctx.runId,
     date: ctx.date,
     audience: 'internal',
     channel,
     digest: built,
     alertGroups,
-    alertLinks,
-    staleAfterDays: (classified && classified.stale_after_days) || 14,
-    alertCategories: (ctx.policy && ctx.policy.alerts && ctx.policy.alerts.categories) || {},
-    layout,
+    alertsLinks,
   });
   await runDir.writeJson('rollup/payload.json', payload);
   if (built) {

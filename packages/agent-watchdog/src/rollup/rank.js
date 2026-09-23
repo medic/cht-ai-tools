@@ -129,7 +129,8 @@ const compareWith = (usersOf) => (a, b) => {
 
 /**
  * Rank items by severity, confidence, persistence and id, then place them with the body layout rule
- * (src/rollup/layout.js): five slots, a programme's items sharing one slot as sub-bullets (FR-010, FR-069).
+ * (src/rollup/layout.js): two programme slots of three project lines; every item a body line covers is in the body
+ * (FR-010, FR-069, revision 28).
  * @param {object} options
  * @param {object[]} options.items accepted items
  * @param {Map<string, object[]>} [options.feedbackByItem] feedback records by item id (US2)
@@ -137,7 +138,7 @@ const compareWith = (usersOf) => (a, b) => {
  *   each id (src/rollup/history.js); `persisting_days` is one more than this (FR-009, revision 21)
  * @param {object|null} [options.cards] loaded pattern cards (src/corpus/cards.js); matched before persistence
  * @param {(projectUrl: string) => string} [options.groupOf] the project's group label; everything is "Other" without it
- * @param {object[]} [options.alertGroups] Alert Groups that take body slots of their own (FR-066)
+ * @param {object[]} [options.alertGroups] Alert Groups, listed for the thread; they take no slot since revision 28
  * @param {(projectUrl: string) => number} [options.usersOf] connected users per project, a ranking input (FR-081)
  */
 const rankItems = ({

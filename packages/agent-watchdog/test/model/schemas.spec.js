@@ -47,8 +47,12 @@ describe('model/schemas', () => {
     expect(parsed.bullets).to.have.length(5);
     // A bare { item_id, text } bullet is an item bullet with no sub-bullets.
     expect(parsed.bullets[0]).to.deep.equal({
-      kind: 'item', item_id: bullet(1).item_id, group: null, text: 'one line', children: [], alert_key: null,
+      kind: 'item', item_id: bullet(1).item_id, item_ids: [], group: null, text: 'one line', children: [],
+      alert_key: null,
     });
+    expect(parsed.thread).to.deep.equal([]);
+    const programme = { kind: 'programme', group: 'North', item_id: null, run_id: 'r', text: 't', publication: null };
+    expect(schemas.ThreadReply.parse(programme).kind).to.equal('programme');
     expect(() => schemas.Brief.parse({ ...brief, bullets: [1, 2, 3, 4, 5, 6].map(bullet) })).to.throw();
     expect(() => schemas.Brief.parse({ ...brief, kind: 'degraded', degradation_notice: null })).to.throw();
     const child = (i) => ({ item_id: `${i}`.padStart(12, 'b'), text: 'sub' });

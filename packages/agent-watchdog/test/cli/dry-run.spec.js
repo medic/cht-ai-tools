@@ -78,7 +78,7 @@ describe('cli/commands/run in preview mode (--dry-run)', () => {
     expect(JSON.parse(t.out.text())).to.deep.equal(payload);
     expect(payload.kind).to.equal('brief');
     expect(payload.parent.channel).to.equal('C123');
-    expect(payload.replies).to.have.length(1);
+    expect(payload.replies, 'no item replies since revision 28').to.deep.equal([]);
     expect(payload.image).to.equal(null);
     expect(fs.existsSync(path.join(root, 'rollup', 'publication.json'))).to.equal(false);
     expect(slack.chat.postMessage).to.not.have.been.called;

@@ -157,11 +157,11 @@ describe('verify/gate', () => {
     expect(report.checks.find((c) => c.name === 'links_resolve').status).to.equal('fail');
   });
 
-  it('verifies a brief with five bullets and rejects a sixth (FR-010, revision 9)', async () => {
+  it('verifies a brief of two bullets and rejects a third without a layout (FR-010, revision 28)', async () => {
     const ctx = briefContext();
-    const ids = ['a', 'b', 'c', 'd', 'e', 'f'].map((c) => c.repeat(12));
+    const ids = ['a', 'b', 'c'].map((c) => c.repeat(12));
     ctx.items = ids.map((id) => ({ ...ctx.items[0], item_id: id }));
-    ctx.draft.bullets = ids.slice(0, 5).map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
+    ctx.draft.bullets = ids.slice(0, 2).map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
     ctx.draft.thread_order = ids;
     const good = await verifyBrief({
       draft: ctx.draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18',
@@ -171,7 +171,7 @@ describe('verify/gate', () => {
     expect(good.report.subject).to.equal('brief');
     expect(good.report.subject_ref).to.equal('rollup/draft2');
     expect(schemas.VerificationReport.parse(good.report)).to.be.an('object');
-    ctx.draft.bullets.push({ item_id: ids[5], text: 'six' });
+    ctx.draft.bullets.push({ item_id: ids[2], text: 'three' });
     const bad = await verifyBrief({
       draft: ctx.draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18',
       attempt: 3, allowlist: ctx.allowlist,
@@ -180,19 +180,26 @@ describe('verify/gate', () => {
     expect(bad.report.checks.find((c) => c.name === 'bullet_count').status).to.equal('fail');
   });
 
-  it('verifies a brief against its body layout: one bullet per body item, sub-bullets one line', async () => {
+  it('verifies a brief against its layout: one text per entry, body slots then replies, two lines each', async () => {
+    const { buildLayout } = require('../../src/rollup/layout');
     const ctx = briefContext();
-    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((c) => c.repeat(12));
-    ctx.items = ids.map((id) => ({ ...ctx.items[0], item_id: id }));
-    const layout = {
-      slots: [
-        { slot: 1, kind: 'group', group: 'North Programme', item_ids: ids.slice(0, 6), one_line: true },
-        { slot: 2, kind: 'item', group: 'Other', item_ids: [ids[6]], one_line: false },
-      ],
-      body_items: ids, thread_items: [], one_line: ids.slice(0, 6),
+    const hosts = { a: 'north-a', b: 'north-b', c: 'north-c', d: 'north-a', e: 'alpha', f: 'south-a', g: 'south-b' };
+    ctx.items = Object.entries(hosts).map(([c, host]) => ({
+      ...ctx.items[0], item_id: c.repeat(12), project_url: `https://${host}.example.org`,
+    }));
+    const groupOf = (url) => {
+      if (/north/.test(url)) {
+        return 'North Programme';
+      }
+      return /south/.test(url) ? 'South Programme' : 'Other';
     };
-    ctx.draft.bullets = ids.map((id) => ({ item_id: id, text: 'cht.example.org backlog 912 vs 300' }));
-    ctx.draft.thread_order = ids;
+    const layout = buildLayout(ctx.items, { groupOf });
+    // North (three lines; d rides on a's line) and alpha fill the body; South's two projects are a thread reply.
+    expect(layout.body_items).to.deep.equal(['a', 'b', 'c', 'e'].map((c) => c.repeat(12)));
+    expect(layout.reply_items).to.deep.equal(['f', 'g'].map((c) => c.repeat(12)));
+    const leads = [...layout.body_items, ...layout.reply_items];
+    ctx.draft.bullets = leads.map((id) => ({ item_id: id, text: 'backlog 912 vs 300' }));
+    ctx.draft.thread_order = [...leads, 'd'.repeat(12)];
     const verify = (draft) => verifyBrief({
       draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, runId: '2026-09-18', attempt: 1,
       allowlist: ctx.allowlist, layout,
@@ -200,11 +207,20 @@ describe('verify/gate', () => {
     const good = await verify(ctx.draft);
     const failures = JSON.stringify(good.report.checks.filter((c) => c.status === 'fail'));
     expect(good.report.outcome, failures).to.equal('accepted');
-    const bullets = ctx.draft.bullets.map((b, i) => (i === 0 ? { ...b, text: 'one\ntwo' } : b));
-    const twoLines = { ...ctx.draft, bullets };
-    const long = await verify(twoLines);
+    const withFirst = (text) => ({
+      ...ctx.draft, bullets: ctx.draft.bullets.map((b, i) => (i === 0 ? { ...b, text } : b)),
+    });
+    // Every entry may take two lines (revision 28); a third line, or a first line over the budget the prefix
+    // leaves, is rejected.
+    const twoLines = await verify(withFirst('backlog 912\nvs 300'));
+    expect(twoLines.report.outcome, JSON.stringify(twoLines.report.checks)).to.equal('accepted');
+    const threeLines = await verify(withFirst('backlog 912\nvs\n300'));
+    expect(threeLines.report.checks.find((c) => c.name === 'bullet_length').status).to.equal('fail');
+    const long = await verify(withFirst(`backlog 912 vs 300 ${'x'.repeat(100)}`));
     expect(long.report.checks.find((c) => c.name === 'bullet_length').status).to.equal('fail');
-    const wrongIds = { ...ctx.draft, bullets: ctx.draft.bullets.slice(1), thread_order: [...ids.slice(1), ids[0]] };
+    const wrongIds = {
+      ...ctx.draft, bullets: ctx.draft.bullets.slice(1), thread_order: [...leads.slice(1), leads[0], 'd'.repeat(12)],
+    };
     const mismatch = await verify(wrongIds);
     expect(mismatch.report.outcome).to.equal('rejected');
     const failed = mismatch.report.checks.filter((c) => c.status === 'fail').map((c) => c.name);

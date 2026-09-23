@@ -281,13 +281,18 @@ const Pass = z.object({
   tool_calls_path: z.string(),
 }).strict();
 
-// A sub-bullet: one item (or, for alerts, one category built by code) on a single line (FR-015).
-const BulletChild = z.object({ item_id: hex12.nullable(), text: z.string() }).strict();
+// A sub-bullet: one project's line, its lead item and every item it covers (FR-069, revision 28), or the code-written
+// count of the projects beyond three (item_id null).
+const BulletChild = z.object({
+  item_id: hex12.nullable(), item_ids: z.array(hex12).default([]), text: z.string(),
+}).strict();
 
 // A bare { item_id, text } is an item bullet with no sub-bullets, so earlier callers keep working.
 const Bullet = z.object({
   kind: enums.BulletKind.default('item'),
   item_id: hex12.nullable().default(null),
+  // Every item an item bullet's line covers, the lead first (revision 28); empty for a group.
+  item_ids: z.array(hex12).default([]),
   group: z.string().nullable().default(null),
   text: z.string(),
   children: z.array(BulletChild).max(8).default([]),
@@ -302,6 +307,8 @@ const Brief = z.object({
   kind: enums.BriefKind,
   headline: z.string(),
   bullets: z.array(Bullet).max(5),
+  // The thread bullets (revision 28): one group bullet per programme reply and one for the Other reply.
+  thread: z.array(Bullet).default([]),
   expected_load_notice: z.string().nullable(),
   checked: z.object({ projects: z.number().int(), panels: z.number().int(), candidates: z.number().int() }).strict(),
   degradation_notice: z.string().nullable(),
@@ -322,14 +329,18 @@ const Brief = z.object({
   path: ['degradation_notice'],
 });
 
-// The per-item thread reply, or the per-alert-group one (FR-066): exactly one of item_id and alert_key is set.
+// A thread reply (FR-020, FR-066, revision 28): a programme, the Other reply or the alerts reply; an item's or an
+// alert group's own reply until then, when exactly one of item_id and alert_key was set.
 const ThreadReply = z.object({
+  kind: z.enum(['item', 'alerts', 'programme', 'other']).default('item'),
+  group: z.string().nullable().default(null),
   item_id: hex12.nullable(),
   alert_key: z.string().nullable().default(null),
   run_id: z.string(),
   text: z.string(),
   publication: Publication.nullable(),
-}).strict().refine((r) => (r.item_id === null) !== (r.alert_key === null), {
+}).strict().refine((r) => (r.kind === 'programme' || r.kind === 'other' || r.kind === 'alerts')
+  || (r.item_id === null) !== (r.alert_key === null), {
   message: 'a thread reply belongs to one item or one alert group',
   path: ['item_id'],
 });

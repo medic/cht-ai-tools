@@ -254,13 +254,16 @@ const createScriptedEngine = ({
     const rankedMatch = /<untrusted source="ranked-items">\n([\s\S]*?)\n<\/untrusted>/.exec(options.userPrompt);
     const ranked = rankedMatch ? JSON.parse(rankedMatch[1]) : [];
     const ordered = [...ranked].sort((a, b) => (a.rank || 0) - (b.rank || 0));
-    // The body layout is computed by code (User Story 9): one bullet per body item, in the layout's order; items
-    // of a programme are one-line sub-bullets. Without a layout section, the first five items are the bullets.
+    // The layout is computed by code (User Story 9, revision 28): one text per entry, body slots then thread
+    // replies, each entry a project whose lead item stands for every item it covers. Without a layout section, the
+    // first two items are the bullets.
     const layoutSection = options.userPrompt.slice(options.userPrompt.indexOf('## Body layout'));
     const layoutMatch = /```json\n([\s\S]*?)\n```/.exec(layoutSection);
-    const bodyIds = layoutMatch
-      ? JSON.parse(layoutMatch[1]).flatMap((slot) => slot.item_ids)
-      : ordered.slice(0, 5).map((item) => item.item_id);
+    const parsedLayout = layoutMatch ? JSON.parse(layoutMatch[1]) : null;
+    const bodyIds = parsedLayout
+      ? [...(parsedLayout.slots || []), ...(parsedLayout.replies || [])]
+        .flatMap((container) => (container.entries || []).map((entry) => entry.lead_id))
+      : ordered.slice(0, 2).map((item) => item.item_id);
     const bullets = bodyIds.map((itemId) => {
       const item = ordered.find((i) => i.item_id === itemId);
       const cur = item.evidence.find((e) => e.window === 'current') || item.evidence[0];

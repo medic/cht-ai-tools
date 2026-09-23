@@ -2,6 +2,7 @@
 const { EMAIL_PATTERN, phoneMatches } = require('../patterns');
 const { walkStrings } = require('../walk');
 const { allowedValues, givenNumerals } = require('./numbers_match');
+const { coveredIds } = require('../../rollup/layout');
 
 const NAME = 'personal_data_absent';
 
@@ -21,8 +22,14 @@ const computedIntegersFor = (ctx, path) => {
   }
   const inBullet = BULLET_PATH.exec(path);
   if (inBullet && ctx.draft) {
+    // A bullet's line covers every item of its project (revision 28), so each of their values is a number here.
     const bullet = (ctx.draft.bullets || [])[Number(inBullet[1])];
-    item = bullet ? (ctx.items || []).find((i) => i.item_id === bullet.item_id) || null : null;
+    const covered = bullet
+      ? coveredIds(ctx.layout, bullet.item_id)
+        .map((id) => (ctx.items || []).find((i) => i.item_id === id))
+        .filter(Boolean)
+      : [];
+    return new Set(covered.flatMap((one) => allowedValues(one, ctx)).map((a) => String(Math.round(Number(a.value)))));
   }
   if (!item) {
     return new Set();

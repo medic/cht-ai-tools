@@ -30,12 +30,14 @@ describe('rollup/deterministic-brief', () => {
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
     expect(brief.kind).to.equal('degraded');
     expect(brief.headline).to.equal('Watchdog brief (degraded): 4 candidates across 3 projects');
-    expect(brief.bullets).to.have.length(4);
-    expect(brief.bullets[0].text).to.equal('cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change)');
+    // Two body units (revision 28): alpha's two candidates as one line, then beta; gamma goes to the Other reply.
+    expect(brief.bullets).to.have.length(2);
+    expect(brief.bullets[0].text)
+      .to.equal('cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change) and 1 more');
     expect(brief.bullets[0]).to.include({ kind: 'item', group: 'Other' });
     expect(brief.bullets[1].text).to.include('cht_replication_limit_count on beta.example.org');
-    expect(brief.bullets[2].text).to.match(/^cht_(conflict_count|feedback_total) on/);
-    expect(brief.bullets[3].text).to.match(/^cht_(conflict_count|feedback_total) on/);
+    expect(brief.thread).to.have.length(1);
+    expect(brief.thread[0].children[0].text).to.match(/^cht_feedback_total on gamma/);
     expect(brief.degradation_notice).to.include('gate rejected three drafts');
     expect(brief.checked).to.deep.equal({ projects: 3, panels: 3, candidates: 4 });
     expect(brief.image).to.equal(null);
@@ -55,7 +57,7 @@ describe('rollup/deterministic-brief', () => {
     expect(brief.bullets[0].text).to.include('1234.57 vs 1000.13');
   });
 
-  it('keeps five slots and collapses a programme into one bullet with sub-bullets (FR-010, FR-069)', () => {
+  it('keeps two slots, collapses a programme into one bullet with project lines, and threads the rest', () => {
     const { makeProject } = require('./factories');
     const discovery = makeDiscovery({
       projects: [
@@ -75,19 +77,23 @@ describe('rollup/deterministic-brief', () => {
       runId: 'r', candidates, discovery, reason: 'model unavailable', footer: footer(), expectedLoadNotice: null,
     });
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
-    expect(brief.bullets).to.have.length(5);
+    expect(brief.bullets).to.have.length(2);
     expect(brief.bullets[0]).to.include({ kind: 'group', group: 'North Programme' });
     expect(brief.bullets[0].text).to.equal('North Programme: 2 projects with issues');
     expect(brief.bullets[0].children.map((c) => c.text)).to.deep.equal([
       'cht_sentinel_backlog_count on north-a.example.org: 912 vs 300 (pct_change)',
       'cht_sentinel_backlog_count on north-b.example.org: 912 vs 300 (pct_change)',
     ]);
-    expect(brief.bullets.slice(1).every((b) => b.kind === 'item' && b.children.length === 0)).to.equal(true);
-    expect(brief.bullets.slice(1).map((b) => b.text)).to.deep.equal([
-      'cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change)',
+    expect(brief.bullets[1]).to.deep.include({ kind: 'item', group: 'Other', children: [] });
+    expect(brief.bullets[1].text).to.equal('cht_sentinel_backlog_count on alpha.example.org: 912 vs 300 (pct_change)');
+    // The remaining ungrouped projects share the Other reply: three lines and the count of the rest.
+    expect(brief.thread).to.have.length(1);
+    expect(brief.thread[0]).to.include({ kind: 'group', group: 'Other', text: 'Other: 4 projects with issues' });
+    expect(brief.thread[0].children.map((c) => c.text)).to.deep.equal([
       'cht_sentinel_backlog_count on beta.example.org: 912 vs 300 (pct_change)',
       'cht_sentinel_backlog_count on gamma.example.org: 912 vs 300 (pct_change)',
       'cht_sentinel_backlog_count on delta.example.org: 912 vs 300 (pct_change)',
+      '+1 more project in the report',
     ]);
   });
 
@@ -108,19 +114,19 @@ describe('rollup/deterministic-brief', () => {
   });
 });
 
-describe('rollup/deterministic-brief: alert bullets (User Story 8)', () => {
+describe('rollup/deterministic-brief: alerts (User Story 8, revision 28)', () => {
   const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
   const south = alertGroupOf([classified('delivery', 'south-a.example.org')]);
 
-  it('keeps the alerts bullet in a degraded brief, laid out by importance among the candidates', () => {
+  it('gives alerts no bullet in a degraded brief: the alerts reply in the thread carries their counts', () => {
     const brief = buildDeterministicBrief({
       runId: 'r', candidates: [makeCandidate()], discovery: makeDiscovery(), reason: 'model unavailable',
-      footer: footer(), expectedLoadNotice: null, alertGroups: [south], staleAfterDays: 14,
+      footer: footer(), expectedLoadNotice: null, alertGroups: [south],
     });
     expect(() => schemas.Brief.parse(brief)).to.not.throw();
-    expect(brief.bullets.map((b) => b.kind)).to.deep.equal(['item', 'alerts']);
-    expect(brief.bullets[1].text).to.equal('South Programme alerts: 1 firing, none stale');
-    expect(brief.bullets[1].children).to.have.length(1);
+    expect(brief.bullets.map((b) => b.kind)).to.deep.equal(['item']);
+    expect(brief.thread).to.deep.equal([]);
+    expect(JSON.stringify(brief)).to.not.include('South Programme alerts');
   });
 });
 

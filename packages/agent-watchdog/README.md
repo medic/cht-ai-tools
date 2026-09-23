@@ -4,8 +4,9 @@ Daily analysis of the CHT projects monitored by Medic's hosted [CHT Watchdog](ht
 posted to Slack as a short brief that flags what a human should look into. It reads metrics
 through Grafana, computes changes deterministically, asks a bounded Claude Agent SDK session to
 interpret them with read-only tools, verifies every number and link in code, and posts one
-message with a threaded reply per body item and the full report shared into the thread, where every
-item is numbered so a note can cite it (`#7`, or its host and metric, with a thumbs as the verdict).
+message of at most two programme bullets, with the full report shared into its thread followed by one
+reply per remaining programme, one for the other projects and one for the alerts; every item is numbered
+in the report so a note can cite it (`#7`, or its host and metric, with a thumbs as the verdict).
 Reactions and thread notes shape the next day's brief and are acknowledged in it, and what the agent
 learns arrives as proposal files for human review, never as changes to its own prompts, skill or
 thresholds.
@@ -95,10 +96,11 @@ failures at the end of a run are logged and leave the exit code alone.
 
 ### What the brief says beyond the alerts
 
-One alert rule firing on most of a programme's projects within two days is one event: the category
-line names the rule and the count, the thread lists the projects once. Every alert line in a thread
-shows the metric behind it with its current and previous-day values, and an item's reply names the
-firing alert its metric explains. Stale alerts on hosts with no data are old news, moved to one
+One alert rule firing on most of a programme's projects within two days is one event: the report's
+alerts section names the rule and the count and lists the projects once, with the metric behind each
+alert and its current and previous-day values. The thread's single alerts reply gives per programme the
+firing count, its categories, the new and stale counts and a link to the filtered alert list, and one
+link to every firing alert. Stale alerts on hosts with no data are old news, moved to one
 housekeeping notice that suggests removing the host or silencing the rule; alerts that cleared since
 the previous run get a resolved notice. Items of the most-used projects, by connected users, rank
 first within a severity. A small fixed set of emoji, placed by code and never by the model, marks
@@ -146,13 +148,14 @@ report lists proposals still awaiting review with their age.
 
 `projects.yaml` declares programme groups by host glob (`groups`, first match wins) and an ignore list
 (`ignore`, development instances). Hosts matching no group belong to `Other`; ignored hosts are listed in
-`discovery.json` and are never analysed, charged or named. The post body holds at most five bullets of two
-lines: a programme with several flagged projects becomes one code-written line ("North Programme: 3 projects with
-issues") with one one-line sub-bullet per project, and every body item keeps its own thread reply (items beyond the
-body live in the report shared into the thread; standing conditions such as a backlog above zero since yesterday or
-a host dark for a fortnight are named by code and open no session). The
-layout is computed by code before the roll-up call (`rollup/layout.json`), the model writes only item text,
-and the gate rejects a draft whose bullets differ from the layout. `npm run smoke:grafana -- --hosts` prints
+`discovery.json` and are never analysed, charged or named. The post body holds the two highest-ranked programmes:
+a programme with several flagged projects becomes one code-written line ("North Programme: 3 projects with 5
+issues") with one line per project for its three highest-ranked projects, each covering every issue of that
+project, and a count of the rest; every other programme with two or more flagged projects is a thread reply in the
+same form, the remaining projects share one "Other" reply, and every item lives in the report shared into the thread
+(standing conditions such as a backlog above zero since yesterday or a host dark for a fortnight are named by code
+and open no session). The layout is computed by code before the roll-up call (`rollup/layout.json`), the model
+writes only the project lines and the headline, and the gate rejects a draft whose lines differ from the layout. `npm run smoke:grafana -- --hosts` prints
 every discovered host with its group, which is how the placeholder patterns in `config/defaults/projects.yaml`
 get replaced.
 
@@ -163,10 +166,10 @@ read-only token as the metrics (`GET /api/prometheus/grafana/api/v1/rules`, foll
 `/alerts` endpoint as a fallback) and stores them as collected in `alerts.json`. Code classifies them from the
 reviewed `alerts.yaml` (category and importance per rule title, unknown titles uncategorised and medium, stale after
 14 days by default), marks what is new since the previous run, and groups them per programme and category. The
-body gets one code-written bullet per programme ("North Programme alerts: 15 firing, 3 stale for more than 14 days") with
-a sub-bullet per category, ranked among the items by importance; each alert group gets its own thread reply with
-its instances and code-built links to the filtered alert list, which the gate resolves against the collected rules
-and instances. Every firing instance has a durable episode in `alerts/episodes.jsonl` (opened, observed, cleared)
+post carries no alert bullet: one alerts reply in the thread gives per programme the firing count with its categories,
+the new and stale counts and a code-built link to the filtered alert list, plus one link to every firing alert, and
+the report's alerts section lists every instance; the gate resolves the links against the collected rules and
+instances. Every firing instance has a durable episode in `alerts/episodes.jsonl` (opened, observed, cleared)
 with correlations computed by code and the explanation an accepted item gives; cleared episodes reach the corpus
 outcomes. The analysis sees its project's firing alerts as untrusted context. An unavailable alerting API is a
 notice on the brief, never a failure. `npm run smoke:grafana -- --alerts` lists what the Viewer token can read.
@@ -195,7 +198,7 @@ is written down under [`specs/001-watchdog-slack-loop/contracts/`](specs/001-wat
 | [`container.md`](specs/001-watchdog-slack-loop/contracts/container.md) | the image: fixed non-root user, read-only root filesystem, writable `/tmp` and `/data`, entrypoint |
 | [`cli.md`](specs/001-watchdog-slack-loop/contracts/cli.md), [`exit-codes.md`](specs/001-watchdog-slack-loop/contracts/exit-codes.md) | commands, flags, streams and exit codes |
 | [`run-directory.md`](specs/001-watchdog-slack-loop/contracts/run-directory.md) | every file a run writes, which stage reads it, and what retention removes |
-| [`slack-payload.md`](specs/001-watchdog-slack-loop/contracts/slack-payload.md) | the exact Slack payload: parent, thread replies, metadata events, image |
+| [`slack-payload.md`](specs/001-watchdog-slack-loop/contracts/slack-payload.md) | the exact Slack payload: parent, thread replies, metadata events |
 | [`agent-definition.md`](specs/001-watchdog-slack-loop/contracts/agent-definition.md) | the agent definition both engines run, its tools and structured outputs |
 | [`brief.schema.json`](specs/001-watchdog-slack-loop/contracts/brief.schema.json), [`findings.schema.json`](specs/001-watchdog-slack-loop/contracts/findings.schema.json) | the JSON Schemas of the model's two outputs |
 

@@ -1,305 +1,151 @@
-// The body layout rule (data-model.md Bullet; FR-010, FR-069): five top-level slots, a programme's items collapse
-// into one slot with at most eight sub-bullets, "Other" never collapses, the rest go to the thread.
+// The body and thread layout (FR-010, FR-020, FR-069, revision 28): two programme slots of three project lines, a
+// reply per remaining programme with two or more flagged projects, one Other reply, and alerts in no slot.
 const {
-  layoutEntries, buildLayout, groupOfProjects, groupBulletText, assembleBullets, BODY_SLOTS, MAX_CHILDREN, UNGROUPED,
+  buildLayout, groupOfProjects, groupBulletText, moreProjectsText, assembleBullets, assembleThread, slotByKey,
+  coveredIds, childPrefixes, shortHostLabel, stripLeadingHost, BODY_SLOTS, MAX_PROJECTS, OWN_REPLY_MIN_PROJECTS,
+  MAX_CHILDREN, UNGROUPED, replyKindOf,
 } = require('../../src/rollup/layout');
-const { rankItems } = require('../../src/rollup/rank');
-const { makeItem, makeDiscovery, makeProject } = require('./factories');
 
-const entry = (key, group) => ({ key, group });
+const id = (letter) => letter.repeat(12);
+const item = (letter, host) => ({ item_id: id(letter), project_url: `https://${host}` });
+const groupOf = (url) => {
+  if (url.includes('north')) {
+    return 'North Programme';
+  }
+  if (url.includes('south')) {
+    return 'South Programme';
+  }
+  if (url.includes('east')) {
+    return 'East Programme';
+  }
+  return UNGROUPED;
+};
+// Rank order: north-a, north-b, north-a again, south-a, alpha (ungrouped), east-a, east-b, beta (ungrouped), north-c,
+// north-d, north-e.
+const items = [
+  item('a', 'north-a.example.org'), item('b', 'north-b.example.org'), item('c', 'north-a.example.org'),
+  item('d', 'south-a.example.org'), item('e', 'alpha.example.org'), item('f', 'east-a.example.org'),
+  item('g', 'east-b.example.org'), item('h', 'beta.example.org'), item('i', 'north-c.example.org'),
+  item('j', 'north-d.example.org'), item('k', 'north-e.example.org'),
+];
 
-describe('rollup/layout layoutEntries', () => {
+describe('rollup/layout', () => {
   it('exposes the limits from the spec', () => {
-    expect(BODY_SLOTS).to.equal(5);
-    expect(MAX_CHILDREN).to.equal(8);
-    expect(UNGROUPED).to.equal('Other');
+    expect(BODY_SLOTS).to.equal(2);
+    expect(MAX_PROJECTS).to.equal(3);
+    expect(OWN_REPLY_MIN_PROJECTS).to.equal(2);
+    expect(MAX_CHILDREN).to.equal(4);
   });
 
-  it('gives ungrouped entries one slot each, five in the body and the rest in the thread', () => {
-    const entries = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((k) => entry(k, 'Other'));
-    const layout = layoutEntries(entries);
-    expect(layout.slots).to.have.length(5);
-    expect(layout.slots.map((s) => s.kind)).to.deep.equal(['item', 'item', 'item', 'item', 'item']);
-    expect(layout.slots.map((s) => s.slot)).to.deep.equal([1, 2, 3, 4, 5]);
-    expect(layout.body).to.deep.equal(['a', 'b', 'c', 'd', 'e']);
-    expect(layout.thread).to.deep.equal(['f', 'g']);
+  it('fills the body with the two highest-ranked programmes, three project lines each, and counts the rest', () => {
+    const layout = buildLayout(items, { groupOf });
+    const summary = layout.slots.map((s) => [s.kind, s.group, s.projects_total, s.issues_total, s.more_projects]);
+    expect(summary).to.deep.equal([
+      ['group', 'North Programme', 5, 6, 2], ['item', 'South Programme', 1, 1, 0],
+    ]);
+    const [north] = layout.slots;
+    expect(north.entries.map((e) => [e.lead_id, e.item_ids, e.host, e.prefix])).to.deep.equal([
+      [id('a'), [id('a'), id('c')], 'north-a.example.org', 'north-a: '],
+      [id('b'), [id('b')], 'north-b.example.org', 'north-b: '],
+      [id('i'), [id('i')], 'north-c.example.org', 'north-c: '],
+    ]);
+    expect(north.item_ids).to.deep.equal([id('a'), id('b'), id('i')]);
+    expect(layout.slots[1].entries[0].prefix).to.equal('south-a.example.org: ');
+    expect(layout.body_items).to.deep.equal([id('a'), id('b'), id('i'), id('d')]);
+  });
+
+  it('gives a programme outside the body its own reply at two projects or more, the rest an Other reply', () => {
+    const layout = buildLayout(items, { groupOf });
+    expect(layout.replies.map((r) => [r.kind, r.group, r.entries.map((e) => e.host)])).to.deep.equal([
+      ['programme', 'East Programme', ['east-a.example.org', 'east-b.example.org']],
+      ['other', UNGROUPED, ['alpha.example.org', 'beta.example.org']],
+    ]);
+    expect(layout.reply_items).to.deep.equal([id('f'), id('g'), id('e'), id('h')]);
+    // North's fourth and fifth projects are in the report only, as are the Other and East items.
+    expect(layout.thread_items).to.deep.equal([id('e'), id('f'), id('g'), id('h'), id('j'), id('k')]);
     expect(layout.one_line).to.deep.equal([]);
   });
 
-  it('collapses a programme with several entries into one group slot, children in rank order', () => {
-    const entries = [
-      entry('a', 'North Programme'), entry('b', 'South Programme'), entry('c', 'North Programme'), entry('d', 'Other'),
-    ];
-    const layout = layoutEntries(entries);
-    expect(layout.slots.map((s) => [s.slot, s.kind, s.group, s.keys])).to.deep.equal([
-      [1, 'group', 'North Programme', ['a', 'c']],
-      [2, 'item', 'South Programme', ['b']],
-      [3, 'item', 'Other', ['d']],
+  it('treats an ungrouped project as a unit of one for the body, so the day\'s top item is never buried', () => {
+    const reordered = [item('e', 'alpha.example.org'), ...items.filter((i) => i.item_id !== id('e'))];
+    const layout = buildLayout(reordered, { groupOf });
+    expect(layout.slots[0]).to.include({ kind: 'item', group: UNGROUPED });
+    expect(layout.slots[0].entries[0].prefix).to.equal('alpha.example.org: ');
+    expect(layout.slots[1].group).to.equal('North Programme');
+    expect(layout.replies.map((r) => r.kind)).to.deep.equal(['programme', 'other']);
+    expect(layout.replies[1].entries.map((e) => e.host)).to.deep.equal(['south-a.example.org', 'beta.example.org']);
+  });
+
+  it('describes every entry for the prompt and the gate, and lists the alert keys for the thread', () => {
+    const layout = buildLayout(items, { groupOf, alertGroups: [{ alert_key: 'North Programme/backlog' }] });
+    expect(layout.entries[id('a')]).to.deep.equal({
+      item_ids: [id('a'), id('c')], host: 'north-a.example.org', prefix: 'north-a: ', budget: 111, where: 'body',
+      group: 'North Programme',
+    });
+    expect(layout.entries[id('f')]).to.include({ where: 'reply', group: 'East Programme', budget: 112 });
+    expect(coveredIds(layout, id('a'))).to.deep.equal([id('a'), id('c')]);
+    expect(coveredIds(layout, id('z'))).to.deep.equal([id('z')]);
+    expect([...childPrefixes(layout).entries()].slice(0, 2))
+      .to.deep.equal([[id('a'), 'north-a: '], [id('b'), 'north-b: ']]);
+    expect(layout.body_alerts).to.deep.equal([]);
+    expect(layout.thread_alerts).to.deep.equal(['North Programme/backlog']);
+  });
+
+  it('maps every item a body line covers to its slot, for placement', () => {
+    const slots = slotByKey(buildLayout(items, { groupOf }));
+    expect([slots.get(id('a')), slots.get(id('c')), slots.get(id('d'))]).to.deep.equal([1, 1, 2]);
+    expect(slots.has(id('e'))).to.equal(false);
+    expect(slots.has(id('j'))).to.equal(false);
+  });
+
+  it('assembles the body bullets and the thread bullets with the project written by code and the count line', () => {
+    const layout = buildLayout(items, { groupOf });
+    const textFor = (leadId) => `line for ${leadId[0]}`;
+    const bullets = assembleBullets({ layout, textFor, prefixHosts: true });
+    expect(bullets[0]).to.deep.include({ kind: 'group', item_id: null, group: 'North Programme', alert_key: null });
+    expect(bullets[0].text).to.equal('North Programme: 5 projects with 6 issues');
+    expect(bullets[0].children).to.deep.equal([
+      { item_id: id('a'), item_ids: [id('a'), id('c')], text: 'north-a: line for a' },
+      { item_id: id('b'), item_ids: [id('b')], text: 'north-b: line for b' },
+      { item_id: id('i'), item_ids: [id('i')], text: 'north-c: line for i' },
+      { item_id: null, item_ids: [], text: '+2 more projects in the report' },
     ]);
-    // Body order follows the slots, not the raw rank order.
-    expect(layout.body).to.deep.equal(['a', 'c', 'b', 'd']);
-    expect(layout.one_line).to.deep.equal(['a', 'c']);
-    expect(layout.thread).to.deep.equal([]);
+    expect(bullets[1]).to.deep.include({
+      kind: 'item', item_id: id('d'), item_ids: [id('d')], text: 'south-a.example.org: line for d', children: [],
+    });
+    const thread = assembleThread({ layout, textFor, prefixHosts: true });
+    expect(thread.map((b) => [replyKindOf(b), b.text])).to.deep.equal([
+      ['programme', 'East Programme: 2 projects with issues'], ['other', 'Other: 2 projects with issues'],
+    ]);
+    expect(thread[1].children.map((c) => c.text)).to.deep.equal(['alpha: line for e', 'beta: line for h']);
+    const plain = assembleBullets({ layout, textFor });
+    expect(plain[0].children[0].text).to.equal('line for a');
   });
 
-  it('never collapses the reserved Other group', () => {
-    const layout = layoutEntries(['a', 'b', 'c'].map((k) => entry(k, 'Other')));
-    expect(layout.slots).to.have.length(3);
-    expect(layout.slots.every((s) => s.kind === 'item')).to.equal(true);
-  });
-
-  it('sends the ninth member of a programme to the thread rather than opening a second slot', () => {
-    const north = Array.from({ length: 10 }, (_, i) => entry(`n${i}`, 'North Programme'));
-    const layout = layoutEntries([...north, entry('k', 'South Programme')]);
-    expect(layout.slots).to.have.length(2);
-    expect(layout.slots[0].keys).to.have.length(8);
-    expect(layout.slots[1]).to.include({ kind: 'item', group: 'South Programme' });
-    expect(layout.thread).to.deep.equal(['n8', 'n9']);
-  });
-
-  it('lets a programme join its slot even when the five slots are already open', () => {
-    const entries = [
-      entry('a', 'North Programme'), entry('b', 'Other'), entry('c', 'Other'), entry('d', 'Other'), entry('e', 'Other'),
-      entry('f', 'Other'), entry('g', 'North Programme'),
-    ];
-    const layout = layoutEntries(entries);
-    expect(layout.slots[0].keys).to.deep.equal(['a', 'g']);
-    expect(layout.thread).to.deep.equal(['f']);
-  });
-
-  it('accepts other limits for the tests of the gate', () => {
-    const layout = layoutEntries(['a', 'b', 'c'].map((k) => entry(k, 'Other')), { slots: 2 });
-    expect(layout.body).to.deep.equal(['a', 'b']);
-    expect(layout.thread).to.deep.equal(['c']);
-  });
-});
-
-describe('rollup/layout buildLayout and groupOfProjects', () => {
-  const discovery = makeDiscovery({
-    projects: [
-      makeProject('north-a.example.org', { group: 'North Programme' }),
-      makeProject('north-b.example.org', { group: 'North Programme' }),
-      makeProject('south-a.example.org', { group: 'South Programme' }),
-      makeProject('alpha.example.org'),
-    ],
-  });
-  const items = rankItems({
-    items: [
-      makeItem({ project_url: 'https://north-a.example.org', confidence: 0.9 }),
-      makeItem({ project_url: 'https://south-a.example.org', confidence: 0.8 }),
-      makeItem({ project_url: 'https://north-b.example.org', confidence: 0.7 }),
-      makeItem({ project_url: 'https://alpha.example.org', confidence: 0.6 }),
-    ],
-    groupOf: groupOfProjects(discovery),
+  it('writes the group and count lines by code', () => {
+    expect(groupBulletText({ label: 'North', projects: 3, issues: 3 })).to.equal('North: 3 projects with issues');
+    expect(groupBulletText({ label: 'North', projects: 1, issues: 2 })).to.equal('North: 1 project with 2 issues');
+    expect(moreProjectsText(1)).to.equal('+1 more project in the report');
+    expect(moreProjectsText(4)).to.equal('+4 more projects in the report');
   });
 
   it('maps a project url to its group label, Other when unknown', () => {
-    const groupOf = groupOfProjects(discovery);
-    expect(groupOf('https://north-a.example.org')).to.equal('North Programme');
-    expect(groupOf('https://alpha.example.org')).to.equal('Other');
-    expect(groupOf('https://unknown.example.org')).to.equal('Other');
+    const groupFor = groupOfProjects({ projects: [{ url: 'https://north-a.example.org', group: 'North Programme' }] });
+    expect(groupFor('https://north-a.example.org')).to.equal('North Programme');
+    expect(groupFor('https://nowhere.example.org')).to.equal(UNGROUPED);
   });
 
-  it('writes the layout document: slots with item ids and one-line flags, body, thread', () => {
-    const layout = buildLayout(items, { groupOf: groupOfProjects(discovery) });
-    expect(layout.slots).to.have.length(3);
-    expect(layout.slots[0]).to.deep.include({ slot: 1, kind: 'group', group: 'North Programme', one_line: true });
-    expect(layout.slots[0].item_ids).to.deep.equal([items[0].item_id, items[2].item_id]);
-    expect(layout.slots[1]).to.deep.include({ slot: 2, kind: 'item', group: 'South Programme', one_line: false });
-    expect(layout.body_items).to.deep.equal([items[0].item_id, items[2].item_id, items[1].item_id, items[3].item_id]);
-    expect(layout.thread_items).to.deep.equal([]);
-    expect(layout.one_line).to.deep.equal([items[0].item_id, items[2].item_id]);
-  });
-
-  it('ranks items with slot and placement from the same rule', () => {
-    expect(items.map((i) => i.rank)).to.deep.equal([1, 2, 3, 4]);
-    expect(items.map((i) => i.slot)).to.deep.equal([1, 2, 1, 3]);
-    expect(items.every((i) => i.placement === 'body')).to.equal(true);
-  });
-
-  it('writes the group line by code from the member count', () => {
-    const text = (projects, issues) => groupBulletText({ label: 'North Programme', projects, issues });
-    expect(text(3, 3)).to.equal('North Programme: 3 projects with issues');
-    expect(text(1, 2)).to.equal('North Programme: 1 project with 2 issues');
-    expect(text(2, 3)).to.equal('North Programme: 2 projects with 3 issues');
-  });
-});
-
-describe('rollup/layout: alert groups (FR-066, User Story 8)', () => {
-  const { interleaveAlerts, alertsBulletText, alertCategoryLine } = require('../../src/rollup/layout');
-  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
-  const northBacklog = alertGroupOf([
-    classified('sentinel', 'north-a.example.org', { new: true }),
-    classified('sentinel', 'north-b.example.org', { started_at: '2026-08-20T00:00:00Z' }),
-  ]);
-  const northAvailability = alertGroupOf([classified('apiDown', 'north-b.example.org')]);
-  const northDatabase = alertGroupOf([classified('fragmentation', 'north-c.example.org')]);
-  const southMessaging = alertGroupOf([classified('delivery', 'south-a.example.org')]);
-  const watchdog = alertGroupOf([classified('watchdog', null)]);
-  const items = [
-    makeItem({ project_url: 'https://alpha.example.org', severity: 'high', confidence: 0.9, rank: 1 }),
-    makeItem({ project_url: 'https://beta.example.org', severity: 'medium', confidence: 0.8, rank: 2 }),
-    makeItem({ project_url: 'https://gamma.example.org', severity: 'low', confidence: 0.7, rank: 3 }),
-  ];
-
-  it('ranks alert groups among items by importance: critical first, otherwise after items of the same severity', () => {
-    const entries = interleaveAlerts(items, [northBacklog, northDatabase, southMessaging, watchdog, northAvailability]);
-    expect(entries.map((e) => (e.type === 'alerts' ? e.key : e.key.slice(0, 4)))).to.deep.equal([
-      'North Programme/availability',
-      items[0].item_id.slice(0, 4), 'North Programme/backlog', 'South Programme/messaging',
-      items[1].item_id.slice(0, 4), 'Watchdog/uncategorised',
-      items[2].item_id.slice(0, 4), 'North Programme/database',
-    ]);
-  });
-
-  it('gives one alerts slot per programme with a sub-bullet per category, never mixing alerts with items', () => {
-    const layout = buildLayout(items, {
-      groupOf: () => 'Other', alertGroups: [northBacklog, northDatabase, southMessaging, watchdog, northAvailability],
-    });
-    expect(layout.slots.map((s) => [s.slot, s.kind, s.group])).to.deep.equal([
-      [1, 'alerts', 'North Programme'], [2, 'item', 'Other'], [3, 'alerts', 'South Programme'], [4, 'item', 'Other'],
-      [5, 'alerts', 'Watchdog'],
-    ]);
-    expect(layout.slots[0].alert_keys)
-      .to.deep.equal(['North Programme/availability', 'North Programme/backlog', 'North Programme/database']);
-    expect(layout.slots[0].item_ids).to.deep.equal([]);
-    expect(layout.slots[1].alert_keys).to.deep.equal([]);
-    expect(layout.body_items).to.deep.equal([items[0].item_id, items[1].item_id]);
-    expect(layout.thread_items).to.deep.equal([items[2].item_id]);
-    expect(layout.body_alerts).to.deep.equal([
-      'North Programme/availability', 'North Programme/backlog', 'North Programme/database',
-      'South Programme/messaging',
-      'Watchdog/uncategorised',
-    ]);
-    expect(layout.thread_alerts).to.deep.equal([]);
-    expect(layout.one_line).to.deep.equal([]);
-  });
-
-  it('writes the alert bullet and category lines by code, with the staleness threshold spelled out', () => {
-    expect(alertsBulletText({ label: 'North Programme', firing: 15, stale: 3, staleAfterDays: 14 }))
-      .to.equal('North Programme alerts: 15 firing, 3 stale for more than 14 days');
-    expect(alertsBulletText({ label: 'South Programme', firing: 4, stale: 0, staleAfterDays: 14 }))
-      .to.equal('South Programme alerts: 4 firing, none stale');
-    expect(alertCategoryLine(northBacklog)).to.equal(
-      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
-    );
-    expect(alertCategoryLine(northAvailability))
-      .to.equal('availability: 1 firing (API Server Down), oldest since 2026-09-17');
-    expect(alertCategoryLine(northBacklog).split('\n')).to.have.length(1);
-  });
-
-  it('writes a programme-wide pattern as the category line when one rule covers the category (FR-078)', () => {
-    const pattern = {
-      title: 'Client Feedback/Error Rate', count: 45, of: 53, since_min: '2026-09-18', since_max: '2026-09-20',
-      instance_ids: Array.from({ length: 45 }, (_, i) => `i${i}`), hosts: [],
-    };
-    const wide = {
-      ...northBacklog, category: 'client_errors', firing: 45, stale: 0, new: 45, titles: ['Client Feedback/Error Rate'],
-      instance_ids: pattern.instance_ids, oldest_started_at: '2026-09-18T00:00:00Z', patterns: [pattern],
-    };
-    expect(alertCategoryLine(wide)).to.equal(
-      'client_errors: Client Feedback/Error Rate on 45 of 53 projects since 2026-09-18, programme-wide',
-    );
-    const partial = {
-      ...wide, firing: 47, instance_ids: [...pattern.instance_ids, 'x1', 'x2'],
-      titles: ['Client Feedback/Error Rate', 'Other Rule'],
-    };
-    expect(alertCategoryLine(partial)).to.include('programme-wide: Client Feedback/Error Rate on 45 of 53');
-    expect(alertCategoryLine(partial).split('\n')).to.have.length(1);
-  });
-
-  it('assembles an alerts bullet from the layout with the group text and one child per category', () => {
-    const alertGroups = [northBacklog, northAvailability, northDatabase];
-    const layout = buildLayout([], { alertGroups });
-    const bullets = assembleBullets({ layout, textFor: () => '', hostFor: () => '', alertGroups, staleAfterDays: 14 });
-    expect(bullets).to.have.length(1);
-    expect(bullets[0]).to.deep.include({
-      kind: 'alerts', item_id: null, group: 'North Programme', alert_key: 'North Programme',
-      text: 'North Programme alerts: 4 firing, 1 stale for more than 14 days',
-    });
-    expect(bullets[0].children.map((c) => c.text)).to.deep.equal([
-      'availability: 1 firing (API Server Down), oldest since 2026-09-17',
-      'backlog: 2 firing (Sentinel Backlog), oldest since 2026-08-20, 1 stale, 1 new',
-      'database: 1 firing (DB Fragmentation), oldest since 2026-09-17',
-    ]);
-    expect(bullets[0].children.every((c) => c.item_id === null)).to.equal(true);
-    const single = assembleBullets({
-      layout: buildLayout([], { alertGroups: [southMessaging] }), textFor: () => '', hostFor: () => '',
-      alertGroups: [southMessaging], staleAfterDays: 14,
-    });
-    expect(single[0].alert_key).to.equal('South Programme/messaging');
-  });
-});
-
-describe('rollup/layout: the project written by code in front of every body line (FR-069, revision 26)', () => {
-  const { childPrefixes, shortHostLabel, stripLeadingHost } = require('../../src/rollup/layout');
-  const hosts = {
-    aaaaaaaaaaaa: 'north-a.example.org', bbbbbbbbbbbb: 'north-b.example.org', cccccccccccc: 'alpha.example.org',
-  };
-  const hostFor = (id) => hosts[id];
-  const layout = {
-    slots: [
-      {
-        slot: 1, kind: 'group', group: 'North Programme', item_ids: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'], alert_keys: [],
-        one_line: true,
-      },
-      { slot: 2, kind: 'item', group: 'Other', item_ids: ['cccccccccccc'], alert_keys: [], one_line: false },
-      {
-        slot: 3, kind: 'alerts', group: 'North Programme', item_ids: [], alert_keys: ['North Programme/backlog'],
-        one_line: false,
-      },
-    ],
-    body_items: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc'], thread_items: [],
-    one_line: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb'],
-    body_alerts: ['North Programme/backlog'], thread_alerts: [],
-  };
-
-  it('names a group member by its first label, two labels on a clash, and a single project by its full host', () => {
+  it('names a group member by its first label, two on a clash, and never writes a host the model wrote twice', () => {
     expect(shortHostLabel('bomet.echis.example', ['bomet.echis.example', 'kisii.echis.example'])).to.equal('bomet');
     expect(shortHostLabel('cht.north.example.org', ['cht.north.example.org', 'cht.south.example.org']))
       .to.equal('cht.north');
-    const prefixes = childPrefixes(layout, hostFor);
-    expect([...prefixes.entries()]).to.deep.equal([
-      ['aaaaaaaaaaaa', 'north-a: '], ['bbbbbbbbbbbb', 'north-b: '], ['cccccccccccc', 'alpha.example.org: '],
-    ]);
-  });
-
-  it('prefixes the assembled children and item bullets, never the alerts, and only when asked', () => {
-    const texts = {
-      aaaaaaaaaaaa: 'backlog 912 vs 300', bbbbbbbbbbbb: 'backlog 400 vs 100', cccccccccccc: 'conflicts up',
-    };
-    const alertGroups = [{
-      alert_key: 'North Programme/backlog', group: 'North Programme', category: 'backlog', importance: 'high',
-      firing: 1, stale: 0, new: 0, hosts: ['north-a.example.org'], titles: ['Sentinel Backlog'],
-      oldest_started_at: '2026-09-17T06:00:00Z', instances: [], patterns: [],
-    }];
-    const args = { layout, textFor: (id) => texts[id], hostFor, alertGroups, staleAfterDays: 14 };
-    const prefixed = assembleBullets({ ...args, prefixHosts: true });
-    expect(prefixed[0].children.map((c) => c.text))
-      .to.deep.equal(['north-a: backlog 912 vs 300', 'north-b: backlog 400 vs 100']);
-    expect(prefixed[1].text).to.equal('alpha.example.org: conflicts up');
-    expect(prefixed[2].kind).to.equal('alerts');
-    expect(prefixed[2].children[0].text).to.not.include(': :');
-    const plain = assembleBullets(args);
-    expect(plain[0].children.map((c) => c.text)).to.deep.equal(['backlog 912 vs 300', 'backlog 400 vs 100']);
-    expect(plain[1].text).to.equal('conflicts up');
-  });
-
-  it('does not write the project twice when the model named it first, in either form and any case', () => {
     expect(stripLeadingHost('North-a: backlog 912', 'north-a.example.org', 'north-a')).to.equal('backlog 912');
-    expect(stripLeadingHost('north-a.example.org — backlog 912', 'north-a.example.org', 'north-a'))
-      .to.equal('backlog 912');
     expect(stripLeadingHost('north-a backlog 912', 'north-a.example.org', 'north-a')).to.equal('backlog 912');
     expect(stripLeadingHost('backlog 912 on north-a', 'north-a.example.org', 'north-a'))
       .to.equal('backlog 912 on north-a');
-    const texts = {
-      aaaaaaaaaaaa: 'North-a: backlog 912 vs 300', bbbbbbbbbbbb: 'backlog 400',
-      cccccccccccc: 'alpha.example.org: conflicts up',
-    };
-    const bullets = assembleBullets({
-      layout, textFor: (id) => texts[id], hostFor, alertGroups: [], prefixHosts: true,
-    });
-    expect(bullets[0].children[0].text).to.equal('north-a: backlog 912 vs 300');
-    expect(bullets[1].text).to.equal('alpha.example.org: conflicts up');
+    const layout = buildLayout(items.slice(0, 3), { groupOf });
+    const texts = { [id('a')]: 'North-a: backlog 912', [id('b')]: 'north-b.example.org — backlog 400' };
+    const [north] = assembleBullets({ layout, textFor: (leadId) => texts[leadId], prefixHosts: true });
+    expect(north.children.map((c) => c.text)).to.deep.equal(['north-a: backlog 912', 'north-b: backlog 400']);
   });
 });

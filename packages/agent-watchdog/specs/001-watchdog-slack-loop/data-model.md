@@ -357,8 +357,7 @@ The published post for a run (FR-019 to FR-025).
 | `run_id` | string | |
 | `kind` | enum | `brief` \| `heartbeat` \| `degraded` \| `failure`. |
 | `headline` | string | One line. |
-| `bullets` | Bullet[] | At most 5 (FR-010, revised from 3 in spec revision 9). See Bullet; constants in code. |
-| `expected_load_notice` | string or null | Present when a window was active (FR-007). |
+\1| `thread` | Bullet[] | The thread bullets (revision 28): one `group` bullet per programme reply (`group` its label) and one for the `Other` reply, in posting order, each with at most three project entries and a count of the rest; built like the body bullets from the layout's `replies`. |\n| `expected_load_notice` | string or null | Present when a window was active (FR-007). |
 | `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
 | `degradation_notice` | string or null | Required when `kind` is `degraded`. |
 | `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23); the incomplete-analysis notices, which name the rejected projects by host (up to three, then the count) and the refusing check in plain words (FR-056, revision 25). Empty on most days. |
@@ -391,39 +390,45 @@ One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
 | `kind` | enum | `item` \| `group` \| `alerts`. |
 | `item_id` | string or null | Required when `kind` is `item`; null otherwise. |
 | `group` | string or null | Project Group label; required for `group` and `alerts`. |
-| `text` | string | At most 2 lines of at most 120 characters, no URLs. For `item`: the full host written by code, then the model's description (revision 26); built by code for `group` ("<label>: <n> projects with issues") and `alerts` ("<label> alerts: <n> firing, <m> stale for more than <d> days"). |
-| `children` | Child[] | At most 8. `{ item_id or null, text }`, one line of at most 120 characters each. For `group`: one per member item in rank order, its text the project's short host written by code (`bomet: `, two labels when two members share the first) followed by the model's one-line description in words; the model is told the prefix and its remaining budget and never repeats the host (FR-069, revision 26). For `alerts`: one per category, built by code with the count, the oldest start and the stale count. Empty for `item`. |
+| `text` | string | At most 2 lines of at most 120 characters, no URLs. For `item`: the full host written by code, then the model's description covering every Item of the project (revisions 26 and 28); built by code for `group` ("<label>: <n> projects with <m> issues", counting the whole programme). |
+| `item_ids` | string[] | Every Item an `item` bullet's line covers, the lead first (revision 28); empty for `group`. |
+| `children` | Child[] | At most 4 (revision 28; 8 before). `{ item_id or null, item_ids, text }`: for `group`, one per project entry for at most three projects in rank order, `item_id` the entry's lead and `item_ids` every Item the line covers, its text the project's short host written by code (`bomet: `, two labels when two members share the first) followed by the model's description of all that project's issues in at most two lines (FR-069, revisions 26 and 28), then one code-written line counting the projects beyond three (`item_id` null). `alerts` bullets no longer exist in the body (revision 28). Empty for `item`. |
 | `alert_key` | string or null | For `alerts`: `<group>/<category>` of the group when the bullet holds one category, else `<group>`; the thread reply and its link are built from the Alert Groups it covers (FR-070). |
 
-**Layout rule** (code, before the roll-up call; the result is `rollup/layout.json` and the prompt
-tells the model which items must be one-liners): walk the ranked Items and Alert Groups together,
-Alert Groups ordered among Items by importance (critical before every item, otherwise after the
-items of the same severity); an entry whose Project Group already holds a slot joins it as a
-sub-bullet while the slot has fewer than eight and goes to the thread once it is full; otherwise it
-opens a new slot while fewer than five are open; otherwise it goes to the thread. The reserved
-`Other` group never collapses: its entries take slots of their own, since a fallback bucket is not
-a programme. A slot with one Item is an `item` bullet; with two or more Items a `group` bullet;
-Alert Groups of one Project Group share one `alerts` bullet with a sub-bullet per category and
-never mix with Items. The model's draft carries one `{ item_id, text }`
-per body Item; code assembles the Bullets from the draft and the layout, and the gate rejects a
-draft whose item ids differ from the layout's body items. `rollup/layout.json` lists the slots with
-`item_ids` and `alert_keys`, plus `body_items`, `thread_items`, `one_line`, `body_alerts` and
-`thread_alerts`; the roll-up prompt carries the slots and tells the model that `alerts` slots are
-written by code.
+**Layout rule** (code, before the roll-up call; the result is `rollup/layout.json`, revision 28): group the
+ranked Items by programme (`groupOf`) and, within a programme, by project, both in rank order of their best
+Item. The body holds at most two units, the programmes of the two highest-ranked Items, where an ungrouped
+(`Other`) project counts as a unit of one; a unit of one project is an `item` bullet, a unit of several a
+`group` bullet with one **entry** per project for the three highest-ranked projects and a count of the rest.
+Every programme not in the body with two or more flagged projects becomes a `programme` thread reply in the
+same form; every remaining project, ungrouped or a single-project programme, joins one `other` reply. Alerts
+take no slot. An entry is `{ lead_id, item_ids, host, prefix }`: the project's Items in rank order, its lead the
+first, and the prefix code writes (the short host in a group, the full host for an item bullet). The model's
+draft carries one `{ item_id: lead_id, text }` per entry, body entries then reply entries, each text covering
+every Item of the entry in at most two lines; code assembles the Bullets and the thread bullets from the draft
+and the layout, and the gate rejects a draft whose lead ids differ from the layout's. `rollup/layout.json`
+lists `slots` and `replies` (each with `kind`, `group`, `projects_total`, `entries`, `item_ids`, `more_projects`),
+`entries` by lead id (`item_ids`, `host`, `prefix`, `budget`, `where`, `group`), `body_items`, `reply_items`,
+`thread_items` (every Item not covered by a body entry), `thread_alerts` (every Alert Group key; `body_alerts`
+is empty and `one_line` retired).
 
 ### Thread Reply
 
-The per-item message that carries reactions (FR-020), and the per-alert-group message (FR-066).
-Since revision 25 only high items have one (body items from revision 23), highest rank first and at most twenty-five; the report's
-share is the thread's first reply and items beyond the body live there, numbered by rank. A body
-item's reply names the lower-ranked items that relate to it (FR-009).
+The messages under the post (FR-020, FR-066, revision 28): the report share first, then one `programme`
+reply per programme not in the body with two or more flagged projects, one `other` reply for the remaining
+projects, and one `alerts` reply with per-programme counts, links and the alert-derived notices. No Item has
+a reply of its own; a note cites an Item by its rank in the report. History: every Item had a reply until
+revision 23, body Items in 23 and 24, high Items in 25 to 27, and each Alert Group had one from revision 14
+to 27.
 
 | Field | Type | Rules |
 |---|---|---|
 | `run_id` | string | |
-| `item_id` | string or null | The Item; null for an alert-group reply. |
-| `alert_key` | string or null | `<group>/<category>` for an alert-group reply; null for an item. Exactly one of `item_id` and `alert_key` is set. |
-| `text` | string | Item rendered for Slack, or the alert group's instances (at most fifty, with the count of the rest) and its code-built link; escaped. |
+| `kind` | enum | `programme` \| `other` \| `alerts` (revision 28). |
+| `group` | string or null | The programme label for `programme`, `Other` for `other`, null for `alerts`. |
+| `item_id` | string or null | Always null since revision 28 (an Item had its own reply until then). |
+| `alert_key` | string or null | Always null since revision 28 (each Alert Group had its own reply until then). |
+| `text` | string | For `programme` and `other`: the group line and its project lines, escaped. For `alerts`: one line per programme with the firing count and its categories, the new and stale counts and a link to that programme's filtered alert list, then a link to every firing alert, then the housekeeping, resolved and alerts-unavailable notices. |
 | `publication` | Publication | `{ channel_id, ts, permalink }`. |
 
 ### Feedback Digest

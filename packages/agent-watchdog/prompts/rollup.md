@@ -31,16 +31,17 @@ counts of what was checked and the feedback and memory that shaped the ranking.
 
 ## Instructions
 
-- Write one headline and one bullet per body item listed in the Body layout, in that order; the
-  programme line of a group slot is written by code. A bullet is at most two lines of at most 120
-  characters; an item marked `one_line` is a sub-bullet of its programme and takes a single line.
-  Code writes the project in front of every body line, so do not name the host: describe the
-  change in words an engineer can act on, with its values, and leave metric keys and PromQL to the
-  thread reply and the report. Values with units and the comparison window; dashboard and panel
-  names as they appear in the watchdog.
+- Write one headline of at most two lines of 120 characters, shown whole, and one text per entry
+  listed in the Body layout, the body slots first and then the thread replies, in that order; the
+  programme lines and the "more projects" counts are written by code. An entry is one project and
+  every item of it: your text covers all of them in at most two lines of 120 characters, the first
+  line within the budget given, because code writes the project in front of it, so do not name the
+  host. Describe the change in words an engineer can act on, with its values, and leave metric keys
+  and PromQL to the report. Values with units and the comparison window; dashboard and panel names
+  as they appear in the watchdog.
 - Quote only values that appear in the items' evidence. Compose no URLs.
-- Put every accepted item id in `thread_order`: the body items first, in the order of your
-  bullets, then the remaining items highest rank first.
+- Put every accepted item id in `thread_order`: the entries' lead items first, in the order of your
+  texts, then the remaining items highest rank first.
 - In `memory_update.replace_with`, return the full memory text if something durable was learned
   today, otherwise null. Stay within the cap you were told.
 - Propose skill, prompt or threshold changes only when today's evidence supports them, in

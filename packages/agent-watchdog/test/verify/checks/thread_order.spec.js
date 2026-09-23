@@ -26,19 +26,26 @@ describe('verify/checks/thread_order', () => {
     expect(check(ctx).status).to.equal('fail');
   });
 
-  it('with a layout, rejects bullets whose item ids differ from the body items (FR-069)', () => {
+  it('with a layout, requires the bullets to be the layout\'s entries in order, body then thread (revision 28)', () => {
     const ctx = withItems();
+    const entry = (c) => ({ lead_id: id(c), item_ids: [id(c)], host: `${c}.example.org`, prefix: `${c}: ` });
     ctx.layout = {
-      slots: [{ slot: 1, kind: 'group', group: 'North Programme', item_ids: ['a', 'b', 'c'].map(id), one_line: true }],
-      body_items: ['a', 'b', 'c'].map(id), thread_items: [id('d')], one_line: ['a', 'b', 'c'].map(id),
+      slots: [{
+        slot: 1, kind: 'group', group: 'North Programme', entries: ['a', 'b'].map(entry), item_ids: ['a', 'b'].map(id),
+      }],
+      replies: [{ kind: 'other', group: 'Other', entries: [entry('c')], item_ids: [id('c')] }],
+      body_items: ['a', 'b'].map(id), reply_items: [id('c')], thread_items: [id('c'), id('d')],
     };
     expect(check(ctx).status).to.equal('pass');
     ctx.draft.bullets = ['a', 'b', 'd'].map((c) => ({ item_id: id(c), text: 't' }));
     ctx.draft.thread_order = ['a', 'b', 'd', 'c'].map(id);
     const result = check(ctx);
     expect(result.status).to.equal('fail');
-    const mismatch = result.reasons.find((r) => r.includes('layout'));
+    const mismatch = result.reasons.find((r) => r.includes('entries'));
     expect(mismatch).to.include(id('c')).and.include(id('d'));
+    ctx.draft.bullets = ['a', 'c', 'b'].map((c) => ({ item_id: id(c), text: 't' }));
+    ctx.draft.thread_order = ['a', 'c', 'b', 'd'].map(id);
+    expect(check(ctx).reasons.some((r) => /layout's order/.test(r))).to.equal(true);
   });
 
   it('is not applicable to findings', () => {

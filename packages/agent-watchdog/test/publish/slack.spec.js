@@ -39,13 +39,22 @@ const rateLimited = (retryAfter) => Object.assign(new Error('rate limited'), {
   data: { retryAfter },
 });
 
+// A thread bullet as the roll-up assembles one (revision 28): a programme or Other reply with one project line.
+const threadBullet = (group, member, text = 'conflicts up') => ({
+  kind: 'group', item_id: null, item_ids: [], group, text: `${group}: 1 project with issues`, alert_key: null,
+  children: [{ item_id: member.item_id, item_ids: [member.item_id], text }],
+});
+
 describe('publish/slack', () => {
   let dir;
   let imagePath;
   const item = makeItem({ rank: 1, placement: 'body' });
-  // Both items high: a reply is for high items only since revision 25, and these tests exercise the posting mechanics.
-  const second = makeItem({ metric: 'cht_conflict_count', severity: 'high', rank: 2, placement: 'body' });
-  const brief = makeBrief({ bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }] });
+  // The second item is in the thread: a programme reply and the Other reply exercise the posting mechanics.
+  const second = makeItem({ metric: 'cht_conflict_count', severity: 'high', rank: 2, placement: 'thread' });
+  const brief = makeBrief({
+    bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
+    thread: [threadBullet('North Programme', second), threadBullet('Other', second)],
+  });
   const payloadFor = (b = brief) => buildPayload({
     brief: b,
     items: [item, second],
@@ -63,7 +72,7 @@ describe('publish/slack', () => {
   });
   afterEach(() => removeDir(dir));
 
-  it('posts the parent without any upload before it, threads a reply per item, records permalinks', async () => {
+  it('posts the parent without any upload before it, threads the programme replies, records permalinks', async () => {
     const client = fakeClient();
     const pace = sinon.stub().resolves();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), pace });
@@ -82,14 +91,15 @@ describe('publish/slack', () => {
     expect(client.chat.postMessage.callCount).to.equal(3);
     for (const call of client.chat.postMessage.getCalls().slice(1)) {
       expect(call.args[0].thread_ts).to.equal('1700000000.000100');
-      expect(call.args[0].metadata.event_type).to.equal('agent_watchdog.item');
+      expect(call.args[0].metadata.event_type).to.equal('agent_watchdog.programme');
       expect(call.args[0]).to.not.have.property('reply_broadcast');
     }
     expect(client.chat.getPermalink.callCount).to.equal(3);
     expect(publication).to.include({ channel_id: 'C123', ts: '1700000000.000100' });
     expect(publication.permalink).to.include('p1700000000000100');
     expect(publication.replies).to.have.length(2);
-    expect(publication.replies[0]).to.include({ item_id: item.item_id });
+    expect(publication.replies[0]).to.include({ kind: 'programme', group: 'North Programme', item_id: null });
+    expect(publication.replies[1]).to.include({ kind: 'other', group: 'Other', item_id: null, alert_key: null });
     expect(publication.replies[0].permalink).to.be.a('string');
     expect(pace.callCount).to.be.at.least(2);
   });
@@ -210,26 +220,32 @@ describe('publish/slack: feedback digest and seen reactions (FR-062)', () => {
   });
 });
 
-describe('publish/slack: alert-group replies (User Story 8)', () => {
-  it('records the alert key of an alert-group reply beside the item replies', async () => {
+describe('publish/slack: the alerts reply (User Story 8, revision 28)', () => {
+  it('records each reply\'s kind and group, the alerts reply last, and an older item reply as an item', async () => {
     const client = fakeClient();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
     const payload = {
-      parent: { text: 'brief', blocks: [{ type: 'header', text: { type: 'plain_text', text: 'h' } }], metadata: {} },
+      parent: { text: 'brief', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*h*' } }], metadata: {} },
       image: null,
       replies: [
+        {
+          kind: 'programme', group: 'North Programme', item_id: null, alert_key: null, text: 'programme', blocks: [],
+          metadata: { event_type: 'agent_watchdog.programme' },
+        },
         { item_id: 'a'.repeat(12), text: 'item', blocks: [], metadata: { event_type: 'agent_watchdog.item' } },
         {
-          alert_key: 'North Programme/backlog', item_id: null, text: 'alerts', blocks: [],
+          kind: 'alerts', group: null, item_id: null, alert_key: null, text: 'alerts', blocks: [],
           metadata: { event_type: 'agent_watchdog.alerts' },
         },
       ],
     };
     const publication = await publisher.publish({ payload, imagePath: null });
-    expect(publication.replies).to.have.length(2);
-    expect(publication.replies[0]).to.include({ item_id: 'a'.repeat(12), alert_key: null });
-    expect(publication.replies[1]).to.include({ item_id: null, alert_key: 'North Programme/backlog' });
-    expect(client.chat.postMessage.thirdCall.args[0].metadata.event_type).to.equal('agent_watchdog.alerts');
+    expect(publication.replies).to.have.length(3);
+    expect(publication.replies[0])
+      .to.include({ kind: 'programme', group: 'North Programme', item_id: null, alert_key: null });
+    expect(publication.replies[1]).to.include({ kind: 'item', group: null, item_id: 'a'.repeat(12), alert_key: null });
+    expect(publication.replies[2]).to.include({ kind: 'alerts', group: null, item_id: null, alert_key: null });
+    expect(client.chat.postMessage.getCall(3).args[0].metadata.event_type).to.equal('agent_watchdog.alerts');
   });
 });
 
@@ -238,13 +254,15 @@ describe('publish/slack: the report shared into the thread (FR-022, revision 23)
   let imagePath;
   let reportPath;
   const item = makeItem({ rank: 1, placement: 'body' });
+  const threadItem = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });
   const brief = makeBrief({
     bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
+    thread: [threadBullet('Other', threadItem)],
     report: { path: 'rollup/report.html', slack_file_id: null, ts: null },
   });
   const payloadFor = (b = brief) => buildPayload({
-    brief: b, items: [item], links: new Map(), runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
-    channel: 'C123', layout: { body_items: [item.item_id], thread_items: [] },
+    brief: b, items: [item, threadItem], runId: '2026-09-18', date: '2026-09-18', audience: 'internal',
+    channel: 'C123',
   });
   const sharingClient = () => {
     const client = fakeClient();
@@ -276,8 +294,8 @@ describe('publish/slack: the report shared into the thread (FR-022, revision 23)
     expect(share)
       .to.include({ channel_id: 'C123', thread_ts: '1700000000.000100', filename: 'report-2026-09-18.html' });
     expect(share.title).to.include('2026-09-18');
-    expect(share.initial_comment).to.include('1 item');
-    // The share is posted after the parent and before the item replies.
+    expect(share.initial_comment).to.include('2 items');
+    // The share is posted after the parent and before the thread replies.
     expect(client.files.uploadV2.firstCall.calledAfter(client.chat.postMessage.firstCall)).to.equal(true);
     expect(client.chat.postMessage.secondCall.calledAfter(client.files.uploadV2.firstCall)).to.equal(true);
     expect(publication.report).to.deep.equal({

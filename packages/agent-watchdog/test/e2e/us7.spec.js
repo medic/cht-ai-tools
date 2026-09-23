@@ -41,24 +41,22 @@ const hashTree = (dir) => {
 };
 const reviewedHashes = () => Object.fromEntries(REVIEWED.map((rel) => [rel, hashTree(path.join(PACKAGE_ROOT, rel))]));
 
-// A Slack client whose thread and reactions come from day one's publication, and that accepts reactions.
-const slackWithFeedback = ({ publication, items, notes, reactionsByTs }) => {
+// A Slack client whose thread and reactions come from day one's publication, and that accepts reactions. Since
+// revision 28 the thread's replies are code-built (programme, Other, alerts), so feedback on an item is a note.
+const slackWithFeedback = ({ publication, notes, reactionsByTs }) => {
   const slack = fakeSlack();
   const parent = {
     type: 'message', ts: publication.ts, thread_ts: publication.ts, bot_id: 'B001', text: 'Watchdog brief',
     reply_count: publication.replies.length + notes.length,
     metadata: { event_type: 'agent_watchdog.brief', event_payload: { run_id: DAY1, date: DAY1, kind: 'brief' } },
   };
-  const replies = publication.replies.map((reply) => {
-    const item = items.find((i) => i.item_id === reply.item_id);
-    return {
-      type: 'message', ts: reply.ts, thread_ts: publication.ts, bot_id: 'B001', text: `item ${reply.item_id}`,
-      metadata: {
-        event_type: 'agent_watchdog.item',
-        event_payload: { run_id: DAY1, item_id: reply.item_id, project_url: item.project_url, metric: item.metric },
-      },
-    };
-  });
+  const replies = publication.replies.map((reply) => ({
+    type: 'message', ts: reply.ts, thread_ts: publication.ts, bot_id: 'B001', text: `${reply.kind}`,
+    metadata: {
+      event_type: reply.kind === 'alerts' ? 'agent_watchdog.alerts' : 'agent_watchdog.programme',
+      event_payload: { run_id: DAY1, date: DAY1, kind: reply.kind, group: reply.group },
+    },
+  }));
   const noteMessages = notes.map((note, i) => ({
     type: 'message', ts: `1700000100.00000${i + 1}`, thread_ts: publication.ts, user: note.user, text: note.text,
   }));
@@ -98,26 +96,22 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     const items = day1.read('rollup/items.ranked.json');
     const alpha = items.find((i) => i.project_url === 'https://alpha.example.org');
     const gamma = items.find((i) => i.project_url === 'https://gamma.example.org');
-    const alphaReply = publication.replies.find((r) => r.item_id === alpha.item_id);
-    const gammaReply = publication.replies.find((r) => r.item_id === gamma.item_id);
+    expect(publication.replies.some((r) => r.item_id), 'no item replies since revision 28').to.equal(false);
 
-    // Four reactions and four notes: an expectation with a horizon, a project fact, a wording complaint with a
-    // mention in it, and one note nobody can match.
+    // One reaction on the brief and five notes: a thumbs-down expectation with a horizon, a project fact, a wording
+    // complaint with a mention in it, a thumbs-up citing gamma's number in the report, and one note nobody can match.
+    const NOTE_AUTHORS = ['U1', 'U4', 'U5', 'U2', 'U9'];
+    const noteTexts = [
+      '👎 alpha.example.org sentinel backlog: known migration, expected until 1 October',
+      'alpha.example.org cht_sentinel_backlog_count is normally around 300, that is its usual baseline',
+      'gamma.example.org: the bullet wording is too long, put the window first <@U0123ABCD>',
+      `#${gamma.rank} 👍 confirmed`,
+      'is anyone looking at the other one?',
+    ];
     const { slack, noteMessages } = slackWithFeedback({
       publication,
-      items,
-      notes: [
-        { user: 'U1', text: 'alpha.example.org sentinel backlog: known migration, expected until 1 October' },
-        {
-          user: 'U4',
-          text: 'alpha.example.org cht_sentinel_backlog_count is normally around 300, that is its usual baseline',
-        },
-        { user: 'U5', text: 'gamma.example.org: the bullet wording is too long, put the window first <@U0123ABCD>' },
-        { user: 'U9', text: 'is anyone looking at the other one?' },
-      ],
+      notes: noteTexts.map((text, i) => ({ user: NOTE_AUTHORS[i], text })),
       reactionsByTs: {
-        [alphaReply.ts]: [{ name: '-1', users: ['U1'], count: 1 }],
-        [gammaReply.ts]: [{ name: '+1', users: ['U1', 'U2'], count: 2 }],
         [publication.ts]: [{ name: '+1', users: ['U3'], count: 1 }],
       },
     });
@@ -128,7 +122,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(day2.error, day2.error && day2.error.stack).to.equal(undefined);
     expect(day2.read('run.json').status).to.equal('published');
     const records = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(records).to.have.length(8);
+    expect(records).to.have.length(6);
 
     // Scenario 1: one digest in the new brief's thread naming each item's effect and the retention statement.
     const payload2 = day2.read('rollup/payload.json');
@@ -150,7 +144,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
       .find((c) => c.args[0].metadata && c.args[0].metadata.event_type === 'agent_watchdog.feedback_digest');
     expect(digestPost, 'digest posted').to.not.equal(undefined);
     expect(digestPost.args[0].thread_ts).to.equal(publication2.ts);
-    expect(digestPost.args[0].metadata.event_payload).to.include({ run_id: DAY2, acknowledged: 8 });
+    expect(digestPost.args[0].metadata.event_payload).to.include({ run_id: DAY2, acknowledged: 6 });
     expect(readJsonl(path.join(dataDir, 'corpus', 'outcomes', `${DAY2}.jsonl`)).length).to.be.greaterThan(0);
 
     // Scenario 2: the notes with a lesson became proposals for their destination; the digest names them; and
@@ -170,14 +164,14 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     }
     const reviewed = records.filter((r) => r.kind === 'note');
     expect(reviewed.map((r) => r.classification).sort())
-      .to.deep.equal(['expectation', 'none', 'project_annotation', 'prompt']);
+      .to.deep.equal(['expectation', 'none', 'none', 'project_annotation', 'prompt']);
     expect(reviewed.filter((r) => r.proposal_id).map((r) => r.classification).sort())
       .to.deep.equal(['project_annotation', 'prompt']);
     expect(reviewedHashes()).to.deep.equal(before);
 
-    // Scenario 3: reactions never reached the model; one call per note.
+    // Scenario 3: the reaction never reached the model; one call per note.
     const reviewCalls = day2.engine.calls.singleTurns.filter((c) => c.name === 'feedback-review');
-    expect(reviewCalls).to.have.length(4);
+    expect(reviewCalls).to.have.length(5);
     for (const call of reviewCalls) {
       expect(call.userPrompt).to.include('<untrusted source="feedback-note">');
       expect(call.userPrompt).to.not.match(AUTHORS);
@@ -198,11 +192,9 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     // Scenario 4 and 5: five weeks later the same feedback is read again, nothing new is acknowledged, no digest
     // is posted, the horizon has passed and the records no longer adjust ranking, yet they are all still there.
     const later = slackWithFeedback({
-      publication, items,
-      notes: noteMessages.map((m, i) => ({ user: ['U1', 'U4', 'U5', 'U9'][i], text: m.text })),
+      publication,
+      notes: noteMessages.map((m, i) => ({ user: NOTE_AUTHORS[i], text: m.text })),
       reactionsByTs: {
-        [alphaReply.ts]: [{ name: '-1', users: ['U1'], count: 1 }],
-        [gammaReply.ts]: [{ name: '+1', users: ['U1', 'U2'], count: 2 }],
         [publication.ts]: [{ name: '+1', users: ['U3'], count: 1 }],
       },
     });
@@ -224,7 +216,7 @@ describe('e2e: User Story 7, feedback acknowledged and made permanent', function
     expect(ranked3.find((i) => i.project_url === 'https://gamma.example.org').confidence).to.equal(gamma.confidence);
     expect(ranked3.some((i) => i.project_url === 'https://alpha.example.org'), 'horizon passed').to.equal(true);
     const stillThere = readJsonl(path.join(dataDir, 'feedback.jsonl'));
-    expect(stillThere).to.have.length(8);
+    expect(stillThere).to.have.length(6);
     expect(stillThere.every((r) => r.acknowledged_run_id === DAY2)).to.equal(true);
 
     // SC-013: a purge dated a year later leaves the file byte for byte.

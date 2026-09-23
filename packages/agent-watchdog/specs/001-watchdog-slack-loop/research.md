@@ -532,7 +532,8 @@ manifest or Slack ignores them with a warning. Per-message `username` needs `cha
 **Decision**: upload the image privately with the bot token and reference it by id in an `image`
 block; post the parent with a fallback `text`, `unfurl_links: false`, and registered
 `agent_watchdog.brief` metadata; post one threaded reply per item with `agent_watchdog.item`
-metadata carrying the stable `item_id`; record permalinks. The bot display name `agent-watchdog` is
+metadata carrying the stable `item_id` (until revision 28, which replaced the item replies with the
+programme, Other and alerts replies of R-33); record permalinks. The bot display name `agent-watchdog` is
 set once in the app configuration, so `chat:write.customize` is not requested. Details in
 [contracts/slack-payload.md](./contracts/slack-payload.md).
 
@@ -649,6 +650,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-45 | A hosted `--group` brief and report say "Checked 30 projects" for a programme of thirty, and the heartbeat headline counts the same | Only the hosted volume has programmes |
 | S-46 | A hosted brief threads a reply for each high item and each alert group and none for a medium or low item, and the report share's comment counts the replies | Only the live thread shows the count |
 | S-47 | On a hosted brief every sub-bullet of a programme starts with its project's short host and every single-project bullet with its full host, none repeats the host, and the model's lines describe the change without metric keys | The model's wording under the new instruction only shows live |
+| S-48 | A hosted post shows its whole headline, at most two programme bullets of at most three project lines, no alert bullet, and its thread holds the report share, one reply per remaining programme with two or more flagged projects, one Other reply and one alerts reply whose links open the filtered alert lists | The thread's shape and Slack's rendering of a bold section headline are only seen live |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1792,3 +1794,33 @@ scopes the app does not hold; the refused post already fails loudly); container 
 (the container revision); adding "database names" as a personal-data category (none appears in any
 published surface; a label value that carried one would be a hostname-like or free-text token the
 existing checks already see).
+
+## R-33. A post read in one glance, and a thread of three
+
+**Evidence** (the run record of 2026-09-20-f8, read with the operator on 2026-09-22). The headline, 145
+characters, was cut mid-word at Slack's 150-character `header` limit once its marker was added, while the
+report showed it whole. The body's first bullet was six alert lines for one programme; the alerts are the
+monitoring stack's own notifications, and the reader can see them in Grafana. The programme bullet's eight
+sub-bullets named one metric each, so one project appeared on three lines and the reader had to reassemble
+it. The thread held one item reply (the day's only high item) and eleven alert-group replies, one per
+programme and category. **Decisions**, four of them put to the operator as clarifications and answered: the
+headline is a bold section, never a header block, and the gate holds it to two lines of 120 characters;
+the body holds the two highest-ranked programmes, each with at most three project lines and a count of the
+rest, and no alert bullet; a project with several issues is one line of at most two lines covering all of
+them, the project written by code, the words the model's, the layout naming every item the line must cover
+so the gate allows their values; the thread is the report share, one reply per programme not in the body
+with two or more flagged projects, one Other reply for the remaining projects and one alerts reply with
+per-programme counts and links and the alert-derived notices; item replies and alert-group replies are
+retired, so a note cites an item by its rank in the report. Programme-wide alert patterns and the metric
+beside an alert move to the report's alerts section, which lists every instance.
+
+**Feedback provenance** (FR-085, specified here, implemented in revision 29): several notes on one item are
+read together in thread order so a later clarification is applied as the clarified whole, and the next
+day's digest quotes the lines the feedback put into the project's prompt and links the session's trace,
+because run files are not web-served (the operator chose this over sharing the prompt file or a report
+section).
+
+**Rejected or deferred here**: a report summary that mirrors the thread bullets (the report lists every
+item already); a configurable count of body programmes (two is the answer until a run argues otherwise);
+reactions on a programme reply as a verdict (ambiguous across its projects; the digest lists them as
+unmatched, as it does for the parent).

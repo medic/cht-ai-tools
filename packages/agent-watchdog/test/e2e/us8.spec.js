@@ -1,5 +1,5 @@
 // End-to-end User Story 8: Grafana-managed alerts read with the same token, classified from alerts.yaml, grouped
-// per programme and category into code-built bullets with links, one thread reply per alert group, durable episodes
+// per programme and category, summed into one alerts reply with counts and links (revision 28), durable episodes
 // with correlations across two days, and a notice when alerting is unavailable. The recorded alert day is the
 // seeded-anomaly day with alerts; programme hosts are aliases of the series' own hosts. Nothing touches the network.
 const fs = require('node:fs');
@@ -50,7 +50,7 @@ describe('e2e: User Story 8, alerts in the brief', function () {
     }
   });
 
-  it('scenarios 1 to 5: grouped alert bullets, staleness, importance, thread replies and episodes across two days',
+  it('scenarios 1 to 5: grouped alerts, staleness, importance, the alerts reply and episodes across two days',
     async () => {
       const dataDir = fresh();
       const env = { AGENT_WATCHDOG_CONFIG_DIR: configDir() };
@@ -94,20 +94,13 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       ]);
       expect(classified.counts).to.include({ housekeeping: 3, firing: 13 });
 
-      // The brief: the critical programme's alerts bullet first, one sub-bullet per category, counts and staleness
-      // in the text, no URL in the body; every alert group has its own thread reply with links under Grafana.
+      // The brief: no alerts bullet since revision 28 and no URL in the body; the alerts go to one thread reply with
+      // each programme's counts and its filtered alert list, closed by the housekeeping notice (FR-066, FR-080).
       const brief = day1.read('rollup/brief.json');
       expect(brief.kind).to.equal('brief');
-      expect(brief.bullets.length).to.be.at.most(5);
-      expect(brief.bullets[0]).to.include({ kind: 'alerts', group: 'North Programme' });
-      expect(brief.bullets[0].text).to.equal('North Programme alerts: 8 firing, none stale');
-      expect(brief.bullets[0].children.map((c) => c.text.split(':')[0])).to.deep.equal([
-        'availability', 'backlog', 'database', 'uncategorised',
-      ]);
-      const backlogLine = brief.bullets[0].children.find((c) => c.text.startsWith('backlog')).text;
-      expect(backlogLine).to.include('3 firing').and.include('oldest since 2026-09-17');
-      expect(backlogLine).to.not.include('stale');
-      for (const bullet of brief.bullets) {
+      expect(brief.bullets.length).to.be.at.most(2);
+      expect(brief.bullets.every((b) => b.kind !== 'alerts')).to.equal(true);
+      for (const bullet of [...brief.bullets, ...brief.thread]) {
         expect(bullet.text).to.not.match(/https?:\/\//);
         expect(bullet.children.every((c) => !/https?:\/\//.test(c.text))).to.equal(true);
       }
@@ -117,37 +110,44 @@ describe('e2e: User Story 8, alerts in the brief', function () {
         + 'watchdog or silence the rules',
       );
       const layout = day1.read('rollup/layout.json');
-      expect(layout.slots[0]).to.include({ kind: 'alerts', group: 'North Programme' });
-      expect([...layout.body_alerts, ...layout.thread_alerts].sort())
-        .to.deep.equal(classified.groups.map((g) => g.alert_key).sort());
+      expect(layout.slots.every((s) => s.kind !== 'alerts')).to.equal(true);
+      expect(layout.body_alerts).to.deep.equal([]);
+      expect([...layout.thread_alerts].sort()).to.deep.equal(classified.groups.map((g) => g.alert_key).sort());
       expect(day1.read('rollup/verification.draft1.json').outcome).to.equal('accepted');
 
       const payload = day1.read('rollup/payload.json');
-      const alertReplies = payload.replies.filter((r) => r.alert_key);
-      expect(alertReplies.map((r) => r.alert_key).sort())
-        .to.deep.equal(classified.groups.map((g) => g.alert_key).sort());
+      expect(payload.replies.some((r) => r.item_id || r.alert_key), 'no item or alert-group replies').to.equal(false);
+      const alertsReplies = payload.replies.filter((r) => r.kind === 'alerts');
+      expect(alertsReplies, 'one alerts reply').to.have.length(1);
+      const [alertsReply] = alertsReplies;
+      expect(payload.replies[payload.replies.length - 1], 'the alerts reply comes last').to.equal(alertsReply);
       const ranked = day1.read('rollup/items.ranked.json');
-      // Replies for the high items only (FR-020, revision 25).
-      expect(payload.replies.filter((r) => r.item_id))
-        .to.have.length(ranked.filter((i) => i.severity === 'high').length);
       expect(payload.report.items).to.equal(ranked.length);
-      const backlogReply = alertReplies.find((r) => r.alert_key === 'North Programme/backlog');
-      expect(backlogReply.metadata).to.deep.equal({
-        event_type: 'agent_watchdog.alerts',
-        event_payload: { run_id: DAY1, date: DAY1, group: 'North Programme', category: 'backlog', firing: 3 },
-      });
-      expect(backlogReply.text).to.include('Sentinel Backlog on north-a.example.org');
-      expect(backlogReply.text, 'housekeeping instances are not listed').to.not.include('north-b.example.org');
-      // The metric behind the alert (FR-079): north-a's sentinel backlog change stands next to its alert.
-      expect(backlogReply.text)
-        .to.match(/Sentinel Backlog on north-a\.example\.org .* · cht_sentinel_backlog_count \S+ now/);
-      expect(backlogReply.text).to.match(/<https:\/\/watchdog\.example\.org\/alerting\/list\?search=[^|]+\|/);
-      expect(backlogReply.text).to.include('rule%3A%22Sentinel%20Backlog%22');
+      expect(alertsReply.metadata.event_type).to.equal('agent_watchdog.alerts');
+      expect(alertsReply.metadata.event_payload).to.include({ run_id: DAY1, date: DAY1, firing: 13 });
+      expect(alertsReply.metadata.event_payload.programmes)
+        .to.deep.equal(['North Programme', 'South Programme', 'Watchdog']);
+      const lines = alertsReply.text.split('\n');
+      expect(lines[0]).to.equal('*ALERTS* · 13 firing across 3 programmes');
+      expect(lines[1]).to.match(/^• North Programme: 8 firing \([^)]*backlog 3[^)]*\), \d+ new, 0 stale · /);
+      expect(lines[1]).to.match(/<https:\/\/watchdog\.example\.org\/alerting\/list\?search=[^|]+\|alert list>$/);
+      // The programme's link filters the alert list by its hosts (regex-escaped, then URL-encoded).
+      expect(lines[1]).to.include(encodeURIComponent('north-a\\.example\\.org'));
+      expect(lines[2]).to.match(/^• South Programme: 4 firing \(/);
+      expect(lines[3]).to.match(/^• Watchdog: 1 firing \(uncategorised 1\)/);
+      expect(lines[4])
+        .to.match(/^<https:\/\/watchdog\.example\.org\/alerting\/list\?search=[^|]+\|all firing alerts>$/);
+      expect(lines.slice(5).join('\n')).to.include('Housekeeping: 3 alerts stale for 24+ days');
+      expect(alertsReply.text, 'instances are in the report, not the reply').to.not.include('Sentinel Backlog on');
+      expect(alertsReply.text, 'housekeeping instances are not listed').to.not.include('DB Fragmentation');
+      expect(payload.parent.text).to.not.include('Housekeeping');
       expect(JSON.stringify(payload)).to.not.include('cht-dev');
       const publication = day1.read('rollup/publication.json');
-      expect(publication.replies.filter((r) => r.alert_key)).to.have.length(classified.groups.length);
+      expect(publication.replies.filter((r) => r.kind === 'alerts')).to.have.length(1);
       expect(day1.slack.chat.postMessage.callCount).to.equal(1 + payload.replies.length);
-      expect(payload.replies.filter((r) => r.alert_key)).to.have.length(classified.groups.length);
+      // The report carries the alert instances the reply only counts.
+      const report = fs.readFileSync(path.join(day1.root, 'rollup', 'report.html'), 'utf8');
+      expect(report).to.include('Sentinel Backlog').and.include('north-a.example.org');
 
       // Episodes: one opened event per firing instance with its correlations; the Sentinel Backlog alert on north-a
       // is explained by the sentinel item the analysis raised on that project.
@@ -194,10 +194,14 @@ describe('e2e: User Story 8, alerts in the brief', function () {
       expect(outcomes.filter((o) => o.kind === 'alert_episode').map((o) => o.episode_id))
         .to.deep.equal([cleared[0].episode_id]);
       const brief2 = day2.read('rollup/brief.json');
-      expect(brief2.bullets[0].text).to.equal('North Programme alerts: 7 firing, none stale');
-      // north-c's sentinel alert ended overnight: a resolved line, not silence (FR-080).
+      const payload2 = day2.read('rollup/payload.json');
+      const alertsReply2 = payload2.replies.find((r) => r.kind === 'alerts');
+      expect(alertsReply2.text).to.include('• North Programme: 7 firing (');
+      // north-c's sentinel alert ended overnight: a resolved line in the alerts reply, not silence (FR-080).
       const resolved = 'Resolved since the previous run: Sentinel Backlog on north-c.example.org';
       expect(brief2.notices.some((n) => n.startsWith(resolved))).to.equal(true);
+      expect(alertsReply2.text).to.include(resolved);
+      expect(payload2.parent.text).to.not.include('Resolved since');
     });
 
   it('scenario 6: when the alerting endpoints are unavailable the brief says so and the run completes', async () => {
@@ -218,8 +222,11 @@ describe('e2e: User Story 8, alerts in the brief', function () {
     expect(brief.bullets.every((b) => b.kind !== 'alerts')).to.equal(true);
     expect(brief.notices.some((n) => /^Alerts unavailable: .*503/.test(n))).to.equal(true);
     const payload = r.read('rollup/payload.json');
-    expect(payload.parent.text).to.match(/Alerts unavailable/);
-    expect(payload.replies.every((reply) => !reply.alert_key)).to.equal(true);
+    // The notice closes the alerts reply, not the post body (revision 28).
+    expect(payload.parent.text).to.not.match(/Alerts unavailable/);
+    const alertsReply = payload.replies.find((reply) => reply.kind === 'alerts');
+    expect(alertsReply.text).to.match(/^\*ALERTS\* · none firing\n\S+ Alerts unavailable: .*503/);
+    expect(payload.replies.every((reply) => !reply.alert_key && !reply.item_id)).to.equal(true);
     expect(fs.existsSync(path.join(dataDir, 'alerts', 'episodes.jsonl'))).to.equal(false);
   });
 });

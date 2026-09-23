@@ -1,0 +1,10 @@
+*ALERTS* · {{mrkdwn summary_text}}
+{{#each programmes}}
+• {{mrkdwn line}}{{#if has_link}} · {{link link 'alert list'}}{{/if}}
+{{/each}}
+{{#if has_all}}
+{{link all 'all firing alerts'}}
+{{/if}}
+{{#each notices}}
+{{mrkdwn this}}
+{{/each}}

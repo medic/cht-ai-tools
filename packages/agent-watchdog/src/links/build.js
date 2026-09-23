@@ -92,6 +92,27 @@ const buildAlertGroupLinks = ({ grafanaUrl, group }) => {
   };
 };
 
+/**
+ * The links of the alerts reply (FR-066, revision 28): per programme the alert list filtered to the hosts of its
+ * groups, and one list of every firing alert.
+ */
+const buildAlertsLinks = ({ grafanaUrl, alertGroups = [] }) => {
+  const hostsByGroup = new Map();
+  for (const group of alertGroups) {
+    const label = group.group || 'Other';
+    const hosts = hostsByGroup.get(label) || new Set();
+    for (const host of group.hosts || []) {
+      hosts.add(host);
+    }
+    hostsByGroup.set(label, hosts);
+  }
+  const byGroup = new Map([...hostsByGroup.entries()].map(([label, hosts]) => [
+    label, buildAlertListLink({ grafanaUrl, terms: alertTerms({ hosts: [...hosts].sort() }) }),
+  ]));
+  return { byGroup, all: buildAlertListLink({ grafanaUrl, terms: alertTerms({}) }) };
+};
+
 module.exports = {
-  buildDashboardLink, buildItemLinks, alertTerms, buildAlertListLink, buildAlertGroupLinks, ALERT_LIST_PATH,
+  buildDashboardLink, buildItemLinks, alertTerms, buildAlertListLink, buildAlertGroupLinks, buildAlertsLinks,
+  ALERT_LIST_PATH,
 };
