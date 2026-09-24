@@ -58,3 +58,20 @@ describe('verify/checks/projects_known: a host written as its leading labels (FR
     expect(check(other).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/projects_known: the notice names no other host (FR-016, revision 33)', () => {
+  const { check } = require('../../../src/verify/checks/projects_known');
+  const { briefContext } = require('../helpers/context');
+
+  it('refuses an undiscovered host in the expected-load notice and accepts a discovered one', () => {
+    const bad = briefContext();
+    bad.draft.expected_load_notice = 'Month-end on evil.partner.org';
+    const result = check(bad);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons)
+      .to.deep.equal(['expected_load_notice names evil.partner.org, which is not a discovered project']);
+    const ok = briefContext();
+    ok.draft.expected_load_notice = 'Month-end on cht.example.org';
+    expect(check(ok).status).to.equal('pass');
+  });
+});

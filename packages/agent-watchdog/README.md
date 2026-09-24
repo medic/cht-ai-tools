@@ -3,7 +3,8 @@
 Daily analysis of the CHT projects monitored by Medic's hosted [CHT Watchdog](https://docs.communityhealthtoolkit.org/hosting/monitoring/),
 posted to Slack as a short brief that flags what a human should look into. It reads metrics
 through Grafana, computes changes deterministically, asks a bounded Claude Agent SDK session to
-interpret them with read-only tools, verifies every number and link in code, and posts one
+interpret them with read-only tools, verifies every number, date and link in code (the evidence, the
+headline and the notices included), and posts one
 message of at most two programme bullets, with the full report shared into its thread followed by one
 reply per remaining programme, one for the other projects and one for the alerts; every item is numbered
 in the report so a note can cite it (`#7`, or its host and metric, with a thumbs as the verdict).

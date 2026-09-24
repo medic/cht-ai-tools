@@ -2,7 +2,7 @@
 // The daily pipeline: purge, feedback, collect, analyze, agent, rollup, render, publish (contracts/cli.md).
 // Owns the run's state machine (data-model.md "Run") and the loud-failure rules (constitution V).
 const codes = require('../exit-codes');
-const { buildEgress, guardFetch, installEgressGuard } = require('../../net/egress');
+const { withEgressGuard } = require('../../net/egress');
 const { redactText } = require('../../publish/redact');
 const { loadConfig } = require('../../config/load');
 const { RunDir, RunExistsError, ensureDataLayout } = require('../../store/run-dir');
@@ -146,23 +146,6 @@ const createResolverSafely = ({ config, deps, runDir, allowlist }) => {
   }
 };
 
-const activeWindowsFrom = async (runDir) => {
-  if (!runDir.exists('discovery.json')) {
-    return {};
-  }
-  const discovery = await runDir.readJson('discovery.json');
-  const result = {};
-  for (const project of discovery.projects || []) {
-    const rel = `${project.slug}/changes.json`;
-    if (runDir.exists(rel)) {
-      const changes = await runDir.readJson(rel);
-      const active = changes.find((c) => c.expected_load_window_id);
-      result[project.slug] = active ? active.expected_load_window_id : null;
-    }
-  }
-  return result;
-};
-
 /** Put the ingested feedback on the context: items, horizons, unmatched notes, brief reactions and authors. */
 const loadFeedbackContext = async (ctx, runDir) => {
   const ingested = await runDir.readJson('feedback.ingested.json');
@@ -243,14 +226,9 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   const loaded = loadConfig({ env, flags, command: 'run' });
   // FR-083: for the run's duration every fetch of this process, the stages' and any library's through the global,
   // passes the egress guard; a destination outside the allow-list is refused before a connection is made.
-  const egress = buildEgress(loaded.config);
-  const guard = installEgressGuard({ egress, logger });
-  const fetch = deps.fetch ? guardFetch(deps.fetch, egress, { logger }) : guard.fetch;
-  try {
-    return await runLoaded({ flags, env, stdout, logger, deps: { ...deps, fetch } }, loaded);
-  } finally {
-    guard.uninstall();
-  }
+  return withEgressGuard({ config: loaded.config, logger, deps }, (guarded) => runLoaded({
+    flags, env, stdout, logger, deps: guarded,
+  }, loaded));
 };
 
 const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effective, policy }) => {
@@ -374,9 +352,6 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
       }
       if (name === 'collect' && runDir.exists('discovery.json')) {
         ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });
-      }
-      if (name === 'analyze') {
-        ctx.activeWindows = await activeWindowsFrom(runDir);
       }
       if (name === 'rollup') {
         rollupResult = result;

@@ -18,7 +18,9 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 - Prompts, skill, schemas and the agent definition under `prompts/`, `skill/`, `schema/`, `agent/`
   are code: change by PR with the replay diff attached. A run never writes to them.
 - Everything the model produces is untrusted until `src/verify/` accepts it. The model composes no
-  URLs; `src/links/` builds them. Numbers in text must match computed data.
+  URLs; `src/links/` builds them. Numbers in text and in evidence must match computed data, dates must
+  fall within the run's windows, and the headline and the notice are checked like the bullets; the
+  resolver contacts a model-written URL only after the allow-list and tool-result checks pass.
 - The committed schemas under `schema/` are JSON Schema 2020-12; the runtime receives them through
   `forStructuredOutput` (no `$schema`/`$id`, `definitions` for `$defs`) because its validator knows
   draft-07 only. A model session that fails before a result is an `error` bound with its message on

@@ -15,6 +15,7 @@ const { loadPatternCards } = require('../../corpus/cards');
 const { RunDir, dataPaths } = require('../../store/run-dir');
 const { analysedDatesBefore, runDate } = require('../../rollup/history');
 const { splitStanding } = require('../../analyze/standing');
+const { activeWindowOf } = require('../../analyze/calendar');
 const atomic = require('../../store/atomic');
 // `--project` and `--group` select the projects a run analyses (FR-066, revision 24); one helper for every stage.
 const { selectProjects } = require('../../config/filter');
@@ -48,15 +49,6 @@ const feedbackFor = (all, project) => {
     return all.projects[project.url];
   }
   return Array.isArray(all.items) ? all.items.filter((f) => f.project_url === project.url) : [];
-};
-
-const activeWindowFrom = (changes, discovery) => {
-  const change = changes.find((c) => c.expected_load_window_id);
-  if (!change) {
-    return null;
-  }
-  const known = asArray(discovery, 'expected_load_windows').find((w) => w.id === change.expected_load_window_id);
-  return known || { id: change.expected_load_window_id };
 };
 
 /**
@@ -252,7 +244,7 @@ const run = async (ctx) => {
           feedback: feedbackFor(feedbackAll, project),
           alerts: alertsFor(project),
           memory,
-          activeWindow: activeWindowFrom(changes, discovery),
+          activeWindow: activeWindowOf(changes, { project, discovery }),
           config: ctx.config,
           gate: deps.gate,
           runDir: ctx.runDir,
@@ -304,5 +296,5 @@ const run = async (ctx) => {
 };
 
 module.exports = {
-  name, inputs, run, asArray, feedbackFor, activeWindowFrom, itemHistoryFor, selectProjects, planFor,
+  name, inputs, run, asArray, feedbackFor, itemHistoryFor, selectProjects, planFor,
 };

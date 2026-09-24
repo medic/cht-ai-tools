@@ -80,7 +80,8 @@ describe('net/egress: the guard on fetch', () => {
     expect(await fetch('https://watchdog.example.org/api/x', init)).to.equal('response');
     expect(await fetch(new URL('https://slack.com/api/y'))).to.equal('response');
     expect(await fetch({ url: 'https://github.com/medic/z' })).to.equal('response');
-    expect(inner.firstCall.args).to.deep.equal(['https://watchdog.example.org/api/x', init]);
+    // The guard follows redirects itself (revision 33), so it asks fetch for manual ones.
+    expect(inner.firstCall.args).to.deep.equal(['https://watchdog.example.org/api/x', { ...init, redirect: 'manual' }]);
     expect(inner.callCount).to.equal(3);
     expect(logger.events.filter((e) => e.event === 'egress.refused')).to.deep.equal([]);
   });
@@ -141,5 +142,72 @@ describe('net/egress: the guard on fetch', () => {
     }]);
     expect(document.notes.some((n) => /platform/.test(n))).to.equal(true);
     expect(JSON.stringify(document)).to.not.include('glsa_x');
+  });
+});
+
+describe('net/egress: redirects and the guard around a command (FR-083, revision 33)', () => {
+  const { withEgressGuard } = require('../../src/net/egress');
+  const egress = buildEgress(config());
+  const redirect = (status, location) => ({ status, headers: new Headers({ location }), ok: false });
+  const final = { status: 200, headers: new Headers(), ok: true };
+
+  it('refuses a redirect to an unlisted host after the first hop, naming that host', async () => {
+    const inner = sinon.stub().resolves(redirect(302, 'https://evil.example.org/collect'));
+    const logger = quietLogger();
+    const fetch = guardFetch(inner, egress, { logger });
+    const error = await fetch('https://watchdog.example.org/api/x').catch((e) => e);
+    expect(error).to.be.instanceOf(EgressRefusedError);
+    expect(error.details).to.deep.equal({ host: 'evil.example.org', port: 443 });
+    expect(inner).to.have.been.calledOnce;
+    expect(inner.firstCall.args[1]).to.include({ redirect: 'manual' });
+  });
+
+  it('follows a redirect to a listed host with the right method and returns the final response', async () => {
+    const inner = sinon.stub();
+    inner.onCall(0).resolves(redirect(303, 'https://slack.com/api/done'));
+    inner.onCall(1).resolves(final);
+    const fetch = guardFetch(inner, egress, { logger: quietLogger() });
+    expect(await fetch('https://slack.com/api/start', { method: 'POST', body: 'x' })).to.equal(final);
+    expect(inner.secondCall.args[0]).to.equal('https://slack.com/api/done');
+    expect(inner.secondCall.args[1]).to.include({ method: 'GET', redirect: 'manual' });
+    expect(inner.secondCall.args[1].body).to.equal(undefined);
+    const keep = sinon.stub();
+    keep.onCall(0).resolves(redirect(307, '/api/again'));
+    keep.onCall(1).resolves(final);
+    const again = guardFetch(keep, egress, { logger: quietLogger() });
+    await again('https://watchdog.example.org/api/x', { method: 'POST', body: 'y' });
+    expect(keep.secondCall.args[0]).to.equal('https://watchdog.example.org/api/again');
+    expect(keep.secondCall.args[1]).to.include({ method: 'POST', body: 'y' });
+  });
+
+  it('hands a redirect back untouched when the caller asked for manual redirects, and caps the hops', async () => {
+    const inner = sinon.stub().resolves(redirect(301, 'https://slack.com/next'));
+    const fetch = guardFetch(inner, egress, { logger: quietLogger() });
+    const response = await fetch('https://slack.com/first', { redirect: 'manual' });
+    expect(response.status).to.equal(301);
+    expect(inner).to.have.been.calledOnce;
+    const error = await fetch('https://slack.com/first').catch((e) => e);
+    expect(error).to.be.instanceOf(TypeError);
+    expect(error.message).to.match(/redirect/);
+    expect(inner.callCount).to.equal(1 + 6);
+  });
+
+  it('withEgressGuard guards the global for a command\'s duration and wraps an injected fetch', async () => {
+    const original = sinon.stub().resolves('ok');
+    const target = { fetch: original };
+    const injected = sinon.stub().resolves('injected');
+    let seen;
+    const result = await withEgressGuard(
+      { config: config(), logger: quietLogger(), deps: { fetch: injected }, target },
+      async (deps) => {
+        seen = { guarded: target.fetch.egressGuard === true, injectedGuarded: deps.fetch.egressGuard === true };
+        await expect(deps.fetch('https://evil.example.org/')).to.be.rejectedWith(EgressRefusedError);
+        return deps.fetch('https://slack.com/api/x');
+      },
+    );
+    expect(result).to.equal('injected');
+    expect(seen).to.deep.equal({ guarded: true, injectedGuarded: true });
+    expect(target.fetch).to.equal(original);
+    expect(injected).to.have.been.calledOnceWith('https://slack.com/api/x');
   });
 });

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 32)
+**Status**: Draft (revision 33)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -142,6 +142,10 @@ run the full pipeline in preview mode to obtain the would-be post as structured 
    a run whose code or configuration would reach any other destination, **When** it tries, **Then**
    the request is refused before a connection is made, the run fails with exit 69 and the log names
    the host and port (FR-083, revision 30).
+9. **Given** a roll-up draft whose headline names a figure no item's computed data holds, whose
+   expected-load notice carries a link or a host not discovered, or whose item evidence states a value
+   never computed or collected, **When** the gate checks it, **Then** the draft is refused and each
+   reason names the headline, the notice or the evidence entry (FR-016, revision 33).
 
 ### User Story 4 - Self-improvement under review (Priority: P3)
 
@@ -173,6 +177,9 @@ and pattern-level, and that no prompt, skill or threshold file changed.
    how many candidates each rule raised, how many became items, how many the analysis set aside
    and its commonest reasons, and any threshold suggestion drawn from those says so; a human
    verdict on the same candidate always outranks the analysis's own (revision 20).
+6. **Given** the roll-up's memory update quotes a note that carries a Slack mention and a phone
+   number, **When** the memory is stored, **Then** both are masked in the memory file and its patch,
+   the log names what was masked, and no later prompt carries them (FR-044, revision 33).
 
 ### User Story 5 - New projects and readiness (Priority: P3)
 
@@ -789,6 +796,12 @@ Verification gate
   proposals. The scan applies to every published text whatever its source: a secret or personal
   datum quoted from a tool result, a memory or a metric label is refused like one the model wrote
   (revision 27).
+  Revision 33 (research.md R-38): every value in the evidence the model attaches to an item MUST
+  itself match a computed value of that metric or a collected value of the named window, and never
+  widens what the prose may quote; the headline and the expected-load notice are checked as the
+  bullets are, for numbers against every item's computed values, for links, length and hosts; and
+  every date the model writes, in a finding or in the brief, MUST fall within the run's collected
+  windows unless the run gave it that date.
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -877,6 +890,9 @@ Feedback
   (FR-085, revision 29). Ranking influence counts only records within the configured influence window
   (FR-060). The feedback read that day, with author identifiers removed, MUST be part of the
   roll-up's context so the memory update can reflect it (User Story 2, scenario 1).
+  Wherever a note reaches a prompt (the analysis feedback block, the horizon parse, the review), Slack
+  user identifiers in its text are masked by code first, and the gate refuses one on the published
+  surface (revision 33).
 - **FR-030**: Confirmed and dismissed items, with their notes, MUST be appended to the knowledge
   corpus as run outcomes so that distillation learns from operation as well as from history.
 
@@ -1000,6 +1016,8 @@ Alerts and groups
   metrics source as unreachable (failure notice, non-zero exit) only when the source cannot be
   connected to or when queries fail consecutively. Range and instant queries MUST have their own
   timeout, distinct from the timeout of the Grafana API calls. Added in revision 11.
+  A query that fails with any status counts toward the consecutive failures; only a successful query
+  resets the count (revision 33).
 - **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
   bound, log per project what was fetched and what was reused, and complete within its share of
   the run budget at the scale assumption of one hundred projects. Added in revision 11.
@@ -1101,6 +1119,9 @@ Security and trust boundaries
   cannot close the delimiter early. Proposal files are Markdown for a human reviewer, scrubbed of
   identifiers by code (FR-033); the preview payload is JSON built by code, so neither needs
   template escaping (revision 27).
+  The memory update the roll-up returns is masked of people, e-mail addresses and phone numbers by
+  code before it is stored, and what was masked is logged (revision 33): memory is read back into
+  every later prompt, so it is held to the same rule as a proposal.
 - **FR-045**: Secrets MUST NOT appear in posts, run records, logs or the public repository. Run
   records include every prompt, tool result, session ledger and verification report the run
   stores, which the end-of-run scan covers with the same patterns as the gate; logs redact the
@@ -1162,6 +1183,12 @@ Configuration
   before any connection is made, fails the run closed with the unavailable-source exit code (69), and
   logs the host and port, never the URL. The `check` command, which contacts the CHT host an operator
   names, is exempt from the guard; inside the container the platform policy refuses it.
+  The gate resolves only links code built and model-written references that are on the link
+  allow-list and appeared in a tool result of the run; every other URL is recorded as unresolved
+  without a request. A refusal by the egress guard during link resolution fails the run (69) rather
+  than reading as a broken link. The guard follows a redirect only to a listed destination, and it
+  is installed for every command that can reach the network: `run`, `tools-server`, `calibrate`,
+  `distill` and `replay` (revision 33).
 - **FR-084**: The Slack app MUST hold exactly the bot scopes the posting needs: `chat:write`,
   `files:write`, `reactions:read`, `reactions:write`, `channels:history` for a public channel,
   `groups:history` if the channel is private, and `im:write` with `im:history` when the configured

@@ -130,4 +130,17 @@ describe('cli/commands/distill', function () {
     expect(error.message).to.include('no runtime here');
     expect(t.args.deps.tracer.finish).to.have.been.calledOnce;
   });
+  it('runs under the egress guard on the global fetch and restores it afterwards (FR-083, revision 33)', async () => {
+    const before = globalThis.fetch;
+    let seen = null;
+    const tracer = fakeTracer();
+    tracer.start = sinon.stub().callsFake(async () => {
+      seen = globalThis.fetch.egressGuard === true;
+      return { traceId: 't1' };
+    });
+    const t = argsFor({ deps: { tracer } });
+    await distillCommand(t.args);
+    expect(seen).to.equal(true);
+    expect(globalThis.fetch).to.equal(before);
+  });
 });

@@ -100,12 +100,7 @@ const resolveOverlaps = (spans) => {
  * @param {string[]} [options.allowedHosts] documentation and tooling hosts that are not project identifiers
  * @returns {{ text: string, flags: Array<{ kind: string, excerpt: string }> }}
  */
-const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
-  const source = text === null || text === undefined ? '' : String(text);
-  if (!source) {
-    return { text: '', flags: [] };
-  }
-  const spans = resolveOverlaps(candidateSpans(source, { hosts, persons, allowedHosts }));
+const applySpans = (source, spans) => {
   let out = '';
   let cursor = 0;
   const flags = [];
@@ -123,9 +118,32 @@ const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
   return { text: out, flags };
 };
 
+const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
+  const source = text === null || text === undefined ? '' : String(text);
+  if (!source) {
+    return { text: '', flags: [] };
+  }
+  return applySpans(source, resolveOverlaps(candidateSpans(source, { hosts, persons, allowedHosts })));
+};
+
+/**
+ * Mask people, e-mail addresses, phone numbers and secrets, and keep every hostname: for text that stays on the data
+ * volume and returns to the model, such as the memory update (FR-044, revision 33), where the projects are the subject.
+ */
+const maskPersonalData = (text, { persons = [] } = {}) => {
+  const source = text === null || text === undefined ? '' : String(text);
+  if (!source) {
+    return { text: '', flags: [] };
+  }
+  const spans = candidateSpans(source, { hosts: [], persons, allowedHosts: [] }).filter((s) => s.kind !== 'hostname');
+  return applySpans(source, resolveOverlaps(spans));
+};
+
 /** Replace Slack mentions and bare user ids with [person]; used wherever note text reaches a prompt or a post. */
 const maskPeople = (text) => String(text === null || text === undefined ? '' : text)
   .replace(SLACK_MENTION, '[person]')
   .replace(new RegExp(SLACK_USER_ID.source, 'g'), '[person]');
 
-module.exports = { scrub, maskEmail, maskPhone, maskPeople, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER, PLACEHOLDER };
+module.exports = {
+  scrub, maskPersonalData, maskEmail, maskPhone, maskPeople, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER, PLACEHOLDER,
+};

@@ -655,6 +655,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-50 | The built image passes `smoke/container.js` under `--read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001` and `--network none` where no network is needed: `--version`, `egress --format hosts`, `check` of an unreachable host exiting 69, the report rendering under `/tmp` | Whether the runtime's start-up writes stay under `/tmp` and `/data` is only seen with the root filesystem read-only |
 | S-51 | With the deployment's egress policy applied, a scheduled run completes and a deliberate request to a host outside the list from inside the pod is refused at the network | The policy engine and its FQDN handling are the platform's |
 | S-52 | In the local Compose setup, `claude auth login` completes inside the `login` service, `auth status` then shows the account, and a `run --dry-run` with the CLI engine and no key logs `agent.cli_auth` with `mode: login` and `credentials_found: true` and analyses a project on the subscription | The OAuth flow needs a person's browser and account; only the wiring is verifiable without them |
+| S-53 | Under the CLI engine, the stdio tools server answers a `query_metric` whose Grafana proxy answers a redirect off the egress list with a refusal (exit 69 in its log), never a connection to the redirect target | The tools server is a separate process; only a live run shows the guard installed in it |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1962,3 +1963,90 @@ flow. The login itself is the operator's to complete (S-52).
 another version to drift, another 200 MB); a `CLAUDE_CODE_OAUTH_TOKEN` path for the SDK engine (the CLI engine
 already has login mode, and a subscription token is a person's, not a scheduled service's); binding the host's
 `~/.claude` into the container (it would expose the contributor's whole configuration, sessions and memory).
+
+## R-38. The branch review: fifty-two findings verified, three revisions to answer them
+
+**Evidence**: on 2026-09-24 the operator brought a code review and a PR review of the branch by another agent
+(sixty-three findings, fifty-two distinct after duplicates, three scored 80 or above). Every finding was
+re-verified here against the code before anything was planned; the table records what was found and where it
+is answered. Scores are the reviewer's. "Held" means the code does what the finding says.
+
+| # | Score | Finding (short) | Held? | Answered in |
+|---|---|---|---|---|
+| 42 | 85 | `numbers_match` seeds its allowed values from the item's own `evidence`, so an invented evidence value lets the same numeral through in prose | yes: `allowedValues` maps `item.evidence` first | revision 33 |
+| 2 | 80 | the brief gate checks numbers and URLs in bullets only; the headline and `expected_load_notice` are published unchecked for numbers, URLs and hosts | yes: `numbers_match` brief branch walks bullets; `bullet_length` URL rule on bullets; `projects_known` skips the notice | revision 33 |
+| 23 | 80 | `run.js` stores window ids where the roll-up's notice builder expects window objects, so the notice is blank on every window day | yes: `activeWindowsFrom` stores `expected_load_window_id`; `expectedLoadNoticeFrom` reads `window.note \|\| window.id` | revision 33 |
+| 10 | 75 | a stored horizon loses `expected_max` and `observed_value`, so from the second day it suppresses every candidate whatever its size | yes: `expected_max` only from `parsedToday`; the Feedback record has no such field | revision 34 |
+| 56 | 75 | the session loop extracts URLs from `JSON.stringify(tool_response)`, mangling multi-line results; `verify/tool-urls.js` is unused | yes: `urlsIn` stringifies; the escaped newline is not a URL boundary | revision 34 |
+| 1 | 70 | a session cut off by the run deadline is neither failed nor incomplete, so the brief reads "All quiet" | yes: `INCOMPLETE_BOUNDS` is `budget`, `turns`; the deadline path adds `timeout` | revision 34 |
+| 25 | 70 | every run re-appends each confirmed or dismissed item of the influence window to that day's outcome file | yes: `appendOutcomes` dedupes within one day's file only | revision 34 |
+| 38 | 70 | the Dockerfile hard-codes the `linux-x64` runtime package, so a build on arm64 fails | yes | revision 35 |
+| 46 | 70 | Slack user ids in note text reach the model; `personal_data_absent` has no rule for them | yes: `sanitiseData` drops identity keys, not mentions inside text; parse wraps the raw note | revision 33 |
+| 13 | 65 | the digest acknowledges notes whose review failed and says the next run will review them; acknowledged notes are never reviewed again | yes: `acknowledged: records.map(...)` | revision 34 |
+| 17 | 65 | retention never purges `runs-replay/` | yes | revision 35 |
+| 48 | 65 | eighteen branch commits fail commitlint (headers to 173 characters, body lines over 100) | yes, checked with commitlint | operator decision (history rewrite) |
+| 52 | 65 | AGENTS.md describes the five-bullet layout and per-alert-group replies | yes | revision 35 |
+| 0 | 60 | the standing-backlog test falls back to the previous-cycle evidence as "yesterday" | yes: `previousDayValue` reads `previous_day ?? previous_cycle` evidence | revision 34 |
+| 5 | 60 | live `query_metric` returns `series[0]` of several, labels every result `count`, never gets `activeWindowFor` | yes | revision 34 |
+| 22 | 60 | the roll-up reads the highest-numbered pass file even when the gate rejected it | yes: `lastFindingsFile` takes the max pass; also `calibration/report.js` and `replay.js` | revision 34 |
+| 37 | 60 | the alerts reply is `truncate`d at 3000 characters and can be cut mid-link | yes | revision 34 |
+| 6 | 55 | the heartbeat headline says "no candidates" with `checked.candidates` above zero | yes | revision 34 |
+| 11 | 55 | note horizons resolve against the run date, not the note's own date | yes: `noteDate: observedDate` | revision 34 |
+| 12 | 55 | the report drops an item whose relation chain is two levels deep | yes: `itemView(other, ...)` passes no `related`; grandchildren are in `nestedIds` | revision 34 |
+| 14 | 55 | the stdio tools server loads no pattern cards, so the CLI engine can never read one | yes: `patternCards: deps.patternCards \|\| { index: [] }` | revision 34 |
+| 15 | 55 | a session ended by the harness turn cap or a timeout records $0 | yes: `synthesizeResult` `total_cost_usd: 0`; a rejected turn adds nothing | revision 34 |
+| 27 | 55 | run cost leaves out the feedback stage's calls; a stage-only roll-up leaves out the agent's spend | yes: `costSoFar` sums agent and roll-up only | revision 34 |
+| 30 | 55 | `--log-level` and `--log-format` are parsed and never applied | yes: the logger reads the environment only | revision 35 |
+| 40 | 55 | run records from the image name `0.0.0-development` and `git_sha: null` | yes: version and revision are image labels only | revision 35 |
+| 55 | 55 | `dates_match` checks nothing the model writes; its evidence branch cannot run under the strict schema | yes | revision 33 |
+| 4 | 50 | one project's discovery query failing aborts the run | yes: `queryInstant`/`queryRange` per host, uncaught | revision 34 |
+| 20 | 50 | the analysis prompt's date is the wall clock, not the run date | yes: `now().toISOString()` | revision 34 |
+| 34 | 50 | the egress guard checks the first URL only; a redirect connects anywhere; tools-server, calibrate, distill and replay have no guard | yes | revision 33 |
+| 58 | 50 | a session that fails to open fails the whole stage | yes: `openSession` is outside the try | revision 34 |
+| 3 | 45 | a 4xx or 500 query failure resets the consecutive-failure counter | yes | revision 33 |
+| 8 | 45 | the worker pool's other workers keep starting items after the first rejection | yes | revision 34 |
+| 16 | 45 | `get_windows` accepts loose key forms and looks up by exact string | yes | revision 34 |
+| 28 | 45 | a Slack failure after the parent post loses the publication record | yes: written after the digest | revision 34 |
+| 32 | 45 | calibration counts forced re-runs as separate days | yes | revision 34 |
+| 35 | 45 | the gate fetches model-supplied URLs before the allow-list and tool-result checks and swallows an egress refusal | yes: `resolveAll` runs before `runChecks`; the resolver's catch returns a reason | revision 33 |
+| 50 | 45 | a stage-only roll-up never resolves links and `links_resolve` passes as "offline" | yes: `ctx.resolveLinks` is set after `collect` only | revision 34 |
+| 7 | 40 | the personal-data check exempts the memory update because "code masks it", but `memory.js` stores it verbatim | yes | revision 33 |
+| 9 | 40 | the degraded notice always says "three drafts" | yes | revision 34 |
+| 18 | 40 | a failed model parse of a dateless note is silent and the missing horizon is stored for good | yes | revision 34 |
+| 21 | 40 | the CLI engine calls `mkdirSync` on `fs/promises` and swallows the TypeError | yes (revision 30's own defect) | revision 35 |
+| 26 | 40 | a bad `--stage` or `--date` creates the run directory before validation | yes | revision 35 |
+| 31 | 40 | no per-command flag validation; `replay --stage` runs a full replay | yes; the effect is harmless, the contract says 64 | revision 35 |
+| 61 | 40 | dead modules and exports (`trace/cost.js`, `verify/tool-urls.js`, `fileIdOf`, `toLayoutDocument`, `materialize`, `readByItem`, `readAlertEpisodes`) | yes; `tool-urls.js` becomes the extractor in revision 34 | revision 35 |
+| 29 | 35 | `tracer.finish` is unguarded in replay, distill and calibrate | yes | revision 35 |
+| 41 | 35 | `egress --format hosts` drops ports | yes | revision 35 |
+| 49 | 35 | two items with one identity pass the gate and collapse in the pass diff | yes | revision 34 |
+| 51 | 35 | the commit header pattern rejects `!` | yes | revision 35 |
+| 53 | 35 | stale caps and descriptions (`max(5)`, `max(8)`, slot `max(5)`, one-line sub-bullets, "contracts/*.json") | yes | revision 35 |
+| 19 | 30 | a reaction re-added after a stored retraction is never counted again | yes; needs a run between the removal and the re-add | revision 34 |
+| 33 | 30 | `check` accepts `http://` and probes `https://` | yes | revision 35 |
+| 62 | 25 | duplicated cost-record, usage and host helpers | yes | deferred (below) |
+
+**Decisions**: three revisions in the reviewer's order, each its own plan delta, tasks phase, gate and commit.
+Revision 33 closes the gate and the trust boundaries (everything the model writes is checked, nothing it wrote
+reaches the network or the store unchecked): the evidence values, the headline and the notice, the notice built
+from window objects, prose dates, the resolver's order, Slack ids before the model, the memory update masked, the
+guard on redirects and in every command, the failure counter. Revision 34 makes the brief say what happened
+(the timeout bound, the heartbeat wording, the horizons' size and date, unclassified notes, the accepted pass,
+tool-result URLs, outcomes once, standing from the computed change, the live query tool, the alerts reply
+fitting, the report's nesting, pattern cards in the tools server, the cost of a killed session and of the
+feedback stage, discovery per host, the worker pool, the run date, an unopened session, the degraded wording,
+the partial publication, calibration per date, duplicate identities, the resolver in a stage-only roll-up, the
+re-added reaction). Revision 35 is the pre-PR hygiene (the arm64 build, versions in the image, the CLI engine's
+directory, AGENTS.md, ports in the hosts format, stale caps and comments, dead code, replay retention, flag
+validation before the run directory, the trace flush, the log flags, the `check` scheme, `!` in the header
+pattern). The commit-message repair (#48) rewrites local history that was never pushed; it is the operator's
+decision and is proposed, not done. Every fix is verified by a test written first (constitution II); the
+security checklist is the reviewer's and gains items, never ticks.
+
+**Rejected or deferred**: #62, the shared cost-record, usage and host helpers, is a refactor with no behaviour
+change across nine modules; it is deferred to its own change after this branch lands, so the review's fixes
+stay readable one by one. The reviewer's suggestion for #15 to charge a killed session its whole grant is taken
+only for the run budget's accounting, with the cost marked as estimated, so the footer never presents an
+estimate as a measurement (revision 34). For #55, the dates the model writes are checked against the run's
+windows, but a month named without a day ("since August") is not a date token and stays unchecked; the number
+check already ignores date-shaped tokens by design, so no numeral is counted twice.

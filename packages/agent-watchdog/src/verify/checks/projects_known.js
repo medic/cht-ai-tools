@@ -39,6 +39,10 @@ const check = (ctx) => {
   if (ctx.mode === 'brief') {
     texts.push(['headline', ctx.draft.headline]);
     (ctx.draft.bullets || []).forEach((b, i) => texts.push([`bullets[${i}]`, b.text]));
+    // The notice is published with the bullets, so it names no other host either (revision 33).
+    if (ctx.draft.expected_load_notice) {
+      texts.push(['expected_load_notice', ctx.draft.expected_load_notice]);
+    }
   } else {
     const urls = new Set((ctx.discovery.projects || []).map((p) => p.url));
     if (!urls.has(ctx.findings.project_url)) {

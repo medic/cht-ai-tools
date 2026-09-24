@@ -4,6 +4,7 @@ const { findingsSchema } = require('../agent/output-schema');
 const { itemId } = require('../model/identity');
 const { buildItemLinks } = require('../links/build');
 const { dashboardRefFor } = require('../links/dashboard-ref');
+const { isAllowed } = require('../links/allowlist');
 const { sameMetric } = require('./metric-key');
 
 const CHECK_NAMES = [
@@ -14,8 +15,8 @@ const CHECK_NAMES = [
 ];
 
 const BRIEF_CHECK_NAMES = [
-  'schema', 'projects_known', 'numbers_match', 'links_built', 'links_resolve', 'bullet_count', 'bullet_length',
-  'thread_order', 'secrets_absent', 'personal_data_absent',
+  'schema', 'projects_known', 'numbers_match', 'dates_match', 'links_built', 'links_resolve', 'bullet_count',
+  'bullet_length', 'thread_order', 'secrets_absent', 'personal_data_absent',
 ];
 
 const MAX_ATTEMPTS = 3;
@@ -78,19 +79,44 @@ const normaliseItems = (findings, project, windows = [], discovery = null) => (f
   pass_history: [],
 }));
 
-const resolveAll = async ({ resolveLinks, items, discovery, grafanaUrl, extraUrls = [] }) => {
+/**
+ * Resolve the links a draft carries (FR-083, revision 33): every link code built (the items' dashboard links and the
+ * `extraUrls` the caller built), and a model-written reference only when it is on the link allow-list and, for a
+ * finding, appeared in a tool result of the run; the brief's items were accepted with theirs. Anything else is
+ * recorded as unresolved without a request, so no model-written URL is contacted before it is checked.
+ */
+const resolveAll = async ({
+  resolveLinks, items, discovery, grafanaUrl, extraUrls = [], allowlist = [], toolResultUrls = new Set(),
+  mode = 'findings',
+}) => {
   if (!resolveLinks) {
     return null;
   }
-  const urls = new Set([...items.flatMap((item) => item.reference_urls || []), ...extraUrls]);
+  const built = new Set(extraUrls);
   if (grafanaUrl) {
     for (const url of buildItemLinks(items, discovery, grafanaUrl).values()) {
       if (url) {
-        urls.add(url);
+        built.add(url);
       }
     }
   }
-  return resolveLinks([...urls]);
+  const seen = toolResultUrls instanceof Set ? toolResultUrls : new Set(toolResultUrls || []);
+  const requested = new Set(built);
+  const withheld = new Map();
+  for (const url of items.flatMap((item) => item.reference_urls || [])) {
+    if (built.has(url) || requested.has(url) || withheld.has(url)) {
+      continue;
+    }
+    const listed = isAllowed(url, allowlist);
+    if (listed && (mode === 'brief' || seen.has(url))) {
+      requested.add(url);
+    } else {
+      const why = listed ? 'not seen in a tool result this run' : 'not on the link allow-list';
+      withheld.set(url, { ok: false, status: null, reason: `not requested: ${why}` });
+    }
+  }
+  const results = await resolveLinks([...requested]);
+  return new Map([...(results instanceof Map ? results : new Map(Object.entries(results || {}))), ...withheld]);
 };
 
 const runChecks = (names, ctx) => names.map((name) => CHECKS[name].check(ctx));
@@ -118,7 +144,7 @@ const verifyFindings = async ({
     return { report: { subject: 'pass', subject_ref: subjectRef, attempt, checks, outcome: 'rejected' }, items: [] };
   }
   const items = normaliseItems(findings, project, windows, discovery);
-  const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl });
+  const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl, allowlist, toolResultUrls });
   const builtLinks = grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null;
   const ctx = { ...base, items, linkResults, builtLinks };
   const checks = runChecks(CHECK_NAMES, ctx);
@@ -136,7 +162,9 @@ const verifyBrief = async ({
   grafanaUrl = null, toolResultUrls = new Set(), layout = null, extraUrls = [], givenText = [], itemTexts = null,
 }) => {
   validateAttempt(attempt);
-  const linkResults = await resolveAll({ resolveLinks, items, discovery, grafanaUrl, extraUrls });
+  const linkResults = await resolveAll({
+    resolveLinks, items, discovery, grafanaUrl, extraUrls, allowlist, toolResultUrls, mode: 'brief',
+  });
   // `givenText` holds the run-wide texts of the roll-up prompt and `itemTexts` each item's own entry, keyed by id, so
   // a bullet may quote what its item was given and nothing of a neighbour's (FR-016, revision 23).
   const ctx = {

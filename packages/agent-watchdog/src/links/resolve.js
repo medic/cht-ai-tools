@@ -3,6 +3,7 @@
 // login), every other link with HEAD then GET, accepting 2xx and 3xx unless the redirect leaves the allow-list.
 const { isAllowed, hostOf } = require('./allowlist');
 const { flatPanels } = require('../verify/metric-key');
+const { EgressRefusedError } = require('../net/egress');
 
 const RETRY_WITH_GET = new Set([405, 501]);
 
@@ -85,6 +86,10 @@ const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allow
       }
       return { ok: false, status: response.status, reason: `HTTP ${response.status}` };
     } catch (error) {
+      // A destination the egress guard refused is a failure of the run, never a broken link (FR-083, revision 33).
+      if (error instanceof EgressRefusedError) {
+        throw error;
+      }
       const timedOut = error && error.name === 'TimeoutError';
       const reason = timedOut ? `timeout after ${timeoutMs}ms` : (error && error.message) || 'failed';
       return { ok: false, status: null, reason };

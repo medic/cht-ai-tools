@@ -130,3 +130,18 @@ describe('links/resolve: alert-list links resolve against the collected rules an
     expect([...results.values()][0]).to.include({ ok: false });
   });
 });
+
+describe('links/resolve: an egress refusal is not a broken link (FR-083, revision 33)', () => {
+  const { createResolver } = require('../../src/links/resolve');
+  const { EgressRefusedError } = require('../../src/net/egress');
+  const { baseContext } = require('../verify/helpers/context');
+
+  it('rethrows the guard\'s refusal instead of recording a reason', async () => {
+    const ctx = baseContext();
+    const fetch = sinon.stub().rejects(new EgressRefusedError({ host: 'docs.communityhealthtoolkit.org', port: 443 }));
+    const resolve = createResolver({
+      fetch, timeoutMs: 50, discovery: ctx.discovery, grafanaUrl: 'https://watchdog.example.org', allowlist: ctx.allowlist,
+    });
+    await expect(resolve(['https://docs.communityhealthtoolkit.org/x/'])).to.be.rejectedWith(EgressRefusedError);
+  });
+});

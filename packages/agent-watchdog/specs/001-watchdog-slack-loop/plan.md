@@ -836,3 +836,29 @@ logout`). A run with `AGENT_WATCHDOG_ENGINE=cli` and no key is the CLI engine's 
 planned: a `CLAUDE_CODE_OAUTH_TOKEN` path for the SDK engine (the CLI engine already has login mode, and a
 subscription token is a person's, not a service's); mounting the host's `~/.claude` (it would expose the
 contributor's whole configuration and sessions to the container).
+
+### Revision 33 delta: the gate holds the whole surface (FR-016, FR-029, FR-044, FR-073, FR-083)
+
+Planned on 2026-09-24 from the branch review (research.md R-38, findings #42, #2, #23, #55, #35, #46, #7,
+#34, #3), the first of three revisions in the reviewer's order. The gate checked the bullets and trusted the
+rest: an item's evidence seeded the numbers its prose could quote, the headline and the expected-load notice
+went to Slack with no number, link or host check, and the notice itself was blank on every window day because
+the run handed the roll-up window ids where it read window objects. Dates the model wrote were checked nowhere.
+And two trust boundaries leaked: the resolver fetched model-written URLs before the allow-list and tool-result
+checks ran, and a Slack mention inside a note reached the model and the memory file verbatim. This revision:
+`numbers_match` checks every evidence value against the computed values of its metric and the collected values
+of its named window, and no longer seeds prose from evidence; the headline and the notice are checked for
+numbers (against every item's values), URLs, length and hosts; the notice is built at roll-up time from the
+window objects of the run directory (so a stage-only roll-up has it too); `dates_match` checks the dates the
+model writes (ISO and day-month forms) against the run's windows, exempting dates it was given; `resolveAll`
+resolves only code-built links and model links that are allow-listed and appeared in a tool result, and an
+egress refusal propagates (exit 69) instead of reading as a broken link; Slack ids are masked in every note
+before it reaches a prompt (analysis feedback block, parse, review) and `personal_data_absent` refuses them on
+the published surface; the memory update is masked of people, e-mail addresses and phone numbers before it is
+stored, and the check's comment says what code does; the egress guard follows a redirect only to a listed
+destination and is installed in tools-server, calibrate, distill and replay; a failed query of any status counts
+toward consecutive failures and only a success resets them. **I** no dependency; **II** tests first for every
+change; **III** the notice and the checks are code; **IV** nothing new stored; **V** unchanged; **VI** the gate
+refuses, the masking flags; **VII** prompts unchanged; **VIII** unchanged. Result: PASS. Not planned here:
+revisions 34 (the brief says what happened) and 35 (pre-PR hygiene), listed in R-38 with each finding's
+disposition; the commit-history repair, which is the operator's call.

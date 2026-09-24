@@ -191,6 +191,28 @@ describe('collect/grafana', () => {
       expect(third.message).to.match(/3 consecutive/);
     });
 
+    it('counts a failed query of any status as consecutive; only a success resets (revision 33)', async () => {
+      const statuses = [422, 500, 400];
+      const fetch = sinon.stub().callsFake(async () => jsonResponse({ message: 'refused' }, statuses.shift() || 200));
+      const client = clientWith(fetch, { retryDelayMs: 0, logger: warnings() });
+      await expect(range(client)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 422);
+      await expect(range(client)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 500);
+      const third = await range(client).catch((e) => e);
+      expect(third).to.be.instanceOf(codes.ExitError);
+      expect(third.code).to.equal(codes.UNAVAILABLE);
+      expect(third.message).to.match(/3 consecutive query failures, last status 400/);
+      const mixed = [422, 200, 422, 422, 200];
+      const flaky = sinon.stub().callsFake(async () => (mixed.shift() === 200
+        ? ok()
+        : jsonResponse({ message: 'refused' }, 422)));
+      const second = clientWith(flaky, { retryDelayMs: 0, logger: warnings() });
+      await expect(range(second)).to.be.rejectedWith(HttpError);
+      expect(await range(second)).to.deep.equal([]);
+      await expect(range(second)).to.be.rejectedWith(HttpError);
+      await expect(range(second)).to.be.rejectedWith(HttpError);
+      expect(await range(second), 'two failures then a success is not unreachable').to.deep.equal([]);
+    });
+
     it('retries a 502, 503 or 504 from the proxy once and reports the status when it persists', async () => {
       const flaky = sinon.stub();
       flaky.onCall(0).resolves(jsonResponse({ message: 'Bad Gateway' }, 502));

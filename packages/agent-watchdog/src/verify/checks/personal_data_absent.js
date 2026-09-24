@@ -1,5 +1,6 @@
 'use strict';
 const { EMAIL_PATTERN, phoneMatches } = require('../patterns');
+const { SLACK_MENTION, SLACK_USER_ID } = require('../../corpus/scrub');
 const { walkStrings } = require('../walk');
 const { allowedValues, givenNumerals } = require('./numbers_match');
 const { coveredIds } = require('../../rollup/layout');
@@ -34,7 +35,9 @@ const computedIntegersFor = (ctx, path) => {
   if (!item) {
     return new Set();
   }
-  return new Set(allowedValues(item, ctx).map((a) => String(Math.round(Number(a.value)))));
+  // The item's evidence counts here: `numbers_match` holds every evidence value to the computed data (revision 33).
+  const allowed = allowedValues(item, ctx, { includeEvidence: true });
+  return new Set(allowed.map((a) => String(Math.round(Number(a.value)))));
 };
 
 /**
@@ -60,6 +63,14 @@ const phoneNumbersIn = (text, computed, given = new Set()) => phoneMatches(text)
   .map((match) => match.replace(/\D/g, ''))
   .filter((digits) => !computed.has(digits) && !given.has(digits));
 
+/** A Slack mention or a bare user id: a person's identifier, which never reaches a post (FR-029, revision 33). */
+const slackIdIn = (text) => {
+  SLACK_MENTION.lastIndex = 0;
+  const found = SLACK_MENTION.test(text) || SLACK_USER_ID.test(text);
+  SLACK_MENTION.lastIndex = 0;
+  return found;
+};
+
 // Identifier fields hold hashes and ids the code derived; an all-digit hex id is not a phone number.
 const ID_FIELD = /\.(candidate_ids?|item_id|thread_order|dashboard_uid|session_id|pattern_card)(\[\d+\])?$/;
 const HEX_ID = /^[0-9a-f]{12,64}$/;
@@ -73,8 +84,9 @@ const publishedSurface = (draft) => ({
 const check = (ctx) => {
   const reasons = [];
   const exempt = new Set((ctx.discovery && ctx.discovery.projects || []).map((p) => p.host));
-  // A brief draft is checked on its published surface only: proposals and the memory update never reach
-  // Slack, and code masks and flags identifiers in them instead of rejecting the brief (FR-033, US4 scenario 3).
+  // A brief draft is checked on its published surface only: proposals and the memory update never reach Slack, and
+  // code masks and flags identifiers in them instead of rejecting the brief (FR-033, US4 scenario 3; the memory
+  // update is masked of people and addresses by the roll-up stage before it is stored, FR-044, revision 33).
   const document = ctx.mode === 'brief' ? publishedSurface(ctx.draft) : ctx.findings;
   walkStrings(document, (text, path) => {
     if (exempt.has(text) || ID_FIELD.test(path) || HEX_ID.test(text)) {
@@ -82,6 +94,9 @@ const check = (ctx) => {
     }
     if (EMAIL_PATTERN.test(text)) {
       reasons.push(`e-mail address at ${path}`);
+    }
+    if (slackIdIn(text)) {
+      reasons.push(`Slack user id at ${path}`);
     }
     // The reason names the digits, so a revision can find what to remove (revision 25).
     for (const digits of phoneNumbersIn(text, computedIntegersFor(ctx, path), givenIntegersFor(ctx, path))) {

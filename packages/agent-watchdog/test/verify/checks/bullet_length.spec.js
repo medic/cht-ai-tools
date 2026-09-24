@@ -82,3 +82,25 @@ describe('verify/checks/bullet_length: the budget after the project code writes 
     expect(check(ctx).status).to.equal('pass');
   });
 });
+
+describe('verify/checks/bullet_length: the headline and the notice carry no link (FR-016, revision 33)', () => {
+  const { check } = require('../../../src/verify/checks/bullet_length');
+  const { briefContext } = require('../helpers/context');
+
+  it('refuses a URL in the headline or the notice, and holds the notice to two lines of 120', () => {
+    const headline = briefContext();
+    headline.draft.headline = 'See https://watchdog.example.org/d/abc for the backlog';
+    expect(check(headline).reasons)
+      .to.deep.equal(['headline contains a URL; links belong in the footer and thread replies']);
+    const notice = briefContext();
+    notice.draft.expected_load_notice = 'Month-end: https://watchdog.example.org/d/abc';
+    expect(check(notice).reasons)
+      .to.deep.equal(['expected_load_notice contains a URL; links belong in the footer and thread replies']);
+    const long = briefContext();
+    long.draft.expected_load_notice = 'one\ntwo\nthree';
+    expect(check(long).reasons[0]).to.match(/^expected_load_notice has 3 lines/);
+    const fine = briefContext();
+    fine.draft.expected_load_notice = 'Expected-load window active: month-end reporting.';
+    expect(check(fine).status).to.equal('pass');
+  });
+});

@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
+const { withEgressGuard } = require('../../net/egress');
 const { normaliseHost } = require('../../config/policy');
 const { ensureDataLayout, dataPaths } = require('../../store/run-dir');
 const atomic = require('../../store/atomic');
@@ -154,6 +155,14 @@ module.exports = async function calibrate({
   flags = {}, env = process.env, stdout = process.stdout, logger, deps = {},
 }) {
   const { config, policy } = loadConfig({ env, flags, command: 'calibrate' });
+  // The summary call and the trace flush leave this process, so the command runs under the egress guard
+  // (FR-083, revision 33).
+  return withEgressGuard({ config, logger, deps }, (guarded) => calibrateLoaded({
+    flags, env, stdout, logger, deps: guarded, config, policy,
+  }));
+};
+
+const calibrateLoaded = async ({ flags, env, stdout, logger, deps, config, policy }) => {
   const now = deps.now ? deps.now() : new Date();
   const week = resolveWeek(flags, now);
   const projects = (flags.project || []).map(normaliseHost);

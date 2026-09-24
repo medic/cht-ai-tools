@@ -6,6 +6,7 @@ const path = require('node:path');
 const { z } = require('zod');
 const { PACKAGE_PATHS } = require('../config/schema');
 const { wrapUntrusted } = require('../agent/prompt-assembly');
+const { maskPeople } = require('../corpus/scrub');
 
 const DAY_MS = 86400000;
 
@@ -156,11 +157,13 @@ const parseNoteWithModel = async ({
   if (deterministic.horizon || !engine) {
     return { ...deterministic, item_reference: null, source: 'deterministic' };
   }
+  // People are masked before any note reaches the model (FR-029, revision 33); the dates and figures stay.
+  const earlier = earlierNotes.map((text_, i) => `${i + 1}. ${maskPeople(text_)}`).join('\n');
   const context = earlierNotes.length
-    ? 'Earlier notes on the same item, in thread order:\n'
-      + `${wrapUntrusted('earlier-notes', earlierNotes.map((earlier, i) => `${i + 1}. ${earlier}`).join('\n'))}\n\n`
+    ? `Earlier notes on the same item, in thread order:\n${wrapUntrusted('earlier-notes', earlier)}\n\n`
     : '';
-  const userPrompt = `Note date: ${noteDate}\n\n${context}The note to read:\n${wrapUntrusted('slack-note', text)}`;
+  const note = wrapUntrusted('slack-note', maskPeople(text));
+  const userPrompt = `Note date: ${noteDate}\n\n${context}The note to read:\n${note}`;
   try {
     const turn = await engine.singleTurn({
       systemPrompt: [promptText(definition)],

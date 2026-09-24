@@ -101,6 +101,15 @@ describe('agent/prompt-assembly', () => {
       expect(text).to.not.include('{{');
     });
 
+    it('masks Slack mentions and bare user ids inside note text before it reaches the model (revision 33)', () => {
+      const text = assembly.buildPassPrompt({
+        definition, pass: 1, project, candidates, changes,
+        feedback: [{ note: 'ask <@U024BE7LH> or U024BE7LH about the migration', author: 'U024BE7LH' }],
+      });
+      expect(text).to.include('ask [person] or [person] about the migration');
+      expect(text).to.not.include('U024BE7LH');
+    });
+
     it('builds a review pass with the previous items and unselected candidates', () => {
       const text = assembly.buildPassPrompt({
         definition, pass: 2, project, candidates, changes,

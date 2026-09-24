@@ -206,3 +206,27 @@ describe('cli/commands/calibrate: open proposals in the weekly report (FR-063)',
     expect(markdown).to.match(/2026-09-10-prompt-say-which-window-moved \| prompt \| 8/);
   });
 });
+
+describe('cli/commands/calibrate: the egress guard (FR-083, revision 33)', function () {
+  this.timeout(30000);
+  let dataDir;
+  before(async () => {
+    dataDir = tempDir();
+    await buildCalibrationHistory({ dataDir, days: 30 });
+  });
+  after(() => removeDir(dataDir));
+
+  it('runs under the egress guard on the global fetch and restores it afterwards', async () => {
+    const before = globalThis.fetch;
+    let seen = null;
+    const tracer = fakeTracer();
+    tracer.start = sinon.stub().callsFake(async () => {
+      seen = globalThis.fetch.egressGuard === true;
+      return { traceId: 't1' };
+    });
+    const t = argsFor(dataDir, { flags: { week: WEEK }, deps: { tracer } });
+    await calibrate(t.args);
+    expect(seen).to.equal(true);
+    expect(globalThis.fetch).to.equal(before);
+  });
+});

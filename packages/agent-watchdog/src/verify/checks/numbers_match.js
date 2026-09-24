@@ -1,6 +1,9 @@
 'use strict';
 // Every number the model wrote in prose must equal a computed value under the display formatter; numerals inside
 // code spans are exempt, but each span must be a collected expression or metric (data-model.md "Number matching").
+// Since revision 33 the evidence the model attaches is held to the same rule (a value must be computed for the
+// metric or collected in the named window, and never widens what the prose may quote), and a brief's headline and
+// expected-load notice are checked as its bullets are.
 const {
   formatValue, extractNumbers, extractNumbersEverywhere, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS,
 } = require('../format');
@@ -38,8 +41,14 @@ const changeValues = (change) => [
   { value: ratio(change.current_value, change.trailing_mean), unit: 'x' },
 ];
 
-const allowedValues = (item, ctx) => {
-  const allowed = (item.evidence || []).map((e) => ({ value: e.value, unit: e.unit }));
+/**
+ * The values the item may quote: its metric's Computed Change, and the observed value and threshold of every
+ * candidate it cites. In a finding the item's own evidence is not among them (revision 33): evidence is checked
+ * against these, so an invented evidence value cannot license the same numeral in prose. In a brief the items were
+ * accepted with their evidence verified, so it counts as computed data there.
+ */
+const allowedValues = (item, ctx, { includeEvidence = ctx.mode === 'brief' } = {}) => {
+  const allowed = includeEvidence ? (item.evidence || []).map((e) => ({ value: e.value, unit: e.unit })) : [];
   for (const change of ctx.changes || []) {
     if (change.project_url === item.project_url && sameMetric(change.metric, item.metric)) {
       allowed.push(...changeValues(change));
@@ -57,6 +66,53 @@ const allowedValues = (item, ctx) => {
 };
 
 const close = (a, b, decimals) => Math.abs(a - b) <= 0.5 * Math.pow(10, -decimals) + 1e-9;
+
+const decimalsOf = (value) => {
+  const text = String(value);
+  const dot = text.indexOf('.');
+  return dot === -1 ? 0 : text.length - dot - 1;
+};
+
+/** The evidence values of every candidate the item cites: what the analysis was handed for this metric. */
+const citedEvidenceValues = (item, ctx) => {
+  const referenced = new Set(item.candidate_ids || []);
+  return (ctx.candidates || [])
+    .filter((candidate) => referenced.has(candidate.candidate_id))
+    .flatMap((candidate) => (candidate.evidence || []).map((e) => Number(e.value)))
+    .filter(Number.isFinite);
+};
+
+/** The collected samples of one window of the item's metric. */
+const sampleValues = (item, window, ctx) => (ctx.windows || [])
+  .filter((w) => w.project_url === item.project_url && sameMetric(w.metric, item.metric) && w.window === window)
+  .flatMap((w) => (w.values || []).map((pair) => Number(Array.isArray(pair) ? pair[1] : pair)))
+  .filter(Number.isFinite);
+
+/**
+ * Every `{ window, value }` the model attached must equal, within its own decimals, a computed value of the metric or
+ * a collected sample of the named window (FR-016, revision 33). A non-numeric value is the schema's failure.
+ */
+const evidenceReasons = (item, index, ctx) => {
+  const computed = [
+    ...allowedValues(item, ctx, { includeEvidence: false }).map((a) => Number(a.value)).filter(Number.isFinite),
+    ...citedEvidenceValues(item, ctx),
+  ];
+  const reasons = [];
+  (item.evidence || []).forEach((evidence, j) => {
+    const value = Number(evidence && evidence.value);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const pool = [...computed, ...sampleValues(item, evidence.window, ctx)];
+    if (!pool.some((v) => close(value, v, decimalsOf(evidence.value)))) {
+      reasons.push(
+        `items[${index}].evidence[${j}] value ${evidence.value} for window ${evidence.window} matches no computed or `
+        + 'collected value',
+      );
+    }
+  });
+  return reasons;
+};
 
 const matches = (token, allowed) => {
   const { numeric, suffix, decimals } = parseToken(token);
@@ -296,6 +352,16 @@ const check = (ctx) => {
   const ranges = rangeTokens(ctx);
   if (ctx.mode === 'brief') {
     const byId = new Map((ctx.items || []).map((item) => [item.item_id, item]));
+    // The headline and the notice speak for the whole brief (revision 33): they may quote any item's values and any
+    // item's given entry, and nothing else.
+    const ownTexts = ctx.itemTexts && typeof ctx.itemTexts.values === 'function' ? [...ctx.itemTexts.values()] : [];
+    const everyGiven = new Set([...runGiven, ...givenNumerals(ownTexts)]);
+    const everyAllowed = (ctx.items || []).flatMap((item) => allowedValues(item, ctx));
+    checkText('headline', ctx.draft.headline, everyAllowed, spanForms, reasons, ctx, everyGiven, ranges);
+    if (ctx.draft.expected_load_notice) {
+      const notice = ctx.draft.expected_load_notice;
+      checkText('expected_load_notice', notice, everyAllowed, spanForms, reasons, ctx, everyGiven, ranges);
+    }
     (ctx.draft.bullets || []).forEach((bullet, i) => {
       // A line covers every item of its project (revision 28): it may quote any of their values and their prompt
       // entries, plus the run-wide counts, and nothing of a neighbour's.
@@ -312,6 +378,7 @@ const check = (ctx) => {
   } else {
     (ctx.items || []).forEach((item, i) => {
       const allowed = allowedValues(item, ctx);
+      reasons.push(...evidenceReasons(item, i, ctx));
       checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx, runGiven, ranges);
       checkText(
         `items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx, runGiven, ranges,
@@ -322,6 +389,6 @@ const check = (ctx) => {
 };
 
 module.exports = {
-  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, derivedValues, rangeTokens,
-  roundsGiven, levelUnitOf, WINDOW_NAME_TOKENS,
+  name: NAME, check, allowedValues, evidenceReasons, matches, stripRunIdentifiers, givenNumerals, bareValue,
+  derivedValues, rangeTokens, roundsGiven, levelUnitOf, WINDOW_NAME_TOKENS,
 };

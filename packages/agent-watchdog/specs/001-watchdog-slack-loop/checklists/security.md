@@ -90,6 +90,10 @@
 - [ ] CHK049 - Are the reference manifests under `deploy/` declared as reference only, with the owning repository named and the test that keeps them in step with the code, so two sources of truth cannot diverge silently? [Dependency, contracts/container.md]
 - [ ] CHK050 - Is the `check` command's contact with an operator-given CHT host reconciled with FR-083 (exempt from the in-process guard, refused by the platform policy inside the container)? [Consistency, Spec §FR-048, §FR-083]
 - [ ] CHK051 - For the local Compose setup's login mode: is the login volume's content classified as a secret (a subscription OAuth token), with its lifetime, its clearing (`auth logout`) and the rule that it is never a bind mount into the repository or the image stated as requirements, and is it stated that the scheduled deployment never carries a login? [Completeness, Spec §FR-086, contracts/container.md]
+- [ ] CHK052 - Is it stated that the gate's link resolver requests only code-built links and model-written references already on the allow-list and seen in a tool result, so no model-written URL is contacted before it is checked, and that an egress refusal during resolution fails the run? [Completeness, Spec §FR-083, §FR-016]
+- [ ] CHK053 - Is the memory update classified with proposals as text that leaves the model and returns to it, with the masking of people, e-mail addresses and phone numbers before storage stated as a requirement and the masking logged? [Consistency, Spec §FR-044, §FR-033]
+- [ ] CHK054 - Is every place a Slack note reaches a prompt enumerated (analysis feedback block, horizon parse, review, roll-up feedback text), with the masking of Slack user identifiers required in each and refused by the gate on the published surface? [Coverage, Spec §FR-029, §FR-044]
+- [ ] CHK055 - Does the egress requirement cover redirects (a listed host answering a redirect to an unlisted one) and every command that can open a connection, not only the scheduled `run`? [Coverage, Spec §FR-083, contracts/container.md]
 
 ## Notes
 

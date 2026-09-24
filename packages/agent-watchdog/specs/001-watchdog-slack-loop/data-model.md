@@ -347,6 +347,9 @@ Check names, fixed in code: `schema`, `projects_known`, `metrics_known`, `candid
 `bullet_count` checks top-level bullets (at most five) and sub-bullets per bullet (at most eight);
 `bullet_length` checks two lines of 120 characters per bullet and one line per sub-bullet, and that
 every body item of the layout has exactly one bullet or sub-bullet (FR-015, FR-069).
+Since revision 33 the brief checks cover the headline and the expected-load notice as they cover a
+bullet (numbers against every item's computed values, links, length, hosts, personal data), and
+`personal_data_absent` refuses a Slack user id or mention anywhere on the published surface.
 
 ### Brief
 
@@ -642,6 +645,21 @@ because they read one spelling only.
   key ends in `_seconds` has values in seconds; the range literals of collected expressions (`24h`)
   join the identifier sets; and the brief's gate receives the run's candidates, so a cited
   candidate's observed and threshold values count in a bullet.
+  Evidence (revision 33): every `{ window, value }` the model attaches to an item must itself equal,
+  within the value's own decimals, a computed value of that metric (the Computed Change's levels,
+  baselines and rates, a cited candidate's observed value and threshold, a candidate's evidence) or a
+  value in the collected series of the named window; evidence never widens the values the prose may
+  quote, so an invented figure has no back door. The headline is checked against the union of every
+  item's allowed values and every item's given entry; the notice against the notice the run gave.
+- Date matching (FR-016, revision 33): `dates_match` extracts every date the model writes (ISO
+  `YYYY-MM-DD`, `1 October`, `October 1`, with or without a year; a day-month form without a year
+  takes the year that places it at or before the run's end) from `why_now`, `suggested_check` and the
+  evidence notes of a finding, and from the headline, bullets and expected-load notice of a brief, and
+  requires each to fall within the run's windows: for a finding the span of its metric's collected
+  windows, for a brief the span from the trailing window's start to the current window's end. A date
+  the model was given (`givenText`, an item's own entry) is exempt, so a horizon the notice names may
+  be repeated. The `dashboard_ref` range is still held to the same span. The former check on evidence
+  `start`/`end` fields is gone: the findings schema never admitted them.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,

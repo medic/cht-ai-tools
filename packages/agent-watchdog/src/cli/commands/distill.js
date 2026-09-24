@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
+const { withEgressGuard } = require('../../net/egress');
 const { ensureDataLayout } = require('../../store/run-dir');
 const { writeResult } = require('../streams');
 const { createTracer } = require('../../trace/langfuse');
@@ -27,6 +28,14 @@ module.exports = async function distillCommand({
   flags = {}, env = process.env, stdout = process.stdout, logger, deps = {},
 }) {
   const { config } = loadConfig({ env, flags, command: 'distill' });
+  // The distillation calls and the trace flush leave this process, so the command runs under the egress guard
+  // (FR-083, revision 33).
+  return withEgressGuard({ config, logger, deps }, (guarded) => distillLoaded({
+    flags, env, stdout, logger, deps: guarded, config,
+  }));
+};
+
+const distillLoaded = async ({ flags, env, stdout, logger, deps, config }) => {
   const now = deps.now ? deps.now() : new Date();
   const date = now.toISOString().slice(0, 10);
   const runId = `distill-${date}`;

@@ -150,4 +150,21 @@ describe('cli/commands/tools-server', () => {
       expect(options.tools.map((t) => t.name).sort()).to.deep.equal(['get_sources', 'search_docs']);
     });
   });
+  describe('the egress guard (FR-083, revision 33)', () => {
+    it('serves under the egress guard on the global fetch and restores it afterwards', async () => {
+      const before = globalThis.fetch;
+      let seen = null;
+      const serve = async () => {
+        seen = { guarded: globalThis.fetch.egressGuard === true, same: globalThis.fetch === before };
+      };
+      const env = { AGENT_WATCHDOG_CONFIG_DIR: DEFAULTS_DIR };
+      const code = await toolsServer({
+        command: 'tools-server', flags: { 'run-dir': runDir.root, project: [project.slug] }, positionals: [], env,
+        logger, deps: { serve },
+      });
+      expect(code).to.equal(0);
+      expect(seen).to.deep.equal({ guarded: true, same: false });
+      expect(globalThis.fetch).to.equal(before);
+    });
+  });
 });

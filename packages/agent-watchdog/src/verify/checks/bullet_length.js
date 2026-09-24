@@ -25,20 +25,30 @@ const lineReasons = (label, text, prefix = '') => {
   return reasons;
 };
 
+const urlReasons = (label, text) => {
+  URL_PATTERN.lastIndex = 0;
+  const found = URL_PATTERN.test(text || '');
+  URL_PATTERN.lastIndex = 0;
+  return found ? [`${label} contains a URL; links belong in the footer and thread replies`] : [];
+};
+
 const check = (ctx) => {
   if (ctx.mode !== 'brief') {
     return { name: NAME, status: 'pass', reasons: ['not applicable to findings'] };
   }
   const reasons = [];
-  // The headline is shown whole in a bold section (FR-019, revision 28), so its length is held here, not by Slack.
+  // The headline is shown whole in a bold section (FR-019, revision 28), so its length is held here, not by Slack;
+  // it and the expected-load notice carry no link either (revision 33).
   reasons.push(...lineReasons('headline', ctx.draft.headline));
+  reasons.push(...urlReasons('headline', ctx.draft.headline));
+  if (ctx.draft.expected_load_notice) {
+    reasons.push(...lineReasons('expected_load_notice', ctx.draft.expected_load_notice));
+    reasons.push(...urlReasons('expected_load_notice', ctx.draft.expected_load_notice));
+  }
   const prefixes = childPrefixes(ctx.layout);
   (ctx.draft.bullets || []).forEach((bullet, i) => {
     reasons.push(...lineReasons(`bullets[${i}]`, bullet.text, prefixes.get(bullet.item_id) || ''));
-    if (URL_PATTERN.test(bullet.text || '')) {
-      reasons.push(`bullets[${i}] contains a URL; links belong in the footer and thread replies`);
-    }
-    URL_PATTERN.lastIndex = 0;
+    reasons.push(...urlReasons(`bullets[${i}]`, bullet.text));
   });
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };

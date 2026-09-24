@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
+const { withEgressGuard } = require('../../net/egress');
 const { createWatchdogTools } = require('../../agent/tools/watchdog-tools');
 const { createRecordedTools } = require('../../agent/tools/recorded-tools');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
@@ -118,13 +119,17 @@ module.exports = async function toolsServer({ flags = {}, env = process.env, log
   }
   const { config } = loadConfig({ env, flags, command: 'tools-server', withPolicy: false });
   const log = logger.child ? logger.child({ command: 'tools-server', server, project: slug }) : logger;
-  const tools = await buildTools({
-    runRoot, dataDir: config.storage.dataDir, slug, server, replay: Boolean(flags.replay), config, logger: log, deps,
+  // The live query tool reaches Grafana from this process, so it serves under the egress guard (FR-083, revision 33).
+  return withEgressGuard({ config, logger: log, deps }, async (guarded) => {
+    const tools = await buildTools({
+      runRoot, dataDir: config.storage.dataDir, slug, server, replay: Boolean(flags.replay), config, logger: log,
+      deps: guarded,
+    });
+    log.info('tools.serving', { tools: tools.map((t) => t.name), replay: Boolean(flags.replay) });
+    await (guarded.serve || serveStdio)({ name: server, tools });
+    log.info('tools.closed', {});
+    return codes.OK;
   });
-  log.info('tools.serving', { tools: tools.map((t) => t.name), replay: Boolean(flags.replay) });
-  await (deps.serve || serveStdio)({ name: server, tools });
-  log.info('tools.closed', {});
-  return codes.OK;
 };
 
 module.exports.buildTools = buildTools;

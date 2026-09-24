@@ -428,6 +428,21 @@ describe('cli/commands/replay', function () {
     expect(created[1].engineName).to.equal('cli');
   });
 
+  it('runs under the egress guard on the global fetch and restores it afterwards (FR-083, revision 33)', async () => {
+    const before = globalThis.fetch;
+    let seen = null;
+    const tracer = fakeTracer();
+    tracer.start = sinon.stub().callsFake(async () => {
+      seen = globalThis.fetch.egressGuard === true;
+      return { traceId: 't1' };
+    });
+    const flags = { date: '2026-09-18', label: 'guarded' };
+    const r = await invoke({ dataDir, flags, deps: { engine: findingsEngine(), tracer } });
+    expect(r.error, r.error && r.error.stack).to.equal(undefined);
+    expect(seen).to.equal(true);
+    expect(globalThis.fetch).to.equal(before);
+  });
+
   describe('exit codes', () => {
     it('64 without a target, with --date and --from together, with --from alone, or a bad --prompts', async () => {
       const cases = [

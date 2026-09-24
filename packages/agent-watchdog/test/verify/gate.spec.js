@@ -248,3 +248,52 @@ describe('verify/gate: a relation to the item\'s own metric is dropped, not reje
     expect(relates.status).to.equal('pass');
   });
 });
+
+describe('verify/gate: what the resolver may request (FR-083, revision 33)', () => {
+  const { EgressRefusedError } = require('../../src/net/egress');
+  const okAll = () => sinon.stub().callsFake(async (urls) => new Map(
+    urls.map((u) => [u, { ok: true, status: 200, reason: 'ok' }]),
+  ));
+
+  it('sends the resolver only built links and model references allow-listed and seen in a tool result', async () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].reference_urls = [
+      'https://docs.communityhealthtoolkit.org/hosting/monitoring/',
+      'https://docs.communityhealthtoolkit.org/never-fetched/',
+      'https://evil.example.org/exfiltrate',
+    ];
+    const resolveLinks = okAll();
+    const { report } = await verifyFindings(args(ctx, { resolveLinks, grafanaUrl: 'https://watchdog.example.org' }));
+    const urls = resolveLinks.firstCall.args[0];
+    expect(urls).to.include('https://docs.communityhealthtoolkit.org/hosting/monitoring/');
+    expect(urls.some((u) => u.startsWith('https://watchdog.example.org/d/'))).to.equal(true);
+    expect(urls).to.not.include('https://docs.communityhealthtoolkit.org/never-fetched/');
+    expect(urls).to.not.include('https://evil.example.org/exfiltrate');
+    const resolve = report.checks.find((c) => c.name === 'links_resolve');
+    expect(resolve.status).to.equal('fail');
+    expect(resolve.reasons.join(' ')).to.include('never-fetched');
+    expect(resolve.reasons.join(' ')).to.include('not requested');
+  });
+
+  it('resolves the accepted items\' allow-listed references for a brief, which has no tool results', async () => {
+    const ctx = briefContext();
+    ctx.items[0].reference_urls = ['https://docs.communityhealthtoolkit.org/hosting/monitoring/'];
+    const resolveLinks = okAll();
+    await verifyBrief({
+      draft: ctx.draft, items: ctx.items, discovery: ctx.discovery, changes: ctx.changes, candidates: ctx.candidates,
+      runId: 'r', allowlist: ctx.allowlist, resolveLinks,
+      extraUrls: ['https://watchdog.example.org/alerting/list?search=x'],
+    });
+    const urls = resolveLinks.firstCall.args[0];
+    expect(urls).to.include('https://docs.communityhealthtoolkit.org/hosting/monitoring/');
+    expect(urls).to.include('https://watchdog.example.org/alerting/list?search=x');
+  });
+
+  it('lets an egress refusal from the resolver fail the run instead of reading as a broken link', async () => {
+    const ctx = baseContext();
+    ctx.findings.items[0].reference_urls = ['https://docs.communityhealthtoolkit.org/hosting/monitoring/'];
+    const refused = new EgressRefusedError({ host: 'docs.communityhealthtoolkit.org', port: 443 });
+    const resolveLinks = sinon.stub().rejects(refused);
+    await expect(verifyFindings(args(ctx, { resolveLinks }))).to.be.rejectedWith(EgressRefusedError);
+  });
+});

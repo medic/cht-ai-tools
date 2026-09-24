@@ -318,6 +318,68 @@ describe('cli/stages/rollup', () => {
     expect(runDir.exists('rollup/prompt.md')).to.equal(true);
   });
 
+  it('builds the expected-load notice from the run directory\'s window objects, in a stage-only run too', async () => {
+    const discovery = makeDiscovery();
+    discovery.projects[0].expected_load_windows = [{
+      id: 'month-end', kind: 'month_end', days_before: 2, days_after: 2, timezone: 'Africa/Nairobi',
+      note: 'Month-end reporting; volumes rise across most projects.', cycle_days: 30, scope: 'alpha.example.org',
+    }];
+    await runDir.writeJson('discovery.json', discovery);
+    await runDir.writeJson('alpha-example-org/changes.json', [{
+      project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', current_value: 912,
+      previous_day_value: 300, expected_load_window_id: 'month-end',
+    }]);
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    // No `activeWindows` on the context: the stage reads the run directory, as `run --stage rollup` must.
+    await stage.run(ctx);
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.expected_load_notice)
+      .to.equal('Expected-load window active: Month-end reporting; volumes rise across most projects.');
+    const prompt = ctx.engine.session.turn.firstCall.args[0];
+    expect(prompt).to.include('Month-end reporting; volumes rise across most projects.');
+    const gateArgs = ctx.gate.verifyBrief.firstCall.args[0];
+    expect(gateArgs.givenText.some((t) => t.includes('Month-end reporting'))).to.equal(true);
+  });
+
+  it('masks people and addresses in the memory update before storing it (FR-044, revision 33)', async () => {
+    const item = makeItem();
+    const replaceWith = 'Call <@U024BE7LH> or U024BE7LH at +254 712 345 678 or ops@example.org about '
+      + 'alpha.example.org.';
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: replaceWith }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    await stage.run(ctx);
+    const memory = fs.readFileSync(path.join(dataDir, 'memory', 'memory.md'), 'utf8');
+    expect(memory).to.equal('Call [person] or [person] at [address] or [address] about alpha.example.org.');
+    const patch = fs.readFileSync(path.join(runDir.root, 'memory.patch'), 'utf8');
+    expect(patch).to.not.include('U024BE7LH');
+    expect(patch).to.not.include('ops@example.org');
+    const masked = ctx.logger.events.find((e) => e.event === 'rollup.memory_masked');
+    expect(masked).to.include({ level: 'info' });
+    expect(masked.kinds).to.deep.equal(['address', 'person']);
+  });
+
   it('refuses to run without discovery.json', async () => {
     fs.rmSync(path.join(runDir.root, 'discovery.json'));
     let error;

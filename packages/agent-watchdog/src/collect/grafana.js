@@ -146,7 +146,8 @@ const createGrafanaClient = (options) => {
     }
 
     if (isQuery) {
-      if (!response || RETRYABLE_STATUSES.has(response.status)) {
+      // A failed query of any status counts (revision 33); only a successful one resets the count (FR-073).
+      if (!response || !response.ok) {
         consecutiveQueryFailures += 1;
         if (consecutiveQueryFailures >= MAX_CONSECUTIVE_QUERY_FAILURES) {
           const last = response ? `status ${response.status}` : `a timeout after ${timeout} ms`;

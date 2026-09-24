@@ -9,6 +9,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
+const { withEgressGuard } = require('../../net/egress');
 const { RunDir, ensureDataLayout, RUN_ID_PATTERN } = require('../../store/run-dir');
 const { createContext } = require('../context');
 const { writeResult } = require('../streams');
@@ -355,6 +356,14 @@ const summariseRange = ({ range, label, comparisons, failed, runIds, startHr }) 
  */
 module.exports = async function replay({ flags = {}, env = process.env, stdout = process.stdout, logger, deps = {} }) {
   const { config, effective, policy } = loadConfig({ env, flags, command: 'replay' });
+  // The model calls, the documentation service and the trace flush leave this process, so a replay runs under the
+  // egress guard like a run (FR-083, revision 33).
+  return withEgressGuard({ config, logger, deps }, (guarded) => replayLoaded({
+    flags, env, stdout, logger, deps: guarded, config, effective, policy,
+  }));
+};
+
+const replayLoaded = async ({ flags, env, stdout, logger, deps, config, effective, policy }) => {
   const now = deps.now ? deps.now() : new Date();
   const dataDir = config.storage.dataDir;
   const promptsDir = resolveDirectory(flags.prompts, config.paths.promptsDir, 'prompts');

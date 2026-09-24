@@ -176,3 +176,28 @@ describe('verify/checks/personal_data_absent: given digits are not a phone numbe
     expect(check(ctx).reasons[0]).to.equal('phone number 254712345678 at $.items[0].suggested_check');
   });
 });
+
+describe('verify/checks/personal_data_absent: Slack user ids (FR-029, revision 33)', () => {
+  const { check } = require('../../../src/verify/checks/personal_data_absent');
+  const { baseContext, briefContext } = require('../helpers/context');
+
+  it('refuses a Slack mention or a bare user id in a finding and on the brief\'s surface', () => {
+    const mention = baseContext();
+    mention.findings.items[0].why_now = 'As <@U024BE7LH> noted, the backlog is climbing.';
+    const first = check(mention);
+    expect(first.status).to.equal('fail');
+    expect(first.reasons.join(' ')).to.match(/Slack user id at .*why_now/);
+    const bare = briefContext();
+    bare.draft.bullets[0].text = 'U024BE7LH confirmed the backlog 912 vs 300';
+    expect(check(bare).reasons.join(' ')).to.match(/Slack user id at \$\.bullets\[0\]/);
+    const notice = briefContext();
+    notice.draft.expected_load_notice = 'Month-end, per <@U024BE7LH|ops>';
+    expect(check(notice).status).to.equal('fail');
+  });
+
+  it('does not mistake a hex item id, an upper-case metric label or a version for a user id', () => {
+    const ctx = briefContext();
+    ctx.draft.bullets[0].text = 'item a1b2c3d4e5f6 UPTIME_24H backlog 912 vs 300 on 4.11.0';
+    expect(check(ctx).status).to.equal('pass');
+  });
+});

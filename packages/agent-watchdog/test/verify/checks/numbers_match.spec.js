@@ -246,3 +246,69 @@ describe('verify/checks/numbers_match: given numerals, roundings, units and rang
     expect(check(unknown).status).to.equal('fail');
   });
 });
+
+describe('verify/checks/numbers_match: evidence, headline and notice (FR-016, revision 33)', () => {
+  const { check } = require('../../../src/verify/checks/numbers_match');
+  const { baseContext, briefContext } = require('../helpers/context');
+
+  it('refuses an evidence value that matches no computed value of the metric or collected sample of its window', () => {
+    const ctx = baseContext();
+    ctx.items[0].evidence.push({ window: 'current', value: 777, unit: 'count' });
+    const result = check(ctx);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons).to.include(
+      'items[0].evidence[2] value 777 for window current matches no computed or collected value',
+    );
+  });
+
+  it('never lets an invented evidence value explain the same numeral in prose', () => {
+    const ctx = baseContext();
+    ctx.items[0].evidence.push({ window: 'current', value: 777, unit: 'count' });
+    ctx.items[0].why_now = 'Backlog reached 777 overnight.';
+    const result = check(ctx);
+    expect(result.reasons.some((r) => r.startsWith('items[0].why_now contains 777'))).to.equal(true);
+  });
+
+  it('accepts evidence quoting a computed value, a collected sample of its own window, or a rounding of one', () => {
+    const ctx = baseContext();
+    ctx.windows[0].values = [[1758088800, 905], [1758092400, 912]];
+    ctx.items[0].evidence = [
+      { window: 'current', value: 912, unit: 'count' },
+      { window: 'current', value: 905, unit: 'count', note: 'earlier sample' },
+      { window: 'trailing_14d', value: 302, unit: 'count', note: 'mean' },
+      { window: 'trailing_14d', value: 9.1, unit: 'count', note: 'stddev' },
+      { window: 'previous_day', value: 300, unit: 'count' },
+    ];
+    expect(check(ctx).status).to.equal('pass');
+    // A sample of another window is not evidence for this one.
+    ctx.items[0].evidence.push({ window: 'previous_day', value: 905, unit: 'count' });
+    expect(check(ctx).reasons).to.deep.equal([
+      'items[0].evidence[5] value 905 for window previous_day matches no computed or collected value',
+    ]);
+  });
+
+  it('checks the headline against every item\'s computed values and refuses a figure none holds', () => {
+    const ok = briefContext();
+    ok.draft.headline = 'Sentinel backlog 912 against 300 yesterday on one project';
+    expect(check(ok).status).to.equal('pass');
+    const bad = briefContext();
+    bad.draft.headline = 'Sentinel backlog at 4321 on one project';
+    const result = check(bad);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons.some((r) => r.startsWith('headline contains 4321'))).to.equal(true);
+  });
+
+  it('checks the expected-load notice: what the run gave passes, a figure the model added does not', () => {
+    const notice = 'Expected-load window active: month-end reporting, 2 days either side';
+    const given = briefContext();
+    given.givenText = [notice];
+    given.draft.expected_load_notice = notice;
+    expect(check(given).status).to.equal('pass');
+    const added = briefContext();
+    added.givenText = [notice];
+    added.draft.expected_load_notice = 'Expected-load window active: month-end reporting, volumes up 40%';
+    const result = check(added);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons.some((r) => r.startsWith('expected_load_notice contains 40%'))).to.equal(true);
+  });
+});

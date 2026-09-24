@@ -111,15 +111,69 @@ class EgressRefusedError extends codes.ExitError {
 
 const noop = { error() {}, warn() {}, info() {}, debug() {} };
 
-/** A fetch that refuses any destination outside `egress` before calling `fetch`; the log names host and port only. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
+
+const urlStringOf = (input) => {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input && input.url ? String(input.url) : String(input);
+};
+
+const locationOf = (response) => (response && response.headers && typeof response.headers.get === 'function'
+  ? response.headers.get('location')
+  : null);
+
+/**
+ * A fetch that refuses any destination outside `egress` before calling `fetch`; the log names host and port only.
+ * Redirects are followed here, not by `fetch` (revision 33): each `Location` is checked like the first URL, so a
+ * listed host cannot hand the request to an unlisted one. A caller that asked for manual redirects gets the redirect.
+ */
 const guardFetch = (fetch, egress, { logger = noop } = {}) => {
+  const refuse = (input) => {
+    const origin = originOf(input);
+    logger.error('egress.refused', { host: origin ? origin.host : null, port: origin ? origin.port : null });
+    throw new EgressRefusedError(origin);
+  };
   const guarded = async (input, init) => {
     if (!isEgressAllowed(input, egress)) {
-      const origin = originOf(input);
-      logger.error('egress.refused', { host: origin ? origin.host : null, port: origin ? origin.port : null });
-      throw new EgressRefusedError(origin);
+      refuse(input);
     }
-    return fetch(input, init);
+    const given = init || {};
+    let options = { ...given, redirect: 'manual' };
+    let current = urlStringOf(input);
+    let response = await fetch(input, options);
+    for (let hop = 0; hop < MAX_REDIRECTS; hop += 1) {
+      const location = locationOf(response);
+      if (!REDIRECT_STATUSES.has(response && response.status) || given.redirect === 'manual' || !location) {
+        return response;
+      }
+      if (given.redirect === 'error') {
+        throw new TypeError('redirect refused: the caller asked for none');
+      }
+      const next = new URL(location, current).toString();
+      if (!isEgressAllowed(next, egress)) {
+        refuse(next);
+      }
+      const method = String(options.method || 'GET').toUpperCase();
+      const status = response.status;
+      const toGet = status === 303 || ((status === 301 || status === 302) && method === 'POST');
+      if (toGet) {
+        options = { ...options, method: 'GET' };
+        delete options.body;
+      }
+      current = next;
+      response = await fetch(next, options);
+    }
+    if (!REDIRECT_STATUSES.has(response && response.status)) {
+      return response;
+    }
+    const from = keyOf(originOf(current));
+    throw new TypeError(`redirect limit reached: more than ${MAX_REDIRECTS} redirects from ${from}`);
   };
   guarded.egressGuard = true;
   return guarded;
@@ -149,6 +203,24 @@ const installEgressGuard = ({ egress, logger = noop, target = globalThis }) => {
   };
 };
 
+/**
+ * Run a command under the egress guard (FR-083, revision 33): the global `fetch` is guarded for the command's
+ * duration and an injected `deps.fetch` is wrapped the same way, so every command that can reach the network
+ * (`run`, `tools-server`, `calibrate`, `distill`, `replay`) refuses an unlisted destination before connecting.
+ * @param {object} options config, logger, deps, and `target` (the global by default)
+ * @param {(deps: object) => Promise<*>} fn the command body, given the deps with the guarded fetch
+ */
+const withEgressGuard = async ({ config, logger = noop, deps = {}, target = globalThis }, fn) => {
+  const egress = buildEgress(config);
+  const guard = installEgressGuard({ egress, logger, target });
+  const fetch = deps.fetch ? guardFetch(deps.fetch, egress, { logger }) : guard.fetch;
+  try {
+    return await fn({ ...deps, fetch });
+  } finally {
+    guard.uninstall();
+  }
+};
+
 /** The egress as the platform reads it: the endpoints, no inbound port, the one exempt command, and what to know. */
 const egressDocument = (config, { version = null } = {}) => ({
   package: '@medic/agent-watchdog',
@@ -168,5 +240,5 @@ const egressDocument = (config, { version = null } = {}) => ({
 
 module.exports = {
   FIXED_ENDPOINTS, CONFIGURED_ENDPOINTS, EXEMPT, originOf, buildEgress, isEgressAllowed, EgressRefusedError, guardFetch,
-  installEgressGuard, egressDocument,
+  installEgressGuard, withEgressGuard, egressDocument, MAX_REDIRECTS,
 };

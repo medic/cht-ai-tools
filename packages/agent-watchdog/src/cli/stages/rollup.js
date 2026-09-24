@@ -8,6 +8,8 @@ const { buildAlertGroupLinks } = require('../../links/build');
 const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
 const { analysisRecord } = require('../../rollup/analysis');
 const { splitStanding, standingRecords, standingNotices, darkHostsOf } = require('../../analyze/standing');
+const { activeWindowOf } = require('../../analyze/calendar');
+const { maskPersonalData } = require('../../corpus/scrub');
 const { analysedHosts, onAnalysedHosts, scopeClassified } = require('../../rollup/scope');
 const { readEpisodeEvents } = require('../../alerts/episodes');
 const { bareKey } = require('../../analyze/kinds');
@@ -41,6 +43,10 @@ const lastFindingsFile = (runDir, slug) => {
 
 const readIfExists = async (runDir, rel, fallback) => (runDir.exists(rel) ? runDir.readJson(rel) : fallback);
 
+/**
+ * The notice for the windows active today, from the window objects the computed changes name (revision 33): read
+ * from the run directory here, so a stage-only roll-up carries it too, and never a bare window id.
+ */
 const expectedLoadNoticeFrom = (activeWindows) => {
   if (!activeWindows) {
     return null;
@@ -101,6 +107,7 @@ const run = async (ctx) => {
   const standing = [];
   const groupOf = groupOfProjects(discovery);
   const changes = {};
+  const activeWindows = {};
   let referenceSourcesUnavailable = false;
   // Sessions that failed before a result (revision 13): counted and named so the brief can say so rather than
   // present an empty analysis as a quiet day.
@@ -110,6 +117,7 @@ const run = async (ctx) => {
     const own = await readIfExists(runDir, `${slug}/candidates.json`, []);
     candidates.push(...own);
     changes[slug] = await readIfExists(runDir, `${slug}/changes.json`, []);
+    activeWindows[slug] = activeWindowOf(changes[slug], { project, discovery });
     forModelCandidates.push(...splitStanding({ candidates: own, changes: changes[slug] }).forModel);
     standing.push(...standingRecords({ candidates: own, changes: changes[slug], project, groupOf }));
     const findings = lastFindingsFile(runDir, slug);
@@ -262,7 +270,7 @@ const run = async (ctx) => {
     analysis,
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],
-    expectedLoadNotice: expectedLoadNoticeFrom(ctx.activeWindows),
+    expectedLoadNotice: expectedLoadNoticeFrom(activeWindows),
     referenceSourcesUnavailable,
     footer,
     notices,
@@ -293,11 +301,25 @@ const run = async (ctx) => {
   });
 
   const memoryUpdate = composed.memoryUpdate || null;
+  // The memory update returns to the model on every later run, so people and addresses are masked before it is
+  // stored, like a proposal's (FR-044, revision 33); the projects it names are its subject and stay.
+  let replaceWith = memoryUpdate && memoryUpdate.replace_with !== undefined ? memoryUpdate.replace_with : null;
+  if (typeof replaceWith === 'string') {
+    const masked = maskPersonalData(replaceWith, {
+      persons: [...(ctx.feedbackAuthors || []), ...ownersOf(ctx.policy)],
+    });
+    if (masked.flags.length) {
+      logger.info('rollup.memory_masked', {
+        kinds: [...new Set(masked.flags.map((flag) => flag.kind))].sort(), flags: masked.flags.length,
+      });
+    }
+    replaceWith = masked.text;
+  }
   const memory = await applyMemoryUpdate({
     dataDir,
     runDir,
     runId,
-    replaceWith: memoryUpdate && memoryUpdate.replace_with !== undefined ? memoryUpdate.replace_with : null,
+    replaceWith,
     maxTokens: (ctx.config.behaviour && ctx.config.behaviour.memoryMaxTokens) || 4000,
     condense: condenserFor(ctx, logger, calls, runId),
     logger,

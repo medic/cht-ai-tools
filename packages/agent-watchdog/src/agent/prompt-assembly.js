@@ -2,6 +2,7 @@
 // Assembles the system prompt (static prefix, dynamic boundary, dynamic suffix) and the per-pass user
 // turns. Untrusted text is delimited and labelled (FR-044); computed data is passed as JSON.
 const path = require('node:path');
+const { maskPeople } = require('../corpus/scrub');
 
 // The runtime splits a system prompt at this marker: content before it is globally cacheable.
 const DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__';
@@ -84,11 +85,23 @@ const alertsBlock = (alerts) => {
   return wrapUntrusted('alerts', json(sanitiseData(alerts)));
 };
 
+/** Every string leaf with Slack mentions and bare user ids masked (FR-029, revision 33). */
+const maskStrings = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(maskStrings);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, maskStrings(inner)]));
+  }
+  return typeof value === 'string' ? maskPeople(value) : value;
+};
+
 const feedbackBlock = (feedback) => {
   if (!feedback || (Array.isArray(feedback) && feedback.length === 0)) {
     return 'No feedback recorded for this project.';
   }
-  return wrapUntrusted('feedback', json(sanitiseData(feedback, { dropIdentities: true })));
+  // Identity keys are dropped and a person named inside a note is masked: no Slack id reaches the model.
+  return wrapUntrusted('feedback', json(maskStrings(sanitiseData(feedback, { dropIdentities: true }))));
 };
 
 const buildPassPrompt = ({

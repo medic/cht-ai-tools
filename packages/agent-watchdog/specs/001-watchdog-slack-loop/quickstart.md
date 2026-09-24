@@ -326,3 +326,17 @@ with the CLI engine and no key: `docker compose run --rm -e AGENT_WATCHDOG_ENGIN
 agent-watchdog run --dry-run --date <date>`; the log's `agent.cli_auth` line says `mode: login` and
 `credentials_found: true`. `docker compose --profile login run --rm login auth status` shows the login,
 `auth logout` removes it. A key in `.env` wins over the login, so leave it blank for this mode.
+
+## 24. What the gate refuses since the review (revision 33)
+
+A finding's evidence is checked, not trusted: each `{ window, value }` must be a computed value of the metric or a
+sample the run collected in that window, and evidence never widens what the prose may quote. The headline and the
+expected-load notice are checked as bullets are (numbers against every item's values, links, length, hosts,
+personal data), and every date the model writes must fall within the run's windows unless the run gave it. A
+Slack mention or user id anywhere on the published surface is refused, and it is masked before any note reaches a
+prompt; the memory update is masked of people and addresses before it is stored. The link resolver now requests
+only code-built links and model references that are allow-listed and appeared in a tool result (`links_resolve`
+records the rest as `not requested`), an egress refusal during resolution fails the run with 69, and the guard
+follows a redirect only to a listed destination, for `run`, `tools-server`, `calibrate`, `distill` and `replay`
+alike. To see the reasons on a stored run: `verification.pass<n>.json` under the project and
+`rollup/verification.draft<n>.json`.

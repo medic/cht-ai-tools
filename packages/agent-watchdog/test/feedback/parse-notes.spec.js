@@ -119,3 +119,24 @@ describe('feedback/parse-notes: parseNoteWithModel', () => {
       .to.include({ horizon: null, source: 'model-failed' });
   });
 });
+
+describe('feedback/parse-notes: people are masked before the model reads a note (FR-029, revision 33)', () => {
+  const { parseNoteWithModel } = require('../../src/feedback/parse-notes');
+
+  it('masks Slack mentions and bare user ids in the note and in the earlier notes of its thread', async () => {
+    const engine = {
+      singleTurn: sinon.stub().resolves({
+        structuredOutput: { horizon: '2026-09-25', expected_max: null, item_reference: null },
+        result: { subtype: 'success' },
+      }),
+    };
+    await parseNoteWithModel({
+      text: '<@U024BE7LH> make that the 25th', noteDate: '2026-09-18', engine, model: 'm',
+      earlierNotes: ['U024BE7LH: expected until the 22nd of this month'],
+    });
+    const prompt = engine.singleTurn.firstCall.args[0].userPrompt;
+    expect(prompt).to.include('[person] make that the 25th');
+    expect(prompt).to.include('[person]: expected until the 22nd');
+    expect(prompt).to.not.include('U024BE7LH');
+  });
+});

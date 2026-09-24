@@ -75,6 +75,10 @@ documentation service) and the Slack SDK's own transport.
 No inbound ports. DNS is the one further egress the pod needs. The runtime's telemetry and update
 checks are disabled by the baked environment. The `check <cht-url>` command contacts the host an
 operator names and is exempt from the guard; the platform policy refuses it inside the container.
+The guard follows a redirect only to a listed destination (it fetches with manual redirects and
+re-checks each `Location`, up to five hops); it is installed for `run`, `tools-server`, `calibrate`,
+`distill` and `replay`, every command that can reach the network (revision 33). The gate's link resolver
+never requests a model-written URL that is off the link allow-list or was not seen in a tool result.
 
 ## Running it locally with Compose (revision 31)
 

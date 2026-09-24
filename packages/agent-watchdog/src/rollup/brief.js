@@ -525,7 +525,11 @@ const composeBrief = async ({
   });
 
   // What the model was given, for the gate (FR-016, revision 23): the run-wide texts and each item's own entry.
-  const givenText = [layoutText(bodyLayout), checkedText(discovery, allCandidates, analysedProjects)];
+  const givenText = [
+    layoutText(bodyLayout), checkedText(discovery, allCandidates, analysedProjects),
+    // The notice the run wrote, which the model echoes and may extend: its figures and dates are given (revision 33).
+    ...(expectedLoadNotice ? [expectedLoadNotice] : []),
+  ];
   // Each entry's line may quote any item it covers, and nothing of a neighbour's (FR-016, revisions 23 and 28).
   const itemTexts = entryTexts(bodyLayout, items);
 

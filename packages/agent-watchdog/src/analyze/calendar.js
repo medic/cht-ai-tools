@@ -59,4 +59,33 @@ const activeWindow = (windows, project, runStart) => {
   return null;
 };
 
-module.exports = { activeWindow, dateInZone, isActive, daysInMonth };
+/**
+ * The expected-load window a computed change names, as the discovery describes it (id, kind, note), looked up on
+ * the project first and then on every project (a default window is listed on each); `{ id }` alone when the
+ * description is gone (revision 33: the roll-up's notice reads the window's note, never a bare id).
+ */
+const windowFor = (id, { project = null, discovery = null } = {}) => {
+  if (!id) {
+    return null;
+  }
+  const pools = [
+    project && project.expected_load_windows,
+    ...((discovery && discovery.projects) || []).map((p) => p && p.expected_load_windows),
+    discovery && discovery.expected_load_windows,
+  ];
+  for (const pool of pools) {
+    const found = (pool || []).find((window) => window && window.id === id);
+    if (found) {
+      return { ...found };
+    }
+  }
+  return { id };
+};
+
+/** The active window of a project's computed changes, described, or null when none names one. */
+const activeWindowOf = (changes, { project = null, discovery = null } = {}) => {
+  const change = (changes || []).find((c) => c && c.expected_load_window_id);
+  return change ? windowFor(change.expected_load_window_id, { project, discovery }) : null;
+};
+
+module.exports = { activeWindow, activeWindowOf, windowFor, dateInZone, isActive, daysInMonth };
