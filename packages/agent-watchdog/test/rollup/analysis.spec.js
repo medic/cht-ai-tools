@@ -49,7 +49,7 @@ describe('rollup/analysis analysisRecord', () => {
       { project_url: 'https://beta.example.org', bounds: ['turns'], cost_usd: 0.3 },
     ]);
     expect(out.failed).to.deep.equal(['https://delta.example.org']);
-    expect(INCOMPLETE_BOUNDS).to.deep.equal(['budget', 'turns']);
+    expect(INCOMPLETE_BOUNDS).to.deep.equal(['budget', 'turns', 'timeout']);
   });
 
   it('names a project whose every pass the gate rejected, with its commonest failing check (revision 22)', () => {
@@ -98,5 +98,22 @@ describe('rollup/analysis analysisRecord', () => {
     expect(out.rejected).to.deep.equal([{ project_url: 'https://alpha.example.org', reason: 'numbers_match' }]);
     expect(out.failed).to.deep.equal(['https://delta.example.org']);
     expect(out.incomplete).to.deep.equal([]);
+  });
+});
+
+describe('rollup/analysis: the run deadline is a shortfall too (revision 34)', () => {
+  it('counts a session the run deadline stopped before any result as incomplete, not as quiet', () => {
+    const out = analysisRecord([
+      { url: 'https://alpha.example.org', passes: passes({ items: [], bounds_hit: ['timeout'], cost_usd: 0 }) },
+      // A turn that timed out is recorded as an error with its message: that project failed.
+      {
+        url: 'https://beta.example.org',
+        passes: passes({
+          items: [], bounds_hit: ['timeout'], errors: [{ pass: 1, attempt: 1, message: 'timed out', bound: 'timeout' }],
+        }),
+      },
+    ]);
+    expect(out.incomplete).to.deep.equal([{ project_url: 'https://alpha.example.org', bounds: ['timeout'], cost_usd: 0 }]);
+    expect(out.failed).to.deep.equal(['https://beta.example.org']);
   });
 });

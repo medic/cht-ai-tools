@@ -359,6 +359,41 @@ describe('publish/payload: the alerts reply (FR-066, FR-080, User Story 8, revis
   });
 });
 
+describe('publish/payload: the alerts reply is fitted line by line, links whole (revision 34)', () => {
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const item = makeItem({ rank: 1, placement: 'body', slot: 1 });
+  const brief = makeBrief({
+    bullets: [{
+      kind: 'item', item_id: item.item_id, group: 'Other', text: 'alpha 912 vs 300', children: [], alert_key: null,
+    }],
+  });
+  const programmes = Array.from({ length: 60 }, (_, i) => `Programme number ${i} with a long descriptive name`);
+  const alertGroups = programmes.map((group, i) => ({
+    ...alertGroupOf([classified('sentinel', `host-${i}.example.org`)]), group,
+  }));
+  const byGroup = new Map(programmes.map((group, i) => [
+    group, `https://watchdog.example.org/alerting/list?search=${encodeURIComponent(`group:"${group}" host ${i}`)}`,
+  ]));
+  const alertsLinks = { byGroup, all: 'https://watchdog.example.org/alerting/list?search=all' };
+
+  it('drops whole programme lines from the end, says how many are in the report, and never cuts a link', () => {
+    const payload = buildPayload({
+      brief, items: [item], runId: '2026-09-18', date: '2026-09-18', audience: 'internal', channel: 'C123',
+      alertGroups, alertsLinks,
+    });
+    const reply = payload.replies.find((r) => r.kind === 'alerts');
+    expect(reply.text.length).to.be.at.most(3000);
+    const opened = (reply.text.match(/</g) || []).length;
+    const closed = (reply.text.match(/\|[^>]*>/g) || []).length;
+    expect(opened, 'every link that starts is closed').to.equal(closed);
+    expect(reply.text).to.include('*ALERTS* · 60 firing across 60 programmes');
+    expect(reply.text).to.match(/\+\d+ more programmes in the report/);
+    expect(reply.text).to.include('<https://watchdog.example.org/alerting/list?search=all|all firing alerts>');
+    expect(reply.text).to.equal(reply.blocks[0].text.text);
+    expect(reply.metadata.event_payload.programmes).to.have.length(60);
+  });
+});
+
 describe('publish/payload: the report in the thread and the footer count (revisions 25 and 28)', () => {
   const body = makeItem({ rank: 1, placement: 'body' });
   const threadItem = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });

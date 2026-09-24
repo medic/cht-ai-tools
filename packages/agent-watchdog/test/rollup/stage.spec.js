@@ -380,6 +380,41 @@ describe('cli/stages/rollup', () => {
     expect(masked.kinds).to.deep.equal(['address', 'person']);
   });
 
+  it('reads the last pass the gate accepted, never a later pass it rejected (revision 34)', async () => {
+    const accepted = { outcome: 'accepted', attempt: 1, checks: [] };
+    const rejected = {
+      outcome: 'rejected', attempt: 3, checks: [{ name: 'numbers_match', status: 'fail', reasons: ['x'] }],
+    };
+    await runDir.writeJson('alpha-example-org/passes.json', {
+      passes: [{ pass: 1, gate: accepted, items: [] }, { pass: 2, gate: rejected, items: [] }],
+      converged: false, bounds_hit: [], errors: [],
+    });
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    await stage.run(ctx);
+    const ranked = await runDir.readJson('rollup/items.ranked.json');
+    expect(ranked.map((i) => i.why_now)).to.deep.equal(['pass one wording']);
+    // Every pass rejected: no items, and the analysis record names the project.
+    await runDir.writeJson('alpha-example-org/passes.json', {
+      passes: [{ pass: 1, gate: rejected, items: [] }, { pass: 2, gate: rejected, items: [] }],
+      converged: false, bounds_hit: [], errors: [],
+    });
+    const none = await stage.run(ctxWith(null));
+    expect(none.kind).to.not.equal('brief');
+    expect(await runDir.readJson('rollup/items.ranked.json')).to.deep.equal([]);
+  });
+
   it('refuses to run without discovery.json', async () => {
     fs.rmSync(path.join(runDir.root, 'discovery.json'));
     let error;

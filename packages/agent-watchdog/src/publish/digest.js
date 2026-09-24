@@ -5,6 +5,7 @@
 // it caused), names the proposals written from notes, and states where the records live and for how long they
 // adjust ranking. It names no person: authors are counted, never shown, and Slack mentions are masked.
 const fs = require('node:fs');
+const { MAX_REVIEW_ATTEMPTS } = require('../feedback/review');
 const path = require('node:path');
 const Handlebars = require('handlebars');
 const { mrkdwn, link } = require('./payload');
@@ -203,9 +204,17 @@ const countInto = (target, record) => {
  * @returns {{ digest: object, text: string, blocks: object[], metadata: object } | null}
  */
 const buildDigest = ({
-  runId, date, records = [], byItem = {}, items = [], adjustments = [], suppressed = [], review = null,
+  runId, date, records: given = [], byItem = {}, items = [], adjustments = [], suppressed = [], review = null,
   unmatched = [], retention, provenance = null,
 }) => {
+  // A note whose review failed is acknowledged only after its last attempt (FR-061, revision 34): until then it
+  // stays out of the acknowledged ids and the tallies, so the next run reviews it and the digest that finally
+  // carries it is the one that says where its lesson went, or that it could not be classified.
+  const failedIds = new Set((review && Array.isArray(review.unclassified)) ? review.unclassified : []);
+  const retrying = given.filter((r) => failedIds.has(r.feedback_id) && (r.review_attempts || 0) < MAX_REVIEW_ATTEMPTS);
+  const retryingIds = new Set(retrying.map((r) => r.feedback_id));
+  const records = given.filter((r) => !retryingIds.has(r.feedback_id));
+  const unclassifiable = records.filter((r) => failedIds.has(r.feedback_id)).length;
   if (!records.length) {
     return null;
   }
@@ -262,7 +271,7 @@ const buildDigest = ({
     .map((n) => (typeof n === 'string' ? n : n && n.note))
     .filter(Boolean)
     .map((note) => ({ note: maskPeople(note) }));
-  const unclassified = (review && Array.isArray(review.unclassified)) ? review.unclassified.length : 0;
+  const unclassified = retrying.length;
   const reactions = records.filter((r) => r.kind === 'reaction' && r.verdict !== 'retracted').length;
   const notes = records.filter((r) => r.kind === 'note').length;
 
@@ -275,6 +284,7 @@ const buildDigest = ({
     proposals,
     unmatched: unmatchedNotes,
     unclassified,
+    unclassifiable,
     retention: { records_path: retention.records_path, influence_days: retention.influence_days },
     reactions: [],
     publication: null,
@@ -298,6 +308,9 @@ const buildDigest = ({
     has_unclassified: unclassified > 0,
     unclassified_text: `${plural(unclassified, 'note')} awaiting classification; the next run will review ${
       unclassified === 1 ? 'it' : 'them'}.`,
+    has_unclassifiable: unclassifiable > 0,
+    unclassifiable_text: `${plural(unclassifiable, 'note')} could not be classified after ${MAX_REVIEW_ATTEMPTS} `
+      + `attempts; ${unclassifiable === 1 ? 'it stays' : 'they stay'} on record unclassified.`,
     retention_text: `Records are kept permanently at ${retention.records_path}; feedback adjusts ranking for `
       + `${retention.influence_days} days. Adopting a proposal makes it permanent.`,
   };
@@ -328,6 +341,9 @@ const buildDigest = ({
   }
   if (view.has_unclassified) {
     blocks.push(section(mrkdwn(view.unclassified_text)));
+  }
+  if (view.has_unclassifiable) {
+    blocks.push(section(mrkdwn(view.unclassifiable_text)));
   }
   blocks.push(section(mrkdwn(view.retention_text)));
 

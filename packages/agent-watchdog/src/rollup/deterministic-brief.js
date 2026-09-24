@@ -55,10 +55,15 @@ const buildHeartbeat = ({
   runId, discovery, candidatesCount = 0, footer, expectedLoadNotice = null, notices = [], analysedProjects = null,
 }) => {
   const checked = checkedCounts(discovery, candidatesCount, analysedProjects);
+  // Candidates the day raised and nothing flagged (standing conditions, or a model that selected none) are said
+  // as such (revision 34): "no candidates" was contradicted by the counts and the standing notice beneath it.
+  const tail = checked.candidates > 0
+    ? `${checked.candidates} candidate${checked.candidates === 1 ? '' : 's'}, none flagged`
+    : 'no candidates';
   return {
     ...baseBrief({ runId, footer, expectedLoadNotice, notices }),
     kind: 'heartbeat',
-    headline: `All quiet: ${checked.projects} projects and ${checked.panels} panels checked, no candidates`,
+    headline: `All quiet: ${checked.projects} projects and ${checked.panels} panels checked, ${tail}`,
     bullets: [],
     checked,
   };

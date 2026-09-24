@@ -155,7 +155,9 @@ const parseNoteWithModel = async ({
 }) => {
   const deterministic = parseHorizon(text, { noteDate });
   if (deterministic.horizon || !engine) {
-    return { ...deterministic, item_reference: null, source: 'deterministic' };
+    // `none`: no date in the note and no model to ask; the record says so (revision 34).
+    const source = deterministic.horizon ? 'deterministic' : 'none';
+    return { ...deterministic, item_reference: null, source, call: null };
   }
   // People are masked before any note reaches the model (FR-029, revision 33); the dates and figures stay.
   const earlier = earlierNotes.map((text_, i) => `${i + 1}. ${maskPeople(text_)}`).join('\n');
@@ -174,13 +176,29 @@ const parseNoteWithModel = async ({
       effort: 'low',
       name: 'feedback-parse',
     });
+    const result = (turn && turn.result) || {};
+    const usage = result.usage || {};
+    // The call is part of the run's cost (FR-049, revision 34), whatever the answer.
+    const call = {
+      stage: 'feedback', kind: 'parse', model,
+      input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0,
+      cache_read_tokens: usage.cache_read_tokens ?? usage.cache_read_input_tokens ?? 0,
+      cache_creation_tokens: usage.cache_creation_tokens ?? usage.cache_creation_input_tokens ?? 0,
+      cost_usd: result.total_cost_usd || 0,
+      num_turns: result.num_turns === undefined ? null : result.num_turns,
+      duration_ms: result.duration_ms === undefined ? null : result.duration_ms,
+    };
     const answer = ModelAnswer.safeParse(turn && turn.structuredOutput);
     if (!answer.success) {
-      return { horizon: null, expected_max: deterministic.expected_max, item_reference: null, source: 'model-invalid' };
+      return {
+        horizon: null, expected_max: deterministic.expected_max, item_reference: null, source: 'model-invalid', call,
+      };
     }
-    return { ...answer.data, source: 'model' };
+    return { ...answer.data, source: 'model', call };
   } catch {
-    return { horizon: null, expected_max: deterministic.expected_max, item_reference: null, source: 'model-failed' };
+    return {
+      horizon: null, expected_max: deterministic.expected_max, item_reference: null, source: 'model-failed', call: null,
+    };
   }
 };
 

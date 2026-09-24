@@ -14,7 +14,7 @@ of a `run` is preceded by a one-line failure notice with the trace link (FR-024)
 | 65 | `DATAERR` | A stage or replay prerequisite file is missing or fails validation. | no |
 | 69 | `UNAVAILABLE` | Metrics source unreachable or timed out after retries; nothing partial is published (Edge Cases). | failure notice |
 | 74 | `IOERR` | Slack unavailable after retries; every artefact persisted and the run marked `unposted` (Edge Cases). | no (cannot) |
-| 75 | `TEMPFAIL` | A run for this date already exists and `--force` was not given (FR-042). Retry with `--force` if intended. | no |
+| 75 | `TEMPFAIL` | A run for this date already exists and `--force` was not given (FR-042); or a stage-only `publish` found the run's publication record already naming a parent post (revision 34). Retry with `--force` if intended. | no |
 | 78 | `CONFIG` | Startup validation of environment, flags or configuration files failed; the offending keys are named in the log with values redacted (FR-055). | no |
 
 Notes:

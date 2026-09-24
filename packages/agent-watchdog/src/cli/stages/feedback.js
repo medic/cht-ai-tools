@@ -5,7 +5,7 @@
 const fs = require('node:fs');
 const { ingestFeedback } = require('../../feedback/ingest');
 const { reviewFeedback, promptFile } = require('../../feedback/review');
-const { readUnacknowledged } = require('../../feedback/store');
+const { readUnacknowledged, updateRecords } = require('../../feedback/store');
 const { buildAllowlist, allowedHosts } = require('../../links/allowlist');
 
 const name = 'feedback';
@@ -94,6 +94,14 @@ const run = async (ctx) => {
     now: ctx.deps && ctx.deps.now ? ctx.deps.now : undefined,
   });
   document.review = await review(ctx, document);
+  // A note whose classification call failed counts the attempt (revision 34): it is reviewed again next run, and
+  // acknowledged as unclassified after the last attempt (src/feedback/review.js MAX_REVIEW_ATTEMPTS).
+  const failed = new Set(document.review.unclassified || []);
+  if (failed.size) {
+    await updateRecords(config.storage.dataDir, (record) => (failed.has(record.feedback_id)
+      ? { ...record, review_attempts: (record.review_attempts || 0) + 1 }
+      : record));
+  }
   await runDir.writeJson('feedback.ingested.json', document);
   logger.info('feedback.done', {
     records: document.records.length, unmatched: document.unmatched.length, horizons: document.horizons.length,

@@ -464,6 +464,12 @@ const Feedback = z.object({
   acknowledged_run_id: z.string().nullable().default(null),
   classification: enums.FeedbackClassification.nullable().default(null),
   proposal_id: z.string().nullable().default(null),
+  // Revision 34: what the note's parse found besides the horizon, so a stored horizon keeps its size and its
+  // provenance; how the horizon was found; and how many review calls failed on the note (FR-029, FR-061).
+  expected_max: z.number().nullable().default(null),
+  observed_value: z.number().nullable().default(null),
+  horizon_source: z.enum(['deterministic', 'model', 'model-invalid', 'model-failed', 'none']).nullable().default(null),
+  review_attempts: z.number().int().min(0).default(0),
 }).strict().refine((f) => f.target !== 'item' || f.item_id, {
   message: 'item_id is required when target is item',
   path: ['item_id'],

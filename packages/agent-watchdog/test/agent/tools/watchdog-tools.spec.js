@@ -163,3 +163,28 @@ describe('agent/tools/watchdog-tools', () => {
     expect(server.tools.map((t) => t.name)).to.include('get_windows');
   });
 });
+
+describe('agent/tools/watchdog-tools: a loose key is resolved to the collected one (revision 34)', () => {
+  it('looks a base name or a stripped key up as the collected key, and refuses an ambiguous one', async () => {
+    const { byName, deps } = build();
+    const full = 'rate(cht_messaging_outgoing_total{status="delivered"}[24h])';
+    expect(parse(await byName.get_windows.handler({ metric: 'cht_messaging_outgoing_total' })))
+      .to.not.have.property('error');
+    expect(deps.getWindows).to.have.been.calledWith(project, full);
+    const withInstance = 'cht_couchdb_doc_total{instance=~"$cht_instance",db="medic"}';
+    expect(parse(await byName.get_windows.handler({ metric: withInstance }))).to.not.have.property('error');
+    expect(deps.getWindows).to.have.been.calledWith(project, 'cht_couchdb_doc_total{db="medic"}');
+    const twoKeys = {
+      metrics: ['sum(cht_feedback_total)', 'rate(cht_feedback_total[1d])'],
+    };
+    const tools = createWatchdogTools({
+      deps, project, discovery: twoKeys, patternCards: { index: [], read: async () => '' }, recorder: () => {},
+    });
+    const windows = tools.find((t) => t.name === 'get_windows');
+    const ambiguous = parse(await windows.handler({ metric: 'cht_feedback_total' }));
+    expect(ambiguous.error).to.include('ambiguous metric');
+    expect(ambiguous.error).to.include('sum(cht_feedback_total)');
+    expect(ambiguous.error).to.include('rate(cht_feedback_total[1d])');
+    expect(parse(await windows.handler({ metric: 'sum(cht_feedback_total)' }))).to.not.have.property('error');
+  });
+});

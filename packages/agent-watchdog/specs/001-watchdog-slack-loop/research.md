@@ -2050,3 +2050,33 @@ only for the run budget's accounting, with the cost marked as estimated, so the 
 estimate as a measurement (revision 34). For #55, the dates the model writes are checked against the run's
 windows, but a month named without a day ("since August") is not a date token and stays unchecked; the number
 check already ignores date-shaped tokens by design, so no numeral is counted twice.
+
+## R-39. Decisions taken while making the brief say what happened (revision 34)
+
+**Evidence**: the findings answered are R-38's second group. Four rules needed a choice the review did not make.
+A note's date: the Slack `ts` is the note's own day, but the recorded fixtures carry timestamps a year behind the
+dates of the runs they belong to, and a reply can never be older than the post it answers, so the date a horizon is
+read against is the `ts` day held between the source run's date and the day it was read. A failed review: a note
+whose classification call failed is worth retrying, but not forever at one call per run, so the record counts the
+attempts and the third failure acknowledges it unclassified, in words. A killed session: the runtime reports a cost
+only on its `result` message, so a harness turn cap or a timeout leaves no figure at all; charging nothing let the
+run budget re-grant money that may have been spent (#15), and charging the whole grant is the only bound the code
+has, so it charges the rest of the grant and marks every record it touches `cost_estimated`, an upper bound the
+footer still prints as the cost. A loose metric key: `get_windows` resolves a request in tiers (the key itself, the
+key without its instance matcher, the base metric name) against the collected keys only, a tie within a tier being
+ambiguous and said so, because the bare names the query tool accepts are not collected keys.
+
+**Decisions**: the alerts reply is fitted by dropping whole programme lines from the end with a count of the rest,
+then the notices, then the link to every alert, and truncated only when even the summary line and one programme
+do not fit, so a link is never cut; the publication record is written twice, partial at the parent post and whole
+at the end, and a stage-only publish that finds a parent already recorded exits 75 rather than posting a second
+brief; calibration takes the last run of each date, as item persistence has since revision 22; discovery's per-host
+queries fail their project alone unless the client has already declared the source unreachable; the worker pool
+starts nothing after a failure and lets the running items settle. Verified by the tests of Phase 38 and the full
+gate; the next revision (35) is R-38's hygiene group.
+
+**Rejected or deferred**: a footer that prints "≤" for an estimated cost (the record carries the flag; the wording
+of the footer is a template change with its own replay diff, left for the operator to ask for); re-parsing every
+stored note against its own date (the horizon a note stated was fixed when first read, revision 29, and moving it
+would change what a reader was told); a per-date dedupe of outcomes across files (the fresh-record rule removes the
+daily re-append without reading the whole corpus).

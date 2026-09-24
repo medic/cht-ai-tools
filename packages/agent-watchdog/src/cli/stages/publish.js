@@ -1,6 +1,7 @@
 'use strict';
 // Stage: publish. Builds the exact payload, writes it, and posts it unless the run is a preview (FR-019, FR-025).
 const { requireInputs } = require('./index');
+const codes = require('../exit-codes');
 const { buildPayload } = require('../../publish/payload');
 const { createSlackPublisher } = require('../../publish/slack');
 const { buildDigest } = require('../../publish/digest');
@@ -178,7 +179,21 @@ const run = async (ctx) => {
     return { posted: false, payload };
   }
 
-  const publisher = createSlackPublisher({ client: slackClient(ctx), channel, logger });
+  // A run posts one parent (FR-042, revision 34): a record of an earlier post, complete or partial, means a
+  // retry must supersede it with `run --force` rather than post a second brief for the date.
+  if (runDir.exists('rollup/publication.json')) {
+    const earlier = await runDir.readJson('rollup/publication.json');
+    if (earlier && earlier.ts) {
+      throw new codes.ExitError(
+        codes.TEMPFAIL,
+        `this run already posted its brief as ${earlier.ts}${earlier.partial ? ' (thread incomplete)' : ''}; `
+          + 'run --force to supersede it rather than post a second one',
+      );
+    }
+  }
+  const publisher = createSlackPublisher({
+    client: slackClient(ctx), channel, logger, ...(ctx.deps && ctx.deps.sleep ? { sleep: ctx.deps.sleep } : {}),
+  });
   let publication;
   if (brief.kind === 'heartbeat' || brief.kind === 'failure') {
     publication = await publisher.postTextOnly(payload);
@@ -186,13 +201,20 @@ const run = async (ctx) => {
     const reportPath = brief.report && brief.report.path && runDir.exists(brief.report.path)
       ? runDir.path(brief.report.path)
       : null;
-    publication = await publisher.publish({ payload, reportPath, superseded: ctx.supersededPermalink || null });
+    publication = await publisher.publish({
+      payload, reportPath, superseded: ctx.supersededPermalink || null,
+      // The record is written as soon as the parent is posted, so a failure in the thread cannot lose it.
+      onParent: (partial) => runDir.writeJson('rollup/publication.json', partial),
+    });
   }
   if (built) {
     // Digest last, under today's parent; acknowledge only once the digest is out, then the courtesy reactions.
     const digestPublication = await publisher.postDigest({ digest: payload.digest, parentTs: publication.ts });
     const marked = await markAcknowledged(dataDir, built.digest.acknowledged, ctx.runId);
-    const notes = unacknowledged.filter((record) => record.kind === 'note');
+    // The courtesy reaction goes on the notes this digest acknowledged; a note still awaiting its review gets it
+    // from the run that finally carries it (revision 34).
+    const acknowledgedIds = new Set(built.digest.acknowledged);
+    const notes = unacknowledged.filter((record) => record.kind === 'note' && acknowledgedIds.has(record.feedback_id));
     const reactions = await publisher.reactToNotes({ records: notes });
     await runDir.writeJson('rollup/feedback.digest.json', {
       ...built.digest, reactions, publication: digestPublication,

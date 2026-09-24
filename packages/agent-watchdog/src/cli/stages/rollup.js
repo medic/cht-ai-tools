@@ -1,12 +1,11 @@
 'use strict';
 // Stage: rollup. Reads every project's last pass, ranks, composes and gates the brief, writes rollup/*.
-const fs = require('node:fs');
 const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
 const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
-const { analysisRecord } = require('../../rollup/analysis');
+const { analysisRecord, lastAcceptedFindingsFile } = require('../../rollup/analysis');
 const { splitStanding, standingRecords, standingNotices, darkHostsOf } = require('../../analyze/standing');
 const { activeWindowOf } = require('../../analyze/calendar');
 const { maskPersonalData } = require('../../corpus/scrub');
@@ -25,21 +24,6 @@ const { buildFooter, round6 } = require('../../publish/footer');
 
 const name = 'rollup';
 const inputs = ['discovery.json'];
-
-const lastFindingsFile = (runDir, slug) => {
-  const dir = runDir.projectPath(slug);
-  if (!fs.existsSync(dir)) {
-    return null;
-  }
-  const passes = fs.readdirSync(dir)
-    .map((file) => /^findings\.pass(\d+)\.json$/.exec(file))
-    .filter(Boolean)
-    .map((match) => Number(match[1]));
-  if (!passes.length) {
-    return null;
-  }
-  return `${slug}/findings.pass${Math.max(...passes)}.json`;
-};
 
 const readIfExists = async (runDir, rel, fallback) => (runDir.exists(rel) ? runDir.readJson(rel) : fallback);
 
@@ -120,7 +104,8 @@ const run = async (ctx) => {
     activeWindows[slug] = activeWindowOf(changes[slug], { project, discovery });
     forModelCandidates.push(...splitStanding({ candidates: own, changes: changes[slug] }).forModel);
     standing.push(...standingRecords({ candidates: own, changes: changes[slug], project, groupOf }));
-    const findings = lastFindingsFile(runDir, slug);
+    // The last pass the gate accepted (revision 34): a rejected or cut-off later pass drops no accepted items.
+    const findings = lastAcceptedFindingsFile(runDir, slug);
     if (findings) {
       const pass = await runDir.readJson(findings);
       items.push(...(pass.items || []));
@@ -394,4 +379,4 @@ const run = async (ctx) => {
   };
 };
 
-module.exports = { name, inputs, run, lastFindingsFile };
+module.exports = { name, inputs, run, lastFindingsFile: lastAcceptedFindingsFile };

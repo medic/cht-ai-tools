@@ -128,7 +128,9 @@ groups as code-built `alerts` bullets, the model never writes them; `publish` po
 in `alerts/episodes.jsonl` (durable), cleared ones also in `corpus/outcomes/` as `alert_episode`.
 
 Feedback: `feedback.jsonl` is permanent (never purged); `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` bounds
-how long a record adjusts ranking. Each run reviews new notes with one bounded call each, writes proposals
+how long a record adjusts ranking. A note's record keeps what its parse found (`expected_max`, `observed_value`,
+`horizon_source`); a failed model parse is retried by the next run with a model, and a note whose review
+failed stays unacknowledged for up to three runs (revision 34). Each run reviews new notes with one bounded call each, writes proposals
 for their destination, and posts one digest reply per run in the brief or heartbeat thread, acknowledging
 every record once (`acknowledged_run_id`) and reacting `eyes` on notes; nothing is acknowledged or reacted
 to in preview. The digest names no person.

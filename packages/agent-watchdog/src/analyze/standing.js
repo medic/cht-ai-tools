@@ -16,10 +16,20 @@ const evidenceValue = (candidate, window) => {
   return found && typeof found.value === 'number' ? found.value : null;
 };
 
-const previousDayValue = (candidate) => evidenceValue(candidate, 'previous_day')
-  ?? evidenceValue(candidate, 'previous_cycle');
-
 const changeFor = (candidate, changes) => (changes || []).find((c) => c.metric === candidate.metric) || null;
+
+/**
+ * Yesterday's value: the Computed Change's `previous_day_value` (revision 34), which is always yesterday; the
+ * candidate's evidence only for a record without its change, and then its `previous_day` entry alone. During an
+ * expected-load window the candidate's baseline evidence is the previous cycle, which is not yesterday.
+ */
+const previousDayValue = (candidate, changes = []) => {
+  const change = changeFor(candidate, changes);
+  if (change && change.previous_day_value !== undefined) {
+    return change.previous_day_value;
+  }
+  return evidenceValue(candidate, 'previous_day');
+};
 
 /**
  * Did this candidate's condition already hold? A backlog above zero yesterday as well is routine for a CHT
@@ -28,8 +38,8 @@ const changeFor = (candidate, changes) => (changes || []).find((c) => c.metric =
  */
 const isStanding = (candidate, changes = []) => {
   if (candidate.rule === 'backlog_absolute') {
-    const previous = previousDayValue(candidate);
-    return previous !== null && previous > 0;
+    const previous = previousDayValue(candidate, changes);
+    return previous !== null && previous !== undefined && previous > 0;
   }
   if (candidate.rule === 'target_down') {
     const change = changeFor(candidate, changes);
@@ -52,10 +62,7 @@ const splitStanding = ({ candidates = [], changes = [] }) => {
 const standingRecords = ({ candidates = [], changes = [], project, groupOf = () => 'Other' }) => splitStanding({
   candidates, changes,
 }).standing.map((candidate) => {
-  const change = changeFor(candidate, changes);
-  const previous = candidate.rule === 'target_down' && change
-    ? change.previous_day_value
-    : previousDayValue(candidate);
+  const previous = previousDayValue(candidate, changes);
   return {
     rule: candidate.rule,
     project_url: project.url,

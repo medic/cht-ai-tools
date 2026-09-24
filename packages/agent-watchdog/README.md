@@ -180,7 +180,8 @@ project, and a count of the rest; every other programme with two or more flagged
 same form, the remaining projects share one "Other" reply, and every item lives in the report shared into the thread
 (standing conditions such as a backlog above zero since yesterday or a host dark for a fortnight are named by code
 and open no session). The layout is computed by code before the roll-up call (`rollup/layout.json`), the model
-writes only the project lines and the headline, and the gate rejects a draft whose lines differ from the layout. `npm run smoke:grafana -- --hosts` prints
+writes only the project lines and the headline, and the gate rejects a draft whose lines differ from the layout. A session the run deadline cuts off, or one the harness stops without a cost figure, is named in the brief and
+charged the rest of its grant with `cost_estimated` on the record (revision 34). `npm run smoke:grafana -- --hosts` prints
 every discovered host with its group, which is how the placeholder patterns in `config/defaults/projects.yaml`
 get replaced.
 

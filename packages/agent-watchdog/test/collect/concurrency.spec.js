@@ -40,3 +40,27 @@ describe('collect/concurrency', () => {
     })).to.be.rejectedWith('boom');
   });
 });
+
+describe('collect/concurrency: nothing new starts after a failure (revision 34)', () => {
+  const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+  it('lets the running workers settle, starts no further item, and rejects with the first error', async () => {
+    const started = [];
+    const finished = [];
+    const error = await mapWithConcurrency([0, 1, 2, 3, 4, 5], 2, async (n) => {
+      started.push(n);
+      if (n === 0) {
+        await tick();
+        throw new Error('boom');
+      }
+      for (let i = 0; i < 5; i += 1) {
+        await tick();
+      }
+      finished.push(n);
+      return n;
+    }).catch((e) => e);
+    expect(error.message).to.equal('boom');
+    expect(started).to.deep.equal([0, 1]);
+    expect(finished, 'the item already running settles before the map rejects').to.deep.equal([1]);
+  });
+});

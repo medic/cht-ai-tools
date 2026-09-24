@@ -121,6 +121,25 @@ describe('render/report: ranks, identities, related items and standing condition
     expect(html).to.include('class="related"');
   });
 
+  it('nests a relation chain at any depth, each item once (revision 34)', () => {
+    const grandchild = makeItem({
+      metric: 'cht_couchdb_doc_total', severity: 'low', rank: 4, placement: 'thread',
+      relates_to: { item_id: related.item_id, metric: related.metric, relation: 'consequence_of' },
+    });
+    const html = renderReport({ ...base, items: [primary, other, related, grandchild] });
+    const rank = (n) => (html.match(new RegExp(`class="rank">#${n}<`, 'g')) || []).length;
+    expect(rank(4), 'the grandchild appears once').to.equal(1);
+    expect(rank(3)).to.equal(1);
+    // The grandchild's list item sits inside the related item's, which sits inside the primary's card.
+    const grandchildAt = html.indexOf('class="rank">#4<');
+    const relatedAt = html.indexOf('class="rank">#3<');
+    const primaryEnd = html.indexOf('</section>', html.indexOf('class="rank">#1<'));
+    expect(relatedAt).to.be.lessThan(grandchildAt);
+    expect(grandchildAt).to.be.lessThan(primaryEnd);
+    expect(html).to.include('consequence of');
+    expect((html.match(/<ul class="related">/g) || []).length).to.equal(2);
+  });
+
   it('lists standing conditions per host when given, and omits the section otherwise', () => {
     const standing = [{
       rule: 'backlog_absolute', project_url: 'https://north-a.example.org', host: 'north-a.example.org',

@@ -24,3 +24,19 @@ describe('verify/checks/metrics_known', () => {
     expect(baseMetricName('cht_sentinel_backlog_count')).to.equal('cht_sentinel_backlog_count');
   });
 });
+
+describe('verify/checks/metrics_known: one item per identity (revision 34)', () => {
+  it('refuses two items with the same metric and pattern card, naming both', () => {
+    const ctx = baseContext();
+    ctx.items.push({ ...ctx.items[0], why_now: 'the same metric again' });
+    const result = check(ctx);
+    expect(result.status).to.equal('fail');
+    expect(result.reasons).to.deep.equal([
+      'items[1] repeats the identity of items[0] (metric cht_sentinel_backlog_count, card none); merge them into one '
+      + 'item citing both candidate ids',
+    ]);
+    const cards = baseContext();
+    cards.items.push({ ...cards.items[0], pattern_card: 'sentinel-stall' });
+    expect(check(cards).status, 'a different card is a different identity').to.equal('pass');
+  });
+});

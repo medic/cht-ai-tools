@@ -272,5 +272,5 @@ const collectWindows = async ({
 
 module.exports = {
   windowBounds, withInstance, trailingQuery, metricSpecs, metricSpecFor, queryFor, unresolvedReason, collectWindows,
-  DAY, MIN_HISTORY_DAYS,
+  seriesFor, ManySeriesError, DAY, MIN_HISTORY_DAYS,
 };

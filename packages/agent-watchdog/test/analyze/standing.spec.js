@@ -102,3 +102,33 @@ describe('analyze/standing', () => {
     expect(standingNotices({ records: [], groupSizes: {} })).to.deep.equal([]);
   });
 });
+
+describe('analyze/standing: yesterday is the computed change\'s, never the cycle baseline (revision 34)', () => {
+  const cycleBacklog = () => ({
+    ...backlog(undefined),
+    // During an expected-load window the candidate's baseline evidence is the previous cycle, not yesterday.
+    evidence: [
+      { window: 'current', value: 1234, unit: 'count' },
+      { window: 'previous_cycle', value: 1200, unit: 'count' },
+    ],
+    expected_load_window_id: 'month-end',
+  });
+  const backlogChange = (previousDay) => ({
+    metric: 'cht_outbound_push_backlog_count', current_value: 1234, previous_day_value: previousDay,
+    previous_cycle_value: 1200, baseline: 'previous_cycle',
+  });
+
+  it('a backlog that was zero yesterday is news for the model, whatever it was a cycle ago', () => {
+    expect(isStanding(cycleBacklog(), [backlogChange(0)])).to.equal(false);
+    expect(isStanding(cycleBacklog(), [backlogChange(null)])).to.equal(false);
+    expect(isStanding(cycleBacklog(), [])).to.equal(false);
+  });
+
+  it('a backlog above zero yesterday is standing, and the record carries yesterday\'s value from the change', () => {
+    expect(isStanding(cycleBacklog(), [backlogChange(50)])).to.equal(true);
+    const [record] = standingRecords({
+      candidates: [cycleBacklog()], changes: [backlogChange(50)], project, groupOf: () => 'Other',
+    });
+    expect(record).to.include({ rule: 'backlog_absolute', value: 1234, previous_day_value: 50 });
+  });
+});

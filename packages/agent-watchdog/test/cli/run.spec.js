@@ -211,7 +211,8 @@ describe('cli/commands/run', () => {
     const { stages } = fakeStages();
     const ingested = {
       run_id: '2026-09-18',
-      records: [],
+      // The records read anew this run: only their items' verdicts are appended as outcomes (revision 34).
+      records: [{ item_id: 'aaaaaaaaaaaa' }, { item_id: 'bbbbbbbbbbbb' }, { item_id: 'cccccccccccc' }],
       unmatched: [{ feedback_id: 'ffffffffffff' }],
       horizons: [{ item_id: 'aaaaaaaaaaaa', project_url: 'https://a', metric: 'm', horizon: '2026-10-01' }],
       by_item: {
@@ -453,5 +454,58 @@ describe('cli/commands/run', () => {
     }
     expect(error.code).to.equal(codes.CONFIG);
     expect(fs.existsSync(path.join(dataDir, 'runs', '2026-09-18'))).to.equal(false);
+  });
+});
+
+describe('cli/commands/run: the cost and the links a run accounts for (revision 34)', () => {
+  let dataDir;
+  beforeEach(() => {
+    dataDir = tempDir();
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('adds the feedback stage\'s model calls to the cost the roll-up and run.json carry', async () => {
+    const { stages } = fakeStages();
+    stages.feedback = {
+      name: 'feedback',
+      inputs: [],
+      run: sinon.spy(async (ctx) => {
+        await ctx.runDir.writeJson('feedback.ingested.json', {
+          run_id: '2026-09-18', records: [], unmatched: [], horizons: [], by_item: {},
+          brief: { up: 0, down: 0, notes: [] },
+          calls: [{ stage: 'feedback', kind: 'parse', cost_usd: 0.01 }],
+          review: { classified: [], unclassified: [], calls: [{ stage: 'feedback', cost_usd: 0.02 }] },
+        });
+        return { records: 0 };
+      }),
+    };
+    const t = base(dataDir, { deps: { stages } });
+    expect(await runCommand(t.args)).to.equal(0);
+    const rollupCtx = stages.rollup.run.firstCall.args[0];
+    expect(rollupCtx.costSoFar).to.be.closeTo(0.53, 1e-9);
+    expect(readRun(dataDir).cost_usd).to.be.closeTo(0.53, 1e-9);
+  });
+
+  it('gives a stage-only roll-up the agent\'s recorded spend and a link resolver', async () => {
+    const { stages } = fakeStages();
+    const first = base(dataDir, { deps: { stages }, flags: { stage: 'collect' } });
+    expect(await runCommand(first.args)).to.equal(0);
+    const runDir = path.join(dataDir, 'runs', '2026-09-18');
+    const discovery = JSON.stringify({ projects: [], dashboards: [], metrics: [] });
+    fs.writeFileSync(path.join(runDir, 'discovery.json'), discovery);
+    fs.writeFileSync(path.join(runDir, 'agent.summary.json'), JSON.stringify({ cost_usd: 0.7, cost_estimated: false }));
+    let seen = null;
+    stages.rollup = {
+      name: 'rollup',
+      inputs: [],
+      run: sinon.spy(async (ctx) => {
+        seen = { cost: ctx.costSoFar, resolver: typeof ctx.resolveLinks };
+        await ctx.runDir.writeJson('rollup/brief.json', { kind: 'brief' });
+        return { kind: 'brief', items: 0, bullets: 0, degraded: false };
+      }),
+    };
+    const second = base(dataDir, { deps: { stages, fetch: sinon.stub() }, flags: { stage: 'rollup' } });
+    expect(await runCommand(second.args)).to.equal(0);
+    expect(seen).to.deep.equal({ cost: 0.7, resolver: 'function' });
   });
 });

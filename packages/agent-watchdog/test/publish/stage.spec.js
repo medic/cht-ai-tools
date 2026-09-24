@@ -62,6 +62,45 @@ describe('cli/stages/publish', () => {
     expect(brief.image).to.equal(null);
   });
 
+  it('writes the publication record as soon as the parent is posted, partial until the thread is done', async () => {
+    const client = fakeClient();
+    client.chat.postMessage = sinon.stub().callsFake(async ({ thread_ts: threadTs, metadata }) => {
+      if (metadata && metadata.event_type === 'agent_watchdog.programme') {
+        throw new Error('socket hang up');
+      }
+      return { ok: true, channel: 'C123', ts: threadTs ? `${threadTs}9` : '1.000' };
+    });
+    const second = makeItem({ metric: 'cht_conflict_count', severity: 'high', rank: 2, placement: 'thread' });
+    await runDir.writeJson('rollup/items.ranked.json', [item, second]);
+    await runDir.writeJson('rollup/brief.json', makeBrief({
+      bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }],
+      thread: [{
+        kind: 'group', item_id: null, item_ids: [], group: 'North Programme', text: 'North Programme: 1 project',
+        alert_key: null, children: [{ item_id: second.item_id, item_ids: [second.item_id], text: 'conflicts up' }],
+      }],
+    }));
+    const error = await stage.run({ ...ctx('scheduled', client), deps: { slack: client, sleep: async () => {} } })
+      .catch((e) => e);
+    expect(error.code).to.equal(74);
+    const publication = await runDir.readJson('rollup/publication.json');
+    expect(publication).to.include({ channel_id: 'C123', ts: '1.000', partial: true });
+    expect(publication.replies).to.deep.equal([]);
+  });
+
+  it('refuses to post a second parent for a run that already has one, with the temporary-failure code', async () => {
+    await runDir.writeJson('rollup/publication.json', {
+      channel_id: 'C123', ts: '1.000', permalink: 'https://slack/p1.000', replies: [], partial: true,
+    });
+    const client = fakeClient();
+    const error = await stage.run(ctx('stage', client)).catch((e) => e);
+    expect(error.code).to.equal(75);
+    expect(error.message).to.include('1.000');
+    expect(client.chat.postMessage.called).to.equal(false);
+    // A preview still builds the payload without posting.
+    const preview = await stage.run(ctx('preview', client));
+    expect(preview.posted).to.equal(false);
+  });
+
   it('refuses to run without the brief', async () => {
     const fresh = await RunDir.create(dataDir, '2026-09-19');
     let error;
@@ -220,6 +259,25 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     expect(slack2.chat.postMessage).to.have.been.calledOnce;
     expect(slack2.reactions.add.called).to.equal(false);
     expect(again.exists('rollup/feedback.digest.json')).to.equal(false);
+  });
+
+  it('holds a note whose review failed back from acknowledgement and from the reaction (FR-061)', async () => {
+    const ingested = await runDir.readJson('feedback.ingested.json');
+    await runDir.writeJson('feedback.ingested.json', {
+      ...ingested, review: { classified: [], unclassified: ['f2f2f2f2f2f2'] },
+    });
+    const slack = client();
+    const out = await stage.run(ctx('scheduled', slack));
+    expect(out.posted).to.equal(true);
+    const entity = await runDir.readJson('rollup/feedback.digest.json');
+    expect(entity.acknowledged).to.deep.equal(['f1f1f1f1f1f1']);
+    expect(entity.unclassified).to.equal(1);
+    const payload = await runDir.readJson('rollup/payload.json');
+    expect(payload.digest.text).to.include('1 note awaiting classification');
+    expect(slack.reactions.add.called, 'no eyes on a note not yet acknowledged').to.equal(false);
+    const records = await readAll(dataDir);
+    expect(records.find((r) => r.feedback_id === 'f1f1f1f1f1f1').acknowledged_run_id).to.equal('2026-09-18');
+    expect(records.find((r) => r.feedback_id === 'f2f2f2f2f2f2').acknowledged_run_id).to.equal(null);
   });
 
   it('posts the digest in a heartbeat thread on a quiet day and survives a failed reaction', async () => {

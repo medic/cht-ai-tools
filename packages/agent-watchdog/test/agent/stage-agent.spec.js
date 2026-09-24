@@ -119,6 +119,28 @@ describe('cli/stages/agent', () => {
     expect(engine.sessions[0].options.systemPrompt[2]).to.include('remember this');
   });
 
+  it('counts a killed session\'s estimated cost against the run budget and says so on the summary', async () => {
+    const engine = createFakeEngine({
+      responses: (userText) => (userText.includes('alpha')
+        ? { structuredOutput: null, result: { subtype: 'error_timeout' } }
+        : { structuredOutput: findingsFor(projectFor(userText), METRIC) }),
+    });
+    const result = await stage.run(ctx(engine, {
+      config: {
+        ...ctx(engine).config,
+        bounds: { ...ctx(engine).config.bounds, maxBudgetUsdProject: 1, maxBudgetUsdRun: 1.5, projectConcurrency: 1 },
+      },
+    }));
+    expect(result.bounds_hit).to.include('timeout');
+    expect(result.cost_estimated).to.equal(true);
+    // alpha's grant of $1 is charged in full; gamma then gets only the $0.50 left.
+    expect(result.run_budget.spent).to.be.closeTo(1.01, 1e-9);
+    const summary = await runDir.readJson('agent.summary.json');
+    expect(summary.cost_estimated).to.equal(true);
+    expect(logs.some((l) => l.event === 'agent.session_start' && l.project_url === 'https://gamma.example.org'
+      && l.budget_usd === 0.5)).to.equal(true);
+  });
+
   it('refuses to start without a gate and without its input file', async () => {
     const engine = createFakeEngine({ responses: [] });
     await expect(stage.run(ctx(engine, { deps: { engine, definition, gate: null } }))).to.be.rejectedWith(/gate/);

@@ -285,7 +285,10 @@ const reviewFeedback = async ({
 
 const promptFile = (promptsDir) => path.join(promptsDir, 'feedback-review.md');
 
+/** Runs that review a note whose classification call failed before it is acknowledged unclassified (revision 34). */
+const MAX_REVIEW_ATTEMPTS = 3;
+
 module.exports = {
   reviewFeedback, splitPrompt, validateProjectsFragment, OUTPUT_SCHEMA, promptFile, PROPOSAL_CLASSIFICATIONS,
-  threadsOf, notesBlock,
+  threadsOf, notesBlock, MAX_REVIEW_ATTEMPTS,
 };

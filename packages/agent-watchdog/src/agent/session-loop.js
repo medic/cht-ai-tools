@@ -3,9 +3,9 @@
 // one session, the gate between turns, convergence, bounds, and every artefact the run directory contract
 // names (FR-056 to FR-058, FR-012, FR-017).
 const { assembleSystemPrompt, buildPassPrompt } = require('./prompt-assembly');
+const { collectToolResultUrls } = require('../verify/tool-urls');
 const { RUNTIME_TOOLS } = require('../../agent/hooks');
 
-const URL_PATTERN = /https?:\/\/[^\s)"'<>\]]+/g;
 
 const roundSig = (value, digits = 3) => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) {
@@ -42,10 +42,8 @@ const addUsage = (total, usage) => {
   }
 };
 
-const urlsIn = (value) => {
-  const found = JSON.stringify(value === undefined ? null : value).match(URL_PATTERN) || [];
-  return [...new Set(found.map((u) => u.replace(/\\+$/, '')))];
-};
+/** The URLs of one tool result, read from its texts (src/verify/tool-urls.js, revision 34). */
+const urlsIn = (value) => [...collectToolResultUrls([{ tool_response: value }])];
 
 const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budget' };
 
@@ -107,11 +105,23 @@ const toolUsage = (calls, refused) => {
 const runProjectSession = async ({
   engine, definition, project, candidates, changes, feedback = [], memory = '', activeWindow = null, config, gate,
   runDir, logger, tracer = null, now = () => new Date(), deadline = null, localTools = [], localServers = {},
-  mcpConfig = null, alerts = [], budgetUsd = null,
+  mcpConfig = null, alerts = [], budgetUsd = null, date = null,
 }) => {
   const slug = project.slug;
-  const date = now().toISOString().slice(0, 10);
+  // The run's date (revision 34): a backfill or a replay tells the model the day it analyses, not today's.
+  const runDate = date || now().toISOString().slice(0, 10);
   const bounds = config.bounds;
+  // What this session may spend: the stage's grant, else the project budget. A turn that ends without a runtime
+  // cost figure (a timeout, the harness turn cap) is charged the rest of it, marked estimated (revision 34), so
+  // the run budget never re-grants money that may already be spent.
+  const grantUsd = budgetUsd === null || budgetUsd === undefined ? bounds.maxBudgetUsdProject : budgetUsd;
+  let costEstimated = false;
+  const chargeRemainingGrant = () => {
+    if (Number.isFinite(grantUsd) && costUsd < grantUsd) {
+      costUsd = grantUsd;
+      costEstimated = true;
+    }
+  };
   const passRecords = [];
   const diffs = [];
   const calls = [];
@@ -158,6 +168,9 @@ const runProjectSession = async ({
     const turnUsage = normaliseUsage(result.usage);
     addUsage(usage, turnUsage);
     costUsd += result.total_cost_usd || 0;
+    if (result.cost_unknown) {
+      chargeRemainingGrant();
+    }
     referenceUnavailable = referenceUnavailable || Boolean(turn.referenceUnavailable);
     await recordToolCalls(pass, attempt, turn.toolCalls);
     allToolCalls.push(...(turn.toolCalls || []));
@@ -189,7 +202,7 @@ const runProjectSession = async ({
   const runPass = async (pass) => {
     const previous = passRecords[passRecords.length - 1];
     let prompt = buildPassPrompt({
-      definition, pass, project, candidates, changes, feedback, date, alerts,
+      definition, pass, project, candidates, changes, feedback, date: runDate, alerts,
       previousItems: previous ? previous.items : [],
       notSelected: previous ? previous.not_selected : [],
     });
@@ -217,6 +230,9 @@ const runProjectSession = async ({
         const timedOut = Boolean(error) && (error.code === 'TIMEOUT' || /timed out/i.test(message));
         errors.push({ pass, attempt, message, bound: timedOut ? 'timeout' : 'error' });
         boundsHit.add(timedOut ? 'timeout' : 'error');
+        if (timedOut) {
+          chargeRemainingGrant();
+        }
         break;
       }
       const subtype = (lastTurn.result && lastTurn.result.subtype) || 'success';
@@ -305,6 +321,8 @@ const runProjectSession = async ({
       bounds_hit: [...boundsHit],
       errors,
       reference_sources_unavailable: referenceUnavailable,
+      cost_usd: Number(costUsd.toFixed(6)),
+      cost_estimated: costEstimated,
     });
     await runDir.writeJson(`${slug}/session.json`, {
       session_id: sessionId, model: config.model.name, engine: engine.name || 'unknown', calls,
@@ -312,25 +330,28 @@ const runProjectSession = async ({
     });
   };
 
+  const summaryResult = () => ({
+    passes: passRecords,
+    items: acceptedItems,
+    converged,
+    bounds_hit: [...boundsHit],
+    reference_sources_unavailable: referenceUnavailable,
+    cost_usd: Number(costUsd.toFixed(6)),
+    cost_estimated: costEstimated,
+    usage,
+    session_id: sessionId,
+    errors,
+  });
+
   if (pastDeadline()) {
     boundsHit.add('timeout');
     await writeSummaries();
-    return {
-      passes: passRecords,
-      items: [],
-      converged,
-      bounds_hit: [...boundsHit],
-      reference_sources_unavailable: referenceUnavailable,
-      cost_usd: 0,
-      usage,
-      session_id: null,
-      errors,
-    };
+    return summaryResult();
   }
 
   const activeWindows = activeWindow ? [activeWindow] : [];
-  const systemPrompt = assembleSystemPrompt({ definition, date, memory, activeWindows });
-  session = await engine.openSession({
+  const systemPrompt = assembleSystemPrompt({ definition, date: runDate, memory, activeWindows });
+  const open = () => engine.openSession({
     systemPrompt,
     outputSchema: definition.outputSchemas.findings,
     tools: definition.tools.allowed,
@@ -347,6 +368,18 @@ const runProjectSession = async ({
     effort: config.model.effort,
     sessionName: slug,
   });
+  try {
+    session = await open();
+  } catch (error) {
+    // A session that cannot open (no runtime on PATH, a refused schema) is this project's error bound, recorded
+    // like a failed turn, never the whole stage's failure (revision 34).
+    const message = String(error && error.message ? error.message : error).slice(0, 500);
+    logger.warn('agent.session_open_failed', { project_url: project.url, error });
+    errors.push({ pass: 1, attempt: 0, message, bound: 'error' });
+    boundsHit.add('error');
+    await writeSummaries();
+    return summaryResult();
+  }
 
   try {
     for (let pass = 1; pass <= bounds.passes; pass += 1) {
@@ -374,17 +407,7 @@ const runProjectSession = async ({
     bounds_hit: [...boundsHit], reference_sources_unavailable: referenceUnavailable, cost_usd: costUsd,
   });
   await writeSummaries();
-  return {
-    passes: passRecords,
-    items: acceptedItems,
-    converged,
-    bounds_hit: [...boundsHit],
-    reference_sources_unavailable: referenceUnavailable,
-    cost_usd: Number(costUsd.toFixed(6)),
-    usage,
-    session_id: sessionId,
-    errors,
-  };
+  return summaryResult();
 };
 
 module.exports = { runProjectSession, diffItems, signature, roundSig, normaliseUsage, urlsIn };

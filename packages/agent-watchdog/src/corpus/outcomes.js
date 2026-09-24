@@ -12,13 +12,18 @@ const entriesOf = (byItem) => (byItem instanceof Map ? [...byItem.entries()] : O
 
 const outcomesFile = (dataDir, date) => path.join(dataPaths(dataDir).corpusOutcomes, `${date}.jsonl`);
 
-/** Append one line per confirmed or dismissed item, skipping ids already recorded for that day. */
-const appendOutcomes = async ({ dataDir, date, runId, byItem }) => {
+/**
+ * Append one line per confirmed or dismissed item, skipping ids already recorded for that day. With `itemIds`
+ * (revision 34) only those items are considered: the run passes the items whose feedback it read anew, so a
+ * verdict standing since last week is not appended again every day of the influence window.
+ */
+const appendOutcomes = async ({ dataDir, date, runId, byItem, itemIds = null }) => {
   const file = outcomesFile(dataDir, date);
   const existing = new Set((await atomic.readJsonl(file)).map((record) => record.item_id));
+  const wanted = itemIds === null || itemIds === undefined ? null : new Set(itemIds);
   let appended = 0;
   for (const [itemId, entry] of entriesOf(byItem)) {
-    if (!OUTCOME_VERDICTS.has(entry.verdict) || existing.has(itemId)) {
+    if (!OUTCOME_VERDICTS.has(entry.verdict) || existing.has(itemId) || (wanted && !wanted.has(itemId))) {
       continue;
     }
     await atomic.appendJsonl(file, {

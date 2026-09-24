@@ -24,3 +24,25 @@ describe('verify/tool-urls', () => {
     expect(collectToolResultUrls(undefined).size).to.equal(0);
   });
 });
+
+describe('verify/tool-urls: URLs are read from each text of a structured result (revision 34)', () => {
+  it('reads the text leaves of a runtime tool result and never a JSON encoding of them', () => {
+    const calls = [{
+      tool_name: 'mcp__cht-docs__search_docs',
+      tool_response: {
+        content: [
+          { type: 'text', text: 'See https://docs.communityhealthtoolkit.org/hosting/monitoring/\nSource: https://forum.communityhealthtoolkit.org/t/2' },
+          { type: 'text', text: '[More](https://github.com/medic/cht-core/issues/9)' },
+        ],
+      },
+    }];
+    expect([...collectToolResultUrls(calls)].sort()).to.deep.equal([
+      'https://docs.communityhealthtoolkit.org/hosting/monitoring/',
+      'https://forum.communityhealthtoolkit.org/t/2',
+      'https://github.com/medic/cht-core/issues/9',
+    ]);
+    // A string carrying a JSON-encoded document is still read as text: an escaped quote ends the URL.
+    const encoded = collectToolResultUrls([{ output: '{"text":"Source: https://docs.communityhealthtoolkit.org/a/"}' }]);
+    expect([...encoded]).to.deep.equal(['https://docs.communityhealthtoolkit.org/a/']);
+  });
+});

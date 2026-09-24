@@ -13,6 +13,7 @@ const { writeResult } = require('../streams');
 const { createTracer } = require('../../trace/langfuse');
 const { createFindingsGate } = require('../gate');
 const { createQueryWindow } = require('../../collect/query-window');
+const { activeWindow } = require('../../analyze/calendar');
 const { metricSpecFor } = require('../../collect/windows');
 const { appendOutcomes } = require('../../corpus/outcomes');
 const { readMemory } = require('../../rollup/memory');
@@ -290,7 +291,11 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
   const specFor = async (metric) => (runDir.exists('discovery.json')
     ? metricSpecFor(await runDir.readJson('discovery.json'))(metric)
     : null);
-  const queryWindow = deps.queryWindow || (grafana ? createQueryWindow({ grafana, runStart, specFor }) : null);
+  const queryWindow = deps.queryWindow || (grafana ? createQueryWindow({
+    grafana, runStart, specFor,
+    // The project's active expected-load window makes previous_cycle a known window (revision 34).
+    activeWindowFor: (project) => activeWindow([], project, runStart),
+  }) : null);
   const ctx = createContext({
     config, effective, policy, logger: log, runDir, runId, date, mode, tracer, engine, flags,
   });
@@ -332,6 +337,16 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
       if (name === 'rollup') {
         ctx.memory = (await readMemory(dataDir)).text;
         ctx.previousItemIds = await previousItemCounts(dataDir, runId);
+        // A stage-only roll-up (FR-043) still resolves links and carries the agent's recorded spend (revision 34):
+        // the resolver is built from the discovery on disk, the cost read from agent.summary.json.
+        if (!ctx.resolveLinks && runDir.exists('discovery.json')) {
+          ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });
+        }
+        if (!agentResult && runDir.exists('agent.summary.json')) {
+          const summary = await runDir.readJson('agent.summary.json');
+          ctx.costSoFar = Number(((ctx.costSoFar || 0) + (summary.cost_usd || 0)).toFixed(6));
+          ctx.costEstimated = Boolean(ctx.costEstimated || summary.cost_estimated);
+        }
       }
       await runDir.stageStart(name);
       const stageCtx = ctx.forStage(name);
@@ -343,12 +358,22 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
 
       if (name === 'agent' && result) {
         agentResult = result;
-        ctx.costSoFar = result.cost_usd || 0;
+        ctx.costSoFar = Number(((ctx.costSoFar || 0) + (result.cost_usd || 0)).toFixed(6));
+        ctx.costEstimated = Boolean(ctx.costEstimated || result.cost_estimated);
       }
       if (name === 'feedback' && runDir.exists('feedback.ingested.json')) {
         const ingested = await loadFeedbackContext(ctx, runDir);
-        const { appended } = await appendOutcomes({ dataDir, date, runId, byItem: ingested.by_item || {} });
+        // Outcomes are appended for the items whose feedback changed this run (revision 34), never re-appended
+        // for every verdict still inside the influence window.
+        const fresh = new Set((ingested.records || []).map((record) => record.item_id).filter(Boolean));
+        const { appended } = await appendOutcomes({
+          dataDir, date, runId, byItem: ingested.by_item || {}, itemIds: fresh,
+        });
         log.info('corpus.outcomes', { appended, items: ctx.feedbackByItem.size });
+        // The feedback stage's own model calls, the horizon parses and the reviews, are part of the run's cost.
+        const feedbackCost = [...(ingested.calls || []), ...((ingested.review && ingested.review.calls) || [])]
+          .reduce((sum, call) => sum + (call.cost_usd || 0), 0);
+        ctx.costSoFar = Number(((ctx.costSoFar || 0) + feedbackCost).toFixed(6));
       }
       if (name === 'collect' && runDir.exists('discovery.json')) {
         ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });
@@ -421,6 +446,7 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
   }
   if (agentResult) {
     patch.cost_usd = ctx.costSoFar;
+    patch.cost_estimated = Boolean(ctx.costEstimated);
     patch.usage = agentResult.usage || null;
     patch.bounds_hit = agentResult.bounds_hit || [];
   }

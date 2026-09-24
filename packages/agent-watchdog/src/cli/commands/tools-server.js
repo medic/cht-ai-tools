@@ -8,6 +8,7 @@ const path = require('node:path');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
 const { withEgressGuard } = require('../../net/egress');
+const { activeWindow } = require('../../analyze/calendar');
 const { createWatchdogTools } = require('../../agent/tools/watchdog-tools');
 const { createRecordedTools } = require('../../agent/tools/recorded-tools');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
@@ -38,7 +39,12 @@ const liveQueryWindow = ({ config, discovery, deps, logger }) => {
     fetch: deps.fetch || globalThis.fetch,
     logger,
   });
-  return createQueryWindow({ grafana, runStart: new Date(discovery.run_start), specFor: metricSpecFor(discovery) });
+  const runStart = new Date(discovery.run_start);
+  return createQueryWindow({
+    grafana, runStart, specFor: metricSpecFor(discovery),
+    // The project's active expected-load window makes previous_cycle a known window (revision 34).
+    activeWindowFor: (project) => activeWindow([], project, runStart),
+  });
 };
 
 /**
@@ -91,10 +97,21 @@ const buildTools = async ({
     },
     project,
     discovery,
-    patternCards: deps.patternCards || { index: [], read: async () => '' },
+    // The merged cards of the skill directory, as the SDK engine's sessions get them (revision 34): before this
+    // the stdio server served none, so the CLI engine could never read a card.
+    patternCards: deps.patternCards || patternCardsFor(config),
     replay: replay ? lookup.forServer('watchdog') : null,
     recorder,
   });
+};
+
+const patternCardsFor = (config) => {
+  const skillDir = config && config.paths && config.paths.skillDir;
+  if (!skillDir) {
+    return { index: [], read: async () => '' };
+  }
+  const { loadPatternCards } = require('../../corpus/cards');
+  return loadPatternCards({ skillDir });
 };
 
 /** Command handler: validate, build, serve until the client closes the transport. */

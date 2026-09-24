@@ -1,7 +1,7 @@
 'use strict';
 // The enumerated, read-only local tools the model may call (contracts/agent-definition.md).
 const { z } = require('zod');
-const { sameMetric } = require('../../verify/metric-key');
+const { stripInstanceMatcher, sameMetric } = require('../../verify/metric-key');
 const { argsHash } = require('./args-hash');
 const { enums } = require('../../model/schemas');
 
@@ -74,10 +74,33 @@ const createWatchdogTools = ({
   };
 
   const validMetric = (metric) => typeof metric === 'string' && METRIC_NAME.test(metric) && knownMetrics.has(metric);
-  const collectedKey = (metric) => typeof metric === 'string'
-    && metric.length <= METRIC_KEY_MAX
-    && !/[\n\r]/.test(metric)
-    && [...knownMetrics].some((known) => sameMetric(known, metric));
+  /**
+   * The collected key a request names (revision 34): itself when collected, else the one collected key it matches
+   * loosely (a base name, a stripped matcher); several matches are ambiguous and none is unknown, both said.
+   */
+  const collectedKeys = [...new Set([...(discovery.metrics || []), ...(deps.metrics || [])])];
+  const resolveKey = (metric) => {
+    const short = String(metric).slice(0, 80);
+    if (typeof metric !== 'string' || metric.length > METRIC_KEY_MAX || /[\n\r]/.test(metric)) {
+      return { error: `unknown metric: ${short}` };
+    }
+    // Exact first, then the same key without its instance matcher, then the same base metric name; a tie within
+    // a tier is ambiguous, and a tier that matches decides before a looser one is tried.
+    const tiers = [
+      (known) => known === metric,
+      (known) => stripInstanceMatcher(known) === stripInstanceMatcher(metric),
+      (known) => sameMetric(known, metric),
+    ];
+    for (const matches of tiers.map((tier) => collectedKeys.filter(tier))) {
+      if (matches.length === 1) {
+        return { key: matches[0] };
+      }
+      if (matches.length > 1) {
+        return { error: `ambiguous metric: ${short} matches ${matches.join(', ')}; name one of them` };
+      }
+    }
+    return { error: `unknown metric: ${short}` };
+  };
 
   return [
     {
@@ -85,10 +108,11 @@ const createWatchdogTools = ({
       description: WINDOWS_DESCRIPTION,
       schema: { metric: z.string().describe('Metric key as it appears in the candidates or computed changes') },
       handler: (args) => run('get_windows', args, async () => {
-        if (!collectedKey(args.metric)) {
-          return { error: `unknown metric: ${String(args.metric).slice(0, 80)}` };
+        const resolved = resolveKey(args.metric);
+        if (resolved.error) {
+          return { error: resolved.error };
         }
-        return deps.getWindows(project, args.metric);
+        return deps.getWindows(project, resolved.key);
       }),
     },
     {

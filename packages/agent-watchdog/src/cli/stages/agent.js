@@ -255,6 +255,7 @@ const run = async (ctx) => {
           localServers: replay ? replay.localServers : {},
           mcpConfig: replay ? { mcpServers: {} } : mcpConfig,
           budgetUsd: granted,
+          date: ctx.date || null,
         });
       } finally {
         reserved = round6(reserved - granted);
@@ -279,6 +280,8 @@ const run = async (ctx) => {
     },
     reference_sources_unavailable: results.some((r) => r && r.reference_sources_unavailable),
     cost_usd: Number(results.filter(Boolean).reduce((sum, r) => sum + (r.cost_usd || 0), 0).toFixed(6)),
+    // True when any session was charged its grant for want of a runtime figure (revision 34): an upper bound.
+    cost_estimated: results.some((r) => r && r.cost_estimated === true),
     usage: results.filter(Boolean).reduce((total, r) => {
       for (const key of Object.keys(total)) {
         total[key] += (r.usage && r.usage[key]) || 0;

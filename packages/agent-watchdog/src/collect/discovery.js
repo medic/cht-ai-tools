@@ -1,5 +1,6 @@
 'use strict';
 // Discover projects, dashboards and metrics from the hosted watchdog on every run (FR-001, FR-003, FR-005).
+const codes = require('../cli/exit-codes');
 const { normaliseHost, matchesGlob } = require('../config/policy');
 const { projectSlug, projectUrlFor } = require('../model/identity');
 const { schemas } = require('../model/schemas');
@@ -261,16 +262,31 @@ const discover = async ({ grafana, policy, runStart, logger = noop, docs = null 
   const defaults = (policy.projects.defaults && policy.projects.defaults.expected_load_windows) || [];
   const trailing = windowBounds(runStart).find((b) => b.window === 'trailing_14d');
   const projects = [];
+  // One host's failed query leaves that project without a version or a history count, never the run without a
+  // brief (FR-073, revision 34); an unreachable or refusing source still fails the run through the client.
+  const perHost = async (host, query, fn, fallback) => {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof codes.ExitError) {
+        throw error;
+      }
+      logger.warn('discovery.query_failed', { project: host, query, error: error.message });
+      return fallback;
+    }
+  };
   for (const host of analysable) {
     const annotation = policy.projects.projects[host] || null;
-    const versionVector = await grafana.queryInstant({ query: withInstance('cht_version', host), time });
+    const versionVector = await perHost(host, 'cht_version', () => grafana.queryInstant({
+      query: withInstance('cht_version', host), time,
+    }), []);
     const versionLabels = versionVector.length ? versionVector[0].metric : {};
-    const daily = await grafana.queryRange({
+    const daily = await perHost(host, 'history', () => grafana.queryRange({
       query: trailingQuery(withInstance(scrapeTargetMetric, host)),
       start: Math.floor(trailing.start.getTime() / 1000),
       end: Math.floor(trailing.end.getTime() / 1000),
       step: trailing.step_s,
-    });
+    }), []);
     const historyDays = daily.length ? daily[0].values.length : 0;
     const projectWindows = ((annotation && annotation.expected_load_windows) || []).map((w) => ({ ...w, scope: host }));
     const project = schemas.Project.parse({

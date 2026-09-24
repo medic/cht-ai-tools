@@ -18,7 +18,7 @@ const { createFindingsGate } = require('../gate');
 const { loadDefinition } = require('../../agent/definition');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
 const { diffItems } = require('../../agent/session-loop');
-const { lastFindingsFile } = require('../stages/rollup');
+const { lastAcceptedFindingsFile: lastFindingsFile } = require('../../rollup/analysis');
 const { selectProjects } = require('../stages/agent');
 const { loadPatternCards } = require('../../corpus/cards');
 const pkg = require('../../../package.json');
@@ -154,7 +154,7 @@ const passSummary = async (dir, slug) => {
   };
 };
 
-// "before" is what the roll-up would have used: the highest-numbered pass file, accepted or not (rollup.js).
+// "before" is what the roll-up used: the last pass the gate accepted (rollup/analysis.js, revision 34).
 const compareProject = async ({ source, replayDir, project, unavailable }) => {
   const before = await passSummary(source, project.slug);
   const after = await passSummary(replayDir, project.slug);

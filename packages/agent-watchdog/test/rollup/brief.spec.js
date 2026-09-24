@@ -132,7 +132,7 @@ describe('rollup/brief composeBrief', () => {
     const out = await composeBrief({ ctx: makeCtx({ engine, gate }), items, ...base() });
     expect(out.degraded).to.equal(true);
     expect(out.brief.kind).to.equal('degraded');
-    expect(out.brief.degradation_notice).to.include('three');
+    expect(out.brief.degradation_notice).to.include('rejected 3 drafts');
     expect(engine.session.turn.callCount).to.equal(3);
     expect(out.drafts).to.have.length(3);
     expect(() => schemas.Brief.parse(out.brief)).to.not.throw();

@@ -340,3 +340,20 @@ records the rest as `not requested`), an egress refusal during resolution fails 
 follows a redirect only to a listed destination, for `run`, `tools-server`, `calibrate`, `distill` and `replay`
 alike. To see the reasons on a stored run: `verification.pass<n>.json` under the project and
 `rollup/verification.draft<n>.json`.
+
+## 25. What a run says about itself since the review (revision 34)
+
+The heartbeat says how many candidates were assessed and that none was flagged; a session the run deadline cut
+off is an incomplete analysis the brief names; the degraded notice counts the drafts it refused. Costs: a
+session killed at the harness turn cap or a turn that timed out is charged the rest of its grant and
+`cost_estimated: true` appears on `passes.json`, `agent.summary.json` and `run.json`; the feedback stage's
+calls are in the run's cost; `run --stage rollup` carries the agent's recorded spend and resolves links. The
+roll-up reads the last pass the gate accepted, so `findings.pass2.json` rejected by the gate drops nothing
+accepted in pass 1. Feedback: a note's record keeps `expected_max`, `observed_value` and `horizon_source`; a
+failed model parse is logged as `feedback.parse_failed` and retried by the next run with a model; a note whose
+review failed stays unacknowledged for up to three runs; outcomes are appended only for items with new
+feedback. Publish: `rollup/publication.json` appears as soon as the parent is posted (`partial: true`) and a
+second `--stage publish` on that run exits 75 instead of posting again; the alerts reply drops whole
+programme lines before it would cut a link. Tools: `get_windows` resolves a bare metric name to the collected
+key and refuses an ambiguous one; `query_metric` refuses several series, carries the panel's unit and knows
+`previous_cycle` under an active window; the CLI engine's tools server serves the merged pattern cards.

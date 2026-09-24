@@ -11,6 +11,8 @@ const { headlineMarker, bulletMarker, noticeMarker, withMarker } = require('../r
 const { buildItemLinks, buildDashboardLink, buildAlertGroupLinks } = require('../links/build');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', '..', 'templates', 'report.hbs');
+// The related-items list, a partial that nests itself: a relation chain renders at any depth (revision 34).
+const RELATED_PARTIAL_PATH = path.join(__dirname, '..', '..', 'templates', 'report-related.hbs');
 const KIND_LABELS = { brief: 'brief', heartbeat: 'all quiet', degraded: 'degraded', failure: 'failed' };
 // `internal` links every reference to the hosted watchdog; `none` names it, for a reader without credentials there.
 const LINK_MODES = Object.freeze(['internal', 'none']);
@@ -146,7 +148,7 @@ const linkBuilder = ({ links, items, discovery }) => {
   };
 };
 
-const itemView = (item, windowsByMetric, linker, related = []) => ({
+const itemView = (item, windowsByMetric, linker, related = [], nested = new Map()) => ({
   item_id: item.item_id,
   host: hostOf(item.project_url),
   metric: item.metric,
@@ -157,7 +159,8 @@ const itemView = (item, windowsByMetric, linker, related = []) => ({
   rank_text: item.rank === null || item.rank === undefined ? '' : `#${item.rank}`,
   relation_text: item.relates_to ? relationText(item.relates_to.relation) : '',
   has_related: related.length > 0,
-  related: related.map((other) => itemView(other, windowsByMetric, linker)),
+  // Each related item brings its own relations along (revision 34), so a chain two levels deep is not dropped.
+  related: related.map((other) => itemView(other, windowsByMetric, linker, nested.get(other.item_id) || [], nested)),
   persisting_text: item.persisting_days > 1 ? `persisting ${item.persisting_days} days` : 'new today',
   confidence_pct: Math.round((item.confidence || 0) * 100),
   why_now: roundProse(item.why_now),
@@ -266,7 +269,7 @@ const buildView = ({
     checked: brief.checked,
     footer: footerView(brief.footer || {}, linker),
     has_items: topLevel.length > 0,
-    items: topLevel.map((item) => itemView(item, windowsByMetric, linker, nested.get(item.item_id) || [])),
+    items: topLevel.map((item) => itemView(item, windowsByMetric, linker, nested.get(item.item_id) || [], nested)),
     has_standing: standingRows.length > 0,
     standing: standingRows,
     has_alerts: alertRows.length > 0,
@@ -296,6 +299,9 @@ const compileTemplate = () => {
   const handlebars = Handlebars.create();
   handlebars.registerHelper('sparkline', (samples) => sparklineSvg(samples));
   handlebars.registerHelper('href', (url) => hrefValue(url));
+  const related = fs.readFileSync(RELATED_PARTIAL_PATH, 'utf8');
+  assertNoTripleStash(related);
+  handlebars.registerPartial('related', related);
   return handlebars.compile(text, { strict: true });
 };
 

@@ -74,6 +74,7 @@ One execution for one date (FR-039, FR-042).
 | `usage` | Usage | Summed token usage across model calls. |
 | `cost_usd` | number | Sum of Cost Records; reconciled with the runtime's estimate (FR-049). |
 | `publications` | Publication[] | Parent post, thread replies, the report share (see Brief, Thread Reply); the image file until revision 24. |
+| `cost_estimated` | boolean | True when any session's cost is an upper bound (revision 34, see Pass). |
 | `trace_id`, `trace_url` | string | One trace per run (FR-049). |
 | `supersedes`, `superseded_by` | string or null | Linked forced runs (Edge Cases). |
 | `bounds_hit` | string[] | Which bounds ended work early, if any (FR-012). |
@@ -326,6 +327,7 @@ One model pass over one project (FR-056 to FR-058).
 | `converged` | boolean | True when items match the previous pass on identity, severity and evidence within display rounding (FR-057). |
 | `gate` | VerificationReport | Result of the in-analysis gate for this pass: the final attempt's report. A project with no items, no error and no stopping bound whose every pass carries `outcome: rejected` is named in the brief's incomplete-analysis notice with its commonest failing check (FR-056, revision 22); the roll-up reads this field, nothing new is stored. |
 | `usage`, `cost_usd`, `num_turns`, `duration_ms` | | From the runtime result. |
+| `cost_estimated` (on `passes.json`) | boolean | True when a turn ended without a runtime cost figure (a timeout, the harness turn cap) and the session was charged the rest of its grant instead (revision 34); `cost_usd` on `passes.json`, `agent.summary.json` and the Run is then an upper bound. |
 | `tool_calls_path` | string | JSONL of every tool call and result, for replay (FR-041). |
 
 ### Verification Report
@@ -446,12 +448,18 @@ The once-per-run thread reply that acknowledges new feedback (FR-062, US7). Stor
 | `items` | object[] | Per item with new feedback: `{ item_id, host, metric, up, down, notes, effect }` where `effect` is `confidence_up` \| `confidence_down` \| `suppressed` \| `none` and, when suppressed, `until` the horizon date. Since revision 29 (FR-085) also `provenance`: `{ applied, prompt_path, records, lines, lines_total, trace_url, suppressed_until, suppressed_path }` where `applied` is `prompt` \| `suppressed` \| `both` \| `none`; `lines` are the exact `kind`, `verdict`, `note` and `horizon` lines the item's records put into the feedback block of `<slug>/prompt.pass1.md` (each verified to occur in the file), `lines_total` how many lines those records took, `trace_url` the run's trace, pointing at the pass-1 generation when the tracer gave its id, and `suppressed_until` the horizon that held the item's candidates back before analysis. |
 | `brief` | object | `{ up, down, notes }` for reactions on the parent post. |
 | `proposals` | object[] | `{ proposal_id, type, path }` written from this feedback, each once: the notes of one item thread share one proposal (revision 29). |
-| `unclassified` | integer | Notes whose classification call failed; retried next run. |
+| `unclassified` | integer | Notes whose classification call failed and which have attempts left: left out of `acknowledged` and the tallies, reviewed again next run (revision 34). |
+| `unclassifiable` | integer | Notes acknowledged by this digest after their last failed attempt, said so in words (revision 34). |
 | `retention` | object | `{ records_path, influence_days }`: where the records live permanently and how long they adjust ranking. |
 | `reactions` | object[] | `{ source_ts, name: 'eyes', ok }` per acknowledged note after posting; empty in preview. |
 | `publication` | Publication or null | The digest's own message in the brief's or heartbeat's thread. |
 
 The digest names no person: authors are counted, never shown.
+
+**The publication record (revision 34).** `rollup/publication.json` is written as soon as the parent post
+is up, with `partial: true`, `replies: []` and no report, and rewritten whole once the thread and the digest
+are posted; a Slack failure in between leaves the record of what reached the channel, a forced re-run links
+it as superseded, and a stage-only publish refuses to post a second parent for the run (exit 75).
 
 ### Feedback
 
@@ -475,6 +483,10 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `acknowledged_run_id` | string or null | Run whose digest acknowledged this record; set once, by the run that posted it, never in preview (FR-062). |
 | `classification` | enum or null | For notes: `expectation` \| `project_annotation` \| `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `none`; null until reviewed, and still null after a failed classification call so the next run retries (FR-061). Reactions are never classified. The unreviewed notes of one item are reviewed together in thread order and share the classification of the clarified whole (FR-085, revision 29). |
 | `proposal_id` | string or null | Proposal written from this note, when its classification produced one (FR-061); shared by the notes of one item thread reviewed together, whose ids the proposal's evidence and source line all carry (revision 29). |
+| `expected_max` | number or null | The largest value the note said to expect, as its parse found it (revision 34); the thread's last stated maximum is the one a horizon applies. |
+| `observed_value` | number or null | The item's current value when the note was matched to it (revision 34), the bar an unnoted expectation is measured against. |
+| `horizon_source` | enum or null | How the horizon was found: `deterministic` \| `model` \| `model-invalid` \| `model-failed` \| `none` (revision 34). A stored note with `model-failed` or `model-invalid` and no horizon is read again by the next run that has a model. |
+| `review_attempts` | integer | Classification calls that failed on the note (revision 34); after `MAX_REVIEW_ATTEMPTS` (3) the note is acknowledged unclassified. |
 
 Records are kept permanently (FR-059); `purge` never removes or compacts `feedback.jsonl`. Only
 the ranking tallies apply the influence window (FR-060): a record older than

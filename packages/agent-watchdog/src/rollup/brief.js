@@ -371,7 +371,7 @@ const analysisFailure = (analysis) => {
   return { count: analysis.failed.length, total: analysis.projects || analysis.failed.length, message };
 };
 
-const BOUND_NAMES = { budget: 'session budget', turns: 'turn cap' };
+const BOUND_NAMES = { budget: 'session budget', turns: 'turn cap', timeout: 'run deadline' };
 const dollars = (n) => `$${Number(n).toFixed(2)}`;
 
 /** Sessions a bound stopped before any result (revision 16), or null. */
@@ -380,7 +380,7 @@ const analysisCutOff = (analysis) => {
   if (!stopped.length) {
     return null;
   }
-  const bounds = ['budget', 'turns'].filter((b) => stopped.some((s) => (s.bounds || []).includes(b)));
+  const bounds = ['budget', 'turns', 'timeout'].filter((b) => stopped.some((s) => (s.bounds || []).includes(b)));
   const spent = stopped.reduce((sum, s) => sum + (s.cost_usd || 0), 0);
   return {
     count: stopped.length,
@@ -622,7 +622,9 @@ const composeBrief = async ({
   }
   const last = rejections[rejections.length - 1];
   const reasonText = last && last.reasons.length ? ` (last reasons: ${last.reasons.join('; ')})` : '';
-  return degrade(`the verification gate rejected three drafts${reasonText}`);
+  // The count is the drafts actually made: AGENT_WATCHDOG_VERIFY_MAX_RETRIES sets it (revision 34).
+  const count = drafts.length;
+  return degrade(`the verification gate rejected ${count} draft${count === 1 ? '' : 's'}${reasonText}`);
 };
 
 module.exports = {

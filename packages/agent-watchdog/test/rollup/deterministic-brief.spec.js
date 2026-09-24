@@ -152,3 +152,19 @@ describe('rollup/deterministic-brief: what was checked counts the analysed proje
     expect(degraded.checked.projects).to.equal(1);
   });
 });
+
+describe('rollup/deterministic-brief: the heartbeat counts what was assessed (revision 34)', () => {
+  const { buildHeartbeat } = require('../../src/rollup/deterministic-brief');
+
+  it('says how many candidates were assessed and that none was flagged, instead of "no candidates"', () => {
+    const heartbeat = (candidatesCount) => buildHeartbeat({
+      runId: '2026-09-18', discovery: makeDiscovery(), candidatesCount, footer: footer(),
+    });
+    const brief = heartbeat(4);
+    expect(brief.headline).to.equal('All quiet: 3 projects and 3 panels checked, 4 candidates, none flagged');
+    expect(brief.checked.candidates).to.equal(4);
+    const one = heartbeat(1);
+    expect(one.headline).to.equal('All quiet: 3 projects and 3 panels checked, 1 candidate, none flagged');
+    expect(() => schemas.Brief.parse(brief)).to.not.throw();
+  });
+});

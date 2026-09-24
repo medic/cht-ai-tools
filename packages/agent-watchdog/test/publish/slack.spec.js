@@ -131,6 +131,26 @@ describe('publish/slack', () => {
     expect(publication.ts).to.equal('1700000000.000100');
   });
 
+  it('reports the parent as soon as it is posted, so a later failure leaves a record of it (revision 34)', async () => {
+    const client = fakeClient();
+    client.files.uploadV2 = sinon.stub().rejects(new Error('upload broken'));
+    const onParent = sinon.stub().resolves();
+    const sleep = sinon.stub().resolves();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), sleep });
+    const withReport = payloadFor();
+    withReport.report = {
+      filename: 'report.html', title: 'Report', path: imagePath, items: 1, initial_comment: 'c', slack_file_id: null,
+      ts: null,
+    };
+    const error = await publisher.publish({ payload: withReport, reportPath: imagePath, onParent }).catch((e) => e);
+    expect(error).to.be.instanceOf(codes.ExitError);
+    expect(error.code).to.equal(74);
+    expect(onParent).to.have.been.calledOnce;
+    expect(onParent.firstCall.args[0]).to.include({ channel_id: 'C123', ts: '1700000000.000100', partial: true });
+    expect(onParent.firstCall.args[0].permalink).to.include('p1700000000000100');
+    expect(onParent.firstCall.args[0].replies).to.deep.equal([]);
+  });
+
   it('gives up after three attempts with exit code 74', async () => {
     const client = fakeClient();
     client.chat.postMessage = sinon.stub().rejects(new Error('socket hang up'));

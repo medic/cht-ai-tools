@@ -2,6 +2,9 @@
 {{#each programmes}}
 • {{mrkdwn line}}{{#if has_link}} · {{link link 'alert list'}}{{/if}}
 {{/each}}
+{{#if has_rest}}
+{{mrkdwn rest_text}}
+{{/if}}
 {{#if has_all}}
 {{link all 'all firing alerts'}}
 {{/if}}

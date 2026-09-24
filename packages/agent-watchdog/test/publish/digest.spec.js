@@ -65,10 +65,12 @@ describe('publish/digest (FR-062)', () => {
     expect(none).to.equal(null);
   });
 
-  it('builds the entity: every record acknowledged, per-item tallies and effects, brief tallies, proposals', () => {
+  it('builds the entity: every record acknowledged but a note awaiting its review, tallies, effects, proposals', () => {
     const { digest } = build();
     expect(digest.run_id).to.equal('2026-09-19');
-    expect(digest.acknowledged.sort()).to.deep.equal(records.map((r) => r.feedback_id).sort());
+    // f6's review failed and it has attempts left (revision 34): the next run reviews it, this digest leaves it out.
+    expect(digest.acknowledged.sort())
+      .to.deep.equal(records.filter((r) => r.feedback_id !== 'f6f6f6f6f6f6').map((r) => r.feedback_id).sort());
     const alphaEntry = digest.items.find((i) => i.item_id === 'aaaaaaaaaaaa');
     expect(alphaEntry).to.include({
       host: 'alpha.example.org', metric: 'cht_sentinel_backlog_count', up: 0, down: 1, notes: 1,
@@ -78,7 +80,7 @@ describe('publish/digest (FR-062)', () => {
     expect(gammaEntry).to.include({ host: 'gamma.example.org', up: 2, down: 0, notes: 0, effect: 'confidence_up' });
     expect(gammaEntry.before).to.equal(0.85);
     expect(gammaEntry.after).to.equal(1);
-    expect(digest.brief).to.deep.equal({ up: 1, down: 0, notes: 1 });
+    expect(digest.brief).to.deep.equal({ up: 1, down: 0, notes: 0 });
     expect(digest.proposals).to.deep.equal([{
       proposal_id: '2026-09-19-project_annotation-sentinel-expectation', type: 'project_annotation',
       path: '/data/proposals/2026-09-19-project_annotation-sentinel-expectation.md',
@@ -92,7 +94,8 @@ describe('publish/digest (FR-062)', () => {
 
   it('renders text and blocks that name no person, escape untrusted notes and state the retention rule', () => {
     const { text, blocks, metadata } = build();
-    expect(text).to.include('Feedback from yesterday: 4 reactions, 2 notes');
+    expect(text).to.include('Feedback from yesterday: 4 reactions, 1 note');
+    expect(text).to.include('1 note awaiting classification; the next run will review it.');
     expect(text).to.include('alpha.example.org');
     expect(text).to.include('suppressed until 2026-10-01');
     expect(text).to.include('confidence raised');
@@ -108,7 +111,7 @@ describe('publish/digest (FR-062)', () => {
     expect(blocks.every((b) => b.type === 'section' && b.text.type === 'mrkdwn')).to.equal(true);
     expect(blocks.map((b) => b.text.text).join('\n')).to.not.match(/U0123ABCD/);
     expect(metadata).to.deep.equal({
-      event_type: DIGEST_EVENT, event_payload: { run_id: '2026-09-19', date: '2026-09-19', acknowledged: 6 },
+      event_type: DIGEST_EVENT, event_payload: { run_id: '2026-09-19', date: '2026-09-19', acknowledged: 5 },
     });
   });
 
@@ -255,5 +258,48 @@ describe('publish/digest: alert-group feedback (User Story 8)', () => {
     expect(built.text).to.not.include('U0123ABCD');
     expect(built.digest.acknowledged).to.have.length(4);
     expect(built.metadata.event_payload.acknowledged).to.equal(4);
+  });
+});
+
+describe('publish/digest: a note whose review failed is not acknowledged yet (FR-061, revision 34)', () => {
+  const { MAX_REVIEW_ATTEMPTS } = require('../../src/feedback/review');
+  const build = (attempts) => buildDigest({
+    runId: '2026-09-19', date: '2026-09-19', retention: RETENTION, byItem: {}, items: [],
+    records: [
+      record({ feedback_id: 'f5f5f5f5f5f5', target: 'brief', item_id: null, verdict: 'up', source_ts: '1.0' }),
+      record({
+        feedback_id: 'f6f6f6f6f6f6', target: 'brief', item_id: null, kind: 'note', verdict: null, matched: false,
+        note: 'is anyone looking at the other one?', source_ts: '1700000000.000400', review_attempts: attempts,
+      }),
+    ],
+    review: { classified: [], unclassified: ['f6f6f6f6f6f6'] },
+  });
+
+  it('leaves the note out of the acknowledged ids and the tallies while attempts remain, and says so', () => {
+    const { digest, text } = build(1);
+    expect(digest.acknowledged).to.deep.equal(['f5f5f5f5f5f5']);
+    expect(digest.brief).to.deep.equal({ up: 1, down: 0, notes: 0 });
+    expect(digest.unclassified).to.equal(1);
+    expect(digest.unclassifiable).to.equal(0);
+    expect(text).to.include('1 note awaiting classification; the next run will review it.');
+    expect(MAX_REVIEW_ATTEMPTS).to.equal(3);
+  });
+
+  it('acknowledges the note after the last attempt and says it could not be classified', () => {
+    const { digest, text } = build(3);
+    expect(digest.acknowledged.sort()).to.deep.equal(['f5f5f5f5f5f5', 'f6f6f6f6f6f6']);
+    expect(digest.brief).to.deep.equal({ up: 1, down: 0, notes: 1 });
+    expect(digest.unclassified).to.equal(0);
+    expect(digest.unclassifiable).to.equal(1);
+    expect(text).to.include('1 note could not be classified after 3 attempts');
+  });
+
+  it('builds no digest when every record is a note still awaiting classification', () => {
+    const none = buildDigest({
+      runId: 'r', date: 'd', retention: RETENTION, byItem: {}, items: [],
+      records: [record({ feedback_id: 'f6f6f6f6f6f6', kind: 'note', verdict: null, note: 'hm', review_attempts: 0 })],
+      review: { classified: [], unclassified: ['f6f6f6f6f6f6'] },
+    });
+    expect(none).to.equal(null);
   });
 });

@@ -389,6 +389,108 @@ describe('agent/session-loop', () => {
   });
 });
 
+describe('agent/session-loop: tool-result URLs come from the texts, not their JSON encoding (revision 34)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('hands the gate the URLs of a structured, multi-line documentation result whole', async () => {
+    const engine = createFakeEngine({ responses: [{
+      structuredOutput: findings([modelItem()]),
+      toolCalls: [{
+        tool_name: 'mcp__cht-docs__search_docs',
+        tool_input: { query: 'sentinel' },
+        tool_response: {
+          content: [{ type: 'text', text: 'Sentinel stalls.\nSource: https://docs.communityhealthtoolkit.org/x/\nMore text' }],
+        },
+      }],
+    }] });
+    const gateSpy = sinon.spy(acceptingGate);
+    await runProjectSession({
+      engine, definition, project, candidates, changes, feedback: [], memory: '', activeWindow: null,
+      config: config({ passes: 1 }), gate: gateSpy, runDir, logger, now: () => new Date('2026-09-18T06:00:00Z'),
+      localTools: [], localServers: {},
+    });
+    expect(gateSpy.firstCall.args[0].toolResultUrls).to.deep.equal(['https://docs.communityhealthtoolkit.org/x/']);
+  });
+});
+
+describe('agent/session-loop: what a record says about a session that did not run as planned (revision 34)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const run = (engine, overrides = {}) => runProjectSession({
+    engine, definition, project, candidates, changes, feedback: [], memory: '', activeWindow: null,
+    config: config(overrides.bounds), gate: acceptingGate, runDir, logger,
+    now: () => new Date('2026-09-18T06:00:00Z'), localTools: [], localServers: {}, ...overrides.args,
+  });
+
+  it('records a session that cannot open as the project\'s error bound, never as a stage failure', async () => {
+    const engine = {
+      name: 'broken',
+      openSession: async () => {
+        throw new Error('spawn claude ENOENT');
+      },
+    };
+    const result = await run(engine);
+    expect(result.bounds_hit).to.deep.equal(['error']);
+    expect(result.items).to.deep.equal([]);
+    expect(result.errors).to.deep.equal([{ pass: 1, attempt: 0, message: 'spawn claude ENOENT', bound: 'error' }]);
+    const passes = await runDir.readJson(`${project.slug}/passes.json`);
+    expect(passes.bounds_hit).to.deep.equal(['error']);
+    expect(passes.errors[0].message).to.include('ENOENT');
+    expect(runDir.exists(`${project.slug}/session.json`)).to.equal(true);
+  });
+
+  it('tells the model the run\'s date, not the wall clock\'s', async () => {
+    const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
+    const now = () => new Date('2026-09-18T06:00:00Z');
+    await run(engine, { args: { date: '2026-09-01', now }, bounds: { passes: 1 } });
+    expect(engine.sessions[0].options.systemPrompt.join('\n')).to.include('Run date (UTC): 2026-09-01');
+    expect(engine.sessions[0].turns[0]).to.include('2026-09-01');
+  });
+
+  it('charges a turn that timed out its remaining grant and marks the cost as estimated', async () => {
+    const timingOut = async () => {
+      throw Object.assign(new Error('turn timed out after 5 ms'), { code: 'TIMEOUT' });
+    };
+    const engine = { name: 'slow', openSession: async () => ({ turn: timingOut, close: async () => {} }) };
+    const result = await run(engine, { args: { budgetUsd: 1.5 } });
+    expect(result.bounds_hit).to.deep.equal(['timeout']);
+    expect(result.cost_usd).to.equal(1.5);
+    expect(result.cost_estimated).to.equal(true);
+    const passes = await runDir.readJson(`${project.slug}/passes.json`);
+    expect(passes).to.include({ cost_usd: 1.5, cost_estimated: true });
+  });
+
+  it('charges a session killed at the harness turn cap its remaining grant, and a measured bound nothing', async () => {
+    const killed = createFakeEngine({ responses: [
+      { structuredOutput: null, result: { subtype: 'error_max_turns', total_cost_usd: 0, cost_unknown: true } },
+    ] });
+    const r1 = await run(killed);
+    expect(r1.bounds_hit).to.deep.equal(['turns']);
+    expect(r1.cost_usd).to.equal(2);
+    expect(r1.cost_estimated).to.equal(true);
+    const measured = createFakeEngine({ responses: [
+      { structuredOutput: findings([modelItem()]), result: { subtype: 'error_max_budget_usd', total_cost_usd: 1.97 } },
+    ] });
+    const r2 = await run(measured);
+    expect(r2.cost_usd).to.equal(1.97);
+    expect(r2.cost_estimated).to.equal(false);
+    const passes = await runDir.readJson(`${project.slug}/passes.json`);
+    expect(passes.cost_estimated).to.equal(false);
+  });
+});
+
 describe('agent/session-loop: the text the model was given reaches the gate (FR-016, revision 23)', () => {
   let dataDir;
   let runDir;

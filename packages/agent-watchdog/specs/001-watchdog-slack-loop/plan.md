@@ -862,3 +862,33 @@ change; **III** the notice and the checks are code; **IV** nothing new stored; *
 refuses, the masking flags; **VII** prompts unchanged; **VIII** unchanged. Result: PASS. Not planned here:
 revisions 34 (the brief says what happened) and 35 (pre-PR hygiene), listed in R-38 with each finding's
 disposition; the commit-history repair, which is the operator's call.
+
+### Revision 34 delta: the brief says what happened (FR-009, FR-012, FR-016, FR-018, FR-029, FR-030, FR-043, FR-049, FR-058, FR-073)
+
+Planned on 2026-09-24 from the branch review (research.md R-38, findings #1, #6, #9, #22, #58, #20, #15, #27,
+#49, #10, #11, #18, #13, #19, #25, #0, #5, #16, #14, #4, #8, #56, #37, #12, #28, #32, #50), the second of three
+revisions in the reviewer's order: every place where the brief, the digest, the report or a record could read
+quieter, cheaper or more certain than the run was. Analysis: a session the run deadline cut off is a shortfall
+the brief names (the `timeout` bound joins `budget` and `turns`); the heartbeat headline says how many candidates
+were assessed and none flagged instead of "no candidates"; the degraded notice counts the drafts it refused; the
+roll-up, calibration and replay read the last pass the gate accepted, never a rejected later one; a session that
+cannot open is that project's `error` bound, not the stage's failure; the prompt's run date is the run's date; a
+session the harness killed or a turn that timed out is charged its remaining grant with `cost_estimated` on the
+record, so the run budget never re-grants money already spent; the run's cost includes the feedback stage's calls
+and a stage-only roll-up reads the agent's spend; two items with one identity are refused. Feedback: a note's
+`expected_max`, `observed_value` and `horizon_source` are stored on the record, so a horizon holds its size from the
+second day and a failed model parse is logged and retried; a horizon resolves against the note's own date; a note
+whose review failed stays unacknowledged and is reviewed again, up to three attempts, then acknowledged as
+unclassified; a reaction re-added after a recorded retraction is recorded again; outcomes are appended only for
+items whose feedback changed this run. Collection and tools: the standing test reads yesterday from the Computed
+Change; the live `query_metric` refuses several series, carries the panel's unit and knows the active window;
+`get_windows` resolves a loose key to the collected one; the stdio tools server serves the merged pattern cards;
+one host's failed discovery query leaves that project without a version and history, not the run without a brief;
+the worker pool stops starting projects after a failure; tool-result URLs are read from each text, never from a
+JSON encoding. Publish and render: the alerts reply is fitted line by line and never cut inside a link; the report
+nests a relation chain at any depth; the publication record is written as soon as the parent is posted and a
+stage-only publish refuses to post a second parent; calibration reads one run per date; a stage-only roll-up
+resolves links. **I** no dependency; **II** tests first; **III** the wording and the fitting are code; **IV** three
+fields on the Feedback record (`expected_max`, `observed_value`, `horizon_source`, `review_attempts`), each stated in
+data-model.md; **V** unchanged; **VI** the gate refuses, code flags; **VII** the heartbeat and degraded wording are
+templates changed here by PR; **VIII** unchanged. Result: PASS. Deferred to revision 35: the hygiene items of R-38.

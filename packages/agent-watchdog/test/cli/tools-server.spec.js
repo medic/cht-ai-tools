@@ -109,6 +109,56 @@ describe('cli/commands/tools-server', () => {
     expect(SERVERS).to.deep.equal(['watchdog', 'cht-docs']);
   });
 
+  it('serves the merged pattern cards of config.paths.skillDir to read_pattern_card (revision 34)', async () => {
+    const { PACKAGE_PATHS } = require('../../src/config/schema');
+    const { renderCardFile } = require('../../src/corpus/cards');
+    const skillDir = tempDir();
+    fs.cpSync(PACKAGE_PATHS.skillDir, skillDir, { recursive: true });
+    const card = {
+      card_id: 'sentinel-stall', title: 'Sentinel stall',
+      symptom: 'Backlog climbs.', metrics: [{ metric: METRIC, shape: 'rises' }],
+      watchdog_appearance: 'Panel climbs.', root_cause: 'Transition error.', resolution: 'Fix it.',
+      confirmation_steps: ['Read the sentinel log.'], false_positives: [], sources: [], status: 'merged',
+    };
+    fs.writeFileSync(path.join(skillDir, 'pattern-cards', 'sentinel-stall.md'), renderCardFile(card, {}));
+    try {
+      const tools = byName(await buildTools(base({ config: { paths: { skillDir } } })));
+      const out = parse(await tools.read_pattern_card.handler({ card_id: 'sentinel-stall' }));
+      expect(out.card_id).to.equal('sentinel-stall');
+      expect(out.text).to.include('Sentinel stall');
+      const none = byName(await buildTools(base()));
+      const missing = parse(await none.read_pattern_card.handler({ card_id: 'sentinel-stall' }));
+      expect(missing.error).to.include('unknown card');
+    } finally {
+      removeDir(skillDir);
+    }
+  });
+
+  it('hands the live query the project\'s active expected-load window, so previous_cycle is known', async () => {
+    const fetch = sinon.stub().resolves(new Response(JSON.stringify({
+      status: 'success',
+      data: { resultType: 'matrix', result: [{ metric: { instance: project.host }, values: [[1, '5']] }] },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const config = {
+      endpoints: { grafanaUrl: 'https://watchdog.example.org', prometheusDatasourceUid: 'PBFA97CFB590B2093' },
+      secrets: { grafanaToken: 'glsa_test' },
+      bounds: { httpTimeoutMs: 1000 },
+    };
+    const windowed = {
+      ...project,
+      expected_load_windows: [{
+        id: 'always', kind: 'dates', start: '2026-01-01', end: '2026-12-31', timezone: 'UTC', note: 'n', cycle_days: 30,
+      }],
+    };
+    await runDir.writeJson('discovery.json', {
+      run_start: '2026-09-18T06:00:00Z', projects: [windowed], metrics: [METRIC], dashboards: [],
+    });
+    const tools = byName(await buildTools(base({ config, deps: { fetch } })));
+    const hit = parse(await tools.query_metric.handler({ metric: METRIC, window: 'previous_cycle' }));
+    expect(hit.available).to.equal(true);
+    expect(hit.start).to.equal('2026-08-18T06:00:00.000Z');
+  });
+
   describe('command handler', () => {
     const env = { AGENT_WATCHDOG_CONFIG_DIR: DEFAULTS_DIR };
     const call = (flags, deps = {}) => toolsServer({

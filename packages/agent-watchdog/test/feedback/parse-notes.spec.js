@@ -140,3 +140,28 @@ describe('feedback/parse-notes: people are masked before the model reads a note 
     expect(prompt).to.not.include('U024BE7LH');
   });
 });
+
+describe('feedback/parse-notes: the model call is accounted for (FR-049, revision 34)', () => {
+  const { parseNoteWithModel } = require('../../src/feedback/parse-notes');
+
+  it('returns the call\'s cost and usage when the model was asked, and no call otherwise', async () => {
+    const engine = {
+      singleTurn: sinon.stub().resolves({
+        structuredOutput: { horizon: null, expected_max: null, item_reference: null },
+        result: {
+          subtype: 'success', usage: { input_tokens: 30, output_tokens: 6 }, total_cost_usd: 0.0015, num_turns: 1,
+        },
+      }),
+    };
+    const asked = await parseNoteWithModel({ text: 'looks fine to me', noteDate: '2026-09-18', engine, model: 'm' });
+    expect(asked).to.include({ horizon: null, source: 'model' });
+    expect(asked.call).to.include({ stage: 'feedback', kind: 'parse', model: 'm', cost_usd: 0.0015, input_tokens: 30 });
+    const known = await parseNoteWithModel({ text: 'until 2026-10-01', noteDate: '2026-09-18', engine, model: 'm' });
+    expect(known.call).to.equal(null);
+    const failed = await parseNoteWithModel({
+      text: 'no date here', noteDate: '2026-09-18', model: 'm',
+      engine: { singleTurn: sinon.stub().rejects(new Error('x')) },
+    });
+    expect(failed).to.include({ source: 'model-failed', call: null });
+  });
+});

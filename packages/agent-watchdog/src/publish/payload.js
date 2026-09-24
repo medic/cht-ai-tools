@@ -206,6 +206,29 @@ const alertsLine = (entry) => {
 };
 
 /**
+ * Fit the alerts reply into one section without cutting a link (revision 34): whole programme lines go first, from
+ * the end, with a line saying how many more the report holds; then the notices, then the link to every alert.
+ * What remains, the summary line and at least one programme, is never longer than the section allows.
+ */
+const fitAlertsText = (render, { programmes, notices }) => {
+  const attempts = [];
+  for (let shown = programmes; shown >= Math.min(1, programmes); shown -= 1) {
+    attempts.push({ shown, notices, withAll: true });
+  }
+  attempts.push({ shown: Math.min(1, programmes), notices: [], withAll: true });
+  attempts.push({ shown: Math.min(1, programmes), notices: [], withAll: false });
+  attempts.push({ shown: 0, notices: [], withAll: false });
+  let last = null;
+  for (const attempt of attempts) {
+    last = render(attempt);
+    if (last.length <= SECTION_MAX) {
+      return last;
+    }
+  }
+  return truncate(last, SECTION_MAX);
+};
+
+/**
  * The one alerts reply (FR-066, FR-080, revision 28): per programme its counts and the link to its filtered alert
  * list, one link to every firing alert, then the alert-derived notices. Null when there is nothing to say.
  */
@@ -221,15 +244,19 @@ const alertsReplyFor = ({ alertGroups, alertsLinks, notices, runId, date }) => {
   const summaryText = summary.length
     ? `${firing} firing across ${plural(summary.length, 'programme')}`
     : 'none firing';
-  const text = truncate(template('alerts')({
+  const programmes = summary.map((entry) => ({
+    line: alertsLine(entry), has_link: Boolean(linkFor(entry.group)), link: linkFor(entry.group),
+  }));
+  const render = ({ shown, notices: shownNotices, withAll }) => template('alerts')({
     summary_text: summaryText,
-    programmes: summary.map((entry) => ({
-      line: alertsLine(entry), has_link: Boolean(linkFor(entry.group)), link: linkFor(entry.group),
-    })),
-    has_all: Boolean(alertsLinks && alertsLinks.all && summary.length),
+    programmes: programmes.slice(0, shown),
+    has_rest: shown < programmes.length,
+    rest_text: `+${programmes.length - shown} more programmes in the report`,
+    has_all: withAll && Boolean(alertsLinks && alertsLinks.all && summary.length),
     all: alertsLinks ? alertsLinks.all : null,
-    notices: alertNotices,
-  }).trim(), SECTION_MAX);
+    notices: shownNotices,
+  }).trim();
+  const text = fitAlertsText(render, { programmes: programmes.length, notices: alertNotices });
   return {
     kind: 'alerts',
     group: null,

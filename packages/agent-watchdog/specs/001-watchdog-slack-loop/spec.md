@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 33)
+**Status**: Draft (revision 34)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -623,6 +623,9 @@ Discovery and collection
   to its own data volume (revision 27, the scope the constitution states).
 - **FR-003**: The system MUST derive the metrics it examines from the dashboards in the configured
   priority list, in that order, and MAY examine additional metrics the analysis judges relevant.
+  The live single-window query MUST answer one series per project as collection does (FR-075), refusing
+  several with the labels that differ, carry the panel's unit, and know the project's active expected-load
+  window (revision 34).
 - **FR-004**: For each metric and project the system MUST collect the current window and its
   comparison windows: the previous day, the same day of the previous week, and the same phase of
   the previous cycle when an expected-load window is active.
@@ -670,6 +673,9 @@ Analysis
   validation MUST NOT be published.
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
   reaching a bound the run completes with what it has and says so.
+  A session the harness stopped or a turn that timed out leaves no runtime cost figure; it MUST be charged
+  the rest of its grant, marked as estimated on its record, so the run budget never re-grants money that
+  may already be spent (revision 34).
 - **FR-013**: A project with no candidate items MUST NOT incur model usage. A project whose only
   candidates are standing conditions (FR-014) MUST NOT incur model usage either: code names them,
   and a session spent on them adds nothing the reader does not already know (revision 23).
@@ -678,6 +684,8 @@ Analysis
   verdict: where a person has judged the same candidate that verdict decides, and a suggestion
   resting on the analysis's own dismissals MUST say so. The system MUST still propose rather than
   change (FR-032). Added in revision 20.
+  Whether a backlog stood yesterday is read from the Computed Change's previous-day value, never from a
+  cycle baseline the candidate's evidence carries during an expected-load window (revision 34).
 - **FR-014**: Severity levels and candidate thresholds MUST be configurable globally and per
   project. The system MUST NOT change them itself. It MUST compute, per project and metric, the
   observed distribution of changes and the confirmed and dismissed rate of past items, and MUST
@@ -819,6 +827,8 @@ Verification gate
   used, per project and per run, counting calls by tool with their failures and refusals, so a tool
   whose contract no longer matches what the model is told shows up without reading the record
   (revision 19).
+  The roll-up, calibration and replay read the last pass the gate accepted; a rejected or cut-off later
+  pass drops no accepted item (revision 34). Two items with one identity in one findings are refused.
 
 Publishing
 
@@ -893,8 +903,14 @@ Feedback
   Wherever a note reaches a prompt (the analysis feedback block, the horizon parse, the review), Slack
   user identifiers in its text are masked by code first, and the gate refuses one on the published
   surface (revision 33).
+  A note's record keeps the expected maximum and the item's observed value its parse found and how the
+  horizon was found, so a stored horizon holds its size from the second day on and a failed model parse is
+  logged and read again by the next run with a model; a horizon is read against the day the note was
+  written, bounded by the post it answers and the day it was read (revision 34).
 - **FR-030**: Confirmed and dismissed items, with their notes, MUST be appended to the knowledge
   corpus as run outcomes so that distillation learns from operation as well as from history.
+  Outcomes are appended for the items whose feedback the run read anew, never again for every verdict still
+  inside the influence window (revision 34).
 
 Feedback review and acknowledgement
 
@@ -916,6 +932,8 @@ Feedback review and acknowledgement
   it. A project-annotation proposal MUST carry a ready-to-paste `projects.yaml` fragment (notes,
   a threshold override or an expected-load window) with a short rationale; the host it concerns
   is flagged for the reviewer as any identifier is.
+  A note whose classification call failed stays unacknowledged and is reviewed again, up to three attempts,
+  and is then acknowledged as unclassified in words (revision 34).
 - **FR-062**: The system MUST acknowledge feedback with at most one digest reply per run, posted
   in the thread of the brief or heartbeat published that day and built by code from structured
   fields: per item the effect applied today, the proposals written with destination and path,
@@ -1018,6 +1036,8 @@ Alerts and groups
   timeout, distinct from the timeout of the Grafana API calls. Added in revision 11.
   A query that fails with any status counts toward the consecutive failures; only a successful query
   resets the count (revision 33).
+  One host's failed discovery query leaves that project without a version and a history count, logged, and
+  the run with its brief (revision 34).
 - **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
   bound, log per project what was fetched and what was reused, and complete within its share of
   the run budget at the scale assumption of one hundred projects. Added in revision 11.
@@ -1109,7 +1129,12 @@ Persistence and reproducibility
   replay MUST NOT contact the metrics source or Slack.
 - **FR-042**: Runs MUST be idempotent per date; a second run on the same date MUST require an
   explicit force flag.
+  A run whose publication record already names a parent post, complete or partial, MUST refuse to post a
+  second one with the temporary-failure code; the record is written as soon as the parent is posted, so a
+  failure later in the thread cannot lose it (revision 34).
 - **FR-043**: Each stage MUST be runnable on its own from the files of the previous stage.
+  A stage-only roll-up resolves links from the discovery on disk and carries the agent stage's recorded
+  spend (revision 34).
 
 Security and trust boundaries
 
@@ -1144,6 +1169,7 @@ Operations
   prerequisites (minimum supported version, host-metrics exporter present) in plain language.
 - **FR-049**: The system MUST record one trace per run with a span per stage and usage per model
   call, and MUST reconcile the runtime's cost estimate with recorded usage.
+  The run's cost includes the feedback stage's model calls, the horizon parses and the reviews (revision 34).
 - **FR-050**: The same agent definition — skill, tools, reference sources, prompts, output schema
   and verification hooks — MUST be usable both by this system's scheduled run and by a
   contributor invoking the agent runtime directly, from one configuration source. When no API key

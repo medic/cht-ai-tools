@@ -103,7 +103,7 @@ const createSlackPublisher = ({
     elements: [{ type: 'mrkdwn', text: `Supersedes an earlier post for this date: <${permalink}|earlier brief>` }],
   });
 
-  const publish = async ({ payload, reportPath = null, superseded = null }) => {
+  const publish = async ({ payload, reportPath = null, superseded = null, onParent = null }) => {
     const post_ = payload;
     let blocks = post_.parent.blocks;
     if (superseded) {
@@ -117,6 +117,13 @@ const createSlackPublisher = ({
       metadata: post_.parent.metadata,
     });
     logger.info('slack.parent_posted', { ts: parent.ts });
+    if (onParent) {
+      // What reached the channel so far, for a record a later failure cannot lose (revision 34).
+      await onParent({
+        channel_id: parent.channel || channel, ts: parent.ts, permalink: await permalinkOf(parent.ts), replies: [],
+        slack_file_id: null, report: null, partial: true,
+      });
+    }
     let report = null;
     if (post_.report && reportPath) {
       await pace();

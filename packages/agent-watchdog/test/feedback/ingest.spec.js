@@ -180,6 +180,32 @@ describe('feedback/ingest', () => {
     expect(doc.by_item[GAMMA]).to.include({ up: 2, retracted: 1, verdict: 'confirmed' });
   });
 
+  it('records a reaction added again after a recorded retraction under a new id, and counts it', async () => {
+    await seedRun(dataDir, '2026-09-17');
+    await appendRecords(dataDir, [
+      {
+        feedback_id: identity.feedbackId(GAMMA_TS, 'U1', 'reaction', 'up'),
+        date: '2026-09-16', run_id: '2026-09-17', target: 'item', item_id: GAMMA, kind: 'reaction', verdict: 'up',
+        note: null, horizon: null, author: 'U1', matched: true, source_ts: GAMMA_TS,
+      },
+      {
+        feedback_id: identity.feedbackId(GAMMA_TS, 'U1', 'reaction', 'retracted'),
+        date: '2026-09-17', run_id: '2026-09-17', target: 'item', item_id: GAMMA, kind: 'reaction',
+        verdict: 'retracted',
+        note: 'retracted: up', horizon: null, author: 'U1', matched: true, source_ts: GAMMA_TS,
+      },
+    ]);
+    // The fixture shows U1's thumbs-up on the gamma reply again today.
+    const doc = await ingest(dataDir, fakeClient());
+    const readded = doc.records.find((r) => r.author === 'U1' && r.source_ts === GAMMA_TS && r.verdict === 'up');
+    expect(readded, 'the re-added reaction is a new record').to.not.equal(undefined);
+    expect(readded.feedback_id).to.equal(identity.feedbackId(GAMMA_TS, 'U1', 'reaction', 'up#1'));
+    expect(doc.by_item[GAMMA]).to.include({ up: 2, retracted: 1, verdict: 'confirmed' });
+    // Ingested again with nothing changed, nothing new is written.
+    const again = await ingest(dataDir, fakeClient());
+    expect(again.records.filter((r) => r.source_ts === GAMMA_TS)).to.deep.equal([]);
+  });
+
   it('appends nothing new when the same feedback is ingested twice', async () => {
     await seedRun(dataDir, '2026-09-17');
     const first = await ingest(dataDir, fakeClient());
@@ -552,5 +578,75 @@ describe('feedback/ingest: the notes on one item are one conversation (FR-085, r
     expect(doc.horizons.map((h) => h.horizon)).to.deep.equal(['2026-09-25']);
     expect(doc.records.filter((r) => r.kind === 'note').map((r) => r.horizon))
       .to.deep.equal(['2026-10-01', '2026-09-25']);
+  });
+  it('stores the expected maximum and the observed value on the note; a stored horizon keeps its size', async () => {
+    const client = clientWith([
+      messageOf('1758090000.000001', 'U1', 'alpha.example.org sentinel backlog: expected up to 1,500 until 1 October'),
+    ]);
+    const doc = await ingest(dataDir, client);
+    const [note] = doc.records.filter((r) => r.kind === 'note');
+    expect(note).to.include({
+      horizon: '2026-10-01', expected_max: 1500, observed_value: 912, horizon_source: 'deterministic',
+    });
+    expect(doc.horizons[0]).to.include({ horizon: '2026-10-01', expected_max: 1500, observed_value: 912 });
+    // The next day nothing is parsed again, and the stored record still says how large "expected" is.
+    const tomorrow = await ingestFeedback({
+      client: clientWith([]), channel: 'C123', dataDir, runId: '2026-09-19', date: '2026-09-19', lookbackRuns: 7,
+      model: 'claude-fable-5-1', logger: quietLogger(), now: () => new Date('2026-09-19T06:05:00Z'),
+    });
+    expect(tomorrow.horizons[0]).to.include({
+      horizon: '2026-10-01', expected_max: 1500, observed_value: 912, source: 'stored',
+    });
+  });
+
+  it('resolves a horizon against the date the note was written, not the run date (revision 34)', async () => {
+    // Written on 15 September; read by a run on 25 October: "until 30 September" is 2026-09-30, and it has passed.
+    const client = clientWith([
+      messageOf('1789473600.000001', 'U1', 'alpha.example.org sentinel backlog: expected until 30 September'),
+    ]);
+    const doc = await ingest(dataDir, client, {
+      runId: '2026-10-25', date: '2026-10-25', now: () => new Date('2026-10-25T06:05:00Z'),
+    });
+    const [note] = doc.records.filter((r) => r.kind === 'note');
+    expect(note).to.include({ horizon: '2026-09-30', date: '2026-10-25' });
+    expect(doc.horizons).to.deep.equal([]);
+    expect(doc.by_item[ALPHA].horizon).to.equal(null);
+  });
+
+  it('logs a failed model parse, stores its source, retries it next run and counts the call', async () => {
+    const message = messageOf('1758090000.000002', 'U7', '#1 make that the 25th');
+    const failing = { singleTurn: sinon.stub().rejects(new Error('model unavailable')) };
+    const logger = { warn: sinon.spy(), info: sinon.spy(), debug() {}, error() {} };
+    logger.child = () => logger;
+    const first = await ingest(dataDir, clientWith([messageOf('1758090000.000001', 'U1', FIRST_NOTE), message]), {
+      engine: failing, logger,
+    });
+    const stored = first.records.find((r) => r.source_ts === message.ts);
+    expect(stored).to.include({ horizon: null, horizon_source: 'model-failed' });
+    expect(logger.warn)
+      .to.have.been.calledWithMatch('feedback.parse_failed', sinon.match({ feedback_id: stored.feedback_id }));
+    expect(first.calls).to.deep.equal([]);
+    expect(first.horizons.map((h) => h.horizon)).to.deep.equal(['2026-10-01']);
+
+    const working = {
+      singleTurn: sinon.stub().resolves({
+        structuredOutput: { horizon: '2026-09-25', expected_max: null, item_reference: null },
+        result: { subtype: 'success', usage: { input_tokens: 40, output_tokens: 8 }, total_cost_usd: 0.002 },
+      }),
+    };
+    const second = await ingestFeedback({
+      client: clientWith([messageOf('1758090000.000001', 'U1', FIRST_NOTE), message]), channel: 'C123', dataDir,
+      runId: '2026-09-19', date: '2026-09-19', lookbackRuns: 7, engine: working, model: 'claude-fable-5-1', logger,
+      now: () => new Date('2026-09-19T06:05:00Z'),
+    });
+    expect(working.singleTurn).to.have.been.calledOnce;
+    const retried = (await readAll(dataDir)).find((r) => r.source_ts === message.ts);
+    expect(retried).to.include({ horizon: '2026-09-25', horizon_source: 'model' });
+    expect(logger.info)
+      .to.have.been.calledWithMatch('feedback.parse_retried', sinon.match({ feedback_id: retried.feedback_id }));
+    expect(second.horizons.map((h) => h.horizon)).to.deep.equal(['2026-09-25']);
+    expect(second.calls).to.have.length(1);
+    expect(second.calls[0])
+      .to.include({ stage: 'feedback', kind: 'parse', model: 'claude-fable-5-1', cost_usd: 0.002 });
   });
 });

@@ -148,6 +148,8 @@ const createTurnMapper = ({ docsServer = 'cht-docs', allowedTools = null } = {})
       stop_reason: null,
       is_error: false,
       result_text: null,
+      // No runtime result means no cost figure: the session loop charges the grant instead (revision 34).
+      cost_unknown: true,
     },
   });
 

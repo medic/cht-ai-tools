@@ -4,7 +4,7 @@ const path = require('node:path');
 const { RunDir, dataPaths } = require('../store/run-dir');
 const { schemas } = require('../model/schemas');
 const identity = require('../model/identity');
-const { appendRecords, readAll } = require('./store');
+const { updateRecords, appendRecords, readAll } = require('./store');
 const { matchNote, matchAlertNote, noteVerdict } = require('./match');
 const { parseNoteWithModel } = require('./parse-notes');
 const { threadOrder, clarifiedWhole } = require('./sequence');
@@ -124,6 +124,22 @@ const applyRecord = (counts, record) => {
 
 const isoDate = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+/**
+ * The calendar day a Slack message was written, from its `ts` (seconds), held between the day of the post it
+ * answers (a reply is never older than its thread) and the day it was read; the latter when the `ts` is unreadable.
+ */
+const noteDateOf = (ts, { earliest, latest }) => {
+  const seconds = Number(String(ts || '').split('.')[0]);
+  const written = Number.isFinite(seconds) && seconds > 0 ? isoDate(seconds * 1000) : latest;
+  if (earliest && written < earliest) {
+    return earliest;
+  }
+  return latest && written > latest ? latest : written;
+};
+
+/** The parse outcomes a later run with a model retries (revision 34): a failure, never a definite answer. */
+const RETRY_SOURCES = new Set(['model-failed', 'model-invalid']);
+
 /** The first date whose records still adjust ranking: `influenceDays` before the run date, inclusive. */
 const windowStartFor = (observedDate, influenceDays) => (
   isoDate(Date.parse(`${observedDate}T00:00:00Z`) - influenceDays * DAY_MS)
@@ -182,6 +198,10 @@ const ingestFeedback = async ({
   // What today's parse found for each new note, and each matched item's current value, for the horizons below.
   const parsedToday = new Map();
   const observedByItem = new Map();
+  // The model calls the horizon parses made, for the run's cost (FR-049, revision 34).
+  const calls = [];
+  // Stored notes whose earlier parse failed and which a model re-read today (revision 34).
+  const reparsed = new Map();
 
   const runIds = await previousRuns(dataDir, runId, { since, lookbackRuns });
   for (const sourceId of runIds) {
@@ -257,6 +277,15 @@ const ingestFeedback = async ({
     for (const target of targets) {
       const reactions = await reactionsOf(client, channel, target.ts, pace);
       const present = new Set();
+      // What is on record for this message, per author and verdict: how often the reaction was added and how often
+      // it was retracted. A reaction added again after a recorded retraction is a new record with a numbered id,
+      // and a second retraction likewise (revision 34); the first of each keeps the id it always had.
+      const history = previous.filter((record) => record.kind === 'reaction' && record.source_ts === target.ts);
+      const tally = (author, verdict) => ({
+        added: history.filter((r) => r.author === author && r.verdict === verdict).length,
+        retracted: history.filter((r) => r.author === author && r.verdict === 'retracted'
+          && r.note === `retracted: ${verdict}`).length,
+      });
       for (const reaction of reactions) {
         const verdict = VERDICTS[reaction.name];
         if (!verdict) {
@@ -264,26 +293,38 @@ const ingestFeedback = async ({
         }
         for (const author of reaction.users || []) {
           present.add(`${author}|${verdict}`);
+          const { added, retracted } = tally(author, verdict);
+          if (added > retracted) {
+            continue;
+          }
+          const sequence = added === 0 ? verdict : `${verdict}#${added}`;
           candidates.push({
-            feedback_id: identity.feedbackId(target.ts, author, 'reaction', verdict),
+            feedback_id: identity.feedbackId(target.ts, author, 'reaction', sequence),
             date: observedDate, run_id: sourceId, target: target.target, item_id: target.item_id,
             alert_key: target.alert_key || null,
             kind: 'reaction', verdict, note: null, horizon: null, author, matched: true, source_ts: target.ts,
           });
         }
       }
-      for (const record of previous) {
-        const isLive = record.kind === 'reaction' && record.source_ts === target.ts
-          && (record.verdict === 'up' || record.verdict === 'down');
-        if (isLive && !present.has(`${record.author}|${record.verdict}`)) {
-          candidates.push({
-            feedback_id: identity.feedbackId(target.ts, record.author, 'reaction', 'retracted'),
-            date: observedDate, run_id: record.run_id, target: record.target, item_id: record.item_id,
-            alert_key: record.alert_key || null,
-            kind: 'reaction', verdict: 'retracted', note: `retracted: ${record.verdict}`, horizon: null,
-            author: record.author, matched: true, source_ts: target.ts,
-          });
+      const live = new Map();
+      for (const record of history) {
+        if (record.verdict === 'up' || record.verdict === 'down') {
+          live.set(`${record.author}|${record.verdict}`, record);
         }
+      }
+      for (const [key, record] of live) {
+        const { added, retracted } = tally(record.author, record.verdict);
+        if (present.has(key) || added <= retracted) {
+          continue;
+        }
+        const sequence = retracted === 0 ? 'retracted' : `retracted#${retracted}`;
+        candidates.push({
+          feedback_id: identity.feedbackId(target.ts, record.author, 'reaction', sequence),
+          date: observedDate, run_id: record.run_id, target: record.target, item_id: record.item_id,
+          alert_key: record.alert_key || null,
+          kind: 'reaction', verdict: 'retracted', note: `retracted: ${record.verdict}`, horizon: null,
+          author: record.author, matched: true, source_ts: target.ts,
+        });
       }
     }
 
@@ -297,9 +338,16 @@ const ingestFeedback = async ({
       const stored = existingIds.has(feedbackId) ? previous.find((r) => r.feedback_id === feedbackId) : null;
       if (stored) {
         // A note already on record keeps the horizon fixed when it was first read: re-parsing "until 1 October"
-        // a year later would move it, and re-parsing costs a model call for nothing.
-        candidates.push(stored);
-        entries.push({ message, feedbackId, stored, item: null, alertKey: null, itemId: stored.item_id || null });
+        // a year later would move it, and re-parsing costs a model call for nothing. The one exception (revision
+        // 34) is a note whose model parse failed: with a model present it is read again, against its own date.
+        const retry = engine && !stored.horizon && RETRY_SOURCES.has(stored.horizon_source);
+        entries.push({
+          message, feedbackId, stored, item: null, alertKey: null, itemId: stored.item_id || null, retry,
+          sourceDate: runDate,
+        });
+        if (!retry) {
+          candidates.push(stored);
+        }
         continue;
       }
       const { item } = matchNote({ text: message.text, items: knownItems });
@@ -307,7 +355,9 @@ const ingestFeedback = async ({
       const { alertKey } = item
         ? { alertKey: null }
         : matchAlertNote({ text: message.text, alertGroups: alertReplies });
-      entries.push({ message, feedbackId, stored: null, item, alertKey, itemId: item ? item.item_id : null });
+      entries.push({
+        message, feedbackId, stored: null, item, alertKey, itemId: item ? item.item_id : null, sourceDate: runDate,
+      });
     }
     const threads = new Map();
     for (const entry of entries) {
@@ -319,16 +369,43 @@ const ingestFeedback = async ({
       }
     }
     for (const entry of entries) {
-      if (entry.stored) {
+      if (entry.stored && !entry.retry) {
         continue;
       }
       const { message, feedbackId, item, alertKey } = entry;
       // The earlier notes of the same thread are the parser's context for a note that states no date of its own.
       const thread = entry.itemId ? threads.get(entry.itemId) : [];
       const earlierNotes = thread.slice(0, thread.indexOf(entry)).map((e) => e.message.text);
+      // A horizon is read against the day the note was written (revision 34): "until 30 September" read weeks
+      // later still means that September.
+      const noteDate = noteDateOf(message.ts, { earliest: entry.sourceDate || null, latest: observedDate });
       const parsed = await parseNoteWithModel({
-        text: message.text, noteDate: observedDate, engine, model, definition, earlierNotes,
+        text: message.text, noteDate, engine, model, definition, earlierNotes,
       });
+      if (parsed.call) {
+        calls.push(parsed.call);
+      }
+      if (RETRY_SOURCES.has(parsed.source)) {
+        logger.warn('feedback.parse_failed', {
+          feedback_id: feedbackId, source: parsed.source, retry: 'the next run with a model reads it again',
+        });
+      }
+      if (entry.stored) {
+        // The retried record keeps its identity and everything else; only what the parse found changes.
+        const updated = {
+          ...entry.stored,
+          horizon: parsed.horizon,
+          expected_max: parsed.expected_max === undefined ? null : parsed.expected_max,
+          horizon_source: parsed.source,
+        };
+        reparsed.set(feedbackId, updated);
+        candidates.push(updated);
+        if (parsed.horizon) {
+          logger.info('feedback.parse_retried', { feedback_id: feedbackId, horizon: parsed.horizon });
+        }
+        parsedToday.set(feedbackId, parsed);
+        continue;
+      }
       parsedToday.set(feedbackId, parsed);
       if (item) {
         observedByItem.set(item.item_id, evidenceValue(item));
@@ -346,6 +423,10 @@ const ingestFeedback = async ({
         // finds the stored record. The horizon is the note's own statement; the one applied is the thread's (below).
         kind: 'note', verdict: noteVerdict(message.text), note: message.text, horizon: parsed.horizon,
         author: message.user, matched: Boolean(item || alertKey), source_ts: message.ts,
+        // What the parse found besides the date, kept on the record (revision 34).
+        expected_max: parsed.expected_max === undefined ? null : parsed.expected_max,
+        observed_value: item ? evidenceValue(item) : null,
+        horizon_source: parsed.source,
       });
     }
     sources.push({ run_id: sourceId, parent_ts: parentTs, replies: itemReplies.length, notes: notes.length, fallback });
@@ -357,7 +438,12 @@ const ingestFeedback = async ({
   const validated = candidates.map((record) => schemas.Feedback.parse(record));
   const fresh = validated.filter((record) => !existingIds.has(record.feedback_id));
   const result = await appendRecords(dataDir, fresh);
-  logger.info('feedback.records', { appended: result.appended, skipped: result.skipped, sources: sources.length });
+  if (reparsed.size) {
+    await updateRecords(dataDir, (record) => reparsed.get(record.feedback_id) || record);
+  }
+  logger.info('feedback.records', {
+    appended: result.appended, skipped: result.skipped, reparsed: reparsed.size, sources: sources.length,
+  });
 
   const all = await readAll(dataDir);
   const byItem = {};
@@ -404,12 +490,16 @@ const ingestFeedback = async ({
   // last stated horizon is the one applied, on the item's tallies and as the one horizon the analysis suppresses
   // by; a statement a later note corrected is never pushed, and a horizon that has passed holds nothing back
   // (FR-060: a stored horizon keeps suppressing until its date, whatever the influence window).
+  // Each record carries what its parse found (revision 34); a record from before that carries null.
+  const expectedMaxOf = (record) => {
+    if (parsedToday.has(record.feedback_id)) {
+      return parsedToday.get(record.feedback_id).expected_max;
+    }
+    return record.expected_max === undefined ? null : record.expected_max;
+  };
   for (const [itemId, records] of itemNotes) {
     const ordered = threadOrder(records);
-    const whole = clarifiedWhole(ordered.map((record) => ({
-      ...record,
-      expected_max: parsedToday.has(record.feedback_id) ? parsedToday.get(record.feedback_id).expected_max : null,
-    })));
+    const whole = clarifiedWhole(ordered.map((record) => ({ ...record, expected_max: expectedMaxOf(record) })));
     const counts = byItem[itemId];
     const active = Boolean(whole.horizon) && whole.horizon >= observedDate;
     counts.horizon = active ? whole.horizon : null;
@@ -417,10 +507,14 @@ const ingestFeedback = async ({
       continue;
     }
     const setter = [...ordered].reverse().find((record) => record.horizon === whole.horizon) || null;
+    // The value the item showed when the note was written: today's reading of the item, else the record's.
+    const observedStored = [...ordered].reverse()
+      .map((record) => record.observed_value)
+      .find((value) => value !== null && value !== undefined);
     horizons.push({
       item_id: itemId, project_url: counts.project_url, metric: counts.metric, pattern_card: counts.pattern_card,
       horizon: whole.horizon, expected_max: whole.expected_max,
-      observed_value: observedByItem.has(itemId) ? observedByItem.get(itemId) : null,
+      observed_value: observedByItem.has(itemId) ? observedByItem.get(itemId) : (observedStored ?? null),
       note: whole.note, author_count: whole.author_count, source_run_id: setter ? setter.run_id : null,
       source: setter && parsedToday.has(setter.feedback_id) ? 'parsed' : 'stored',
     });
@@ -450,6 +544,7 @@ const ingestFeedback = async ({
     projects,
     influence: { days: influenceDays, window_start: windowStart },
     records_path: path.resolve(dataPaths(dataDir).feedbackFile),
+    calls,
   };
 };
 

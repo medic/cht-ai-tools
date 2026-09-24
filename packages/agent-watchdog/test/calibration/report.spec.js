@@ -123,9 +123,15 @@ describe('calibration/report', function () {
       expect(some.entries).to.have.length(1);
     });
 
-    it('collects per-run observations, forced runs included, and skips runs without discovery', async () => {
+    it('collects one run per date, the last, so a forced re-run never counts a day twice (revision 34)', async () => {
+      const fs = require('node:fs');
+      // A forced re-run of the last day, a copy of the first: the same day must not add a second observation.
+      const runs = path.join(dataDir, 'runs');
+      fs.cpSync(path.join(runs, '2026-09-18'), path.join(runs, '2026-09-18-f1'), { recursive: true });
       const observations = await collectObservations({ dataDir, from: '2026-08-20', to: '2026-09-18' });
       expect(observations.runs).to.have.length(30);
+      expect(observations.runs.map((r) => r.run_id)).to.include('2026-09-18-f1');
+      expect(observations.runs.map((r) => r.run_id)).to.not.include('2026-09-18');
       const [series] = [...observations.series.values()];
       expect(series.pct).to.have.length(30);
       expect(series.items).to.have.length(history.expected.sessions);

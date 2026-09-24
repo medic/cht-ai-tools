@@ -158,9 +158,11 @@ describe('agent/turn-mapper', () => {
     const capped = mapper.synthesizeResult({
       subtype: 'error_max_turns', errors: ['harness turn cap reached'], durationMs: 12,
     });
+    expect(capped.result.cost_unknown, 'a synthesised result carries no runtime cost (revision 34)').to.equal(true);
     expect(capped.structuredOutput).to.equal(null);
     expect(capped.result).to.deep.equal({
       subtype: 'error_max_turns',
+      cost_unknown: true,
       usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
       total_cost_usd: 0,
       cumulative_cost_usd: 0.04,

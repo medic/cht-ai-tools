@@ -91,11 +91,7 @@
   <p>{{why_now}}</p>
   <p><em>Check:</em> {{suggested_check}}</p>
 {{#if has_related}}
-  <ul class="related">
-{{#each related}}
-    <li><span class="relation">{{relation_text}}</span><span class="rank">{{rank_text}}</span><span class="sev sev-{{severity}}">{{severity_label}}</span><strong>{{host}}</strong> · <span class="metric">{{metric}}</span>{{#if link}} · <a href="{{href link}}">panel</a>{{/if}}<code class="id">{{item_id}}</code><br>{{why_now}}</li>
-{{/each}}
-  </ul>
+{{> related}}
 {{/if}}
 </section>
 {{/each}}

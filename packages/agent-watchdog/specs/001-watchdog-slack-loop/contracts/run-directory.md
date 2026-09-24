@@ -24,7 +24,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── findings.pass<n>.json      # Pass output after schema validation                [kept]
 │       │   ├── verification.pass<n>.json  # in-analysis gate report for pass n                 [kept]
 │       │   ├── tool-calls.jsonl           # every tool call and result, untrusted, for replay  [kept]
-│       │   ├── passes.json                # per-pass diff, convergence, failed-turn errors (FR-058) [kept]
+│       │   ├── passes.json                # per-pass diff, convergence, errors, cost and whether it is estimated (FR-058) [kept]
 │       │   └── session.json               # session id, model, usage and trace observation per call (revision 29) [kept]
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
@@ -38,7 +38,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
 │       │   ├── feedback.digest.json       # the digest as built, each item's provenance (FR-062, FR-085) [kept]
-│       │   └── publication.json           # channel, ts, permalinks, the report share's file id  [kept]
+│       │   └── publication.json           # channel, ts, permalinks, the report share's file id; written partial at the parent post (revision 34) [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]
 │       └── trace.json                     # trace id, url, span summary                        [kept]
@@ -73,7 +73,7 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 | `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances), the stored current windows of the runs one and seven days earlier, `history/<slug>.json` | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory), `history/<slug>.json` extended with the day's maxima |
 | `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
 | `agent` | `candidates.json` less its standing conditions (revision 23), `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
-| `rollup` | all `findings.pass<last>.json`, every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
+| `rollup` | each project's last accepted `findings.pass<n>.json` (revision 34), every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |
 | `render` | `brief.json`, `items.ranked.json`, `standing.json`, `alert-groups.json`, `discovery.json` | `report.html` (the image `brief.png` was retired in revision 24) |
 | `publish` | `brief.json`, `report.html`, `items.ranked.json`, `layout.json`, `alerts.classified.json`, `feedback.ingested.json` | `payload.json` (report share; programme, Other and alerts replies), `feedback.digest.json`, `publication.json`, `run.json` (final); marks acknowledged records in `feedback.jsonl` |
 

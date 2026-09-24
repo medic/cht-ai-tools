@@ -326,6 +326,29 @@ describe('collect/discovery: programme groups and ignored hosts (FR-068, User St
     expect(perHost.some((c) => /cht-dev|cht\.dev/.test(decodeURIComponent(c.url)))).to.equal(false);
   });
 
+  it('leaves a project without a version when its own query fails, and the run with its brief (FR-073)', async () => {
+    const failing = createFakeGrafana({ fixtureDir: fixturePath('runs', 'seeded-anomaly') });
+    const fetch = sinon.stub().callsFake(async (url, init) => {
+      const decoded = decodeURIComponent(String(url));
+      if (decoded.includes('cht_version') && decoded.includes('beta.example.org')) {
+        const body = JSON.stringify({ status: 'error', errorType: 'execution', error: 'boom' });
+        return new Response(body, { status: 422 });
+      }
+      return failing.fetch(url, init);
+    });
+    const client = createGrafanaClient({
+      baseUrl: failing.baseUrl, token: failing.token, datasourceUid: failing.datasourceUid, timeoutMs: 1000, fetch,
+    });
+    const logger = { debug() {}, info() {}, warn: sinon.spy(), error() {} };
+    const out = await discover({ grafana: client, policy: policyWith({}), config: {}, runStart: RUN_START, logger });
+    const beta = out.projects.find((p) => p.host === 'beta.example.org');
+    expect(beta).to.include({ cht_version: null, history_days: 21 });
+    expect(out.projects.find((p) => p.host === 'alpha.example.org').cht_version).to.equal('4.11.0');
+    expect(logger.warn).to.have.been.calledWithMatch('discovery.query_failed', sinon.match({
+      project: 'beta.example.org', query: 'cht_version',
+    }));
+  });
+
   it('puts every host under Other when no groups are declared and ignores nothing without patterns', async () => {
     const plainPolicy = policyWith({});
     plainPolicy.projects.groups = [];
