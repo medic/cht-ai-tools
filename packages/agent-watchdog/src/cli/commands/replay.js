@@ -383,16 +383,25 @@ const replayLoaded = async ({ flags, env, stdout, logger, deps, config, effectiv
   const tracer = deps.tracer || createTracer({ config });
   const startHr = process.hrtime.bigint();
 
+  // A rejected trace flush is logged and never changes the exit code, and the result is printed first (revision 35).
+  const finishTrace = async (output) => {
+    try {
+      await tracer.finish({ output });
+    } catch (traceError) {
+      logger.warn('trace.finish_failed', { error: traceError });
+    }
+  };
+
   if (!range) {
     const runId = runIds[0];
     await tracer.start({ runId, date: runId.slice(0, 10), mode: 'replay', tags: ['replay', label] });
     try {
       const comparison = await replayOne({ runId, label, shared, tracer, stageName: 'agent' });
-      await tracer.finish({ output: { status: 'drafted', totals: comparison.totals, cost_usd: comparison.cost_usd } });
       writeResult(stdout, comparison);
+      await finishTrace({ status: 'drafted', totals: comparison.totals, cost_usd: comparison.cost_usd });
       return codes.OK;
     } catch (error) {
-      await tracer.finish({ output: { status: 'failed', error: error.message } });
+      await finishTrace({ status: 'failed', error: error.message });
       throw error;
     }
   }
@@ -421,11 +430,12 @@ const replayLoaded = async ({ flags, env, stdout, logger, deps, config, effectiv
   await Promise.all(Array.from({ length: concurrency }, worker));
   comparisons.sort((a, b) => a.run_id.localeCompare(b.run_id));
   const report = summariseRange({ range, label, comparisons, failed, runIds, startHr });
-  await tracer.finish({ output: { status: comparisons.length ? 'drafted' : 'failed', summary: report.summary } });
   if (!comparisons.length) {
+    await finishTrace({ status: 'failed', summary: report.summary });
     throw lastError;
   }
   writeResult(stdout, report);
+  await finishTrace({ status: 'drafted', summary: report.summary });
   return codes.OK;
 };
 

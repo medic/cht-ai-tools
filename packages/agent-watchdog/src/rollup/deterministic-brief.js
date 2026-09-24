@@ -96,8 +96,8 @@ const candidateText = (candidate) => {
 
 /**
  * The deterministic brief: computed candidates only, clearly labelled, never silent (constitution III). One line per
- * project and metric, keyed by the item id the analysis would give it, laid out with the same five-slot rule as the
- * model's brief so a programme's candidates share one bullet (FR-069).
+ * project and metric, keyed by the item id the analysis would give it, laid out with the same two-slot rule as the
+ * model's brief so a programme's candidates share one bullet (FR-069, revision 28).
  */
 const buildDeterministicBrief = ({
   runId, candidates, discovery, reason, footer, expectedLoadNotice = null, notices = [], alertGroups = [],

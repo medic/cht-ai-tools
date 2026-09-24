@@ -97,10 +97,12 @@ Pattern cards: merged cards live under `skill/cht-watchdog/pattern-cards/<card_i
 system prompt; `read_pattern_card` serves a full merged card. `distill` writes proposed cards to the data
 volume, never to `skill/`; raw corpus material stays under `AGENT_WATCHDOG_CORPUS_RAW_DIR`.
 
-Body layout: five bullets of two lines, a programme's items as up to eight one-line sub-bullets, "Other" never
-collapsed, computed in `src/rollup/layout.js` before the roll-up call and written to `rollup/layout.json`. The
-model writes item lines only; group lines are code; `bullet_count`, `bullet_length` and `thread_order` check the
-draft against the layout. Ignored hosts never enter `discovery.projects`.
+Body layout (revision 28): two body slots, each a programme or a single project, a programme's slot naming up to
+three projects on lines of two lines each with a count of the rest; every further programme and the "Other"
+projects are one thread reply each in the same form, computed in `src/rollup/layout.js` before the roll-up call
+and written to `rollup/layout.json`. The model writes the item lines and the headline only; group lines are code;
+`bullet_count`, `bullet_length` and `thread_order` check the draft against the layout, and the headline and the
+expected-load notice are checked like the lines. Ignored hosts never enter `discovery.projects`.
 
 Collection: a panel expression is scoped to the project and its dashboard variables are resolved by code before
 it is sent (`src/collect/variables.js`; `$interval` to the dashboard's value, Grafana's built-in time variables to
@@ -122,10 +124,12 @@ housekeeping and resolved lines, and `src/rollup/markers.js` is the only source 
 and the report render (FR-078 to FR-082).
 
 Alerts: `collect` reads Grafana-managed rules and instances into `alerts.json` (unavailable is a fact, not a
-failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up places alert
-groups as code-built `alerts` bullets, the model never writes them; `publish` posts one reply per alert group
-(`agent_watchdog.alerts`) with links the gate resolved against the collected data; episodes are append-only events
-in `alerts/episodes.jsonl` (durable), cleared ones also in `corpus/outcomes/` as `alert_episode`.
+failure); `analyze` classifies them from `alerts.yaml` into `alerts.classified.json`; the roll-up counts alert
+groups per programme and takes no body slot for them; `publish` posts one alerts reply per run
+(`agent_watchdog.alerts`) with the counts per programme, a link to each programme's filtered alert list and one to
+every firing alert, fitted line by line and never cut inside a link, plus the alert-derived notices; the report
+lists every instance; episodes are append-only events in `alerts/episodes.jsonl` (durable), cleared ones also in
+`corpus/outcomes/` as `alert_episode`.
 
 Feedback: `feedback.jsonl` is permanent (never purged); `AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` bounds
 how long a record adjusts ranking. A note's record keeps what its parse found (`expected_max`, `observed_value`,

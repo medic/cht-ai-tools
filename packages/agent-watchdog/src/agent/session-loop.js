@@ -48,11 +48,6 @@ const urlsIn = (value) => [...collectToolResultUrls([{ tool_response: value }])]
 const BOUND_BY_SUBTYPE = { error_max_turns: 'turns', error_max_budget_usd: 'budget' };
 
 /**
- * How the session used its tools (FR-018, revision 19): calls by tool with the ones that answered an error, and
- * the tools the runtime refused. A tool whose contract no longer matches what the model is told shows up here
- * instead of needing the record read.
- */
-/**
  * True when a tool answered with its own error envelope. The watchdog tools return `{ error }` as the whole
  * response, so that is what is read: a documentation result quoting an error payload of its own is not a failed
  * call, and run 2026-09-20-f1 counted one because the text was searched instead (revision 19).
@@ -70,6 +65,11 @@ const answeredError = (response) => {
   }
 };
 
+/**
+ * How the session used its tools (FR-018, revision 19): calls by tool with the ones that answered an error, and
+ * the tools the runtime refused. A tool whose contract no longer matches what the model is told shows up here
+ * instead of needing the record read.
+ */
 const toolUsage = (calls, refused) => {
   const byTool = {};
   let failed = 0;

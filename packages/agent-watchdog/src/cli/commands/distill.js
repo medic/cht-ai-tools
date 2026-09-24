@@ -60,25 +60,29 @@ const distillLoaded = async ({ flags, env, stdout, logger, deps, config }) => {
       logger: log,
     }));
     const durationMs = Number(process.hrtime.bigint() - startHr) / 1e6;
-    await tracer.finish({
-      output: {
-        status: 'completed', processed: report.processed.length, skipped: report.skipped.length,
-        rejected: report.rejected.length, cards: report.cards.length, cost_usd: report.cost_usd,
-      },
-    });
     log.info('distill.done', {
       processed: report.processed.length, skipped: report.skipped.length, rejected: report.rejected.length,
       cards: report.cards.map((c) => c.card_id), cost_usd: report.cost_usd, duration_ms: durationMs,
     });
+    // The result first, then the flush: tracing is observability, never the product (revision 13; here revision 35).
     writeResult(stdout, report);
+    await finishTrace(tracer, log, {
+      status: 'completed', processed: report.processed.length, skipped: report.skipped.length,
+      rejected: report.rejected.length, cards: report.cards.length, cost_usd: report.cost_usd,
+    });
     return codes.OK;
   } catch (error) {
     log.error('distill.failed', { error });
-    try {
-      await tracer.finish({ output: { status: 'failed', error: error.message } });
-    } catch (traceError) {
-      log.warn('trace.finish_failed', { error: traceError });
-    }
+    await finishTrace(tracer, log, { status: 'failed', error: error.message });
     throw error;
+  }
+};
+
+/** A rejected trace flush is logged and never changes the exit code. */
+const finishTrace = async (tracer, log, output) => {
+  try {
+    await tracer.finish({ output });
+  } catch (traceError) {
+    log.warn('trace.finish_failed', { error: traceError });
   }
 };

@@ -99,3 +99,29 @@ describe('store/retention', () => {
     expect(fs.existsSync(`${p.feedbackFile}.tmp`)).to.equal(false);
   });
 });
+
+describe('store/retention: replay directories age like runs (FR-040, revision 35)', () => {
+  let dataDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    await ensureDataLayout(dataDir);
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('removes a whole replay after the kept period and its raw copies after the raw period', async () => {
+    const old = await RunDir.createReplay(dataDir, daysAgo(40), 'baseline');
+    await old.writeJson('run.json', { run_id: old.runId });
+    const mid = await RunDir.createReplay(dataDir, daysAgo(20), 'baseline');
+    await mid.writeGz('cht-x/inputs/windows.json.gz', { a: 1 });
+    await mid.writeJson('cht-x/changes.json', { b: 2 });
+    const fresh = await RunDir.createReplay(dataDir, daysAgo(3), 'baseline');
+    await fresh.writeGz('cht-x/inputs/windows.json.gz', { a: 1 });
+    const result = await purge(dataDir, { rawDays: 14, keptDays: 30, now: NOW });
+    expect(fs.existsSync(path.join(dataDir, 'runs-replay', daysAgo(40)))).to.equal(false);
+    expect(fs.existsSync(path.join(mid.root, 'cht-x', 'inputs', 'windows.json.gz'))).to.equal(false);
+    expect(fs.existsSync(path.join(mid.root, 'cht-x', 'changes.json'))).to.equal(true);
+    expect(fs.existsSync(path.join(fresh.root, 'cht-x', 'inputs', 'windows.json.gz'))).to.equal(true);
+    expect(result.removed.map((r) => [r.class, r.path.startsWith('runs-replay/')]))
+      .to.deep.equal([['kept', true], ['raw', true]]);
+  });
+});

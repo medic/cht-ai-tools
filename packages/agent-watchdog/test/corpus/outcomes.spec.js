@@ -49,7 +49,7 @@ describe('corpus/outcomes (FR-030)', () => {
 });
 
 describe('corpus/outcomes: alert episodes (FR-067, User Story 8)', () => {
-  const { appendAlertEpisodes, readAlertEpisodes } = require('../../src/corpus/outcomes');
+  const { appendAlertEpisodes } = require('../../src/corpus/outcomes');
   let dataDir;
   beforeEach(async () => {
     dataDir = tempDir();
@@ -84,7 +84,8 @@ describe('corpus/outcomes: alert episodes (FR-067, User Story 8)', () => {
     } });
     // Item outcome readers (calibration) see only item outcomes; the episode reader sees only episodes.
     expect(await readOutcomes(dataDir, { from: '2026-09-01', to: '2026-09-30' })).to.have.length(1);
-    expect((await readAlertEpisodes(dataDir, { from: '2026-09-01', to: '2026-09-30' })).map((e) => e.episode_id))
+    const stored = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+    expect(stored.filter((r) => r.kind === 'alert_episode').map((e) => e.episode_id))
       .to.deep.equal(['e1e1e1e1e1e1', 'e2e2e2e2e2e2']);
   });
 });

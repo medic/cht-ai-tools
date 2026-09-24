@@ -1,10 +1,6 @@
-const fs = require('node:fs');
-const path = require('node:path');
 const assembly = require('../../src/agent/prompt-assembly');
 const { loadDefinition } = require('../../src/agent/definition');
 const { PACKAGE_PATHS } = require('../../src/config/schema');
-const { RunDir } = require('../../src/store/run-dir');
-const { tempDir, removeDir } = require('../helpers/fixtures');
 
 const env = { AGENT_WATCHDOG_DOCS_MCP_URL: 'https://docs-mcp.example.org/mcp' };
 
@@ -63,20 +59,6 @@ describe('agent/prompt-assembly', () => {
       const parts = assembly.assembleSystemPrompt({ definition, date: '2026-09-18', memory: '', activeWindows: [] });
       expect(parts[2]).to.match(/no memory/i);
       expect(parts[2]).to.match(/no expected-load window/i);
-    });
-
-    it('materialises the parts to runs/<id>/agent/system-prompt.md', async () => {
-      const dataDir = tempDir();
-      try {
-        const runDir = await RunDir.create(dataDir, '2026-09-18');
-        const parts = assembly.assembleSystemPrompt({ definition, date: '2026-09-18', memory: '', activeWindows: [] });
-        const file = await assembly.materialize(runDir, parts);
-        expect(file).to.equal(path.join(runDir.root, 'agent', 'system-prompt.md'));
-        const text = fs.readFileSync(file, 'utf8');
-        expect(text).to.equal(parts.join('\n'));
-      } finally {
-        removeDir(dataDir);
-      }
     });
   });
 

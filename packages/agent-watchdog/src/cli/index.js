@@ -6,8 +6,25 @@ const path = require('node:path');
 const codes = require('./exit-codes');
 const { createLogger } = require('../log/logger');
 const { writeResult } = require('./streams');
+const { imageVersion } = require('../store/versions');
 
 const COMMANDS = ['run', 'replay', 'distill', 'calibrate', 'check', 'purge', 'egress', 'tools-server'];
+
+// The flags each command owns (contracts/cli.md); one table is parsed for every command, so a flag of another
+// command is refused here with exit 64 rather than silently ignored (revision 35: `replay --stage` ran a replay).
+const GLOBAL_FLAGS = ['config-dir', 'data-dir', 'log-level', 'log-format', 'help', 'version'];
+const COMMAND_FLAGS = {
+  run: ['date', 'project', 'group', 'stage', 'engine', 'dry-run', 'force', 'since'],
+  replay: ['date', 'project', 'group', 'prompts', 'skill', 'label', 'compare', 'from', 'to', 'engine'],
+  distill: ['all', 'item'],
+  calibrate: ['week', 'project'],
+  check: [],
+  purge: ['dry-run'],
+  egress: ['format'],
+  'tools-server': ['run-dir', 'project', 'server', 'replay'],
+};
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error'];
+const LOG_FORMATS = ['json', 'pretty'];
 
 const OPTIONS = {
   date: { type: 'string' },
@@ -81,7 +98,7 @@ const packageVersion = () => require('../../package.json').version;
  */
 const main = async (argv, options = {}) => {
   const { env = process.env, stdout = process.stdout, stderr = process.stderr, commands = null } = options;
-  const logger = createLogger({
+  let logger = createLogger({
     level: env.AGENT_WATCHDOG_LOG_LEVEL || 'info',
     format: env.AGENT_WATCHDOG_LOG_FORMAT || 'json',
     stream: stderr,
@@ -100,7 +117,7 @@ const main = async (argv, options = {}) => {
   const { command, positionals, flags } = parsed;
 
   if (flags.version) {
-    writeResult(stdout, packageVersion());
+    writeResult(stdout, imageVersion(env) || packageVersion());
     return 0;
   }
   if (flags.help || !command) {
@@ -109,6 +126,27 @@ const main = async (argv, options = {}) => {
   }
   if (!COMMANDS.includes(command)) {
     return exit(codes.USAGE, `unknown command "${command}"`);
+  }
+  // The log flags apply to the command's logger (revision 35); a value outside the contract is a usage error.
+  const level = flags['log-level'];
+  const format = flags['log-format'];
+  if (level !== undefined && !LOG_LEVELS.includes(level)) {
+    return exit(codes.USAGE, `--log-level must be one of ${LOG_LEVELS.join(', ')}, got "${level}"`);
+  }
+  if (format !== undefined && !LOG_FORMATS.includes(format)) {
+    return exit(codes.USAGE, `--log-format must be one of ${LOG_FORMATS.join(', ')}, got "${format}"`);
+  }
+  if (level !== undefined || format !== undefined) {
+    logger = createLogger({
+      level: level || env.AGENT_WATCHDOG_LOG_LEVEL || 'info',
+      format: format || env.AGENT_WATCHDOG_LOG_FORMAT || 'json',
+      stream: stderr,
+    });
+  }
+  const owned = new Set([...GLOBAL_FLAGS, ...COMMAND_FLAGS[command]]);
+  const foreign = Object.keys(flags).find((name) => !owned.has(name));
+  if (foreign) {
+    return exit(codes.USAGE, `--${foreign} is not a flag of ${command}`);
   }
 
   const handler = (commands && commands[command]) || loadCommand(command);
@@ -129,4 +167,5 @@ const main = async (argv, options = {}) => {
   }
 };
 
-module.exports = { main, parseCommandLine, COMMANDS, OPTIONS, USAGE };
+module.exports = {
+  COMMAND_FLAGS, GLOBAL_FLAGS, main, parseCommandLine, COMMANDS, OPTIONS, USAGE };

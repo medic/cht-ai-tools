@@ -54,21 +54,6 @@ const markAcknowledged = async (dataDir, feedbackIds, runId) => {
   ));
 };
 
-/** Records that target an item, grouped by item_id; brief-level records are left out. */
-const readByItem = async (dataDir) => {
-  const byItem = new Map();
-  for (const record of await readAll(dataDir)) {
-    if (record.target !== 'item' || !record.item_id) {
-      continue;
-    }
-    if (!byItem.has(record.item_id)) {
-      byItem.set(record.item_id, []);
-    }
-    byItem.get(record.item_id).push(record);
-  }
-  return byItem;
-};
-
 module.exports = {
-  appendRecords, readAll, readByItem, feedbackFile, updateRecords, readUnacknowledged, markAcknowledged,
+  appendRecords, readAll, feedbackFile, updateRecords, readUnacknowledged, markAcknowledged,
 };

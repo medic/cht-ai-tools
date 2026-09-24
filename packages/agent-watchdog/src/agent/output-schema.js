@@ -1,6 +1,7 @@
 'use strict';
 // Structured-output schemas for the analysis pass and the roll-up, defined once in zod and exported as
-// JSON Schema 2020-12 (contracts/findings.schema.json, contracts/brief.schema.json). The model never emits
+// JSON Schema 2020-12 (schema/findings.schema.json and schema/brief.schema.json, by `npm run schema:build`). The
+// model never emits
 // URLs except reference_urls; identity, links and persistence are derived by code.
 const { z } = require('zod');
 
@@ -19,9 +20,9 @@ const TEXT = {
   threadOrder: 'Every accepted item id: the body items first, in the order of the bullets, then the rest highest '
     + 'rank first.',
   bullets: 'One per body item named in the Body layout section of the prompt, in that order (checked by the gate). '
-    + 'A programme\'s own line is written by code; an item marked one_line is a sub-bullet and takes one line.',
-  bulletText: 'At most 2 lines of at most 120 characters, one line for a sub-bullet; numbers must match evidence; '
-    + 'no URLs.',
+    + 'A programme\'s own line is written by code.',
+  bulletText: 'At most 2 lines of at most 120 characters; numbers must match evidence; no URLs.',
+  headline: 'At most 2 lines of at most 120 characters; numbers must match the items\' evidence; no URLs.',
   replaceWith: 'Full new memory text within the cap, or null for no change; code stores the diff.',
   brief: 'Structured output of the roll-up call. Bullets reference items by id; the gate checks every number '
     + 'against computed data and every structural limit before publication.',
@@ -78,7 +79,7 @@ const findingsSchema = z.object({
 });
 
 const briefSchema = z.object({
-  headline: z.string().describe('One line; no URLs.'),
+  headline: z.string().describe(TEXT.headline),
   bullets: z.array(z.object({
     item_id: z.string().describe('An accepted item id from this run.'),
     text: z.string().describe(TEXT.bulletText),

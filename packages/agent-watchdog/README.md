@@ -263,7 +263,8 @@ Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour onl
 The image runs as user `10001:10001` with a read-only root filesystem and writes only to `/data` (the
 volume) and `/tmp`; it carries no browser, no secrets, no policy files and no run data, and exposes no
 port ([`contracts/container.md`](specs/001-watchdog-slack-loop/contracts/container.md), FR-086).
-[`compose.yaml`](compose.yaml) runs it the same way on a contributor's machine.
+[`compose.yaml`](compose.yaml) runs it the same way on a contributor's machine, on x64 or arm64; a run from the
+released image names the image's version and revision in its record and in `--version`.
 `agent-watchdog egress` prints every destination a run contacts, from the effective configuration, for the
 platform's network policy, and a run refuses any other destination itself before a connection is made
 (FR-083). [`deploy/`](deploy/README.md) holds reference manifests with placeholder hosts: the CronJob with its

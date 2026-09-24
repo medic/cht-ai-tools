@@ -892,3 +892,24 @@ resolves links. **I** no dependency; **II** tests first; **III** the wording and
 fields on the Feedback record (`expected_max`, `observed_value`, `horizon_source`, `review_attempts`), each stated in
 data-model.md; **V** unchanged; **VI** the gate refuses, code flags; **VII** the heartbeat and degraded wording are
 templates changed here by PR; **VIII** unchanged. Result: PASS. Deferred to revision 35: the hygiene items of R-38.
+
+### Revision 35 delta: the hygiene before the pull request (FR-039, FR-040, FR-043, FR-048, FR-049, FR-083, FR-086)
+
+Planned on 2026-09-24 from the branch review (research.md R-38, findings #38, #40, #21, #52, #41, #53, #61, #17,
+#26, #29, #30, #31, #33, #51), the last of three revisions in the reviewer's order: what a reviewer of the pull
+request would trip over. The image symlinks the runtime package of its own architecture, so an arm64 build works,
+and bakes its version and revision into the environment, so a run record from the image names them instead of
+`0.0.0-development` and a null sha; the CLI engine creates its runtime directory with the synchronous call it
+meant to use; `AGENTS.md` describes the two-slot body and the one alerts reply; the deploy notes say the reference
+Cilium policy pins 443 and where the ports are; the entity schema's caps match the layout (two slots, four
+children) and the model-facing descriptions no longer speak of one-line sub-bullets; misplaced and stale comments
+are set right; the dead module and the exports used by nothing or by tests alone are removed, and FR-049 is
+reworded to the reconciliation the code can make; retention purges replay directories like runs; a bad `--stage`,
+`--date` or `--since` is refused before a run directory exists; each command refuses the flags that are not its
+own, so `replay --stage` exits 64 as the contract says; `--log-level` and `--log-format` apply; the trace flush of
+replay, distill and calibrate is logged and never changes the exit code, and each prints its result first; `check`
+refuses an `http://` target in words rather than probing `https://` silently; the commit header pattern accepts
+the `!` breaking-change marker. **I** no dependency; **II** tests first; **III** to **VI** unchanged; **VII** the
+brief schema's descriptions are model-facing text, rebuilt into `schema/brief.schema.json` with the replay diff
+attached to the pull request; **VIII** unchanged. Result: PASS. Not done here: rewriting the eighteen commit
+messages that fail commitlint (#48), which rewrites local history and is the operator's decision (R-40).

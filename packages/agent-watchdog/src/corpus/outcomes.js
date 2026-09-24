@@ -90,9 +90,7 @@ const readOutcomeRecords = async (dataDir, { from, to }) => {
 const readOutcomes = async (dataDir, range) => (await readOutcomeRecords(dataDir, range))
   .filter((record) => !isAlertEpisode(record));
 
-/** Cleared alert episodes recorded for days in the inclusive range [from, to]. */
-const readAlertEpisodes = async (dataDir, range) => (await readOutcomeRecords(dataDir, range)).filter(isAlertEpisode);
 
 module.exports = {
-  appendOutcomes, readOutcomes, appendAlertEpisodes, readAlertEpisodes, OUTCOME_VERDICTS, ALERT_EPISODE_KIND,
+  appendOutcomes, readOutcomes, appendAlertEpisodes, OUTCOME_VERDICTS, ALERT_EPISODE_KIND,
 };

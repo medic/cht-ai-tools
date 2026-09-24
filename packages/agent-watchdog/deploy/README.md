@@ -14,7 +14,9 @@ egress list the package builds from the same configuration.
   `agent-watchdog-secrets` through `envFrom`; nothing is inline.
 - `networkpolicy.example.yaml`: a default-deny egress `NetworkPolicy` that allows DNS, and a
   `CiliumNetworkPolicy` whose FQDN selectors are exactly what `agent-watchdog egress --format hosts` prints
-  for the ConfigMap's configuration, on 443. A cluster without Cilium substitutes its own name-based egress
+  for the ConfigMap's configuration, on 443. The port is the example's assumption, not the list's: `egress
+  --format json` prints each destination's port, and an endpoint on another port (a Grafana on 3000, a tracing
+  backend on 4318) needs its own `toPorts` rule. A cluster without Cilium substitutes its own name-based egress
   mechanism; a plain `NetworkPolicy` selects CIDRs only.
 
 Regenerate the host list after changing an endpoint:

@@ -157,7 +157,7 @@ const hostMetricsCheck = async ({ fetch, host, timeoutMs }) => {
 
 /**
  * @param {object} options
- * @param {string} options.url the CHT deployment URL (scheme and host; path ignored)
+ * @param {string} options.url the CHT deployment URL (https; the host is what is probed, the path ignored)
  * @param {Function} [options.fetch]
  * @param {number} [options.timeoutMs]
  * @param {boolean} [options.hostMetrics] probe the cAdvisor exporter (projects.yaml `host_metrics: true`)

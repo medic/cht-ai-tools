@@ -1,7 +1,6 @@
 'use strict';
 // Assembles the system prompt (static prefix, dynamic boundary, dynamic suffix) and the per-pass user
 // turns. Untrusted text is delimited and labelled (FR-044); computed data is passed as JSON.
-const path = require('node:path');
 const { maskPeople } = require('../corpus/scrub');
 
 // The runtime splits a system prompt at this marker: content before it is globally cacheable.
@@ -71,12 +70,6 @@ const assembleSystemPrompt = ({ definition, date, memory = '', activeWindows = [
   return [definition.systemPrefix, boundary, lines.join('\n')];
 };
 
-const materialize = async (runDir, parts) => {
-  const rel = path.join('agent', 'system-prompt.md');
-  await runDir.writeText(rel, parts.join('\n'));
-  return runDir.path('agent', 'system-prompt.md');
-};
-
 /** The project's firing alerts (FR-067): untrusted data the analysis may explain, never a reason to raise an item. */
 const alertsBlock = (alerts) => {
   if (!alerts || (Array.isArray(alerts) && alerts.length === 0)) {
@@ -136,5 +129,5 @@ const buildPassPrompt = ({
 };
 
 module.exports = {
-  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, assembleSystemPrompt, materialize, buildPassPrompt, alertsBlock,
+  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, assembleSystemPrompt, buildPassPrompt, alertsBlock,
 };

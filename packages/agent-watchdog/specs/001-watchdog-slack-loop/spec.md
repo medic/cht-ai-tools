@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 34)
+**Status**: Draft (revision 35)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -1119,12 +1119,15 @@ Persistence and reproducibility
 - **FR-039**: For every run and project the system MUST persist the collected inputs, computed
   changes, candidates, items, verification results, published-message references, usage and
   cost, and the code, prompt and configuration versions.
+  A run from the released image names the image's version and revision, which the build bakes into the
+  environment, never the package's development default or a null sha (revision 35).
 - **FR-040**: The system MUST NOT retain raw metric series longer than a short configurable
   period, because the hosted watchdog is the source of record; computed changes, candidates,
   items, feedback and memory — the inputs the model saw — MUST be retained for the long period.
   Feedback records are exempt from retention and kept permanently (FR-059). Defaults: 14 days
   for raw series, 30 days for everything else (rendered images, retired in revision 24, shared the
   short period).
+  Replay directories (`runs-replay/`) age like the run they copy, by that run's date (revision 35).
 - **FR-041**: The system MUST support offline replay of any stored run from its retained inputs;
   replay MUST NOT contact the metrics source or Slack.
 - **FR-042**: Runs MUST be idempotent per date; a second run on the same date MUST require an
@@ -1135,6 +1138,9 @@ Persistence and reproducibility
 - **FR-043**: Each stage MUST be runnable on its own from the files of the previous stage.
   A stage-only roll-up resolves links from the discovery on disk and carries the agent stage's recorded
   spend (revision 34).
+  A bad `--stage`, `--date` or `--since` is refused before any run directory exists, so a typo never blocks
+  the scheduled run of the day; each command refuses a flag that is not its own with the usage code, and
+  `--log-level` and `--log-format` apply to the command's logger (revision 35).
 
 Security and trust boundaries
 
@@ -1167,8 +1173,12 @@ Operations
   bot named `agent-watchdog`.
 - **FR-048**: The system MUST provide a readiness check for a CHT URL that reports unmet
   prerequisites (minimum supported version, host-metrics exporter present) in plain language.
+  An `http://` address is refused in words: the watchdog scrapes over https and never probes another
+  scheme than the one it was given (revision 35).
 - **FR-049**: The system MUST record one trace per run with a span per stage and usage per model
-  call, and MUST reconcile the runtime's cost estimate with recorded usage.
+  call. The cost a run records is the runtime's own figure per call, summed (revision 35: there is no second
+  source to reconcile it against, and the module that promised one is gone); a session that ends without a
+  figure is charged its remaining grant and marked estimated (FR-012).
   The run's cost includes the feedback stage's model calls, the horizon parses and the reviews (revision 34).
 - **FR-050**: The same agent definition — skill, tools, reference sources, prompts, output schema
   and verification hooks — MUST be usable both by this system's scheduled run and by a
@@ -1215,6 +1225,8 @@ Configuration
   than reading as a broken link. The guard follows a redirect only to a listed destination, and it
   is installed for every command that can reach the network: `run`, `tools-server`, `calibrate`,
   `distill` and `replay` (revision 33).
+  The `hosts` format prints host names for a name-based policy; the ports are in the JSON form, and the
+  reference policy's single 443 rule is an assumption its notes state (revision 35).
 - **FR-084**: The Slack app MUST hold exactly the bot scopes the posting needs: `chat:write`,
   `files:write`, `reactions:read`, `reactions:write`, `channels:history` for a public channel,
   `groups:history` if the channel is private, and `im:write` with `im:history` when the configured
@@ -1247,6 +1259,8 @@ Configuration
   than an API key, the same setup MUST let the contributor log in to the agent runtime once, inside the
   container, into a named volume that every service mounts and nothing else reads, so the CLI engine
   runs on that login (login mode, FR-050); the scheduled deployment never carries a login (revision 32).
+  The image links the runtime package of its own architecture, so it builds on x64 and arm64 alike
+  (revision 35).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.

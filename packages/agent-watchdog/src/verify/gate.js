@@ -29,11 +29,6 @@ const validateAttempt = (attempt) => {
   }
 };
 
-/**
- * Turn the model's items into schemas.Item records; identity, links, the dashboard reference and persistence are
- * all derived by code (FR-009). `windows` are the run's collected windows: the reference comes from them, never
- * from the model, which no longer emits one (revision 18).
- */
 /** The sibling's identity for a relation the analysis named by metric; null when it named none or names a stranger. */
 const resolveRelation = (item, findings, project) => {
   const relation = item.relates_to;
@@ -56,6 +51,11 @@ const resolveRelation = (item, findings, project) => {
   };
 };
 
+/**
+ * Turn the model's items into schemas.Item records; identity, links, the dashboard reference and persistence are
+ * all derived by code (FR-009). `windows` are the run's collected windows: the reference comes from them, never
+ * from the model, which no longer emits one (revision 18).
+ */
 const normaliseItems = (findings, project, windows = [], discovery = null) => (findings.items || []).map((item) => ({
   item_id: itemId(project.url, item.item_key.metric, item.item_key.pattern_card),
   project_url: project.url,

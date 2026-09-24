@@ -112,3 +112,47 @@ describe('cli/exit-codes', () => {
     expect(e.details).to.deep.equal({ keys: ['X'] });
   });
 });
+
+describe('cli/parse: the flags a command owns, the log flags and the image version (revision 35)', () => {
+  const { envFor } = require('./helpers');
+  const run = (argv, env = envFor('/tmp')) => {
+    const out = capture();
+    const err = capture();
+    return main(argv, { env, stdout: out.stream, stderr: err.stream }).then((code) => ({ code, out, err }));
+  };
+
+  it('refuses a flag that is not the command\'s own with a usage error naming it, replay --stage first', async () => {
+    const replay = await run(['replay', '--date', '2026-09-18', '--stage', 'agent']);
+    expect(replay.code).to.equal(codes.USAGE);
+    expect(replay.err.text()).to.include('--stage is not a flag of replay');
+    const purge = await run(['purge', '--force']);
+    expect(purge.code).to.equal(codes.USAGE);
+    expect(purge.err.text()).to.include('--force is not a flag of purge');
+    const egress = await run(['egress', '--week', '2026-W38']);
+    expect(egress.code).to.equal(codes.USAGE);
+    const global = await run(['egress', '--format', 'hosts', '--data-dir', '/tmp/x']);
+    expect(global.code).to.equal(0);
+  });
+
+  it('applies --log-level and --log-format to the command\'s logger and refuses a bad value', async () => {
+    const quiet = await run(['egress', '--log-level', 'error']);
+    expect(quiet.code).to.equal(0);
+    expect(quiet.err.text(), 'nothing below error is written').to.equal('');
+    const pretty = await run(['egress', '--log-format', 'pretty']);
+    expect(pretty.code).to.equal(0);
+    expect(pretty.err.text()).to.match(/ info\s+/);
+    expect(() => JSON.parse(pretty.err.text().trim().split('\n')[0])).to.throw();
+    const bad = await run(['egress', '--log-level', 'loud']);
+    expect(bad.code).to.equal(codes.USAGE);
+    expect(bad.err.text()).to.include('--log-level');
+    const badFormat = await run(['egress', '--log-format', 'xml']);
+    expect(badFormat.code).to.equal(codes.USAGE);
+  });
+
+  it('prints the image\'s version for --version when the image set one', async () => {
+    const image = await run(['--version'], { ...envFor('/tmp'), AGENT_WATCHDOG_VERSION: '1.4.0' });
+    expect(image.out.text().trim()).to.equal('1.4.0');
+    const dev = await run(['--version'], { ...envFor('/tmp'), AGENT_WATCHDOG_VERSION: '0.0.0-development' });
+    expect(dev.out.text().trim()).to.equal(require('../../package.json').version);
+  });
+});

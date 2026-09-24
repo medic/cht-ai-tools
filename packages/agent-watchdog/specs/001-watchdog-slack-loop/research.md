@@ -2080,3 +2080,29 @@ of the footer is a template change with its own replay diff, left for the operat
 stored note against its own date (the horizon a note stated was fixed when first read, revision 29, and moving it
 would change what a reader was told); a per-date dedupe of outcomes across files (the fresh-record rule removes the
 daily re-append without reading the whole corpus).
+
+## R-40. The hygiene before the pull request, and the commit history left to the operator (revision 35)
+
+**Evidence**: R-38's third group. Two of its items needed a decision beyond the reviewer's suggestion. FR-049
+promised to "reconcile the runtime's cost estimate with recorded usage", and `src/trace/cost.js` held a
+`reconcile` for it, called by nothing: the only cost figures the run has are the runtime's own, per call, so
+there is no second source, and a promise the code cannot keep is worse than none. The `hosts` format of `egress`
+prints host names because a name-based policy wants exactly those; the ports are in the JSON form, and the
+reference Cilium policy's single 443 rule was an assumption the notes did not state.
+
+**Decisions**: FR-049 is reworded to what the run records (the runtime's figure per call, summed, with an
+estimated upper bound when a session leaves none, FR-012), and the module is gone with the other exports nothing
+used (`fileIdOf`, `toLayoutDocument`, `materialize`, `readByItem`, `readAlertEpisodes`); the `hosts` format is
+unchanged and the deploy notes say what the 443 rule assumes and where the ports are. The image links the runtime
+package named by `node -p process.arch` and bakes `AGENT_WATCHDOG_VERSION` and `AGENT_WATCHDOG_REVISION` into
+the environment, which `collectVersions` and `--version` prefer to the development defaults (git still wins over
+the image revision when a tree has it). One option table serves every command, so each command now refuses the
+flags that are not its own; the log flags apply; `run` validates its stage and dates before a run directory
+exists; `check` refuses `http://` in words; replay, distill and calibrate print their result before a flush they
+only log; retention ages `runs-replay/` by the run's date; the entity caps are the layout's, read from one place.
+
+**Rejected or deferred**: rewriting the eighteen branch commits that fail commitlint (#48). The branch has never
+been pushed, so the rewrite is local, but it changes every hash after the first offending commit and is the
+operator's call; the offending headers (up to 173 characters) and body lines (over 100) can be rewrapped in an
+interactive rebase without touching the trees. Every commit since the review (revisions 33 to 35) passes
+commitlint as written. A `≤` on the footer's cost when it is an estimate stays deferred (R-39).

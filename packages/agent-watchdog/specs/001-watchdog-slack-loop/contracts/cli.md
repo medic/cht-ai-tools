@@ -117,6 +117,12 @@ start of `run`.
 `--help`, `--version`, `--config-dir <path>` (overrides `AGENT_WATCHDOG_CONFIG_DIR`),
 `--data-dir <path>` (overrides `AGENT_WATCHDOG_DATA_DIR`), `--log-level`, `--log-format`.
 
+Every command is parsed with one option table, and each then refuses a flag that is not its own or a
+global flag with exit 64 naming it (revision 35): `replay --stage` is the contract's example. `--log-level`
+and `--log-format` take the same values as their environment variables and apply to the command's logger;
+a value outside them is a usage error. `run` refuses an unknown `--stage` and a `--date` or `--since` that is
+not a calendar date before it creates a run directory.
+
 ## Examples
 
 ```sh

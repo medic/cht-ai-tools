@@ -143,4 +143,12 @@ describe('cli/commands/distill', function () {
     expect(seen).to.equal(true);
     expect(globalThis.fetch).to.equal(before);
   });
+  it('logs a rejected trace flush after printing the report, and keeps the exit code (revision 35)', async () => {
+    const tracer = fakeTracer();
+    tracer.finish.rejects(Object.assign(new Error('Unauthorized'), { name: 'OTLPExporterError' }));
+    const t = argsFor({ deps: { tracer } });
+    expect(await distillCommand(t.args)).to.equal(codes.OK);
+    expect(JSON.parse(t.out.text()).cards).to.have.length(1);
+    expect(t.err.text()).to.include('trace.finish_failed');
+  });
 });

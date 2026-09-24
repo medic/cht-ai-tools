@@ -230,3 +230,22 @@ describe('cli/commands/calibrate: the egress guard (FR-083, revision 33)', funct
     expect(globalThis.fetch).to.equal(before);
   });
 });
+
+describe('cli/commands/calibrate: the trace flush never changes the exit code (revision 35)', function () {
+  this.timeout(30000);
+  let dataDir;
+  before(async () => {
+    dataDir = tempDir();
+    await buildCalibrationHistory({ dataDir, days: 30 });
+  });
+  after(() => removeDir(dataDir));
+
+  it('prints the report and exits 0 when the flush rejects, logging it', async () => {
+    const tracer = fakeTracer();
+    tracer.finish.rejects(new Error('Unauthorized'));
+    const t = argsFor(dataDir, { flags: { week: WEEK }, deps: { tracer } });
+    expect(await calibrate(t.args)).to.equal(0);
+    expect(JSON.parse(t.out.text()).week).to.equal(WEEK);
+    expect(t.err.text()).to.include('trace.finish_failed');
+  });
+});

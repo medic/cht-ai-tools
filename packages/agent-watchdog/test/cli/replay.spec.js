@@ -443,6 +443,17 @@ describe('cli/commands/replay', function () {
     expect(globalThis.fetch).to.equal(before);
   });
 
+  it('prints the comparison and exits 0 when the trace flush rejects, logging it (revision 35)', async () => {
+    const tracer = fakeTracer();
+    tracer.finish.rejects(new Error('Unauthorized'));
+    const flags = { date: '2026-09-18', label: 'flush' };
+    const r = await invoke({ dataDir, flags, deps: { engine: findingsEngine(), tracer } });
+    expect(r.error, r.error && r.error.stack).to.equal(undefined);
+    expect(r.code).to.equal(0);
+    expect(JSON.parse(r.out.text()).run_id).to.equal('2026-09-18');
+    expect(r.err.text()).to.include('trace.finish_failed');
+  });
+
   describe('exit codes', () => {
     it('64 without a target, with --date and --from together, with --from alone, or a bad --prompts', async () => {
       const cases = [

@@ -232,7 +232,24 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
   }, loaded));
 };
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const validDay = (value) => ISO_DAY.test(String(value))
+  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+
+/** Refuse a bad stage name or date before a run directory exists (revision 35), so a typo blocks no scheduled run. */
+const validateFlags = (flags) => {
+  if (flags.stage && !STAGE_ORDER.includes(flags.stage)) {
+    throw new codes.ExitError(codes.USAGE, `unknown stage "${flags.stage}"; expected one of ${STAGE_ORDER.join(', ')}`);
+  }
+  for (const name of ['date', 'since']) {
+    if (flags[name] !== undefined && !validDay(flags[name])) {
+      throw new codes.ExitError(codes.USAGE, `--${name} must be a calendar date YYYY-MM-DD, got "${flags[name]}"`);
+    }
+  }
+};
+
 const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effective, policy }) => {
+  validateFlags(flags);
   const now = deps.now ? deps.now() : new Date();
   const date = flags.date || todayUtc(now);
   const stageOnly = flags.stage || null;

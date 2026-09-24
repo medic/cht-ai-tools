@@ -357,3 +357,16 @@ second `--stage publish` on that run exits 75 instead of posting again; the aler
 programme lines before it would cut a link. Tools: `get_windows` resolves a bare metric name to the collected
 key and refuses an ambiguous one; `query_metric` refuses several series, carries the panel's unit and knows
 `previous_cycle` under an active window; the CLI engine's tools server serves the merged pattern cards.
+
+## 26. Before the pull request (revision 35)
+
+`docker compose build` works on an arm64 machine as on x64: the image links the runtime package of its own
+architecture. A run from the released image names the image's version and revision in `run.json` and in
+`agent-watchdog --version`. A flag that is not the command's own exits 64 naming it (`replay --stage`,
+`purge --force`); `--log-level error` and `--log-format pretty` apply to any command; `run --stage colect` or
+`run --date 2026-9-24` exits 64 before a run directory exists; `check http://host` says to give the https address.
+`purge` now ages `runs-replay/` like `runs/`. `replay`, `distill` and `calibrate` print their result before the
+trace flush and log a rejected flush without changing the exit code. The entity schema refuses a third body slot
+or a fifth entry, and the brief schema the model reads no longer speaks of one-line sub-bullets
+(`npm run schema:build` regenerated `schema/brief.schema.json`; `npm run replay:eval` is the diff). The commit
+header pattern accepts `feat(#12)!: subject`.

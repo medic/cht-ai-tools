@@ -10,7 +10,11 @@ const { checkReadiness, renderReport } = require('../../readiness/check');
 
 const USAGE = 'usage: agent-watchdog check <cht-url>';
 
-/** Accept `https://host`, `http://host/path` or a bare host; anything else is a usage error. */
+/**
+ * Accept `https://host`, `https://host/path` or a bare host; anything else is a usage error. An `http://` address is
+ * refused in words (revision 35): the watchdog scrapes over https, and probing https behind an http request would
+ * report the wrong thing as unreachable.
+ */
 const parseTarget = (positionals) => {
   const raw = positionals && positionals[0] ? String(positionals[0]).trim() : '';
   if (!raw) {
@@ -23,8 +27,13 @@ const parseTarget = (positionals) => {
   } catch {
     throw new codes.ExitError(codes.USAGE, `${USAGE}: "${raw}" is not a valid URL`);
   }
-  if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname || /\s/.test(raw)) {
-    throw new codes.ExitError(codes.USAGE, `${USAGE}: "${raw}" is not an http(s) URL`);
+  if (parsed.protocol === 'http:') {
+    throw new codes.ExitError(
+      codes.USAGE, `${USAGE}: "${raw}" is an http:// address; the watchdog scrapes over https, give the https:// one`,
+    );
+  }
+  if (parsed.protocol !== 'https:' || !parsed.hostname || /\s/.test(raw)) {
+    throw new codes.ExitError(codes.USAGE, `${USAGE}: "${raw}" is not an https URL`);
   }
   return parsed;
 };

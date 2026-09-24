@@ -51,13 +51,15 @@ describe('container: the image definition (FR-086, contracts/container.md)', () 
     expect(copied.some((s) => excluded.test(s))).to.equal(false);
   });
 
-  it('puts the Agent SDK\'s own Claude Code binary on PATH as claude for the CLI engine and the local login', () => {
+  it('puts the Agent SDK\'s own Claude Code binary on PATH as claude, for the image\'s own architecture', () => {
+    // npm installs the runtime package of the build platform alone, so the symlink is chosen at build time
+    // (revision 35): an arm64 build fails no more than an x64 one.
+    expect(dockerfile).to.include('ARCH="$(node -p \'process.arch\')"');
+    expect(dockerfile).to.include('test -x "/app/node_modules/@anthropic-ai/claude-agent-sdk-linux-${ARCH}/claude"');
     expect(dockerfile).to.include(
-      'test -x /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude',
+      'ln -s "/app/node_modules/@anthropic-ai/claude-agent-sdk-linux-${ARCH}/claude" /usr/local/bin/claude',
     );
-    expect(dockerfile).to.include(
-      'ln -s /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude',
-    );
+    expect(dockerfile).to.not.include('linux-x64');
     expect(dockerfile).to.not.match(/npm install -g|@anthropic-ai\/claude-code/);
   });
 
@@ -68,6 +70,8 @@ describe('container: the image definition (FR-086, contracts/container.md)', () 
     expect(dockerfile).to.include('org.opencontainers.image.licenses="AGPL-3.0"');
     expect(dockerfile).to.include('org.opencontainers.image.version="${VERSION}"');
     expect(dockerfile).to.include('org.opencontainers.image.revision="${REVISION}"');
+    // The run record names the image's version and revision (revision 35), not the development defaults.
+    expect(lines).to.include('ENV AGENT_WATCHDOG_VERSION=${VERSION} AGENT_WATCHDOG_REVISION=${REVISION}');
     const release = read('release.config.js');
     expect(release).to.include('--build-arg VERSION=${nextRelease.version}');
     expect(release).to.include('--build-arg REVISION=${nextRelease.gitHead}');

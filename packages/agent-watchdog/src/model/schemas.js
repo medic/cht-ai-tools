@@ -9,6 +9,10 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 const host = z.string().regex(/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d+)?$/, 'expected a bare, lowercase host');
 const url = z.url();
 
+// The body layout's caps (src/rollup/layout.js reads them from here, revision 35): two body slots, and a
+// programme's entry names at most three projects and a count of the rest, four children in all.
+const LAYOUT_CAPS = Object.freeze({ BODY_SLOTS: 2, MAX_CHILDREN: 4 });
+
 const enums = {
   Severity: z.enum(['low', 'medium', 'high']),
   WindowName: z.enum(['current', 'previous_day', 'previous_week', 'previous_cycle', 'trailing_14d']),
@@ -246,7 +250,7 @@ const Item = z.object({
   rank: z.number().int().min(1).nullable(),
   placement: enums.Placement.nullable(),
   // The top-level bullet the item appears in, alone or as a sub-bullet; null in the thread (FR-069).
-  slot: z.number().int().min(1).max(5).nullable().default(null),
+  slot: z.number().int().min(1).max(LAYOUT_CAPS.BODY_SLOTS).nullable().default(null),
   pass_history: z.array(PassChangeRecord),
 }).strict();
 
@@ -295,7 +299,7 @@ const Bullet = z.object({
   item_ids: z.array(hex12).default([]),
   group: z.string().nullable().default(null),
   text: z.string(),
-  children: z.array(BulletChild).max(8).default([]),
+  children: z.array(BulletChild).max(LAYOUT_CAPS.MAX_CHILDREN).default([]),
   alert_key: z.string().nullable().default(null),
 }).strict().refine((b) => (b.kind === 'item' ? b.item_id !== null : b.group !== null), {
   message: 'an item bullet needs item_id; group and alerts bullets need group',
@@ -306,7 +310,7 @@ const Brief = z.object({
   run_id: z.string(),
   kind: enums.BriefKind,
   headline: z.string(),
-  bullets: z.array(Bullet).max(5),
+  bullets: z.array(Bullet).max(LAYOUT_CAPS.BODY_SLOTS),
   // The thread bullets (revision 28): one group bullet per programme reply and one for the Other reply.
   thread: z.array(Bullet).default([]),
   expected_load_notice: z.string().nullable(),
@@ -601,4 +605,5 @@ const schemas = {
   Feedback, MemoryMeta, Flag, Proposal, CorpusItem, PatternCard, CalibrationReport, PriorityList, CostRecord,
 };
 
-module.exports = { schemas, enums };
+module.exports = {
+  LAYOUT_CAPS, schemas, enums };

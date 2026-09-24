@@ -1,4 +1,4 @@
-const { schemas, enums } = require('../../src/model/schemas');
+const { schemas, enums, LAYOUT_CAPS } = require('../../src/model/schemas');
 
 describe('model/schemas', () => {
   it('rejects unknown enumeration values', () => {
@@ -40,11 +40,12 @@ describe('model/schemas', () => {
     expect(() => schemas.Item.parse({ ...item, item_id: 'short' })).to.throw();
   });
 
-  it('validates a Brief with at most five bullets of at most eight sub-bullets (FR-010, FR-015)', () => {
+  it('validates a Brief with at most two body bullets of at most four entries (FR-010, FR-015, revision 28)', () => {
     const bullet = (i) => ({ item_id: `${i}`.padStart(12, 'a'), text: 'one line' });
-    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2, 3, 4, 5].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { specs_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
+    const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { specs_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
     const parsed = schemas.Brief.parse(brief);
-    expect(parsed.bullets).to.have.length(5);
+    expect(parsed.bullets).to.have.length(2);
+    expect(LAYOUT_CAPS).to.deep.equal({ BODY_SLOTS: 2, MAX_CHILDREN: 4 });
     // A bare { item_id, text } bullet is an item bullet with no sub-bullets.
     expect(parsed.bullets[0]).to.deep.equal({
       kind: 'item', item_id: bullet(1).item_id, item_ids: [], group: null, text: 'one line', children: [],
@@ -53,15 +54,16 @@ describe('model/schemas', () => {
     expect(parsed.thread).to.deep.equal([]);
     const programme = { kind: 'programme', group: 'North', item_id: null, run_id: 'r', text: 't', publication: null };
     expect(schemas.ThreadReply.parse(programme).kind).to.equal('programme');
-    expect(() => schemas.Brief.parse({ ...brief, bullets: [1, 2, 3, 4, 5, 6].map(bullet) })).to.throw();
+    // The entity caps are the layout's (revision 35): a third slot or a fifth entry is a layout bug, refused here.
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [1, 2, 3].map(bullet) })).to.throw();
     expect(() => schemas.Brief.parse({ ...brief, kind: 'degraded', degradation_notice: null })).to.throw();
     const child = (i) => ({ item_id: `${i}`.padStart(12, 'b'), text: 'sub' });
     const group = {
       kind: 'group', item_id: null, group: 'North Programme', text: 'North Programme: 8 projects with issues',
-      children: [1, 2, 3, 4, 5, 6, 7, 8].map(child), alert_key: null,
+      children: [1, 2, 3, 4].map(child), alert_key: null,
     };
-    expect(schemas.Brief.parse({ ...brief, bullets: [group] }).bullets[0].children).to.have.length(8);
-    expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, children: [...group.children, child(9)] }] }))
+    expect(schemas.Brief.parse({ ...brief, bullets: [group] }).bullets[0].children).to.have.length(4);
+    expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, children: [...group.children, child(5)] }] }))
       .to.throw();
     expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, group: null }] })).to.throw();
     expect(() => schemas.Brief.parse({ ...brief, bullets: [{ ...group, kind: 'item', item_id: null }] })).to.throw();
@@ -82,8 +84,9 @@ describe('model/schemas', () => {
       placement: 'body', pass_history: [],
     };
     expect(schemas.Item.parse(item).slot).to.equal(null);
-    expect(schemas.Item.parse({ ...item, slot: 5 }).slot).to.equal(5);
-    expect(() => schemas.Item.parse({ ...item, slot: 6 })).to.throw();
+    // Two body slots since revision 28; the entity cap follows the layout (revision 35).
+    expect(schemas.Item.parse({ ...item, slot: 2 }).slot).to.equal(2);
+    expect(() => schemas.Item.parse({ ...item, slot: 3 })).to.throw();
     expect(() => schemas.Item.parse({ ...item, slot: 0 })).to.throw();
   });
 

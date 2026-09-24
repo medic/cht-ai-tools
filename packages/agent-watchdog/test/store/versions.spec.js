@@ -73,3 +73,16 @@ describe('store/versions', () => {
     }
   });
 });
+
+describe('store/versions: the image names its version and revision (FR-039, revision 35)', () => {
+  it('prefers the image\'s version and revision to the development defaults, and git to the image revision', () => {
+    const image = { ...env, AGENT_WATCHDOG_VERSION: '1.4.0', AGENT_WATCHDOG_REVISION: 'abc123def456' };
+    const fromImage = collectVersions({ pkg, config, env: image, policy, deps: { gitSha: null } });
+    expect(fromImage).to.include({ package: '1.4.0', git_sha: 'abc123def456' });
+    const withGit = collectVersions({ pkg, config, env: image, policy, deps: { gitSha: 'deadbee' } });
+    expect(withGit.git_sha).to.equal('deadbee');
+    const defaults = { ...env, AGENT_WATCHDOG_VERSION: '0.0.0-development', AGENT_WATCHDOG_REVISION: 'unknown' };
+    expect(collectVersions({ pkg, config, env: defaults, policy, deps: { gitSha: null } }))
+      .to.include({ package: '1.2.3', git_sha: null });
+  });
+});

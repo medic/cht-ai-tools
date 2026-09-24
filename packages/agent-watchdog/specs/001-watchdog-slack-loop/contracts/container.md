@@ -13,7 +13,7 @@ repository, never a second source of truth.
 | Property | Value |
 |---|---|
 | Base | `node:22-bookworm-slim` (Node 22 LTS), two stages: dependencies, then the runtime |
-| Runtime | the package with production dependencies only, installed from the lockfile with `npm ci --omit=dev --ignore-scripts` (no lifecycle script runs; the one `postinstall` in the tree, `protobufjs`'s version warning, is not needed), including the Agent SDK's `linux-x64` runtime package (about 224 MB) |
+| Runtime | the package with production dependencies only, installed from the lockfile with `npm ci --omit=dev --ignore-scripts` (no lifecycle script runs; the one `postinstall` in the tree, `protobufjs`'s version warning, is not needed), including the Agent SDK's runtime package for the image's architecture, `linux-x64` or `linux-arm64` (about 224 MB), linked onto PATH at build time (revision 35) |
 | Browser | none. The daily run renders no image since revision 24 (FR-019); Playwright, Chromium and the emoji font left the image in revision 30 (FR-086) |
 | User | non-root, fixed UID and GID (`10001:10001`), home `/home/watchdog`, shell `nologin`; the application files are owned by root and read-only to it |
 | Entrypoint | `node bin/agent-watchdog.js`; the CronJob passes the command, for example `run` or `calibrate` |

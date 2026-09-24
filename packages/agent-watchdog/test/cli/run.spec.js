@@ -509,3 +509,37 @@ describe('cli/commands/run: the cost and the links a run accounts for (revision 
     expect(seen).to.deep.equal({ cost: 0.7, resolver: 'function' });
   });
 });
+
+describe('cli/commands/run: bad flags are refused before a run directory exists (revision 35)', () => {
+  let dataDir;
+  beforeEach(() => {
+    dataDir = tempDir();
+  });
+  afterEach(() => removeDir(dataDir));
+
+  const refused = async (flags) => {
+    const t = base(dataDir, { deps: { stages: fakeStages().stages }, flags });
+    let error;
+    try {
+      await runCommand(t.args);
+    } catch (e) {
+      error = e;
+    }
+    return error;
+  };
+
+  it('exits 64 for an unknown stage, a malformed date or since, and creates nothing', async () => {
+    const stage = await refused({ stage: 'colect' });
+    expect(stage.code).to.equal(codes.USAGE);
+    expect(stage.message).to.include('colect');
+    const date = await refused({ date: '2026-9-24' });
+    expect(date.code).to.equal(codes.USAGE);
+    expect(date.message).to.include('--date');
+    const impossible = await refused({ date: '2026-02-30' });
+    expect(impossible.code).to.equal(codes.USAGE);
+    const since = await refused({ since: 'yesterday' });
+    expect(since.code).to.equal(codes.USAGE);
+    expect(since.message).to.include('--since');
+    expect(fs.existsSync(path.join(dataDir, 'runs'))).to.equal(false);
+  });
+});

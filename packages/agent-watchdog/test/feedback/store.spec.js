@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { appendRecords, readAll, readByItem } = require('../../src/feedback/store');
+const { appendRecords, readAll } = require('../../src/feedback/store');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 
 const record = (overrides = {}) => ({
@@ -42,23 +42,8 @@ describe('feedback/store', () => {
     expect(fs.existsSync(path.join(dataDir, 'feedback.jsonl'))).to.equal(false);
   });
 
-  it('groups records by item and leaves brief-level records out of the map', async () => {
-    await appendRecords(dataDir, [
-      record(),
-      record({ feedback_id: 'bbbbbbbbbbbb', author: 'U2', item_id: 'a09c1ddc330a', verdict: 'up' }),
-      record({
-        feedback_id: 'cccccccccccc', author: 'U9', target: 'brief', item_id: null, verdict: 'up',
-        source_ts: '1758088800.000100',
-      }),
-    ]);
-    const byItem = await readByItem(dataDir);
-    expect([...byItem.keys()].sort()).to.deep.equal(['49bd5cd2499f', 'a09c1ddc330a']);
-    expect(byItem.get('49bd5cd2499f')).to.have.length(1);
-  });
-
   it('returns an empty list when no feedback has ever been recorded', async () => {
     expect(await readAll(dataDir)).to.deep.equal([]);
-    expect((await readByItem(dataDir)).size).to.equal(0);
   });
 });
 

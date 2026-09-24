@@ -46,7 +46,9 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Exactly `agent-watchdog egress --format hosts` for the ConfigMap in cronjob.example.yaml.
+    # Exactly `agent-watchdog egress --format hosts` for the ConfigMap in cronjob.example.yaml. The single 443 rule
+    # below assumes every destination answers there; `egress --format json` prints each one's port, and an endpoint
+    # on another port needs its own toFQDNs/toPorts pair.
     - toFQDNs:
         - matchName: api.anthropic.com
         - matchName: docs-mcp.example.org

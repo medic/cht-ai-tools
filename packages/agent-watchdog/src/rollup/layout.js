@@ -5,11 +5,13 @@
 // more flagged projects gets a thread reply of its own; the remaining projects share one "Other" reply. Alerts take
 // no slot. The gate rejects a draft whose lead ids differ from the layout's entries.
 
-const BODY_SLOTS = 2;
+const { LAYOUT_CAPS } = require('../model/schemas');
+
+const { BODY_SLOTS } = LAYOUT_CAPS;
 const MAX_PROJECTS = 3;
 const OWN_REPLY_MIN_PROJECTS = 2;
 // A "more projects" line follows the three project lines, so a bullet has at most four children.
-const MAX_CHILDREN = MAX_PROJECTS + 1;
+const { MAX_CHILDREN } = LAYOUT_CAPS;
 // Hosts matching no programme pattern: a fallback bucket, not a programme, so each of its projects is a unit of one in
 // the body and all of them share the Other reply in the thread.
 const UNGROUPED = 'Other';
@@ -142,9 +144,6 @@ const buildLayout = (items, { groupOf = () => UNGROUPED, alertGroups = [] } = {}
   };
 };
 
-/** The same document, for callers that held the intermediate form before revision 28. */
-const toLayoutDocument = (layout) => layout;
-
 /** Map a project url to its Project Group label from a discovery document; unknown hosts are `Other`. */
 const groupOfProjects = (discovery) => {
   const byUrl = new Map(((discovery && discovery.projects) || []).map((p) => [p.url, p.group || UNGROUPED]));
@@ -259,7 +258,7 @@ const replyKindOf = (bullet) => (bullet.group === UNGROUPED ? 'other' : 'program
 
 module.exports = {
   shortHostLabel, childPrefixes, stripLeadingHost, coveredIds, PREFIX_SEPARATOR, MAX_LINE_CHARS,
-  programmesOf, unitsOf, buildLayout, toLayoutDocument, groupOfProjects, slotByKey, groupBulletText,
+  programmesOf, unitsOf, buildLayout, groupOfProjects, slotByKey, groupBulletText,
   moreProjectsText, assembleBullets, assembleThread, replyKindOf, BODY_SLOTS, MAX_PROJECTS, OWN_REPLY_MIN_PROJECTS,
   MAX_CHILDREN, UNGROUPED, WATCHDOG,
 };

@@ -44,6 +44,12 @@ describe('cli/commands/check', () => {
     expect(malformed.error.code).to.equal(codes.USAGE);
     const garbage = await attempt(check, argsFor({ positionals: ['not a url at all'], fetch: sinon.stub() }).args);
     expect(garbage.error.code).to.equal(codes.USAGE);
+    // An http:// address is refused in words rather than probed over https behind the operator's back (revision 35).
+    const fetch = sinon.stub();
+    const plain = await attempt(check, argsFor({ positionals: ['http://cht.example.org'], fetch }).args);
+    expect(plain.error.code).to.equal(codes.USAGE);
+    expect(plain.error.message).to.match(/https/);
+    expect(fetch.called).to.equal(false);
   });
 
   it('prints the report and exits 0 when every prerequisite is met, accepting a bare host', async () => {

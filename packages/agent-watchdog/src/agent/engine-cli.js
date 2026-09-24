@@ -50,7 +50,7 @@ const subprocessEnv = (env, { apiKey = null } = {}) => {
     child.CLAUDE_CONFIG_DIR = env.CLAUDE_CONFIG_DIR || DEFAULT_CONFIG_DIR;
     // Under the writable /tmp (FR-086); best effort, the runtime reports its own failure otherwise.
     try {
-      fs.mkdirSync(child.CLAUDE_CONFIG_DIR, { recursive: true });
+      fsSync.mkdirSync(child.CLAUDE_CONFIG_DIR, { recursive: true });
     } catch {
       // the runtime will say so
     }

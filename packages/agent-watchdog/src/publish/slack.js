@@ -1,7 +1,8 @@
 'use strict';
 // Posting to the one configured channel (contracts/slack-payload.md): one parent, the report shared into its
-// thread, one threaded reply per body item and alert group, permalinks recorded, retries on rate limits, loud
-// failure (FR-019 to FR-024). The brief image and its private upload were retired in revision 24.
+// thread, one threaded reply per programme outside the body, one for the Other projects and one for the alerts,
+// permalinks recorded, retries on rate limits, loud failure (FR-019 to FR-024, revision 28). The brief image and
+// its private upload were retired in revision 24.
 const fs = require('node:fs');
 const codes = require('../cli/exit-codes');
 const { BRIEF_EVENT } = require('./payload');
@@ -26,11 +27,6 @@ const fileOf = (result) => {
     }
   }
   return null;
-};
-
-const fileIdOf = (result) => {
-  const file = fileOf(result);
-  return file ? file.id : null;
 };
 
 /** The `ts` of a file's share into `channel`, when the completed upload reports it, else null (smoke test S-31). */
@@ -211,4 +207,4 @@ const createSlackPublisher = ({
   return { publish, postHeartbeat, postFailureNotice, postTextOnly, postDigest, reactToNotes };
 };
 
-module.exports = { createSlackPublisher, retryDelayMs, fileIdOf, fileOf, shareTs };
+module.exports = { createSlackPublisher, retryDelayMs, fileOf, shareTs };

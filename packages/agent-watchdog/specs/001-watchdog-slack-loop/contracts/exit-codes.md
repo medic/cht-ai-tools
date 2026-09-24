@@ -10,7 +10,7 @@ of a `run` is preceded by a one-line failure notice with the trace link (FR-024)
 |---|---|---|---|
 | 0 | `OK` | `run` published a brief, a heartbeat or a degraded brief; or `run --dry-run`, `replay`, `distill`, `calibrate`, `purge` completed; or `check` found every prerequisite met. | brief or heartbeat (not in preview) |
 | 1 | `FAILED` | `run` failed for a reason not listed below (unexpected error, model runtime crash); or `check` found unmet prerequisites. | failure notice |
-| 64 | `USAGE` | Unknown command, unknown flag, or an invalid flag combination (for example `--stage` with `replay`). | no |
+| 64 | `USAGE` | Unknown command, unknown flag, a flag that is not the command's own (for example `--stage` with `replay`), a bad `--log-level` or `--log-format`, a `run` with an unknown `--stage` or a malformed `--date` or `--since`, or a `check` of an `http://` address (revision 35). | no |
 | 65 | `DATAERR` | A stage or replay prerequisite file is missing or fails validation. | no |
 | 69 | `UNAVAILABLE` | Metrics source unreachable or timed out after retries; nothing partial is published (Edge Cases). | failure notice |
 | 74 | `IOERR` | Slack unavailable after retries; every artefact persisted and the run marked `unposted` (Edge Cases). | no (cannot) |

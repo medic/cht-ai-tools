@@ -5,7 +5,7 @@
   "properties": {
     "headline": {
       "type": "string",
-      "description": "One line; no URLs."
+      "description": "At most 2 lines of at most 120 characters; numbers must match the items' evidence; no URLs."
     },
     "bullets": {
       "type": "array",
@@ -18,7 +18,7 @@
           },
           "text": {
             "type": "string",
-            "description": "At most 2 lines of at most 120 characters, one line for a sub-bullet; numbers must match evidence; no URLs."
+            "description": "At most 2 lines of at most 120 characters; numbers must match evidence; no URLs."
           }
         },
         "required": [
@@ -27,7 +27,7 @@
         ],
         "additionalProperties": false
       },
-      "description": "One per body item named in the Body layout section of the prompt, in that order (checked by the gate). A programme's own line is written by code; an item marked one_line is a sub-bullet and takes one line."
+      "description": "One per body item named in the Body layout section of the prompt, in that order (checked by the gate). A programme's own line is written by code."
     },
     "thread_order": {
       "type": "array",

@@ -223,25 +223,29 @@ const calibrateLoaded = async ({ flags, env, stdout, logger, deps, config, polic
     );
     const costUsd = summary.call ? summary.call.cost_usd : 0;
     const durationMs = Number(process.hrtime.bigint() - startHr) / 1e6;
-    await tracer.finish({
-      output: {
-        status: 'completed', entries: validated.entries.length, proposals: validated.proposals, cost_usd: costUsd,
-      },
-    });
     log.info('calibrate.done', {
       week, entries: validated.entries.length, proposals: validated.proposals, cost_usd: costUsd,
       duration_ms: durationMs,
     });
+    // The result first, then the flush: tracing is observability, never the product (revision 35).
     writeResult(stdout, validated);
+    await finishTrace(tracer, log, {
+      status: 'completed', entries: validated.entries.length, proposals: validated.proposals, cost_usd: costUsd,
+    });
     return codes.OK;
   } catch (error) {
     log.error('calibrate.failed', { error });
-    try {
-      await tracer.finish({ output: { status: 'failed', error: error.message } });
-    } catch (traceError) {
-      log.warn('trace.finish_failed', { error: traceError });
-    }
+    await finishTrace(tracer, log, { status: 'failed', error: error.message });
     throw error;
+  }
+};
+
+/** A rejected trace flush is logged and never changes the exit code. */
+const finishTrace = async (tracer, log, output) => {
+  try {
+    await tracer.finish({ output });
+  } catch (traceError) {
+    log.warn('trace.finish_failed', { error: traceError });
   }
 };
 

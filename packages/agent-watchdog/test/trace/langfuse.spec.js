@@ -1,5 +1,4 @@
 const { createTracer } = require('../../src/trace/langfuse');
-const { sumUsage, reconcile } = require('../../src/trace/cost');
 
 const fakeSdk = () => {
   const observations = [];
@@ -97,21 +96,5 @@ describe('trace/langfuse', () => {
     const tracer = createTracer({ sdk, baseUrl: 'https://langfuse.example.org' });
     await tracer.start({ runId: 'r', date: 'd', mode: 'manual' });
     expect(await tracer.traceUrl()).to.equal('https://langfuse.example.org/trace/trace-1');
-  });
-});
-
-describe('trace/cost', () => {
-  it('sums cost records into a run total and reconciles with the runtime estimate', () => {
-    const records = [
-      { cost_usd: 0.0125, input_tokens: 100, output_tokens: 20, cache_read_tokens: 50, cache_creation_tokens: 0 },
-      { cost_usd: 0.0075, input_tokens: 50, output_tokens: 10, cache_read_tokens: 0, cache_creation_tokens: 10 },
-    ];
-    const sum = sumUsage(records);
-    expect(sum).to.deep.equal({
-      cost_usd: 0.02, input_tokens: 150, output_tokens: 30, cache_read_tokens: 50, cache_creation_tokens: 10, calls: 2,
-    });
-    expect(reconcile({ recorded: 0.02, runtime: 0.0201 })).to.include({ within_tolerance: true });
-    expect(reconcile({ recorded: 0.02, runtime: 0.05 })).to.include({ within_tolerance: false });
-    expect(reconcile({ recorded: 0.02, runtime: 0.05 }).difference).to.be.closeTo(0.03, 1e-9);
   });
 });

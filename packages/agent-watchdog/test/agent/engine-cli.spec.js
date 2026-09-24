@@ -439,3 +439,19 @@ describe('agent/engine-cli', function () {
     expect(cliTurns[1].result.total_cost_usd).to.be.closeTo(0.03, 1e-9);
   });
 });
+
+describe('agent/engine-cli: the runtime configuration directory (FR-086, revision 35)', () => {
+  const { subprocessEnv } = require('../../src/agent/engine-cli');
+
+  it('creates the configuration directory it hands the runtime in key mode', () => {
+    const base = tempDir();
+    try {
+      const dir = path.join(base, 'nested', 'runtime');
+      const child = subprocessEnv({ CLAUDE_CONFIG_DIR: dir, PATH: process.env.PATH }, { apiKey: 'sk-ant-test' });
+      expect(child.CLAUDE_CONFIG_DIR).to.equal(dir);
+      expect(fs.existsSync(dir)).to.equal(true);
+    } finally {
+      removeDir(base);
+    }
+  });
+});
