@@ -654,6 +654,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-49 | After two people write in sequence about one item under a hosted post, the next day's digest shows the item suppressed until the corrected horizon or quotes the lines from the project's `prompt.pass1.md`, and its trace link opens the run in Langfuse at the pass-1 generation | Langfuse's `?observation=` deep link and the SDK's observation id are only verified against the hosted instance |
 | S-50 | The built image passes `smoke/container.js` under `--read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001` and `--network none` where no network is needed: `--version`, `egress --format hosts`, `check` of an unreachable host exiting 69, the report rendering under `/tmp` | Whether the runtime's start-up writes stay under `/tmp` and `/data` is only seen with the root filesystem read-only |
 | S-51 | With the deployment's egress policy applied, a scheduled run completes and a deliberate request to a host outside the list from inside the pod is refused at the network | The policy engine and its FQDN handling are the platform's |
+| S-52 | In the local Compose setup, `claude auth login` completes inside the `login` service, `auth status` then shows the account, and a `run --dry-run` with the CLI engine and no key logs `agent.cli_auth` with `mode: login` and `credentials_found: true` and analyses a project on the subscription | The OAuth flow needs a person's browser and account; only the wiring is verifiable without them |
 
 ## Corrections this research makes to files outside `specs/`
 
@@ -1927,3 +1928,37 @@ names exactly the variables the schema reads, so Compose and Node read one `.env
 for the network policy (Docker filters no destination by name, and an `internal` network would block the model
 API too); a compose-managed Grafana or Slack; running as the host user (it would let a run write to the
 application files a real deployment keeps read-only).
+
+## R-37. A contributor's own Claude login in the local container
+
+**Evidence**: the operator wants the local container to run `claude -p` (the CLI engine) on the Team plan for
+individual use, logging in once inside the container with the login kept in a volume, as `cht-agent`'s seeder
+already does (`docker exec -it cht-seeder claude` for a one-time OAuth login into a named volume mounted at the
+runtime user's `~/.claude`; that image installs `@anthropic-ai/claude-code` globally). Here the Agent SDK already
+ships the Claude Code runtime: `@anthropic-ai/claude-agent-sdk-linux-x64/claude` is an executable native binary
+(234 MB, `2.1.278 (Claude Code)`) with `-p/--print`, `auth login [--claudeai|--console|--sso]`, `auth status`,
+`auth logout` and `setup-token`; its OAuth authorize and token endpoints are on `platform.claude.com` (read from
+the binary's strings), which the scheduled run's egress list does not carry because that run never logs in. The CLI engine resolves `claude` on PATH (or `AGENT_WATCHDOG_CLAUDE_PATH`) and,
+with no key configured, runs in login mode reading the credentials file under `CLAUDE_CONFIG_DIR` (R-3). The
+image bakes `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, a tmpfs in the local setup, so a login there would
+not outlive the container; and the root filesystem is read-only, so the runtime's home has to be a mount.
+
+**Decisions**: symlink the SDK's binary to `/usr/local/bin/claude` at build time (`test -x` first, so a build
+without the platform package fails loudly) and install nothing else, keeping the runtime version the SDK's own;
+a named volume `agent-watchdog-login` mounted at `/home/watchdog`, the runtime user's home (created in the image,
+so a fresh volume takes its ownership), with `CLAUDE_CONFIG_DIR=/home/watchdog/.claude` set by Compose for every
+service, so the runtime's `.claude/` and `.claude.json` both land in the volume whatever the version writes; a
+`login` profile running `claude auth login` under the same hardening with a TTY; login mode chosen by
+`AGENT_WATCHDOG_ENGINE=cli` with `ANTHROPIC_API_KEY` blank (a key wins, key mode with `--bare` never reads a
+login); the volume documented as holding an OAuth token: named, never bound into the repository or the image,
+read-write because the runtime refreshes the token, cleared with `auth logout`. The `offline` profile's example
+is corrected: `replay` regenerates findings with the model, so only `purge`, `analyze`, `render` and a preview
+`publish` run with no network. Verified locally on 2026-09-23: the rebuilt image answers `claude --version`
+as the bundled runtime under the hardened flags; `claude auth status` in the login service reports the volume's
+configuration directory and writes only there; the in-container `auth login --help` offers the subscription
+flow. The login itself is the operator's to complete (S-52).
+
+**Rejected or deferred**: installing `@anthropic-ai/claude-code` in the image (a second copy of the runtime,
+another version to drift, another 200 MB); a `CLAUDE_CODE_OAUTH_TOKEN` path for the SDK engine (the CLI engine
+already has login mode, and a subscription token is a person's, not a scheduled service's); binding the host's
+`~/.claude` into the container (it would expose the contributor's whole configuration, sessions and memory).

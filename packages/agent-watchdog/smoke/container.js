@@ -90,6 +90,15 @@ const main = () => {
   const whoami = docker(['run', '--rm', '--network', 'none', ...HARDENED, '--entrypoint', 'id', image, '-u']);
   record('the process runs as uid 10001', whoami.stdout.trim() === '10001', `uid ${whoami.stdout.trim()}`);
 
+  const claude = docker([
+    'run', '--rm', '--network', 'none', ...HARDENED, '--entrypoint', 'claude', image, '--version',
+  ]);
+  record(
+    'the bundled Claude Code runtime answers as claude on PATH (CLI engine, local login)',
+    claude.status === 0 && /Claude Code/.test(claude.stdout),
+    claude.stdout.trim(),
+  );
+
   const failed = checks.filter((c) => !c.ok);
   process.exitCode = failed.length ? 1 : 0;
 };

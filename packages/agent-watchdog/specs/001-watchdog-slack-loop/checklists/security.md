@@ -89,6 +89,7 @@
 - [ ] CHK048 - Is the image's build-time network need (the npm registry) distinguished from run-time egress, and is the dependency install pinned to the lockfile with lifecycle scripts disabled? [Consistency, Spec §FR-086, contracts/container.md]
 - [ ] CHK049 - Are the reference manifests under `deploy/` declared as reference only, with the owning repository named and the test that keeps them in step with the code, so two sources of truth cannot diverge silently? [Dependency, contracts/container.md]
 - [ ] CHK050 - Is the `check` command's contact with an operator-given CHT host reconciled with FR-083 (exempt from the in-process guard, refused by the platform policy inside the container)? [Consistency, Spec §FR-048, §FR-083]
+- [ ] CHK051 - For the local Compose setup's login mode: is the login volume's content classified as a secret (a subscription OAuth token), with its lifetime, its clearing (`auth logout`) and the rule that it is never a bind mount into the repository or the image stated as requirements, and is it stated that the scheduled deployment never carries a login? [Completeness, Spec §FR-086, contracts/container.md]
 
 ## Notes
 

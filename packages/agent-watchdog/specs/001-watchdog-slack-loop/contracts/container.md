@@ -89,9 +89,24 @@ data volume is named `agent-watchdog-data`, the local analogue of the claim; `AG
 binds a host directory instead, which must be writable by uid 10001. The policy files come from
 `config/local` (or `AGENT_WATCHDOG_COMPOSE_CONFIG_DIR`), read-only; a file missing there falls back to the
 package default. The default command previews (`run --dry-run`); the `offline` profile runs the same image
-with no network at all, for `replay` and single stages (FR-041, FR-043). What the cluster's network policy
+with no network at all, for the stages that need none: `purge`, `analyze`, `render` and a preview `publish`
+(FR-043; `replay` still calls the model and runs in the default service). What the cluster's network policy
 enforces has no local equivalent: the package refuses its own requests outside the egress list, and the
 runtime subprocess and the Slack SDK are not filtered on a contributor's machine.
+
+### Individual use on a Claude subscription (revision 32)
+
+The image carries the Agent SDK's own Claude Code binary on PATH as `claude`, so the CLI engine
+(`AGENT_WATCHDOG_ENGINE=cli`, `claude -p`) and a login need nothing installed. `docker compose --profile
+login run --rm login` runs `claude auth login` interactively; the login lands in the named volume
+`agent-watchdog-login`, mounted at the runtime user's home by every service, with `CLAUDE_CONFIG_DIR`
+pointing into it. A run with the CLI engine and `ANTHROPIC_API_KEY` blank is then in login mode
+(contracts/agent-definition.md): no `--bare`, `--setting-sources ""`, no tools, no session persistence; a
+key present wins and ignores the login. The volume holds an OAuth token for the contributor's account: it
+is a named volume, never a bind mount into the repository or the image, read-write because the runtime
+refreshes the token, cleared with `auth logout`, and it is the third and last writable path of the local
+setup. The login flow and the token refresh reach `platform.claude.com` (the runtime's OAuth authorize and token
+endpoints), which is not on the scheduled run's egress list because the scheduled run never logs in.
 
 ## Exit codes and logs
 

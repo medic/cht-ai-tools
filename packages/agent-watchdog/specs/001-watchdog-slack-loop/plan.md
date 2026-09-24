@@ -814,9 +814,25 @@ arguments and runs it as user `10001:10001`, root read-only, every capability dr
 `/tmp` tmpfs, a PID limit, `init`, the CPU and memory limits of the contract, secrets and endpoints from the
 operator's `.env`, the container paths pinned, the data volume named like the claim (a bind mount by choice),
 the policy files from `config/local` read-only; it previews by default and has an `offline` profile with no
-network for replay and single stages. `test/container/compose.spec.js` pins every setting and that no secret or
+network for the stages that need none (revision 32 corrected the profile's example: `replay` still calls the model). `test/container/compose.spec.js` pins every setting and that no secret or
 real host is in the file (FR-086, US3 scenario 5). Compose's `env_file` reader keeps text after `#` on a value
 line as part of the value where Node's `--env-file` drops it, so `.env.example` now keeps every comment on its
 own line and `test/config/env-example.spec.js` holds the format (research.md R-36). **I** no dependency, **II** tests first, **III** to **VIII**
 unchanged. Result: PASS. Not planned: a local stand-in for the cluster's network policy (Docker filters no
 destination by name; the package's own guard applies), and a local Grafana or Slack.
+
+### Revision 32 delta: a contributor's own Claude login in the local container (FR-050, FR-086)
+
+Planned on 2026-09-23 from the operator's request: run the container locally on a Claude subscription (Team
+plan) rather than an API key, logging in once inside the container with the login kept in a volume, the way
+`cht-agent`'s seeder does (research.md R-37). The Agent SDK already ships the Claude Code runtime as a native
+binary, so the image symlinks it onto PATH as `claude` and installs nothing; `compose.yaml` gains a named
+volume `agent-watchdog-login` at the runtime user's home, mounted by every service with `CLAUDE_CONFIG_DIR`
+inside it, and a `login` profile that runs `claude auth login` interactively (also `auth status`, `auth
+logout`). A run with `AGENT_WATCHDOG_ENGINE=cli` and no key is the CLI engine's existing login mode. The
+`offline` profile's example is corrected: `replay` calls the model, so the profile is for `purge`, `analyze`,
+`render` and a preview `publish`. **I** no dependency, **II** tests first (compose, image, smoke), **III** to
+**VIII** unchanged; the scheduled deployment keeps the API key and never carries a login. Result: PASS. Not
+planned: a `CLAUDE_CODE_OAUTH_TOKEN` path for the SDK engine (the CLI engine already has login mode, and a
+subscription token is a person's, not a service's); mounting the host's `~/.claude` (it would expose the
+contributor's whole configuration and sessions to the container).

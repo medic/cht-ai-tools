@@ -313,5 +313,16 @@ CronJob will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/dat
 supplies secrets and endpoints (comments on their own lines, as in `.env.example`: Compose keeps text after `#`
 on a value line as part of the value, Node drops it); `config/local` supplies the policy files. `docker compose run --rm agent-watchdog run
 --dry-run --date <date> > payload.json` previews without posting; `docker compose run --rm agent-watchdog run --date
-<date>` posts. `docker compose --profile offline run --rm offline replay --date <date>` replays with no network at all.
+<date>` posts. `docker compose --profile offline run --rm offline run --dry-run --stage analyze --date <date>` runs a
+stage that needs no network with none at all (`replay` still calls the model, so it runs in the default service).
 Read an artefact back with `docker compose run --rm --entrypoint cat agent-watchdog /data/runs/<id>/rollup/report.html`.
+
+## 23. Your own Claude login in the container (revision 32)
+
+For individual use on a Claude subscription instead of an API key: `docker compose --profile login run --rm login`
+runs `claude auth login` (the Agent SDK's own Claude Code binary, on PATH in the image) and walks you through the
+browser sign-in; the login is kept in the named volume `agent-watchdog-login`, the runtime user's home. Then run
+with the CLI engine and no key: `docker compose run --rm -e AGENT_WATCHDOG_ENGINE=cli -e ANTHROPIC_API_KEY=
+agent-watchdog run --dry-run --date <date>`; the log's `agent.cli_auth` line says `mode: login` and
+`credentials_found: true`. `docker compose --profile login run --rm login auth status` shows the login,
+`auth logout` removes it. A key in `.env` wins over the login, so leave it blank for this mode.

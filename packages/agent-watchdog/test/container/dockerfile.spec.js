@@ -34,8 +34,10 @@ describe('container: the image definition (FR-086, contracts/container.md)', () 
     expect(dockerfile).to.include(
       'groupadd -g 10001 watchdog && useradd -u 10001 -g 10001 -d /home/watchdog -m -s /usr/sbin/nologin watchdog',
     );
-    expect(dockerfile).to.match(/mkdir -p \/data && chown watchdog:watchdog \/data \/home\/watchdog/);
-    expect(dockerfile).to.not.match(/chown -R/);
+    expect(dockerfile).to.include(
+      'mkdir -p /data /home/watchdog/.claude && chown -R watchdog:watchdog /data /home/watchdog',
+    );
+    expect(dockerfile).to.not.match(/chown -R [^\n]*\/app/);
     expect(dockerfile).to.not.match(/^EXPOSE/m);
     expect(dockerfile).to.not.match(/^VOLUME/m);
     expect(lines).to.include('ENTRYPOINT ["node", "bin/agent-watchdog.js"]');
@@ -47,6 +49,16 @@ describe('container: the image definition (FR-086, contracts/container.md)', () 
     ]);
     const excluded = /^(test|specs|smoke|scripts|deploy|data|config\/local|\.env|payload)/;
     expect(copied.some((s) => excluded.test(s))).to.equal(false);
+  });
+
+  it('puts the Agent SDK\'s own Claude Code binary on PATH as claude for the CLI engine and the local login', () => {
+    expect(dockerfile).to.include(
+      'test -x /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude',
+    );
+    expect(dockerfile).to.include(
+      'ln -s /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude',
+    );
+    expect(dockerfile).to.not.match(/npm install -g|@anthropic-ai\/claude-code/);
   });
 
   it('labels the image with its source, licence, version and revision from build arguments', () => {

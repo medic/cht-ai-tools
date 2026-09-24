@@ -68,7 +68,17 @@ capabilities, `/data` a named volume, `/tmp` a tmpfs), with your `.env` (comment
 docker compose build
 docker compose run --rm agent-watchdog run --dry-run --date 2026-09-18 > payload.json      # nothing posted
 docker compose run --rm agent-watchdog egress --format hosts                                # the destinations a run contacts
-docker compose --profile offline run --rm offline replay --date 2026-09-18 > diff.json      # no network at all
+docker compose --profile offline run --rm offline run --dry-run --stage analyze --date 2026-09-18   # no network at all
+```
+
+For individual use on a Claude subscription instead of an API key: log in once inside the container, into the
+named volume `agent-watchdog-login`, and run the CLI engine on that login (login mode; a key in `.env` would win,
+so leave it blank):
+
+```sh
+docker compose --profile login run --rm login                                              # claude auth login
+docker compose run --rm -e AGENT_WATCHDOG_ENGINE=cli -e ANTHROPIC_API_KEY= agent-watchdog run --dry-run --date 2026-09-18
+docker compose --profile login run --rm login auth logout
 ```
 
 Your own policy files go under `config/local/`, which git ignores: point `AGENT_WATCHDOG_CONFIG_DIR`

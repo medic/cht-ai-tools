@@ -31,8 +31,13 @@ COPY skill ./skill
 COPY schema ./schema
 COPY templates ./templates
 COPY config/defaults ./config/defaults
+# The Agent SDK ships the Claude Code runtime as a native binary; on PATH as `claude` it is also the CLI engine's
+# executable (`claude -p`) and the way a contributor logs in locally (contracts/container.md, revision 32). The build
+# fails if the platform package is missing rather than shipping an image without it.
+RUN test -x /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude \
+  && ln -s /app/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude /usr/local/bin/claude
 RUN groupadd -g 10001 watchdog && useradd -u 10001 -g 10001 -d /home/watchdog -m -s /usr/sbin/nologin watchdog \
-  && mkdir -p /data && chown watchdog:watchdog /data /home/watchdog
+  && mkdir -p /data /home/watchdog/.claude && chown -R watchdog:watchdog /data /home/watchdog
 USER 10001:10001
 LABEL org.opencontainers.image.source="https://github.com/medic/cht-ai-tools" \
       org.opencontainers.image.title="agent-watchdog" \
