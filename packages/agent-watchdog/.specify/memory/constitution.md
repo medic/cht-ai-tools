@@ -25,7 +25,7 @@ agent-watchdog is a CHT tool and MUST be indistinguishable in style from cht-cor
   constants, UNIX newlines.
 - Lint: `@medic/eslint-config`. `npm run lint` MUST pass with zero warnings before a PR opens.
 - Tests: mocha, chai (with chai-as-promised), sinon, nyc. `test/` mirrors `src/`
-  (`src/analyze/deltas.js` → `test/analyze/deltas.spec.js`).
+  (`src/analyze/changes.js` → `test/analyze/changes.spec.js`).
 - Commits and PR titles: Conventional Commits, `type(#issue): subject`, with `type` in
   `build feat fix perf refactor test chore docs`. PRs target `main` and reference an issue.
 - Release: semantic-release derives the version from commit types; the container image is

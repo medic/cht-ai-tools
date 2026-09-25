@@ -114,19 +114,24 @@ const buildAllowlistSafely = (config) => {
   }
 };
 
-const supersededPermalinkFor = async (dataDir, supersedes) => {
+/**
+ * The post a forced re-run supersedes (FR-042): its permalink as recorded, and its ts so the publish stage can
+ * look the permalink up when the earlier run's own lookup failed (revision 37).
+ */
+const supersededPostFor = async (dataDir, supersedes) => {
+  const none = { permalink: null, ts: null };
   if (!supersedes) {
-    return null;
+    return none;
   }
   try {
     const previous = RunDir.open(dataDir, supersedes);
     if (!previous.exists('rollup/publication.json')) {
-      return null;
+      return none;
     }
     const publication = await previous.readJson('rollup/publication.json');
-    return publication.permalink || null;
+    return { permalink: publication.permalink || null, ts: publication.ts || null };
   } catch {
-    return null;
+    return none;
   }
 };
 
@@ -360,7 +365,9 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
   ctx.now = now;
   ctx.allowlist = buildAllowlistSafely(config);
   ctx.resolveLinks = null;
-  ctx.supersededPermalink = await supersededPermalinkFor(dataDir, supersedes);
+  const supersededPost = await supersededPostFor(dataDir, supersedes);
+  ctx.supersededPermalink = supersededPost.permalink;
+  ctx.supersededTs = supersededPost.ts;
   ctx.deadline = Date.now() + config.bounds.runTimeoutMs;
   ctx.traceUrl = traceUrl;
   ctx.costSoFar = 0;
@@ -473,11 +480,7 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
         }
       }
     }
-    try {
-      await tracer.finish({ output: { status, error: error.message } });
-    } catch (traceError) {
-      log.warn('trace.finish_failed', { error: traceError });
-    }
+    await finishTraceSafely(tracer, log, { status, error: error.message });
     throw error;
   }
 

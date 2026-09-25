@@ -96,13 +96,14 @@
 - [ ] CHK055 - Does the egress requirement cover redirects (a listed host answering a redirect to an unlisted one) and every command that can open a connection, not only the scheduled `run`? [Coverage, Spec §FR-083, contracts/container.md]
 - [ ] CHK056 - Does the egress requirement say what a redirect that leaves the origin may carry (no Authorization, Proxy-Authorization or Cookie header) and that a step down from https to http is refused? [Coverage, Spec §FR-083, contracts/container.md]
 - [ ] CHK057 - Is it stated that a tool's error answer never repeats the model's argument, so a URL passed as a metric or card name cannot become "seen in a tool result" and be cited? [Coverage, Spec §FR-016, §FR-044]
+- [ ] CHK058 - Does the degraded-brief requirement say the notice names the refusing checks in words and never their reasons, so no digit or token the gate refused is published? [Coverage, Spec §FR-016]
+- [ ] CHK059 - Is the collection notice's share defined over the queries sent, so a warm volume whose every query failed can never post a quiet heartbeat? [Clarity, Spec §FR-073]
 
 ## Notes
 
 - Mark items `[x]` only after review confirms the requirement-quality criterion is satisfied
 - Leave items unchecked when they still require clarification, correction, or reviewer evaluation
 - `/speckit-implement` reads checklist checkbox state as a gate and must not modify markers
-- `checklists/requirements.md` has a separate built-in lifecycle maintained by `/speckit-specify` and `/speckit-clarify`
 - Add comments or findings inline
 - Link to relevant resources or documentation
 - Items are numbered sequentially for easy reference

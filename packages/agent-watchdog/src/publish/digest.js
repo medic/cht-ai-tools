@@ -10,7 +10,7 @@ const path = require('node:path');
 const Handlebars = require('handlebars');
 const { mrkdwn, link } = require('./payload');
 const { hostOf } = require('../rollup/deterministic-brief');
-const { maskPeople } = require('../corpus/scrub');
+const { maskPeople, maskNote } = require('../corpus/scrub');
 
 const DIGEST_EVENT = 'agent_watchdog.feedback_digest';
 const TEMPLATE = path.join(__dirname, '..', '..', 'templates', 'slack', 'feedback-digest.hbs');
@@ -272,7 +272,8 @@ const buildDigest = ({
   const unmatchedNotes = (unmatched || [])
     .map((n) => (typeof n === 'string' ? n : n && n.note))
     .filter(Boolean)
-    .map((note) => ({ note: maskPeople(note) }));
+    // Masked as on their way to a prompt (revision 37): the bot re-posts no address, number or token from a note.
+    .map((note) => ({ note: maskNote(note) }));
   const unclassified = retrying.length;
   const reactions = records.filter((r) => r.kind === 'reaction' && r.verdict !== 'retracted').length;
   const notes = records.filter((r) => r.kind === 'note').length;

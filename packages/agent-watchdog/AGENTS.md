@@ -34,7 +34,9 @@ flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changi
 - Secrets never appear in prompts, logs, posts, run records or this repository. `scripts/scan-secrets.js`
   checks the repository in CI and every run scans its own artefacts at the end (SC-010); a deliberate
   sample value in a test carries `// scan-secrets:allow` on its line.
-- Commits: `type(#issue): subject` with `type` in `build feat fix perf refactor test chore docs`.
+- Commits: `type(#issue): subject` with `type` in `build feat fix perf refactor test chore docs`. The founding
+  branch predates its issues and keeps `type: subject`; the deviation and its expiry are in plan.md's Complexity
+  Tracking, and commitlint makes the scope mandatory once it merges.
 
 ## Layout
 
@@ -115,8 +117,11 @@ A run fetches only what the data volume lacks (`src/collect/history.js`): the cu
 previous-day and previous-week windows from the stored runs one and seven days earlier when their bounds match
 exactly, the trailing baseline from `history/<slug>.json` (one daily maximum per metric) once it holds fourteen
 days; every window carries its `source`. Range queries have their own timeout
-(`AGENT_WATCHDOG_QUERY_TIMEOUT_MS`), one retry, and fail only their window; three consecutive failures or a
-connection failure make the source unreachable (exit 69). Projects are collected concurrently within
+(`AGENT_WATCHDOG_QUERY_TIMEOUT_MS`), one retry, and fail only their window; a 4xx or a 500 is that
+expression's problem and neither counts nor resets, three consecutive queries with no answer (a timeout, a
+connection failure, a 502, 503 or 504) or a connection failure make the source unreachable (exit 69), and
+when half or more of the queries a run sent failed the brief carries a `Collection incomplete` notice
+(`collect.summary.json`). Projects are collected concurrently within
 `AGENT_WATCHDOG_PROJECT_CONCURRENCY`. A per-project metric is one series per project: panels grouped by route,
 code or database, or ranked with `topk`, are listed in `discovery.json` (`breakdown`) and never queried, and a
 query that answers several series fails only its window, naming the labels that differ (FR-075).

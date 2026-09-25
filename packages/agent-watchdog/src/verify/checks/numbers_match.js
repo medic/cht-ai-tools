@@ -1,9 +1,11 @@
 'use strict';
 // Every number the model wrote in prose must equal a computed value under the display formatter; numerals inside
 // code spans are exempt, but each span must be a collected expression or metric (data-model.md "Number matching").
-// Since revision 33 the evidence the model attaches is held to the same rule (a value must be computed for the
-// metric or collected in the named window, and never widens what the prose may quote), and a brief's headline and
-// expected-load notice are checked as its bullets are.
+// The evidence the model attaches is checked against the values of its own window (a computed level of that window,
+// a cited candidate's evidence for it, a collected sample of it) or, for a rate, ratio, sigma or hour value, against
+// the metric's rates and cited thresholds in that unit (revisions 33, 36 and 37). An entry that passes is a value the
+// prose may quote, rounded or derived, under the unit of the computed value it matched; one that fails is refused
+// here and licenses nothing. A brief's headline and expected-load notice are checked as its bullets are.
 const {
   formatValue, extractNumbers, extractNumbersEverywhere, codeSpans, parseToken, HOUR_SECONDS, DAY_SECONDS,
 } = require('../format');
@@ -44,9 +46,10 @@ const changeValues = (change) => [
 
 /**
  * The values the item may quote: its metric's Computed Change, and the observed value and threshold of every
- * candidate it cites. In a finding the item's own evidence is not among them (revision 33): evidence is checked
- * against these, so an invented evidence value cannot license the same numeral in prose. In a brief the items were
- * accepted with their evidence verified, so it counts as computed data there.
+ * candidate it cites. In a finding the item's own evidence is not among them: only the entries evidenceReasons
+ * verified against their window join the allow-list (revision 36), so an invented evidence value cannot license
+ * the same numeral in prose. In a brief the items were accepted with their evidence verified, so it counts as
+ * computed data there.
  */
 const allowedValues = (item, ctx, { includeEvidence = ctx.mode === 'brief' } = {}) => {
   const allowed = includeEvidence ? (item.evidence || []).map((e) => ({ value: e.value, unit: e.unit })) : [];
@@ -74,15 +77,25 @@ const decimalsOf = (value) => {
   return dot === -1 ? 0 : text.length - dot - 1;
 };
 
-// Which computed levels each window holds (revision 36): evidence is checked against its own window's values.
+// Which computed levels each window holds (revision 36): evidence is checked against its own window's values. The
+// day's restart count belongs to the current window (revision 37): a restart candidate's evidence is written as one.
 const WINDOW_LEVELS = {
-  current: ['current_value'],
+  current: ['current_value', 'restarts_24h'],
   previous_day: ['previous_day_value'],
   previous_week: ['previous_week_value'],
   previous_cycle: ['previous_cycle_value'],
   trailing_14d: ['trailing_mean', 'trailing_stddev'],
 };
-const COUNT_UNITS = new Set(['count', '', null, undefined]);
+// The unit families evidence is compared within (revision 37): a sigma labelled "x" matches no multiple, and a
+// multiple labelled "percent" no percentage. Anything else is a level in the metric's own unit.
+const UNIT_GROUPS = {
+  percent: 'percent', '%': 'percent', pct: 'percent',
+  x: 'x', times: 'x', multiple: 'x', fold: 'x',
+  ratio: 'ratio', sigma: 'ratio', 'σ': 'ratio', stddev: 'ratio', sd: 'ratio',
+  h: 'h', hour: 'h', hours: 'h',
+};
+const unitGroup = (unit) => UNIT_GROUPS[String(unit === null || unit === undefined ? '' : unit).toLowerCase()]
+  || 'level';
 
 const changeOf = (item, ctx) => (ctx.changes || [])
   .find((change) => change.project_url === item.project_url && sameMetric(change.metric, item.metric)) || null;
@@ -102,27 +115,40 @@ const sampleValues = (item, window, ctx) => (ctx.windows || [])
   .flatMap((w) => (w.values || []).map((pair) => Number(Array.isArray(pair) ? pair[1] : pair)))
   .filter(Number.isFinite);
 
-/** The rates, ratios and cited thresholds of the metric: values without a window, for evidence in their unit. */
-const unitlessValues = (item, ctx) => {
-  const values = [];
-  const change = changeOf(item, ctx);
-  if (change) {
-    values.push(change.pct_change_vs_previous_day, change.deviation_sigma, change.monotonic_rise_hours);
-  }
+/** The candidates the item cites. */
+const citedCandidates = (item, ctx) => {
   const referenced = new Set(item.candidate_ids || []);
-  for (const candidate of ctx.candidates || []) {
-    if (referenced.has(candidate.candidate_id)) {
-      values.push(candidate.observed, candidate.threshold && candidate.threshold.value);
-    }
-  }
-  return values.map(Number).filter(Number.isFinite);
+  return (ctx.candidates || []).filter((candidate) => referenced.has(candidate.candidate_id));
 };
 
 /**
- * Every `{ window, value }` the model attached must equal, within its own decimals, a computed level of that window
- * (the Computed Change's value for it, a cited candidate's evidence for it, a collected sample of it), or, for a
- * value in a rate, ratio or hour unit, one of the metric's rates and cited thresholds (FR-016, revisions 33 and 36).
- * The entries that pass are returned as values the prose may quote; an invented one fails here and is quoted nowhere.
+ * The metric's rates, ratios and hours and the cited candidates' observed values and thresholds, each with its
+ * unit: values without a window, for evidence written in one of those units (revision 37).
+ */
+const typedValues = (item, ctx) => {
+  const change = changeOf(item, ctx);
+  const values = change ? changeValues(change).filter((entry) => unitGroup(entry.unit) !== 'level') : [];
+  for (const candidate of citedCandidates(item, ctx)) {
+    const unit = RULE_UNITS[candidate.rule] || 'count';
+    values.push({ value: candidate.observed, unit }, { value: candidate.threshold && candidate.threshold.value, unit });
+  }
+  return values.filter((entry) => Number.isFinite(Number(entry.value)));
+};
+
+/** The observed values of the cited candidates that measure a level of the current window, such as a restart count. */
+const citedLevelValues = (item, window, ctx) => (window === 'current'
+  ? citedCandidates(item, ctx)
+    .filter((candidate) => unitGroup(RULE_UNITS[candidate.rule] || 'count') === 'level')
+    .map((candidate) => Number(candidate.observed))
+    .filter(Number.isFinite)
+  : []);
+
+/**
+ * Every `{ window, value, unit }` the model attached must equal, within its own decimals, a computed level of that
+ * window (the Computed Change's value for it, a cited candidate's evidence or observed level for it, a collected
+ * sample of it), or, when its unit is a percentage, a multiple, a sigma or hours, one of the metric's values in that
+ * unit family (FR-016, revisions 33, 36 and 37). The entries that pass are returned as values the prose may quote,
+ * under the unit of the value they matched; an invented one fails here and is quoted nowhere.
  */
 const evidenceReasons = (item, index, ctx) => {
   const reasons = [];
@@ -133,15 +159,22 @@ const evidenceReasons = (item, index, ctx) => {
     if (!Number.isFinite(value)) {
       return;
     }
-    const levels = (WINDOW_LEVELS[evidence.window] || [])
-      .map((field) => (change ? Number(change[field]) : NaN))
-      .filter(Number.isFinite);
-    const pool = [
-      ...levels, ...citedEvidenceValues(item, evidence.window, ctx), ...sampleValues(item, evidence.window, ctx),
-      ...(COUNT_UNITS.has(evidence.unit) ? [] : unitlessValues(item, ctx)),
-    ];
-    if (pool.some((v) => close(value, v, decimalsOf(evidence.value)))) {
-      verified.push({ value: evidence.value, unit: evidence.unit });
+    const group = unitGroup(evidence.unit);
+    let pool;
+    if (group === 'level') {
+      const levels = (WINDOW_LEVELS[evidence.window] || [])
+        .map((field) => (change ? Number(change[field]) : NaN))
+        .filter(Number.isFinite);
+      pool = [
+        ...levels, ...citedEvidenceValues(item, evidence.window, ctx), ...sampleValues(item, evidence.window, ctx),
+        ...citedLevelValues(item, evidence.window, ctx),
+      ].map((v) => ({ value: v, unit: evidence.unit }));
+    } else {
+      pool = typedValues(item, ctx).filter((entry) => unitGroup(entry.unit) === group);
+    }
+    const matched = pool.find((entry) => close(value, Number(entry.value), decimalsOf(evidence.value)));
+    if (matched) {
+      verified.push({ value: evidence.value, unit: matched.unit });
       return;
     }
     reasons.push(

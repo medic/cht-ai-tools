@@ -138,8 +138,9 @@ match exactly, and the fourteen-day baseline is built from a per-project ledger 
 fetched, so the first day costs four range queries per metric, the second two, and from the eighth
 consecutive day one. Each `collect.project` log line reports `fetched`, `reused` and `queries`, and
 every stored window carries its `source`. A slow or failed query is retried once and then makes only
-its window unavailable; the source counts as unreachable, and the run fails, only on a connection
-failure or three consecutive failed queries. Projects are collected concurrently within
+its window unavailable; a 4xx or a 500 fails that window alone, the source counts as unreachable, and the
+run fails, only on a connection failure or three consecutive queries with no answer, and a brief whose run
+had half or more of its queries fail carries a `Collection incomplete` notice. Projects are collected concurrently within
 `AGENT_WATCHDOG_PROJECT_CONCURRENCY`. Panels that break a metric down by route, code or database, or
 rank a top five, are one series per label value rather than one per project: they stay on the
 dashboard, are listed in `discovery.json` and are not analysed. Their aggregate siblings, such as the

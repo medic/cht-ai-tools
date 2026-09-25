@@ -106,6 +106,7 @@ describe('agent/tools/watchdog-tools', () => {
     const { byName, deps } = build();
     const bad = parse(await byName.query_metric.handler({ metric: 'rate(anything{job="x"}[5m])', window: 'current' }));
     expect(bad.error).to.match(/unknown metric/);
+    expect(bad.error).to.include('bare metric name');
     expect(deps.queryWindow).to.not.have.been.called;
     const badWindow = parse(await byName.query_metric.handler({ metric: 'cht_conflict_count', window: 'last_month' }));
     expect(badWindow.error).to.match(/window/);

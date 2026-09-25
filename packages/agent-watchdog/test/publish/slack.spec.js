@@ -30,7 +30,7 @@ const fakeClient = () => ({
     postMessage: sinon.stub().callsFake(async ({ thread_ts: threadTs }) => ({
       ok: true, channel: 'C123', ts: threadTs ? `${threadTs}1` : '1700000000.000100',
     })),
-    getPermalink: sinon.stub().callsFake(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://medic.slack.com/archives/C123/p${ts.replace('.', '')}` })),
+    getPermalink: sinon.stub().callsFake(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://example.slack.com/archives/C123/p${ts.replace('.', '')}` })),
   },
 });
 
@@ -107,10 +107,10 @@ describe('publish/slack', () => {
   it('adds a superseded link when a forced run replaces an earlier post', async () => {
     const client = fakeClient();
     const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
-    await publisher.publish({ payload: payloadFor(), superseded: 'https://medic.slack.com/archives/C123/p1' });
+    await publisher.publish({ payload: payloadFor(), superseded: 'https://example.slack.com/archives/C123/p1' });
     const parent = client.chat.postMessage.firstCall.args[0];
     expect(parent.blocks[0].type).to.equal('context');
-    expect(parent.blocks[0].elements[0].text).to.include('https://medic.slack.com/archives/C123/p1');
+    expect(parent.blocks[0].elements[0].text).to.include('https://example.slack.com/archives/C123/p1');
   });
 
   it('retries a rate-limited call after retryAfter seconds and then succeeds', async () => {
@@ -182,6 +182,10 @@ describe('publish/slack', () => {
     const plain = await publisher.postTextOnly({ parent: { text: 'quiet day', metadata: {} } });
     expect(plain.permalink).to.include('p1700000000000100');
     expect(client.chat.getPermalink.callCount).to.equal(2);
+    // A forced re-run's text-only post links the post it supersedes (revision 37).
+    await publisher.postTextOnly({ parent: { text: 'quiet day', metadata: {} } }, { superseded: 'https://slack/pOLD' });
+    expect(client.chat.postMessage.lastCall.args[0].text)
+      .to.equal('quiet day\nSupersedes an earlier post for this date: <https://slack/pOLD|earlier brief>');
   });
 
   it('gives up after three attempts with exit code 74', async () => {
@@ -322,7 +326,7 @@ describe('publish/slack: the report shared into the thread (FR-022, revision 23)
     client.files.uploadV2 = sinon.stub().callsFake(async ({ file, channel_id: channelId }) => {
       await settle(file);
       const shared = channelId
-        ? { id: 'F456', title: 'report', permalink: 'https://medic.slack.com/files/F456', shares: { public: { C123: [{ ts: '1700000000.000150' }] } } }
+        ? { id: 'F456', title: 'report', permalink: 'https://example.slack.com/files/F456', shares: { public: { C123: [{ ts: '1700000000.000150' }] } } }
         : { id: 'F123', title: 'brief' };
       return { ok: true, files: [{ ok: true, files: [shared] }] };
     });
@@ -352,7 +356,7 @@ describe('publish/slack: the report shared into the thread (FR-022, revision 23)
     expect(client.files.uploadV2.firstCall.calledAfter(client.chat.postMessage.firstCall)).to.equal(true);
     expect(client.chat.postMessage.secondCall.calledAfter(client.files.uploadV2.firstCall)).to.equal(true);
     expect(publication.report).to.deep.equal({
-      file_id: 'F456', ts: '1700000000.000150', permalink: 'https://medic.slack.com/files/F456',
+      file_id: 'F456', ts: '1700000000.000150', permalink: 'https://example.slack.com/files/F456',
     });
     expect(publication.slack_file_id).to.equal(null);
   });

@@ -72,7 +72,7 @@ const fakeSlack = () => {
         counter += 1;
         return { ok: true, channel: 'C123', ts: `1700000000.00${String(counter).padStart(4, '0')}` };
       }),
-      getPermalink: sinon.spy(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://medic.slack.com/archives/C123/p${ts}` })),
+      getPermalink: sinon.spy(async ({ message_ts: ts }) => ({ ok: true, permalink: `https://example.slack.com/archives/C123/p${ts}` })),
     },
   };
 };

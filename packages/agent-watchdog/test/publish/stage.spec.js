@@ -100,9 +100,12 @@ describe('cli/stages/publish', () => {
     expect(client.chat.postMessage.called).to.equal(false);
     expect(await runDir.readJson('rollup/payload.json'))
       .to.deep.equal({ as_posted: true, digest: { text: 'yesterday' } });
-    // A preview still builds the payload without posting.
+    // A preview still builds the payload without posting, beside the posted record, never over it (revision 37).
     const preview = await stage.run(ctx('preview', client));
     expect(preview.posted).to.equal(false);
+    expect(await runDir.readJson('rollup/payload.json'))
+      .to.deep.equal({ as_posted: true, digest: { text: 'yesterday' } });
+    expect((await runDir.readJson('rollup/payload.preview.json')).kind).to.equal('brief');
   });
 
   it('refuses to run without the brief', async () => {
@@ -301,6 +304,21 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     const again = await stage.run(ctx('stage', client())).catch((e) => e);
     expect(again.code).to.equal(75);
     expect((await readAll(dataDir)).every((r) => r.acknowledged_run_id === null)).to.equal(true);
+  });
+
+  it('links the post a forced re-run supersedes on a heartbeat too, looking the permalink up when needed', async () => {
+    await runDir.writeJson('rollup/brief.json', makeBrief({ kind: 'heartbeat', bullets: [] }));
+    const slack = client();
+    await stage.run(ctx('scheduled', slack, { deps: { slack }, supersededPermalink: 'https://slack/pEARLIER' }));
+    expect(slack.chat.postMessage.firstCall.args[0].text)
+      .to.include('Supersedes an earlier post for this date: <https://slack/pEARLIER|earlier brief>');
+    // The earlier run recorded its ts but no permalink (its lookup failed): the permalink is looked up now.
+    const again = await RunDir.create(dataDir, '2026-09-19');
+    await again.writeJson('rollup/brief.json', makeBrief({ kind: 'heartbeat', bullets: [] }));
+    const later = client();
+    await stage.run({ ...ctx('scheduled', later, { deps: { slack: later }, supersededTs: '0.999' }), runDir: again });
+    expect(later.chat.getPermalink).to.have.been.calledWithMatch({ message_ts: '0.999' });
+    expect(later.chat.postMessage.firstCall.args[0].text).to.include('<https://slack/p0.999|earlier brief>');
   });
 
   it('posts the digest in a heartbeat thread on a quiet day and survives a failed reaction', async () => {

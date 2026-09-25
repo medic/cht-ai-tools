@@ -193,6 +193,19 @@ describe('collect/windows', () => {
       projects: [alpha],
     };
 
+    it('picks the one series without the project\'s instance and refuses several (revision 37)', () => {
+      const { pickSeries } = require('../../src/collect/windows');
+      const one = [{ metric: { instance: 'sql-exporter:9399', target: 'alpha.example.org' }, values: [] }];
+      expect(pickSeries(one, 'alpha.example.org')).to.deep.equal({ series: one[0], many: null });
+      const two = [
+        ...one, { metric: { instance: 'sql-exporter:9399', target: 'alpha.example.org', db: 'x' }, values: [] },
+      ];
+      expect(pickSeries(two, 'alpha.example.org')).to.deep.equal({ series: null, many: two });
+      const own = [{ metric: { instance: 'alpha.example.org' }, values: [] }, two[1]];
+      expect(pickSeries(own, 'alpha.example.org')).to.deep.equal({ series: own[0], many: null });
+      expect(pickSeries([], 'alpha.example.org')).to.deep.equal({ series: null, many: null });
+    });
+
     it('never queries a breakdown panel', () => {
       expect(metricSpecs(discovery).map((s) => s.metric)).to.deep.equal([
         'cht_couchdb_fragmentation', 'sum(rate(c[5m]))', 'up{job="cht"}',

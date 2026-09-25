@@ -6,7 +6,6 @@
 // never stored, only the name of the pattern that matched.
 const {
   SECRET_PATTERNS, EMAIL_PATTERN, PHONE_PATTERN, PHONE_MIN_DIGITS, HOST_LIKE_PATTERN, isProjectLikeHost, countDigits,
-  phoneMatches,
 } = require('../verify/patterns');
 
 // Kinds in the order overlaps are resolved: an e-mail address wins over the hostname inside it.
@@ -128,15 +127,47 @@ const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
 };
 
 /**
- * A phone number as a person writes one: digit groups with a leading plus, brackets, dots or dashes, and the gate's
- * refinements (no decimal, no token with letters). A bare run of digits is a count, a byte size or an id; a run of
- * space-separated integers is a list of values; anything holding a date is a date range (revision 36): memory and
- * notes keep all of those.
+ * A phone number as a person writes one (FR-029, FR-044; revisions 36 and 37): a run of nine or more digits that
+ * starts with a plus or a zero, whatever its grouping, or that brackets, dots or dashes group into parts of at most
+ * four digits. Not a phone number: a bare run of digits (a count, a byte size, an id), a decimal, integers or
+ * decimals side by side (a list of values, a range such as `150000-200000` or `1234.5-2345.6`, a value with its
+ * previous one in brackets) and a date in any form, ISO or `20.09.2026`. A label glued to the number (`tel:+254…`)
+ * does not hide it, and a date after it stays where it is. Memory and notes keep everything but the number.
  */
-const ISO_DAY_IN = /\d{4}-\d{2}-\d{2}/;
-const phoneSpans = (text) => phoneMatches(text)
-  .map((match) => match.trim())
-  .filter((match) => /^\+|[().-]/.test(match) && !ISO_DAY_IN.test(match));
+const ISO_DAY_IN = /\d{4}-\d{2}-\d{2}(?:[\sT]\d{1,2}(?::\d{2}){0,2})?/g;
+const DOTTED_DAY = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+const SEPARATORS = /^[\s.-]+|[\s().-]+$/g;
+const phoneLike = (span) => {
+  if ((span.match(/\d/g) || []).length < PHONE_MIN_DIGITS) {
+    return false;
+  }
+  const parts = span.split(/[\s()-]+/).filter(Boolean);
+  if (parts.some((part) => DOTTED_DAY.test(part) || /\d\.\d/.test(part))) {
+    return false;
+  }
+  if (/^[+0]/.test(span)) {
+    return true;
+  }
+  // Spaces alone group a list of values; brackets, dots or dashes group a number into short parts.
+  return /[().-]/.test(span) && parts.length > 1 && parts.every((part) => part.replace(/\D/g, '').length <= 4);
+};
+const phoneSpans = (text) => {
+  const source = String(text);
+  const out = [];
+  for (const match of source.matchAll(PHONE_PATTERN)) {
+    // The pattern starts at a digit; a bracket before it belongs to the number when the area code closes it.
+    const opened = match.index > 0 && source[match.index - 1] === '(' && match[0].includes(')');
+    const raw = opened ? `(${match[0]}` : match[0];
+    // A date inside the match is not part of the number: what is left on either side is read on its own.
+    for (const piece of raw.split(ISO_DAY_IN)) {
+      const span = piece.replace(SEPARATORS, '');
+      if (span && phoneLike(span) && !out.includes(span)) {
+        out.push(span);
+      }
+    }
+  }
+  return out;
+};
 
 /**
  * Mask what identifies a person and nothing else: Slack mentions and user ids, e-mail addresses, phone numbers with

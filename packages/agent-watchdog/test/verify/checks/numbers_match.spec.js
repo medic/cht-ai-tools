@@ -324,10 +324,20 @@ describe('verify/checks/numbers_match: date phrases, quotable evidence, evidence
     const finding = baseContext();
     finding.items[0].why_now = 'Backlog 912 climbing since Sept 16th, three times the 300 of yesterday.';
     expect(check(finding).status).to.equal('pass');
-    // "may" followed by a number is the verb, not the month: the numeral is still checked.
+    // "may" beside a number is the verb, not the month, in either order (revision 37): the numeral is still checked.
     const may = baseContext();
     may.items[0].why_now = 'It may 43 times exceed the 300 of yesterday.';
     expect(check(may).reasons).to.deep.equal(['items[0].why_now contains 43, which matches no computed value']);
+    const before = baseContext();
+    before.items[0].why_now = 'Pending docs rose to 45 may point to a sync backlog; lag of 12.5 may reflect it.';
+    expect(check(before).reasons).to.deep.equal([
+      'items[0].why_now contains 45, which matches no computed value',
+      'items[0].why_now contains 12.5, which matches no computed value',
+    ]);
+    // A day the month never holds is a numeral beside a word, and a written May is a date.
+    const impossible = baseContext();
+    impossible.items[0].why_now = 'Backlog 912 on 31 September; the rise began May 3.';
+    expect(check(impossible).reasons).to.deep.equal(['items[0].why_now contains 31, which matches no computed value']);
   });
 
   it('lets the prose quote a rounded or derived form of evidence the check verified against a collected sample', () => {
@@ -360,5 +370,45 @@ describe('verify/checks/numbers_match: date phrases, quotable evidence, evidence
     const rateAsCount = baseContext();
     rateAsCount.items[0].evidence = [{ window: 'previous_day', value: 204, unit: 'count' }];
     expect(check(rateAsCount).status).to.equal('fail');
+  });
+
+  it('matches a rate, a multiple, a sigma and hours only within their own unit family (revision 37)', () => {
+    // The fixture's deviation is 67 sigma; written as a multiple it matches nothing, and licenses no "67x".
+    const relabelled = baseContext();
+    relabelled.items[0].evidence = [{ window: 'current', value: 67, unit: 'x' }];
+    relabelled.items[0].why_now = 'Backlog 912, 67x the usual level.';
+    expect(check(relabelled).reasons).to.deep.equal([
+      'items[0].evidence[0] value 67 for window current matches no computed or collected value of that window',
+      'items[0].why_now contains 67x, which matches no computed value',
+    ]);
+    const sigma = baseContext();
+    sigma.items[0].evidence = [{ window: 'current', value: 67, unit: 'sigma' }];
+    sigma.items[0].why_now = 'Backlog 912, 67 sigma above the trailing mean.';
+    expect(check(sigma).status).to.equal('pass');
+    // A true multiple (912 over 300) is verified as one and may be quoted as 3x or 300%.
+    const multiple = baseContext();
+    multiple.items[0].evidence = [{ window: 'current', value: 3.04, unit: 'x' }];
+    multiple.items[0].why_now = 'Tripled (3x, up 300%) on yesterday.';
+    expect(check(multiple).status).to.equal('pass');
+    const hours = baseContext();
+    hours.items[0].evidence = [{ window: 'current', value: 7, unit: 'hours' }];
+    expect(check(hours).status).to.equal('pass');
+    const percentAsX = baseContext();
+    percentAsX.items[0].evidence = [{ window: 'current', value: 204, unit: 'x' }];
+    expect(check(percentAsX).status).to.equal('fail');
+  });
+
+  it('accepts a restart count written as a count of the current window (revision 37)', () => {
+    const ctx = baseContext();
+    ctx.changes[0].restarts_24h = 2;
+    const restart = {
+      ...ctx.candidates[0], candidate_id: 'c-restart', rule: 'restart', observed: 2,
+      threshold: { source: 'default', value: 0 }, severity_floor: 'medium', evidence: [],
+    };
+    ctx.candidates.push(restart);
+    ctx.items[0].candidate_ids = [...(ctx.items[0].candidate_ids || []), restart.candidate_id];
+    ctx.items[0].evidence = [{ window: 'current', value: 2, unit: 'count', note: 'restarts in 24h' }];
+    ctx.items[0].why_now = 'Restarted 2 times in the last day; backlog 912.';
+    expect(check(ctx)).to.deep.equal({ name: 'numbers_match', status: 'pass', reasons: [] });
   });
 });

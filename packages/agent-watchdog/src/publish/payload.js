@@ -212,19 +212,16 @@ const PROGRAMME_LINK_MAX = 1000;
 
 /**
  * Fit the alerts reply into one section without cutting a link (revision 34): whole programme lines go first, from
- * the end, with a line saying how many more the report holds; then the notices with one programme; then, before
- * the notices and the link to every alert are given up, no programme at all (revision 36). What remains is never
- * longer than the section allows.
+ * the end, with a line saying how many more the report holds, down to none; the notices and the link to every alert
+ * are given up only after the last programme line (revision 37, as contracts/slack-payload.md says: the notices
+ * are the one place in Slack that names dark hosts and cleared alerts). What remains is never longer than the
+ * section allows.
  */
 const fitAlertsText = (render, { programmes, notices }) => {
   const attempts = [];
-  for (let shown = programmes; shown >= 1; shown -= 1) {
+  for (let shown = programmes; shown >= 0; shown -= 1) {
     attempts.push({ shown, notices, withAll: true });
   }
-  if (programmes >= 1) {
-    attempts.push({ shown: 1, notices: [], withAll: true });
-  }
-  attempts.push({ shown: 0, notices, withAll: true });
   attempts.push({ shown: 0, notices: [], withAll: true });
   attempts.push({ shown: 0, notices: [], withAll: false });
   let last = null;

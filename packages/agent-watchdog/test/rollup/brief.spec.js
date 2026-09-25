@@ -500,6 +500,31 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
       + 'projects before a result (up to $4.00 spent)');
   });
 
+  it('names the checks that refused the last draft in words, never their reasons (revision 37)', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const refusal = {
+      report: {
+        outcome: 'rejected',
+        checks: [
+          { name: 'personal_data_absent', status: 'fail', reasons: ['phone number 0712345678 at $.bullets[0].text'] },
+          {
+            name: 'numbers_match',
+            status: 'fail',
+            reasons: ['bullets[0] contains 0712, which matches no computed value'],
+          },
+          { name: 'schema', status: 'pass', reasons: [] },
+        ],
+      },
+    };
+    const gate = { verifyBrief: sinon.stub().resolves(refusal) };
+    const out = await composeBrief({ ...base(engine, gate), candidates: [makeCandidate()] });
+    expect(out.degraded).to.equal(true);
+    expect(out.brief.degradation_notice).to.include('the last draft was refused for digits that looked like a phone '
+      + 'number, a number that matched no computed value');
+    expect(out.brief.degradation_notice).to.not.include('0712');
+    expect(out.brief.degradation_notice).to.not.include('$.bullets');
+  });
+
   it('keeps the model brief when only some sessions were stopped before a result, and says so', async () => {
     const engine = engineWith(successResult(draftFor(items)));
     const gate = { verifyBrief: sinon.stub().resolves(accepted) };

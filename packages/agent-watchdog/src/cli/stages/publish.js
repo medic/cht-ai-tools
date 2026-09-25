@@ -116,16 +116,17 @@ const run = async (ctx) => {
   // A run posts one parent (FR-042, revision 34): a record of an earlier post, complete or partial, means a
   // retry must supersede it with `run --force` rather than post a second brief for the date. Checked before
   // anything is rebuilt or written (revision 36), so the payload on disk stays the one that was posted.
-  if (ctx.mode !== 'preview' && runDir.exists('rollup/publication.json')) {
-    const earlier = await runDir.readJson('rollup/publication.json');
-    if (earlier && earlier.ts) {
-      throw new codes.ExitError(
-        codes.TEMPFAIL,
-        `this run already posted its brief as ${earlier.ts}${earlier.partial ? ' (thread incomplete)' : ''}; `
-          + 'run --force to supersede it rather than post a second one',
-      );
-    }
+  const earlier = runDir.exists('rollup/publication.json') ? await runDir.readJson('rollup/publication.json') : null;
+  const posted = Boolean(earlier && earlier.ts);
+  if (ctx.mode !== 'preview' && posted) {
+    throw new codes.ExitError(
+      codes.TEMPFAIL,
+      `this run already posted its brief as ${earlier.ts}${earlier.partial ? ' (thread incomplete)' : ''}; `
+        + 'run --force to supersede it rather than post a second one',
+    );
   }
+  // A preview of a run that already posted writes beside the record, never over it (revision 37).
+  const suffix = ctx.mode === 'preview' && posted ? '.preview' : '';
   const items = runDir.exists('rollup/items.ranked.json') ? await runDir.readJson('rollup/items.ranked.json') : [];
   const discovery = runDir.exists('discovery.json') ? await runDir.readJson('discovery.json') : null;
   const channel = ctx.config.endpoints.slackChannelId || null;
@@ -178,9 +179,9 @@ const run = async (ctx) => {
     alertGroups,
     alertsLinks,
   });
-  await runDir.writeJson('rollup/payload.json', payload);
+  await runDir.writeJson(`rollup/payload${suffix}.json`, payload);
   if (built) {
-    await runDir.writeJson('rollup/feedback.digest.json', built.digest);
+    await runDir.writeJson(`rollup/feedback.digest${suffix}.json`, built.digest);
     logger.info('publish.digest_built', {
       acknowledged: built.digest.acknowledged.length, items: built.digest.items.length,
       proposals: built.digest.proposals.length, unclassified: built.digest.unclassified,
@@ -198,16 +199,18 @@ const run = async (ctx) => {
   // The record is written as soon as the parent is posted, so a failure in the thread (a reply, the report, the
   // digest) cannot lose it; a heartbeat or failure post gets the same record (revision 36).
   const onParent = (partial) => runDir.writeJson('rollup/publication.json', partial);
+  // A forced re-run links the post it supersedes (FR-042), a heartbeat or failure post too (revision 37): the
+  // permalink the earlier run recorded, or one looked up now from its ts when that lookup failed at the time.
+  const superseded = ctx.supersededPermalink
+    || (ctx.supersededTs ? await publisher.permalinkOf(ctx.supersededTs).catch(() => null) : null);
   let publication;
   if (brief.kind === 'heartbeat' || brief.kind === 'failure') {
-    publication = await publisher.postTextOnly(payload, { onParent });
+    publication = await publisher.postTextOnly(payload, { onParent, superseded });
   } else {
     const reportPath = brief.report && brief.report.path && runDir.exists(brief.report.path)
       ? runDir.path(brief.report.path)
       : null;
-    publication = await publisher.publish({
-      payload, reportPath, superseded: ctx.supersededPermalink || null, onParent,
-    });
+    publication = await publisher.publish({ payload, reportPath, superseded, onParent });
   }
   if (built) {
     // Digest last, under today's parent; acknowledge only once the digest is out, then the courtesy reactions.

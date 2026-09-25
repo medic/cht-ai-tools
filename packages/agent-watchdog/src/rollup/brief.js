@@ -632,7 +632,12 @@ const composeBrief = async ({
     await session.close();
   }
   const last = rejections[rejections.length - 1];
-  const reasonText = last && last.reasons.length ? ` (last reasons: ${last.reasons.join('; ')})` : '';
+  // The checks that refused the last draft, in words (revision 37): the gate's reasons repeat the digits and tokens
+  // they refused, and the notice is published.
+  const refusedFor = last ? [...new Set(last.reasons.map((reason) => reason.split(': ')[0]))] : [];
+  const reasonText = refusedFor.length
+    ? ` (the last draft was refused for ${refusedFor.map((name) => CHECK_PHRASES[name] || name).join(', ')})`
+    : '';
   // The count is the drafts actually made: AGENT_WATCHDOG_VERIFY_MAX_RETRIES sets it (revision 34).
   const count = drafts.length;
   return degrade(`the verification gate rejected ${count} draft${count === 1 ? '' : 's'}${reasonText}`);

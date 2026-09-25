@@ -99,8 +99,9 @@ const createGrafanaClient = (options) => {
   /**
    * One request. Grafana API calls get one attempt and their timeout; range and instant queries get their own
    * timeout and one retry on a timeout, a connection failure or a 502, 503 or 504. A query that still fails is a
-   * QueryError for its window alone; three consecutive failed queries, or a connection failure the retry does not
-   * clear, mean the source is unreachable (FR-073).
+   * QueryError for its window alone. Three consecutive queries with no answer (a timeout, a connection failure or
+   * a 502, 503 or 504 the retry did not clear) mean the source is unreachable; a 4xx or a 500 is that expression's
+   * problem and neither counts nor resets, and only a success resets (FR-073, revision 36).
    */
   const request = async (pathname, params = {}) => {
     const url = new URL(`${base}${pathname}`);

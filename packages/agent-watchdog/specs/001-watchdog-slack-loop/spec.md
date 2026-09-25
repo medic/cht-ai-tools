@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 36)
+**Status**: Draft (revision 37)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -800,8 +800,9 @@ Verification gate
   secret and personal-data patterns and the link allow-list; adding one is a code change by pull
   request. A link that times out or errors during resolution is unresolved and fails the check; a
   redirect is followed only when its target is on the allow-list, otherwise the link fails. Personal
-  data means e-mail addresses, telephone numbers, person names known to the run (owners and
-  feedback authors) and Slack user ids; hostnames are not personal data but are masked in
+  data means e-mail addresses, telephone numbers and Slack user ids (revision 37: owner and
+  feedback-author names are teams and roles, and a rule refusing ordinary prose that names one would
+  refuse most briefs, research.md R-41); hostnames are not personal data but are masked in
   proposals. The scan applies to every published text whatever its source: a secret or personal
   datum quoted from a tool result, a memory or a metric label is refused like one the model wrote
   (revision 27).
@@ -820,6 +821,14 @@ Verification gate
   evidence check verified against a collected sample may be quoted in the prose, rounded or derived, and
   each evidence entry is checked against the values of its own window. A tool's error answer never repeats
   the model's argument, so a URL passed as a metric or card name cannot become "seen in a tool result".
+  Revision 37: a day-month phrase is a date only when its month is written as a name (a lowercase "may"
+  beside a number is the verb, in either order) and its day is one the month holds; otherwise the numeral
+  is checked. Evidence written in a percentage, multiple, sigma or hour unit is matched only against the
+  metric's values in that unit family, and a verified entry may be quoted under the unit of the value it
+  matched, never under a label the model chose; the day's restart count is a level of the current window.
+  The texts given for dates reach the analysis gate in production, not only in tests. A degraded brief
+  names the checks that refused the last draft in words and never repeats their reasons, so no refused
+  digit or token is published.
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -914,9 +923,14 @@ Feedback
   user identifiers in its text are masked by code first, and the gate refuses one on the published
   surface (revision 33). The same masking, of Slack identifiers, e-mail addresses and phone numbers, covers
   every remaining path: the roll-up's feedback text and unmatched notes, the item-history tool, the
-  outcome files distillation reads; a phone number carries a plus or a separator and holds no date, so a
-  date range and a list of integers are not phones. The memory update is masked of the same identifiers
-  only, so byte counts, decimals, dates and owners' names survive it (FR-044, revision 36).
+  outcome files distillation reads. A phone number is a run of nine or more digits that starts with a plus
+  or a zero, whatever its grouping, or that brackets, dots or dashes group into parts of at most four
+  digits; a bare run of digits, a decimal, integers or decimals side by side (a list, a range such as
+  `150000-200000`, a value with its previous one in brackets) and a date in any form are values and stay,
+  a label glued to the number does not hide it, and a date after it is left in place (revision 37). The
+  horizon parse and the review read a note with only its Slack ids masked, since they need its figures.
+  The memory update is masked of the same identifiers only, so byte counts, decimals, dates and owners'
+  names survive it (FR-044, revision 36).
   A note's record keeps the expected maximum and the item's observed value its parse found and how the
   horizon was found, so a stored horizon holds its size from the second day on and a failed model parse is
   logged and read again by the next run with a model; a horizon is read against the day the note was
@@ -964,6 +978,8 @@ Feedback review and acknowledgement
   one `eyes` reaction to each note it acknowledged as a "seen" signal (Slack scope
   `reactions:write`); a failed reaction is logged and never fails the run, and no reaction is
   added in preview mode.
+  The unmatched notes the digest lists are masked as a note is on its way to a prompt: Slack ids, e-mail
+  addresses, phone numbers and secrets (revision 37).
 - **FR-063**: The weekly calibration report MUST list every proposal still awaiting review, with
   its age in days and its destination.
 
@@ -999,7 +1015,7 @@ Alerts and groups
   presentation scope MUST resolve the restriction through one helper so they agree on the set
   (revision 24); the post still goes to the one configured channel. What the brief and the report
   say was checked MUST count the projects the run analysed, not every project discovered, so a
-  restricted run never reads "Checked 90 projects" over 30 (revision 25).
+  restricted run never counts every discovered project over the ones it analysed (revision 25).
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -1050,9 +1066,10 @@ Alerts and groups
   timeout, distinct from the timeout of the Grafana API calls. Added in revision 11.
   Only a query that cannot be answered, no response or a 502, 503 or 504, counts toward the consecutive
   failures, and only a successful query resets the count; a 4xx or a 500 is that expression's problem and
-  fails its window alone (revision 33, corrected in revision 36). When half or more of a run's windows
-  failed their query the brief carries a collection notice saying so; the heartbeat is never refused for
-  it (revision 36).
+  fails its window alone (revision 33, corrected in revision 36). When half or more of the queries a run
+  sent failed, the brief carries a collection notice with a warning marker; the windows read back from
+  the volume are not part of that share, so a warm day whose every query failed is never a quiet
+  heartbeat (revision 36, corrected in revision 37).
   One host's failed discovery query leaves that project without a version and a history count, logged, and
   the run with its brief (revision 34).
 - **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
@@ -1062,7 +1079,9 @@ Alerts and groups
   series per label value (grouped by anything but the histogram bucket) or a ranked set MUST be
   recorded in discovery with its grouping and MUST NOT be collected or analysed; a query that
   returns several series for a project MUST make that window unavailable, naming the labels that
-  differ, rather than have one series chosen over the others. Breakdown analysis per route, code or
+  differ, rather than have one series chosen over the others; several series of which none carries the
+  project's instance label are a breakdown too, and only a single such series is the answer (revision
+  37). Breakdown analysis per route, code or
   database is a later feature (Out of Scope). Added in revision 12. A **reference line**, a target
   after the first on a panel with several targets whose expression is another series adjusted only
   by constant arithmetic (a threshold drawn from the connected-user count, an expected rate drawn
@@ -1154,7 +1173,10 @@ Persistence and reproducibility
   failure later in the thread cannot lose it (revision 34). It is written before the parent's permalink is
   looked up, so a lookup that fails after the post cannot lose it either; a heartbeat or failure post gets
   the same record; and the refusal comes before anything is rebuilt, so the payload on disk stays the one
-  that was posted (revision 36).
+  that was posted (revision 36). A forced re-run's heartbeat or failure post links the earlier post too,
+  and the permalink is looked up from the recorded ts when the earlier run's own lookup failed; a preview
+  of a run that already posted writes beside the record, as `rollup/payload.preview.json`, never over it
+  (revision 37).
 - **FR-043**: Each stage MUST be runnable on its own from the files of the previous stage.
   A stage-only roll-up resolves links from the discovery on disk and carries the agent stage's recorded
   spend (revision 34).
@@ -1192,7 +1214,7 @@ Security and trust boundaries
 Operations
 
 - **FR-047**: The system MUST run once daily at a configured time and MUST prevent overlapping
-  runs. Defaults: the run starts at 06:00 UTC and posts to the `#agents` Slack channel as the
+  runs. Defaults: the run starts at 06:00 UTC and posts to the configured Slack channel as the
   bot named `agent-watchdog`.
 - **FR-048**: The system MUST provide a readiness check for a CHT URL that reports unmet
   prerequisites (minimum supported version, host-metrics exporter present) in plain language.
@@ -1246,7 +1268,8 @@ Configuration
   allow-list and appeared in a tool result of the run; every other URL is recorded as unresolved
   without a request. The resolver checks a destination against the egress list before any request and
   records one outside it as not requested, so a link on a listed host at another port fails the link
-  and never the run (revision 36). The guard follows a redirect only to a listed destination, and it
+  and never the run (revision 36; the analysis gate's resolver applies the same check since revision 37,
+  before which only the roll-up's did). The guard follows a redirect only to a listed destination, and it
   is installed for every command that can reach the network: `run`, `tools-server`, `calibrate`,
   `distill` and `replay` (revision 33). A redirect that leaves the origin travels without the
   Authorization, Proxy-Authorization and Cookie headers, and a redirect from https to http is refused
@@ -1510,7 +1533,7 @@ Configuration
   zero, or a sentinel backlog above three times its baseline.
 - Q: What are the default retention periods? → A: 14 days for raw series, 30 days for everything
   else (rendered images shared the short period until they were retired in revision 24).
-- Q: When and where is the daily brief posted? → A: 06:00 UTC, to the `#agents` Slack channel,
+- Q: When and where is the daily brief posted? → A: 06:00 UTC, to the configured Slack channel (`AGENT_WATCHDOG_SLACK_CHANNEL_ID`),
   as the bot named `agent-watchdog`.
 - Q: Where is the SC-002 thumbs-down rate measured from, given 30-day retention of items and
   feedback? → A: from the run outcomes appended to the knowledge corpus (FR-030), which fall

@@ -79,8 +79,10 @@ const alertsBlock = (alerts) => {
 };
 
 /**
- * Every string leaf with people, e-mail addresses and phone numbers masked (FR-029, revisions 33 and 36): the one
- * masker for every note that reaches a prompt, so nothing personal becomes a numeral the model was "given".
+ * Every string leaf with people, e-mail addresses and phone numbers masked (FR-029, revisions 33 and 36): the masker
+ * for the notes an analysis session or the roll-up reads (the feedback block, the roll-up's feedback text and
+ * unmatched notes, the item-history tool, the outcome files), so nothing personal becomes a numeral the model was
+ * "given". The horizon parse and the review read a note with only its Slack ids masked, since they need its figures.
  */
 const maskStrings = (value) => {
   if (Array.isArray(value)) {

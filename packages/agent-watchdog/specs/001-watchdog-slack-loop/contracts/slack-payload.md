@@ -22,8 +22,8 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
 | Item | Value |
 |---|---|
 | Bot display name | `agent-watchdog` |
-| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if `#agents` becomes private; `im:write` and `im:history` when the configured conversation is a direct message with the bot, as a test post (FR-084, revision 27). The bot must be a member of the conversation; a post refused for `not_in_channel` fails the run with exit 74 |
-| Channel membership | the bot is invited to `#agents`; posting and reading both require membership (`not_in_channel` otherwise) |
+| Bot token scopes | `chat:write`, `files:write`, `reactions:read`, `reactions:write` (the "seen" reaction on acknowledged notes, FR-062), `channels:history`; add `groups:history` only if the configured channel is private; `im:write` and `im:history` when the configured conversation is a direct message with the bot, as a test post (FR-084, revision 27). The bot must be a member of the conversation; a post refused for `not_in_channel` fails the run with exit 74 |
+| Channel membership | the bot is invited to the configured channel; posting and reading both require membership (`not_in_channel` otherwise) |
 | Message metadata schemas (app manifest, `metadata.event_subscriptions`) | `agent_watchdog.brief` with `run_id`, `date`, `kind`; `agent_watchdog.programme` with `run_id`, `date`, `group`, `kind` (`programme` or `other`), `item_ids` for the programme and Other replies (revision 28); `agent_watchdog.alerts` with `run_id`, `date`, `firing` (count), `programmes` for the one alerts reply (FR-066, revision 28); `agent_watchdog.feedback_digest` with `run_id`, `date`, `acknowledged` (count). `agent_watchdog.item` (`run_id`, `item_id`, `project_url`, `metric`) and the per-group `agent_watchdog.alerts` shape (`group`, `category`) are still read from posts made before revision 28. Unregistered metadata is ignored by Slack with a warning, so registration is part of the app setup checklist. |
 | Rate-limit class | internal customer-built app: `conversations.history` and `conversations.replies` keep Tier 3 and the normal `limit` values; the 2025 one-request-per-minute limit applies only to non-Marketplace apps distributed commercially |
 
@@ -62,7 +62,7 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    group has a reply of its own since revision 28. Each reply is one section of at most 3,000 characters
    and a link is never cut; a programme's own alert-list link longer than 1,000 characters is left off its
    line, which keeps its counts, and the notices and the link to every firing alert are given up only
-   after the last programme line (revision 36). Replies are never broadcast.
+   after the last programme line (revisions 36 and 37). Replies are never broadcast.
 4. **Record** `chat.getPermalink({ channel, message_ts })` for the parent and each reply into
    `publication.json`; permalinks of thread replies carry `thread_ts` and `cid`.
 5. A forced re-run posts a new parent whose first context block links the superseded post's

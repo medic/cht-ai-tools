@@ -420,21 +420,28 @@ describe('cli/stages/rollup', () => {
   });
 
   it('names a collection that failed most of its queries, and gives the gate the window and date texts', async () => {
-    await runDir.writeJson('collect.summary.json', { projects: 2, metrics: 10, windows: 40, failed: 30 });
+    await runDir.writeJson('collect.summary.json', {
+      projects: 2, metrics: 10, windows: 40, fetched: 40, reused: 0, queries: 40, failed: 30,
+    });
     const discovery = makeDiscovery();
-    discovery.projects[0].expected_load_windows = [{
+    const monthEnd = {
       id: 'month-end', kind: 'month_end', days_before: 2, days_after: 2, timezone: 'Africa/Nairobi',
       note: 'Month-end reporting; volumes rise across most projects and the sync backlog doubles for two days.',
       cycle_days: 30, scope: 'alpha.example.org',
-    }, {
+    };
+    const campaign = {
       id: 'campaign', kind: 'dates', start: '2026-09-01', end: '2026-09-30', timezone: 'UTC',
       note: 'Quarterly immunisation campaign; sync volumes double on every project of the programme.', cycle_days: 90,
-      scope: 'alpha.example.org',
-    }];
+      scope: 'beta.example.org',
+    };
+    discovery.projects[0].expected_load_windows = [monthEnd, campaign];
+    discovery.projects[1].expected_load_windows = [monthEnd, campaign];
     await runDir.writeJson('discovery.json', discovery);
     await runDir.writeJson('alpha-example-org/changes.json', [
       { project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', expected_load_window_id: 'month-end' },
-      { project_url: 'https://alpha.example.org', metric: 'cht_conflict_count', expected_load_window_id: 'campaign' },
+    ]);
+    await runDir.writeJson('beta-example-org/changes.json', [
+      { project_url: 'https://beta.example.org', metric: 'cht_conflict_count', expected_load_window_id: 'campaign' },
     ]);
     const item = makeItem();
     const ctx = ctxWith({
@@ -452,14 +459,15 @@ describe('cli/stages/rollup', () => {
     await stage.run({ ...ctx, memory: 'alpha spikes at month end (until 2026-10-02)' });
     const brief = await runDir.readJson('rollup/brief.json');
     expect(brief.notices)
-      .to.include('Collection incomplete: 30 of 40 windows failed their query; the brief covers what was collected');
+      .to.include('Collection incomplete: 30 of 40 queries failed; the brief covers what was collected');
     // The run's own notice fits the gate's two lines of 120 (revision 36), whole words only.
     const lines = brief.expected_load_notice.split('\n');
     expect(lines.length).to.be.at.most(2);
     expect(lines.every((line) => line.length <= 120)).to.equal(true);
     expect(brief.expected_load_notice).to.include('Expected-load window active: Month-end reporting');
     const gateArgs = ctx.gate.verifyBrief.firstCall.args[0];
-    expect(gateArgs.activeWindow).to.include({ id: 'month-end', cycle_days: 30 });
+    // The longest cycle among the active windows (revision 37), so every previous-cycle date is inside the span.
+    expect(gateArgs.activeWindow).to.include({ id: 'campaign', cycle_days: 90 });
     const memoryLine = 'alpha spikes at month end (until 2026-10-02)';
     expect(gateArgs.givenDateText.some((t) => t.includes(memoryLine))).to.equal(true);
     expect(gateArgs.givenText.some((t) => t.includes('until 2026-10-02')), 'given for dates only').to.equal(false);

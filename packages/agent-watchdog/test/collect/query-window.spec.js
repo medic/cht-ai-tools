@@ -97,6 +97,21 @@ describe('collect/query-window: one series, the panel\'s unit, the active window
     expect(w.values).to.deep.equal([[1, 5], [2, 7]]);
   });
 
+  it('refuses several series that all carry the exporter\'s instance instead of taking the first', async () => {
+    const exporter = {
+      __name__: 'couch2pg_progress_pending', instance: 'sql-exporter:9399', target: 'alpha.example.org',
+    };
+    const fetch = sinon.stub().callsFake(async () => matrix([
+      { metric: { ...exporter, db: 'medic' }, values: [[1, '5']] },
+      { metric: { ...exporter, db: 'medic-sentinel' }, values: [[1, '9000']] },
+    ]));
+    const query = createQueryWindow({ grafana: clientWith(fetch), runStart });
+    const w = await query(alpha, 'couch2pg_progress_pending', 'current');
+    expect(w.available).to.equal(false);
+    expect(w.values).to.deep.equal([]);
+    expect(w.unavailable_reason).to.equal('2 series, not one per project (labels: db)');
+  });
+
   it('carries the panel\'s unit from the discovery spec and counts by default', async () => {
     const fetch = sinon.stub().callsFake(async () => matrix([
       { metric: { __name__: 'cht_couchdb_disk_bytes', instance: 'alpha.example.org' }, values: [[1, '5']] },

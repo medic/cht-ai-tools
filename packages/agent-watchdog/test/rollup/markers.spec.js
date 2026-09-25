@@ -32,6 +32,7 @@ describe('rollup/markers', () => {
     expect(noticeMarker('New projects: a.example.org')).to.equal(MARKERS.newProject);
     expect(noticeMarker('Analysis incomplete: model sessions failed')).to.equal(MARKERS.warning);
     expect(noticeMarker('Alerts unavailable: timeout')).to.equal(MARKERS.warning);
+    expect(noticeMarker('Collection incomplete: 12 of 12 queries failed')).to.equal(MARKERS.warning);
     expect(noticeMarker('Something else')).to.equal('');
     expect(withMarker(MARKERS.high, 'text')).to.equal(`${MARKERS.high} text`);
     expect(withMarker('', 'text')).to.equal('text');

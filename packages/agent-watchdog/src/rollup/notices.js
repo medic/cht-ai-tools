@@ -86,18 +86,19 @@ const runBudgetNotice = (summary) => {
 };
 
 /**
- * A collection in which half or more of the windows failed their query is said on the brief (FR-073, revision 36):
- * one refused panel is that panel's problem and no notice, but a day the source answered almost nothing is never
- * a quiet heartbeat.
+ * A collection in which half or more of the queries sent failed is said on the brief (FR-073, revision 36): one
+ * refused panel is that panel's problem and no notice, but a day the source answered almost nothing is never a
+ * quiet heartbeat. The share is over the queries sent (fetched plus failed), never over every window (revision
+ * 37): on a warm volume the comparison windows are read back from disk and only the current windows are queried.
  */
 const collectionNotice = (summary) => {
   const failed = summary && Number(summary.failed);
-  const windows = summary && Number(summary.windows);
-  if (!failed || !windows || failed * 2 < windows) {
+  // `queries` counts every range query sent, the failed ones included (src/collect/windows.js).
+  const sent = Math.max(Number((summary && summary.queries) || 0), failed || 0);
+  if (!failed || failed * 2 < sent) {
     return null;
   }
-  return `Collection incomplete: ${failed} of ${windows} windows failed their query; the brief covers what was `
-    + 'collected';
+  return `Collection incomplete: ${failed} of ${sent} queries failed; the brief covers what was collected`;
 };
 
 module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice, collectionNotice };

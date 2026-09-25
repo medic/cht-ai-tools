@@ -38,6 +38,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── brief.json                 # final Brief (brief, heartbeat, degraded, failure)  [kept]
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
+│       │   ├── payload.preview.json       # a preview made after the run posted, beside the record (revision 37) [kept]
 │       │   ├── feedback.digest.json       # the digest as built, each item's provenance (FR-062, FR-085) [kept]
 │       │   └── publication.json           # channel, ts, permalinks, the report share's file id; written partial at the parent post, before its permalink, for heartbeats too (revisions 34, 36) [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]

@@ -310,3 +310,18 @@ describe('publish/digest: a note whose review failed is not acknowledged yet (FR
     expect(none).to.equal(null);
   });
 });
+
+describe('publish/digest: the unmatched notes it re-posts are masked like a prompt (revision 37)', () => {
+  it('masks e-mail addresses, phone numbers and tokens, not only Slack ids', () => {
+    const built = buildDigest({
+      runId: 'r', date: 'd', retention: RETENTION, byItem: {}, items: [],
+      records: [
+        record({ feedback_id: 'f7f7f7f7f7f7', target: 'brief', item_id: null, verdict: 'up', source_ts: '1.0' }),
+      ],
+      unmatched: [{ note: 'ping jane@clinic.example.org or +254 712 345 678, token xoxb-1234567890-abcdefghij-test' }],
+    });
+    expect(built.text).to.include('ping [address] or [address], token [secret]');
+    expect(built.text).to.not.include('jane@');
+    expect(built.digest.unmatched).to.deep.equal([{ note: 'ping [address] or [address], token [secret]' }]);
+  });
+});

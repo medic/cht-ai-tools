@@ -1,6 +1,8 @@
 // semantic-release for one package in the cht-ai-tools monorepo (research.md R-12). The analyzer and the notes
-// read the headers commitlint accepts (commitlint.config.js): the conventionalcommits preset understands the `!`
-// breaking-change marker, which the default angular preset does not (revision 36).
+// keep their default preset and read the headers commitlint accepts through these parser options: the
+// breakingHeaderPattern turns a `!` header into a breaking-change note, which the analyzer scores as a major
+// release and the notes list (revision 37). The conventionalcommits preset tried in revision 36 needs a newer
+// changelog writer than the plugins ship, and threw on every release.
 const parserOpts = {
   headerPattern: /^(\w+)(?:\((#\d+)\))?!?: (.+)$/,
   breakingHeaderPattern: /^(\w+)(?:\((#\d+)\))?!: (.+)$/,
@@ -12,8 +14,8 @@ module.exports = {
   tagFormat: 'agent-watchdog-v${version}',
   extends: 'semantic-release-monorepo',
   plugins: [
-    ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits', parserOpts }],
-    ['@semantic-release/release-notes-generator', { preset: 'conventionalcommits', parserOpts }],
+    ['@semantic-release/commit-analyzer', { parserOpts }],
+    ['@semantic-release/release-notes-generator', { parserOpts }],
     ['@semantic-release/changelog', { changelogFile: 'CHANGELOG.md' }],
     ['@semantic-release/exec', {
       publishCmd: [

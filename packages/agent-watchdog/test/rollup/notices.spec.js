@@ -92,11 +92,18 @@ describe('rollup/notices: dark hosts in the housekeeping line (FR-080, revision 
 describe('rollup/notices: a collection that failed most of its queries (FR-073, revision 36)', () => {
   const { collectionNotice } = require('../../src/rollup/notices');
 
-  it('says so when half or more of the windows failed their query, and nothing for one refused panel', () => {
-    expect(collectionNotice({ windows: 120, failed: 60 }))
-      .to.equal('Collection incomplete: 60 of 120 windows failed their query; the brief covers what was collected');
-    expect(collectionNotice({ windows: 120, failed: 4 })).to.equal(null);
-    expect(collectionNotice({ windows: 120, failed: 0 })).to.equal(null);
+  it('says so when half or more of the queries sent failed, and nothing for one refused panel', () => {
+    expect(collectionNotice({ windows: 120, fetched: 120, queries: 120, failed: 60 }))
+      .to.equal('Collection incomplete: 60 of 120 queries failed; the brief covers what was collected');
+    expect(collectionNotice({ windows: 120, fetched: 120, queries: 120, failed: 4 })).to.equal(null);
+    expect(collectionNotice({ windows: 120, fetched: 120, queries: 120, failed: 0 })).to.equal(null);
     expect(collectionNotice(null)).to.equal(null);
+  });
+
+  it('counts the share over the queries sent, so a warm volume whose every query failed is never quiet', () => {
+    // Revision 37: with stored history only the current windows are queried; the reused windows are not a denominator.
+    expect(collectionNotice({ windows: 48, fetched: 12, reused: 36, queries: 12, failed: 12 }))
+      .to.equal('Collection incomplete: 12 of 12 queries failed; the brief covers what was collected');
+    expect(collectionNotice({ windows: 48, fetched: 12, reused: 36, queries: 12, failed: 2 })).to.equal(null);
   });
 });

@@ -6,7 +6,8 @@ const { BODY_SLOTS, MAX_PROJECTS } = require('../../rollup/layout');
 
 const NAME = 'bullet_count';
 const MAX_BULLETS = BODY_SLOTS;
-const MAX_CHILDREN = MAX_PROJECTS;
+// The project lines of a slot or reply the model writes: three; the "more projects" line is code's fourth child.
+const MAX_PROJECT_LINES = MAX_PROJECTS;
 
 const check = (ctx) => {
   if (ctx.mode !== 'brief') {
@@ -21,9 +22,9 @@ const check = (ctx) => {
     }
     for (const container of [...slots, ...(ctx.layout.replies || [])]) {
       const lines = (container.entries || container.item_ids || []).length;
-      if (lines > MAX_CHILDREN) {
+      if (lines > MAX_PROJECT_LINES) {
         reasons.push(
-          `${container.kind} ${container.group} has ${lines} project lines, at most ${MAX_CHILDREN} allowed`,
+          `${container.kind} ${container.group} has ${lines} project lines, at most ${MAX_PROJECT_LINES} allowed`,
         );
       }
     }
@@ -39,4 +40,4 @@ const check = (ctx) => {
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
-module.exports = { name: NAME, check, MAX_BULLETS, MAX_CHILDREN };
+module.exports = { name: NAME, check, MAX_BULLETS, MAX_PROJECT_LINES };

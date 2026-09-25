@@ -294,7 +294,7 @@ accepted or rejected by the gate.
 | `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
 | `why_now` | string | Prose; escaped on render. |
 | `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
-| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the five-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). A relation naming the item's own metric is dropped by code when the items are normalised, not rejected (revision 24). |
+| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the two-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). A relation naming the item's own metric is dropped by code when the items are normalised, not rejected (revision 24). |
 | `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
 | `confidence` | number | 0 to 1 inclusive, checked in code. |
 | `persisting_days` | integer | Consecutive prior analysed **dates** whose ranked items contained this `item_id`, plus one (FR-009, revision 21). The date of a run is the first ten characters of its id, and the latest run of a date speaks for that date, so forced re-runs of one date count once and a re-run reports what the date's first run reported. A date whose latest run wrote no ranked items ends the streak. Set by code, never by the model; the agent stage carries a placeholder `1` because persistence is a roll-up concern it cannot know. |
@@ -346,8 +346,8 @@ Check names, fixed in code: `schema`, `projects_known`, `metrics_known`, `candid
 `numbers_match`, `dates_match`, `links_built`, `links_allowlisted`, `links_resolve`,
 `severity_rules`, `bullet_count`, `bullet_length`, `secrets_absent`, `personal_data_absent`,
 `pattern_cards_known`. The same list runs inside the analysis and before publication (FR-018).
-`bullet_count` checks the body slots (at most two) and the project lines per bullet (at most four:
-three projects and the count of the rest); `bullet_length` checks two lines of 120 characters per
+`bullet_count` checks the body slots (at most two) and the project lines per bullet (at most three;
+the count of the rest is a fourth line code writes); `bullet_length` checks two lines of 120 characters per
 bullet and per project line, and that every body item of the layout has exactly one bullet or
 project line (FR-015, FR-069; the caps as revision 35 set them, in `LAYOUT_CAPS`).
 Since revision 33 the brief checks cover the headline and the expected-load notice as they cover a
@@ -667,15 +667,23 @@ because they read one spelling only.
   union of every item's allowed values and every item's given entry, the notice also against the notice
   the run gave. Revision 36: a value the check verified against a collected sample may be quoted in the
   prose, rounded or derived, and each evidence entry is checked against the values of its own window.
-- Date matching (FR-016, revision 33): `dates_match` extracts every date the model writes (ISO
-  `YYYY-MM-DD`, `1 October`, `October 1`, with or without a year; a day-month form without a year
-  takes the year that places it at or before the run's end) from `why_now`, `suggested_check` and the
-  evidence notes of a finding, and from the headline, bullets and expected-load notice of a brief, and
-  requires each to fall within the run's windows: for a finding the span of its metric's collected
-  windows, for a brief the span from the trailing window's start to the current window's end. A date
-  the model was given (`givenText`, an item's own entry) is exempt, so a horizon the notice names may
-  be repeated. The `dashboard_ref` range is still held to the same span. The former check on evidence
-  `start`/`end` fields is gone: the findings schema never admitted them.
+  Revision 37: evidence in a percentage, multiple, sigma or hour unit matches only the metric's values
+  in that unit family, and a verified entry is quoted under the unit of the value it matched; the day's
+  restart count is a level of the current window.
+- Date matching (FR-016, revisions 33, 36 and 37): `dates_match` extracts every date the model writes
+  (ISO `YYYY-MM-DD` and timestamps, `1 October`, `October 1`, with or without a year) from `why_now`,
+  `suggested_check` and the evidence notes of a finding, and from the headline, bullets and
+  expected-load notice of a brief, and requires each to fall within the run's windows: for a finding
+  the span of its metric's collected windows, for a brief the span from the trailing window's start to
+  the current window's end, widened to the previous cycle of the longest active expected-load window.
+  A day-month phrase without a year has three readings, the years around the span's end: it is exempt
+  when any reading was given, and otherwise checked in the reading nearest the run. A date the model was
+  given is exempt: `givenText` (prompts and tool results), `givenDateText` (the session's system prompt
+  with its window notes and memory; for a brief the feedback read that day and the memory, given for
+  dates only, never for numerals) and an item's own entry. The one matcher for a written date is shared
+  with the number check (`src/verify/patterns.js`): a lowercase "may" beside a number is the verb, and a
+  day the month cannot hold is a numeral. The `dashboard_ref` range is still held to the same span. The
+  former check on evidence `start`/`end` fields is gone: the findings schema never admitted them.
 - Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
   code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
   allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,

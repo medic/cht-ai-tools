@@ -88,6 +88,29 @@ describe('corpus/scrub: the one masker for notes and memory (FR-029, FR-044, rev
     expect(maskNote(null)).to.equal('');
   });
 
+  it('masks a number that starts with a plus or a zero whatever its grouping, and a labelled one (revision 37)', () => {
+    expect(maskNote('ring 0712 345 678 or 0712345678 today')).to.equal('ring [address] or [address] today');
+    expect(maskNote('partner tel:+254712345678, Contact:+254712345678'))
+      .to.equal('partner tel:[address], Contact:[address]');
+    expect(maskNote('reach (0712) 345-678 or +1 (415) 555-0100')).to.equal('reach [address] or [address]');
+    // A date after the number is not part of it.
+    expect(maskNote('on call +254 712 345 678 (2026-09-30)')).to.equal('on call [address] (2026-09-30)');
+    expect(maskNote('on call: +254-712-345-678 - 2026-10-01 onwards'))
+      .to.equal('on call: [address] - 2026-10-01 onwards');
+  });
+
+  it('keeps ranges, values with their previous one, lists of integers, byte counts and dated forms', () => {
+    for (const text of [
+      'expect 150000-200000 docs/day during the campaign', 'p95 1234.5-2345.6 ms after the upgrade',
+      'campaign window 20.09.2026 - 24.09.2026', 'on 25.09.2026 12:00', 'backlog 150000 (120000 yesterday)',
+      'db size 10737418240 (10.0 GiB) is normal', 'samples 300 310 305', 'disk 1073741824 bytes',
+      'window 2026-09-20 - 2026-09-24', 'version 5.2.0-10700-photo-capture.29102352761-1783696221314',
+      'a bare international number 254712345678 is a value the rule cannot tell from a count',
+    ]) {
+      expect(maskNote(text), text).to.equal(text);
+    }
+  });
+
   it('reports what it masked by kind, secrets included, and touches no hostname or name', () => {
     const { text, flags } = maskPersonalData(
       'token xoxb-1234567890-abcdefghij-test on cht.north.example.org, Mark <@U024BE7LH>',

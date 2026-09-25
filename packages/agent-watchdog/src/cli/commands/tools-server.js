@@ -108,9 +108,9 @@ const buildTools = async ({
 const NO_CARDS = Object.freeze({ index: [], read: async () => '' });
 
 /**
- * The merged cards of the skill directory, or none: a card that fails to parse is logged and left out, as the SDK
- * engine's run does (src/cli/commands/run.js), so one malformed file never takes the CLI engine's tools with it
- * (revision 36).
+ * The merged cards of the skill directory, or none: when any card fails to parse the load is logged and no card is
+ * served, as the SDK engine's run does (src/cli/commands/run.js), so a malformed file never takes the CLI engine's
+ * other tools with it (revision 36).
  */
 const patternCardsFor = (config, logger) => {
   const skillDir = config && config.paths && config.paths.skillDir;

@@ -43,7 +43,7 @@ const NOTICE_MARKERS = [
   [/^Resolved /, MARKERS.resolved],
   [/^Housekeeping:/, MARKERS.housekeeping],
   [/^(First run|New project)/, MARKERS.newProject],
-  [/^(Analysis incomplete|Alerts unavailable|Degraded)/, MARKERS.warning],
+  [/^(Analysis incomplete|Collection incomplete|Alerts unavailable|Degraded)/, MARKERS.warning],
   // A standing condition (FR-014, revision 23) is a programme-wide, day-after-day fact: the pattern marker.
   [/^Standing:/, MARKERS.pattern],
 ];

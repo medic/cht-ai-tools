@@ -94,9 +94,10 @@ const createSlackPublisher = ({
     return { file_id: file.id, ts: shareTs(file, channel), permalink: file.permalink || null };
   };
 
+  const supersededLine = (permalink) => `Supersedes an earlier post for this date: <${permalink}|earlier brief>`;
   const supersededBlock = (permalink) => ({
     type: 'context',
-    elements: [{ type: 'mrkdwn', text: `Supersedes an earlier post for this date: <${permalink}|earlier brief>` }],
+    elements: [{ type: 'mrkdwn', text: supersededLine(permalink) }],
   });
 
   /**
@@ -164,9 +165,13 @@ const createSlackPublisher = ({
     };
   };
 
-  /** A heartbeat or failure brief: the text alone, reported to `onParent` like a brief's parent (revision 36). */
-  const postTextOnly = async (payload, { onParent = null } = {}) => {
-    const posted = await post({ text: payload.parent.text, metadata: payload.parent.metadata });
+  /**
+   * A heartbeat or failure brief: the text alone, reported to `onParent` like a brief's parent (revision 36), with
+   * the line that links the post it supersedes when a forced re-run says so (revision 37).
+   */
+  const postTextOnly = async (payload, { onParent = null, superseded = null } = {}) => {
+    const text = superseded ? `${payload.parent.text}\n${supersededLine(superseded)}` : payload.parent.text;
+    const posted = await post({ text, metadata: payload.parent.metadata });
     const permalink = (await reportParent(onParent, posted)) || await permalinkOf(posted.ts);
     return { channel_id: posted.channel || channel, ts: posted.ts, permalink, replies: [], slack_file_id: null };
   };
@@ -213,7 +218,7 @@ const createSlackPublisher = ({
     return postTextOnly({ parent: { text: message, metadata } });
   };
 
-  return { publish, postHeartbeat, postFailureNotice, postTextOnly, postDigest, reactToNotes };
+  return { publish, postHeartbeat, postFailureNotice, postTextOnly, postDigest, reactToNotes, permalinkOf };
 };
 
 module.exports = { createSlackPublisher, retryDelayMs, fileOf, shareTs };

@@ -76,23 +76,76 @@ const phoneMatches = (text) => {
   return out;
 };
 
-const MONTH_NAME = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?'
+// The one matcher for a written date, shared by the date check and the number check (revision 37): what one reads
+// as a date the other never counts as a numeral, and the reverse.
+const MONTHS = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6,
+  jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11,
+  november: 11, dec: 12, december: 12,
+};
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const MONTH_NAME = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?'
   + '|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
-const DATE_PHRASE_PATTERN = new RegExp(
-  `\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_NAME}\\b\\.?(?:,?\\s+\\d{4})?`
-  + `|\\b${MONTH_NAME}\\b\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b(?!\\s*[:%])(?:,?\\s+\\d{4})?`,
-  'gi',
+const ORDINAL = '(?:st|nd|rd|th)?';
+const DAY_MONTH_PATTERN = new RegExp(
+  `\\b(\\d{1,2})${ORDINAL}\\s+(?:of\\s+)?${MONTH_NAME}\\b\\.?(?:,?\\s+(\\d{4}))?`, 'gi',
+);
+const MONTH_DAY_PATTERN = new RegExp(
+  `\\b${MONTH_NAME}\\b\\.?\\s+(\\d{1,2})${ORDINAL}\\b(?!\\s*[:%])(?:,?\\s+(\\d{4}))?`, 'gi',
 );
 
 /**
- * A day-month or month-day phrase ("15 September", "Sept 16th", "October 1, 2026") is a date the date check reads,
- * not a numeral the number check should count (revision 36); "may" is a month only when written as a name.
+ * Whether a day and a month name make a date: "may" is a month only when written as a name, in either order, and
+ * a day the month never holds ("31 September") is a numeral beside a word, not a date (revision 37).
  */
-const stripDatePhrases = (text) => String(text || '').replace(DATE_PHRASE_PATTERN, (phrase) => (
-  /^may\b/.test(phrase) ? phrase : ' '
-));
+const isDatePhrase = (day, monthName) => {
+  const month = MONTHS[monthName.toLowerCase()];
+  if (!month || (monthName.toLowerCase() === 'may' && monthName !== 'May')) {
+    return false;
+  }
+  return day >= 1 && day <= DAYS_IN_MONTH[month - 1];
+};
+
+/**
+ * Every day-month or month-day phrase in a text ("15 September", "Sept 16th", "October 1, 2026"), with its day,
+ * month number and year when written.
+ * @returns {Array<{ phrase: string, index: number, day: number, month: number, year: number|null }>}
+ */
+const datePhrases = (text) => {
+  const source = String(text || '');
+  const found = [];
+  for (const match of source.matchAll(DAY_MONTH_PATTERN)) {
+    if (isDatePhrase(Number(match[1]), match[2])) {
+      found.push({
+        phrase: match[0], index: match.index, day: Number(match[1]), month: MONTHS[match[2].toLowerCase()],
+        year: match[3] ? Number(match[3]) : null,
+      });
+    }
+  }
+  for (const match of source.matchAll(MONTH_DAY_PATTERN)) {
+    if (isDatePhrase(Number(match[2]), match[1])) {
+      found.push({
+        phrase: match[0], index: match.index, day: Number(match[2]), month: MONTHS[match[1].toLowerCase()],
+        year: match[3] ? Number(match[3]) : null,
+      });
+    }
+  }
+  return found;
+};
+
+/** The text with every date phrase blanked, so the number check counts no day as a numeral (revision 36). */
+const stripDatePhrases = (text) => {
+  const source = String(text || '');
+  const spans = datePhrases(source).sort((a, b) => b.index - a.index);
+  let out = source;
+  for (const { index, phrase } of spans) {
+    out = `${out.slice(0, index)} ${out.slice(index + phrase.length)}`;
+  }
+  return out;
+};
 
 module.exports = {
+  datePhrases,
   stripDatePhrases,
   SECRET_PATTERNS,
   EMAIL_PATTERN,

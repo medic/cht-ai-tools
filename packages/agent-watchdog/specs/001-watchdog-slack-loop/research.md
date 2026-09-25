@@ -568,7 +568,7 @@ channel membership.
 `conversations.replies` call (paged) per previous parent, one `reactions.get` with `full: true` per
 bot message, `conversations.history` only as the fallback when a publication record is missing.
 Map `+1`/`thumbsup` to `up`, `-1`/`thumbsdown` to `down`, absent-but-previously-recorded reactions
-to `retracted`. Request the four scopes above and invite the bot to `#agents`.
+to `retracted`. Request the four scopes above and invite the bot to the configured channel.
 
 **Alternatives considered**: scanning `conversations.history` every run (rejected: unnecessary
 calls and dependence on message ordering); trusting embedded `reactions[]` without `reactions.get`
@@ -610,7 +610,7 @@ Each item becomes a `smoke/` script and a task. None runs in the unit-test suite
 | S-5 | SDK hooks still fire when the subprocess environment sets `CLAUDE_CODE_SIMPLE=1`; if not, bare semantics are obtained from `settingSources: []` and `tools: []` alone | The type documentation says "session hooks still run" under bare mode but does not define session hooks |
 | S-6 | A Viewer service-account token on the hosted watchdog can call the datasource proxy (`query_range`, `targets`), `GET /api/search`, `GET /api/dashboards/uid/:uid`, `GET /api/annotations`, and whether it can call `GET /api/datasources` | Permission behaviour was inferred from source |
 | S-7 | `viewPanel=panel-<id>` opens the panel on Grafana 12.3.3 and the link resolves with `var-cht_instance` | Parameter is undocumented |
-| S-8 | A file uploaded privately with `files.uploadV2` renders in `#agents` through an `image` block with `slack_file.id`, and registered metadata round-trips through `conversations.replies` with `include_all_metadata` | Rendering and metadata registration are only observable live |
+| S-8 | A file uploaded privately with `files.uploadV2` renders in the configured channel through an `image` block with `slack_file.id`, and registered metadata round-trips through `conversations.replies` with `include_all_metadata` | Rendering and metadata registration are only observable live |
 | S-9 | Langfuse v5 `getTraceUrl(traceId)` returns a link that opens the run's trace, and `forceFlush` completes before exit in the container | Network behaviour |
 | S-10 | `smoke/agent-parity.js`: one recorded project through both engines produces identical `findings.pass<n>.json` after gate normalisation | The whole point of FR-050 |
 | S-11 | `smoke/render.js` inside the image with a read-only root filesystem and writable `/tmp` only (no browser since revision 30; `smoke/container.js` runs it) | Which paths a render touches is only seen with the root filesystem read-only |
@@ -1628,8 +1628,8 @@ image adds a Chromium render, an upload and 600 KB a day for nothing a reader us
 image is retired: the render stage writes `report.html` only, the payload carries `image: null`, the
 publisher uploads nothing before the parent, and the Slack sequence loses its first step. Dashboard or
 panel captures, which is what the image was once imagined to be, remain a later story (Clarifications);
-`src/render/browser.js`, `AGENT_WATCHDOG_CHROMIUM_PATH` and the container's Chromium stay in place for it
-and can be removed if that story is declined, which would also lower the container's memory ceiling.
+`src/render/browser.js`, `AGENT_WATCHDOG_CHROMIUM_PATH` and the container's Chromium stayed in place for it
+until revision 30 removed all three (FR-086), which also lowered the container's memory ceiling.
 
 **The report as the document.** With the report the artefact people open, three things follow. (1)
 Every reference in it becomes a link when the reader can follow it: each item links its dashboard panel
@@ -2120,8 +2120,11 @@ reaching the roll-up prompt through three paths (the feedback text, the unmatche
 item-history tool) and the outcome files distillation reads.
 
 **Decisions**: `maskNote` masks Slack identifiers, e-mail addresses, phone numbers and secrets and nothing
-else, on every path to a prompt; a phone number carries a plus or a separator and holds no ISO date, so
-`2026-09-20 - 2026-09-24` and `300 310 305` are not phones; the memory update is cut back to the same
+else, on the note paths that feed a session or the roll-up (the analysis feedback block, the roll-up's
+feedback text and unmatched notes, the item-history tool, the outcome files; the horizon parse and the
+review mask Slack ids only, since they read the note's figures); a phone number carries a plus or a
+separator and holds no ISO date, so `2026-09-20 - 2026-09-24` and `300 310 305` are not phones (widened
+and narrowed in revision 37, R-42); the memory update is cut back to the same
 identifiers so byte counts, decimals, dates and owners' names survive. Only no response or a 502, 503 or
 504 counts toward "unreachable" and only a success resets the count; a 4xx or 500 is the expression's
 problem, and a run in which half or more of the windows failed their query says so in a collection notice
@@ -2149,3 +2152,51 @@ lint's limits in a message-only rewrite of the unpushed history, trees unchanged
 **Rejected or deferred**: validating the feedback stage's calls against the Cost Record schema (nothing
 reads them by shape; the shape is now one, with `kind`); a `≤` on the footer's cost when it is an estimate
 (R-39); a second digest line for a note whose review is retried (the awaiting line already says it).
+
+## R-42. The third review: what revision 36 tested through spies, and the rules it set too loosely
+
+**Evidence**: the third review (2026-09-25) re-checked the 66 open findings (43 fixed, 10 partly, 3 fixes
+that introduced a bug, 2 not fixed, 5 accepted decisions) and found 30 new ones. The top five were revision
+36's: the conventionalcommits preset put on the semantic-release plugins, whose installed changelog writer
+cannot render it, so the notes step threw on every release while pull-request CI stayed green; the analysis
+gate adapter, which dropped the texts given for dates and built its resolver without the egress list, so
+neither fix reached a production run (the tests used a spy gate and a resolver built by hand); the
+collection notice divided by every window, reused ones included, so a warm volume whose every query failed
+was one failure in four and posted a quiet heartbeat; a one- or two-digit number before a lowercase "may"
+stripped as a date phrase and checked by neither check; verified evidence licensing prose under the unit the
+model wrote, so a sigma relabelled "x" licensed "3x" and "300%". Behind them: the shared series picker took
+the first of several series when none carried the project's instance, the phone rule of revision 36 let a
+labelled or space-grouped number through while masking ranges and dotted dates, a degraded brief published
+the gate's raw reasons with the digits it refused, and the digest re-posted unmatched notes with only Slack
+ids masked.
+
+**Decisions**: both semantic-release plugins keep their default preset and read the CHT headers through the
+parser options, whose breaking-header pattern yields the breaking-change note; the test runs the installed
+analyzer and notes generator offline on a plain, a scoped and a `!` header. Every production-path fix is
+tested through the adapter or the command it runs in, with the real verification module. The collection
+notice's share is over the queries sent, which `collect.summary.json` records as `queries`. One date matcher
+serves both checks: a lowercase "may" beside a number is the verb in either order, and a day the month
+cannot hold ("31 September") leaves its numeral to the number check. Evidence is matched within unit
+families (percent, multiple, sigma, hours; everything else a level in the metric's unit) and a verified
+entry carries the unit of the value it matched; the restart count joins the current window's levels. Several
+series without the project's instance label are refused as a breakdown. A phone number is a run of nine or
+more digits starting with a plus or a zero, whatever its grouping, or grouped by brackets, dots or dashes
+into parts of at most four digits; ranges, bracketed pairs, integer lists and dated forms stay, a label
+before the number does not hide it, and a date after it is split off. A bare international number without a
+plus (`254712345678`) is left as a value: it cannot be told from a count, and the residual risk is a number
+its author already posted in the same channel. The degraded brief names the refusing checks in the words the
+analysis notices already use. The alerts reply gives up its notices last, as the contract said and the code
+did not. The commit-convention deviation is recorded in the plan's Complexity Tracking with its expiry, the
+merge of this branch, after which the commitlint scope becomes mandatory.
+
+**The documents**: the quickstart lost its fourteen per-revision sections in favour of three topic sections
+an operator reads; the revision history stays in the plan deltas and here. References to files that no
+longer exist were removed or corrected (the contract schema copies, the browser renderer, the constitution's
+example file pair, two agent file names). The spec's one production run figure and the channel name are
+gone from the specification and the history; "Medic's hosted CHT Watchdog" stays as the organisational
+context it is.
+
+**Rejected or deferred**: the pure simplifications scored 15 to 25 (a shared span engine for the two maskers,
+the test-only alias of the text-only post, the duplicate string walk after sanitising); a per-file skip of a
+malformed pattern card (the SDK engine's run and the tools server both serve none and log it, and the
+comment now says so).

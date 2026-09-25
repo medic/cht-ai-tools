@@ -20,6 +20,8 @@ const METRIC_NAME = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
 // shape: nothing multi-line, nothing longer than the longest key a dashboard could hold.
 const METRIC_KEY_MAX = 200;
 const UNKNOWN_METRIC = 'unknown metric; name one collected this run, as the candidates and computed changes spell it';
+const QUERY_UNKNOWN_METRIC = 'unknown metric; query_metric takes a bare metric name from the base list, such as '
+  + 'cht_conflict_count';
 const WINDOWS = enums.WindowName.options;
 const QUERY_CAP = 20;
 const ROLE_LABEL = 'a reviewer';
@@ -126,7 +128,7 @@ const createWatchdogTools = ({
       },
       handler: (args) => run('query_metric', args, async () => {
         if (!validMetric(args.metric)) {
-          return { error: UNKNOWN_METRIC };
+          return { error: QUERY_UNKNOWN_METRIC };
         }
         if (!WINDOWS.includes(args.window)) {
           return { error: `unknown window; expected one of ${WINDOWS.join(', ')}` };

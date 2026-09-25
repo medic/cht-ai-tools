@@ -10,8 +10,7 @@ to Slack unless the step says so.
 ## Prerequisites
 
 - Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
-- No browser: nothing has rendered an image since revision 24, and the browser left the image and the
-  dependencies in revision 30.
+- No browser: the report is HTML and nothing renders an image.
 - Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY` (or, with
   `AGENT_WATCHDOG_ENGINE=cli`, a `claude` login and the key left blank); a Grafana service-account
   token with the Viewer role on the watchdog you point at (`AGENT_WATCHDOG_GRAFANA_TOKEN`,
@@ -54,7 +53,7 @@ agent-watchdog run --dry-run --date "$(date -u -d yesterday +%F)" > payload.json
 
 Expected: exit 0; `payload.json` is the exact Slack payload (parent, replies, report share)
 with `slack_file_id: null`; under `.data/runs/<date>/` every artefact of a real run exists,
-including `rollup/report.html` and `run.json` with `status: previewed` (no image since revision 24); the
+including `rollup/report.html` and `run.json` with `status: previewed`; the
 footer contains the trace link and the cost in USD; nothing was posted. The log carries no
 `collect.query_failed` warning: derived expressions use the trailing subquery form and the
 dashboards' `$interval` is resolved (FR-071); a `collect.unresolved_variable` warning names any
@@ -163,10 +162,12 @@ build, `--version`, `check https://example.invalid` exiting 69, and the report r
 agent-watchdog run --date <date>
 ```
 
-Only against the configured `#agents` channel with `AGENT_WATCHDOG_DRY_RUN=false`. Expected: one
-parent message from `agent-watchdog` with at most five bullets and the footer; the report shared into
-the thread and one threaded reply per high item and alert group (revisions 24 and 25); `publication.json` holds `ts` and permalinks; exit 0. A second run for the
-same date exits 75 unless `--force` is given, and a forced run links the superseded post.
+Only against the configured channel (`AGENT_WATCHDOG_SLACK_CHANNEL_ID`) with `AGENT_WATCHDOG_DRY_RUN=false`.
+Expected: one parent message from `agent-watchdog` with the headline, at most two programme bullets and the
+footer; the report shared into the thread, one reply per further programme with two or more flagged
+projects, one `Other` reply and one alerts reply; `publication.json` holds `ts` and permalinks; exit 0. A
+second run for the same date exits 75 unless `--force` is given, and a forced run links the superseded post,
+a heartbeat too.
 
 ## 12. Feedback acknowledged (User Story 7)
 
@@ -189,10 +190,10 @@ by host pattern, one `.dev` host ignored. For a preview against a real watchdog,
 `ignore` in the `projects.yaml` under `AGENT_WATCHDOG_CONFIG_DIR` (contracts/config-files.md) and run
 `agent-watchdog run --dry-run --date <date> > payload.json`.
 
-Expected: `rollup/layout.json` holds at most five slots; a programme with several flagged projects is
-one `group` bullet ("North Programme: 3 projects with issues") whose sub-bullets are the model's one-line
-words behind the project code writes (revision 26), rendered in the parent's section as indented `◦` lines and as a nested list in the report;
-every high project item still has a thread reply (revision 25); `discovery.json` lists ignored hosts under `ignored` and
+Expected: `rollup/layout.json` holds at most two slots; a programme with several flagged projects is
+one `group` bullet ("North Programme: 3 projects with issues") whose project lines are the model's words
+behind the project code writes, rendered in the parent's section as indented `◦` lines and as a nested list
+in the report; `discovery.json` lists ignored hosts under `ignored` and
 they appear nowhere else; the gate report shows `bullet_count`, `bullet_length` and `thread_order`
 passing against the layout. `node smoke/grafana.js --hosts` prints every discovered host with its
 group, which is how the placeholder patterns in `projects.yaml` get replaced; `node smoke/slack.js --yes`
@@ -210,180 +211,64 @@ watchdog, `node smoke/grafana.js --alerts` lists the rules and instances the Vie
 states and paging (S-14) and prints the alert-list links to open (S-15); `agent-watchdog run --dry-run` with the
 alerting endpoints unreachable posts nothing but leaves an "Alerts unavailable" notice in the payload.
 
-## 14. Thread economy and the report (revision 23)
+## 14. What the gate refuses
 
-Preview a recorded day with many items (the alerts-day fixture, or a hosted preview) and open
-`rollup/payload.json`: `replies` held one entry per body item until revision 25, now one per high item (section 16; at most
-twenty-five) and one per alert group, `report` names `rollup/report.html` with a code-built
-`initial_comment`, and the parent's footer counts the items that are only in the report. Open
-`rollup/report.html`: every item is numbered by rank with its id, related items sit under the item they
-relate to, and standing conditions are listed per host. Then run the feedback stage against the Slack
-fixtures: a note "#2 :-1: expected until 1 October" is recorded on the item ranked 2 with verdict `down`
-and the horizon, and a note that is only a thumbs is recorded as unmatched.
+Every draft, of a finding and of the brief, passes the same deterministic checks before anything is kept
+or posted (`src/verify/`). Numbers: every numeral in prose must equal a computed value of the item's metric,
+a value the model was given in its session, or a difference, ratio or percentage of two values it may quote;
+each evidence entry must match its own window's values, or the metric's values in its unit family when it is
+a percentage, multiple, sigma or hours; a day-month phrase is a date, not a numeral, unless its month is a
+lowercase "may" or its day is one the month cannot hold. Dates: every date the model writes must fall
+within the run's windows unless the run gave it, in a prompt, a tool result, the system prompt's window notes
+and memory, or the brief's feedback and memory; a yearless date is read as the run read it. Links: only
+links code built and references on the allow-list that appeared in a tool result are requested, and one
+outside the egress list is recorded as not requested. Personal data: a Slack id, an e-mail address or a
+phone number on the published surface is refused, and notes are masked before they reach a prompt. A brief
+that fails every attempt degrades to the deterministic one, whose notice names the refusing checks in words
+and never their reasons. To see the reasons on a stored run: `verification.pass<n>.json` under the project
+and `rollup/verification.draft<n>.json`.
 
-## 15. One programme, links and rounding (revision 24)
+## 15. What a run records and posts
 
-Preview one programme: `agent-watchdog run --dry-run --group "North Programme"` (a `projects.yaml` group
-label; `--project` still names single hosts). `discovery.json` still lists every project, but only the
-programme's projects have a directory, the brief's bullets, standing and housekeeping lines cover only
-them, and `alerts.classified.json` stays whole. Open `rollup/report.html`: items are numbered by rank
-with the host and metric first (the labelled meta line of revision 24 was replaced by the original header in revision 25, section 16);
-each item, standing host and alert group links its hosted panel or alert list; the footer links the
-specification (the prompts until revision 25), the configuration and the trace and repeats the citation line; evidence shows at most three
-decimals. Run the same preview with `AGENT_WATCHDOG_REPORT_LINKS=none` and the report carries no
-link. `rollup/brief.png` is no longer written and the payload's `image` is null.
+Collection: a panel Prometheus refuses fails its own windows and nothing else; the source is unreachable
+only when queries get no answer three times running; when half or more of the queries a run sent failed,
+the brief carries `Collection incomplete` with a warning marker (`collect.summary.json` holds the counts).
+The heartbeat says how many candidates were assessed; a session a bound stopped is an incomplete analysis
+the brief names, and an estimated charge reads `up to $X spent`; `run.json` carries the run's cost, the
+feedback stage's calls included, and `run --stage rollup` carries the recorded spend. Publish:
+`rollup/publication.json` appears as soon as the parent is posted (`partial: true`), before its permalink
+is known, for heartbeats too; a second `--stage publish` on that run exits 75 without rewriting anything;
+a preview of a posted run writes `rollup/payload.preview.json` beside the record; a forced run links the
+post it supersedes. The alerts reply drops whole programme lines before it would cut a link and gives up
+its notices last. Feedback: a note's record keeps its horizon and figures; a note whose review failed stays
+unacknowledged for up to three runs; the digest lists unmatched notes with their identities, addresses and
+numbers masked; memory keeps byte counts, ranges and dates. Tools: a tool's error answer never repeats what
+the model passed. Flags: `run --stage ''` and `run --date 2026-13-01` exit 64 before a run directory exists;
+`--engine` is accepted by `distill` and `calibrate`. A run from the released image names the image's
+version and revision in `run.json`, in `replay` and in `egress`.
 
-## 16. One footer, threads for what needs a person, a notice in words (revision 25)
-
-Preview a run (`agent-watchdog run --dry-run`) with `AGENT_WATCHDOG_SPECS_URL` set (it replaced
-`AGENT_WATCHDOG_PROMPTS_URL`; the run refuses to start without it). The post's footer reads `specs ·
-configuration · trace · cost $X · run <id> · N more items in the report (thread)`, and the report's footer
-is the same line with the citation sentence under it. `rollup/payload.json` carries one reply per high
-item and one per alert group and none for a medium or low item; the report share's comment counts them.
-Open `rollup/report.html`: the original design, each item headed `#N SEV host · metric · new today` with
-its id set apart and `confidence NN%` on the next line, window names as recorded (`previous_day`), the
-panel, standing and alert links of revision 24, evidence notes rounded. Restrict the run with `--group`
-and the checked line counts the programme's projects, not every project discovered. When a project's
-analysis was refused on every attempt the notice reads `Analysis incomplete: no findings for 1 of 3
-projects (host): the verification gate refused the model's analysis on every attempt, mostly for digits
-that looked like a phone number`.
-
-## 17. The project first on every body line (revision 26)
-
-Preview a run whose programme has several flagged projects. Every sub-bullet under the programme
-bullet reads `north-a: <the change in words>` and a single-project bullet reads
-`alpha.example.org: <the change in words>`; the host is written by code, the words are the model's,
-and neither carries a metric key. `rollup/prompt.md` shows the layout the model received with a
-`prefix` and a `budget` for every body item. A draft whose line would exceed 120 characters with the
-prefix is refused by the gate with the prefix named in the reason.
-
-## 18. A failure notice that quotes nothing it should not (revision 27)
-
-Make a run fail after startup with an error whose message carries a token, for example by pointing
-`AGENT_WATCHDOG_GRAFANA_URL` at a host that answers with an error page quoting the request. The failure
-notice in Slack reads `agent-watchdog run <id> failed at stage <stage>: ...` with every secret, e-mail
-address and phone-shaped run replaced by `[redacted]`; the same message is in the log untouched by the
-gate but with secret-named keys redacted.
-
-## 19. The post and its three replies (revision 28)
-
-Preview a run with items in several programmes. The parent reads: the whole headline in bold, at most two
-programme bullets each with at most three project lines (`north-a: …`) and a `+N more projects in the
-report` line, then the standing and analysis notices and the footer; no alert bullet. `rollup/payload.json`
-`replies` holds, in order, one `programme` reply per remaining programme with two or more flagged projects,
-one `other` reply, and one `alerts` reply whose text has one line per programme with its firing count,
-categories, new and stale counts and a link, then the link to every firing alert, then the housekeeping and
-resolved lines. `rollup/layout.json` has `slots`, `replies` and `entries` (each project line's lead id, the
-items it covers, its prefix and budget). A draft with a headline over two lines, more than one line per
-entry, or a line that exceeds its budget is refused with the reason naming the entry.
-
-## 20. A thread read as one conversation, and the digest that shows where it acted (revision 29)
-
-Leave two notes on one item in yesterday's thread, the second correcting the first ("expected until 1
-October", then "correction: expected until 25 September"), and run the next day. `feedback.ingested.json`
-`horizons` holds one entry for the item with the corrected date and `author_count: 2`; the project's
-`suppressed.json` names that date; `feedback.jsonl` keeps each note with its own `horizon`. The review made
-one `feedback-review` call for the two notes (`feedback.ingested.json` `review.calls` has one entry for
-them), and both records carry the same `classification` and, when a lesson was found, the same `proposal_id`. In the digest (`rollup/feedback.digest.json` and the
-payload's `digest.text`) each item has a line saying how the feedback was used: for a project that was
-analysed, `in today's analysis prompt for <host> (<slug>/prompt.pass1.md, N of M lines quoted)` with the
-run's trace link and the quoted `"kind"`, `"verdict"`, `"note"` and `"horizon"` lines exactly as they stand
-in that file; for a project whose candidates the horizon held back, `applied before analysis: candidates
-suppressed until <date> (<slug>/suppressed.json)`; otherwise `not used today`. Every quoted line can be found
-verbatim in the prompt file, and the trace link opens the run in Langfuse at the project's pass-1
-generation when the tracer returned its id.
-
-## 21. The hardened image, and the egress list for the platform (revision 30)
+## 16. The container, on the platform and on your machine
 
 `node --env-file=.env bin/agent-watchdog.js egress` prints every destination a run contacts, host and port
-with its purpose and where it comes from; `--format hosts` prints one host per line for a network policy.
-Nothing else is contacted: a stage that tried would fail the run with exit 69 and an `egress.refused` log
-line naming the host and port (try it by pointing `AGENT_WATCHDOG_GRAFANA_URL` at one host and a stored
-`discovery.json` at another). With Docker, `node smoke/container.js` builds the image and runs it as the
-platform will: root filesystem read-only, every capability dropped, no privilege escalation, user
-`10001:10001`, and no network for the checks that need none; it prints the version, lists the egress for a
-placeholder configuration, exits 69 for `check https://example.invalid` and renders the fixture report under
-`/tmp`. The reference manifests under `deploy/` show the CronJob's security context, mounts, limits and
-deadline and an egress policy whose names are that list; `npm test` keeps them in step with the contract.
+with its purpose; `--format hosts` prints one host per line for a network policy. Nothing else is contacted:
+a stage that tried would fail the run with exit 69 and an `egress.refused` log line naming the host and port,
+and a redirect off the origin carries no credentials. With Docker, `node smoke/container.js` builds the
+image and runs it as the platform will: root filesystem read-only, every capability dropped, no privilege
+escalation, user `10001:10001`, no network for the checks that need none; the reference manifests under
+`deploy/` show the CronJob's security context, mounts, limits and deadline and an egress policy whose names
+are that list, and `npm test` keeps them in step with the contract.
 
-## 22. The same container on your machine (revision 31)
+`docker compose build` builds the image as CI does, on x64 and arm64 alike; `docker compose run --rm
+agent-watchdog --version` runs it as the CronJob will: user 10001, read-only root, no capabilities, `/tmp` a
+tmpfs, `/data` a named volume. Your `.env` supplies secrets and endpoints (comments on their own lines, as in
+`.env.example`) and `config/local` the policy files. `docker compose run --rm agent-watchdog run --dry-run
+--date <date> > payload.json` previews without posting; without `--dry-run` it posts. `docker compose
+--profile offline run --rm offline run --dry-run --stage analyze --date <date>` runs a stage that needs no
+network with none at all. Read an artefact back with `docker compose run --rm --entrypoint cat
+agent-watchdog /data/runs/<id>/rollup/report.html`.
 
-`docker compose build` builds the image as CI does; `docker compose run --rm agent-watchdog --version` runs it as the
-CronJob will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/data` a named volume. Your `.env`
-supplies secrets and endpoints (comments on their own lines, as in `.env.example`: Compose keeps text after `#`
-on a value line as part of the value, Node drops it); `config/local` supplies the policy files. `docker compose run --rm agent-watchdog run
---dry-run --date <date> > payload.json` previews without posting; `docker compose run --rm agent-watchdog run --date
-<date>` posts. `docker compose --profile offline run --rm offline run --dry-run --stage analyze --date <date>` runs a
-stage that needs no network with none at all (`replay` still calls the model, so it runs in the default service).
-Read an artefact back with `docker compose run --rm --entrypoint cat agent-watchdog /data/runs/<id>/rollup/report.html`.
-
-## 23. Your own Claude login in the container (revision 32)
-
-For individual use on a Claude subscription instead of an API key: `docker compose --profile login run --rm login`
-runs `claude auth login` (the Agent SDK's own Claude Code binary, on PATH in the image) and walks you through the
-browser sign-in; the login is kept in the named volume `agent-watchdog-login`, the runtime user's home. Then run
-with the CLI engine and no key: `docker compose run --rm -e AGENT_WATCHDOG_ENGINE=cli -e ANTHROPIC_API_KEY=
-agent-watchdog run --dry-run --date <date>`; the log's `agent.cli_auth` line says `mode: login` and
-`credentials_found: true`. `docker compose --profile login run --rm login auth status` shows the login,
+For individual use on a Claude subscription instead of an API key: `docker compose --profile login run --rm
+login` runs `claude auth login` and keeps the login in the named volume `agent-watchdog-login`; then run
+with `-e AGENT_WATCHDOG_ENGINE=cli -e ANTHROPIC_API_KEY=` and the log's `agent.cli_auth` line says
+`mode: login`. `docker compose --profile login run --rm login auth status` shows the login and
 `auth logout` removes it. A key in `.env` wins over the login, so leave it blank for this mode.
-
-## 24. What the gate refuses since the review (revision 33)
-
-A finding's evidence is checked, not trusted: each `{ window, value }` must be a computed value of the metric or a
-sample the run collected in that window, and evidence never widens what the prose may quote. The headline and the
-expected-load notice are checked as bullets are (numbers against every item's values, links, length, hosts,
-personal data), and every date the model writes must fall within the run's windows unless the run gave it. A
-Slack mention or user id anywhere on the published surface is refused, and it is masked before any note reaches a
-prompt; the memory update is masked of people and addresses before it is stored. The link resolver now requests
-only code-built links and model references that are allow-listed and appeared in a tool result (`links_resolve`
-records the rest as `not requested`), an egress refusal during resolution fails the run with 69, and the guard
-follows a redirect only to a listed destination, for `run`, `tools-server`, `calibrate`, `distill` and `replay`
-alike. To see the reasons on a stored run: `verification.pass<n>.json` under the project and
-`rollup/verification.draft<n>.json`.
-
-## 25. What a run says about itself since the review (revision 34)
-
-The heartbeat says how many candidates were assessed and that none was flagged; a session the run deadline cut
-off is an incomplete analysis the brief names; the degraded notice counts the drafts it refused. Costs: a
-session killed at the harness turn cap or a turn that timed out is charged the rest of its grant and
-`cost_estimated: true` appears on `passes.json`, `agent.summary.json` and `run.json`; the feedback stage's
-calls are in the run's cost; `run --stage rollup` carries the agent's recorded spend and resolves links. The
-roll-up reads the last pass the gate accepted, so `findings.pass2.json` rejected by the gate drops nothing
-accepted in pass 1. Feedback: a note's record keeps `expected_max`, `observed_value` and `horizon_source`; a
-failed model parse is logged as `feedback.parse_failed` and retried by the next run with a model; a note whose
-review failed stays unacknowledged for up to three runs; outcomes are appended only for items with new
-feedback. Publish: `rollup/publication.json` appears as soon as the parent is posted (`partial: true`) and a
-second `--stage publish` on that run exits 75 instead of posting again; the alerts reply drops whole
-programme lines before it would cut a link. Tools: `get_windows` resolves a bare metric name to the collected
-key and refuses an ambiguous one; `query_metric` refuses several series, carries the panel's unit and knows
-`previous_cycle` under an active window; the CLI engine's tools server serves the merged pattern cards.
-
-## 26. Before the pull request (revision 35)
-
-`docker compose build` works on an arm64 machine as on x64: the image links the runtime package of its own
-architecture. A run from the released image names the image's version and revision in `run.json` and in
-`agent-watchdog --version`. A flag that is not the command's own exits 64 naming it (`replay --stage`,
-`purge --force`); `--log-level error` and `--log-format pretty` apply to any command; `run --stage colect` or
-`run --date 2026-9-24` exits 64 before a run directory exists; `check http://host` says to give the https address.
-`purge` now ages `runs-replay/` like `runs/`. `replay`, `distill` and `calibrate` print their result before the
-trace flush and log a rejected flush without changing the exit code. The entity schema refuses a third body slot
-or a fifth entry, and the brief schema the model reads no longer speaks of one-line sub-bullets
-(`npm run schema:build` regenerated `schema/brief.schema.json`; `npm run replay:eval` is the diff). The commit
-header pattern accepts `feat(#12)!: subject`.
-
-## 27. After the re-review (revision 36)
-
-A panel Prometheus refuses (a 422, a 500) fails its own windows and nothing else; the run goes on, and when
-half or more of the windows failed their query the brief carries `Collection incomplete: N of M windows
-failed their query`. A yearless date the model restates from a horizon it was given passes the gate; a
-timestamp in a tool result counts as a date it was given; a day-month phrase is not a numeral; a figure the
-gate verified in the evidence may be quoted rounded. Notes are masked of Slack ids, e-mail addresses and
-phone numbers on every path to a prompt, and the memory keeps its byte counts, decimals and dates. A redirect
-off the origin carries no credentials and a step down to http is refused; a link on a listed host at another
-port is recorded as not requested instead of failing the run. `rollup/publication.json` appears before the
-parent's permalink is known, for heartbeats too, and `run --stage publish` on a posted run refuses before it
-rewrites anything. `run --stage ''` and `run --date 2026-13-01` exit 64; `distill --engine cli` and
-`calibrate --engine cli` are accepted. The alerts reply keeps every programme line, the notices and the link
-to all alerts on a day when one programme's filtered link would not fit. A stopped session's estimated charge
-reads `up to $X spent`. A tool's error answer never repeats what the model passed. The eighteen commits from
-before the first review were rewrapped to the lint's limits in a message-only rewrite; trees are unchanged.

@@ -430,6 +430,26 @@ describe('publish/payload: a programme whose filtered link is too long keeps its
     expect(reply.text).to.not.include('…');
   });
 
+  it('gives up the last programme line before the notices and the link to every alert (revision 37)', () => {
+    const few = [{ ...alertGroupOf([classified('sentinel', 'one.example.org')]), group: 'Other' }];
+    const links = buildAlertsLinks({ grafanaUrl: 'https://watchdog.example.org', alertGroups: few });
+    const dark = Array.from({ length: 115 }, (_, i) => `dark-${String(i).padStart(3, '0')}.example.org`).join(', ');
+    const long = [
+      `Housekeeping: 230 alerts stale for 24+ days on 115 hosts with no data (${dark}): remove them`, notices[1],
+    ];
+    const payload = buildPayload({
+      brief: makeBrief({ ...brief, notices: long }), items: [item], runId: '2026-09-18', date: '2026-09-18',
+      audience: 'internal', channel: 'C123', alertGroups: few, alertsLinks: links,
+    });
+    const reply = payload.replies.find((r) => r.kind === 'alerts');
+    expect(reply.text.length).to.be.at.most(3000);
+    expect(reply.text).to.include('Housekeeping: 230 alerts stale');
+    expect(reply.text).to.include('Resolved since the previous run');
+    expect(reply.text).to.include(`<${links.all}|all firing alerts>`);
+    expect(reply.text).to.include('+1 more programmes in the report');
+    expect(reply.text).to.not.match(/\n• Other: /);
+  });
+
   it('keeps a programme link that fits', () => {
     const few = [{ ...alertGroupOf([classified('sentinel', 'one.example.org')]), group: 'Other' }];
     const links = buildAlertsLinks({ grafanaUrl: 'https://watchdog.example.org', alertGroups: few });

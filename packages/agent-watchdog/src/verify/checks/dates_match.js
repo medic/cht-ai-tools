@@ -7,21 +7,12 @@
 // notes and memory, or the roll-up's feedback and memory sections) and an item's own entry.
 const { sameMetric } = require('../metric-key');
 const { windowBounds } = require('../../collect/windows');
+const { datePhrases } = require('../patterns');
 
 const NAME = 'dates_match';
 
-const MONTHS = {
-  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6,
-  jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11,
-  november: 11, dec: 12, december: 12,
-};
-const MONTH = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?'
-  + '|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
-const ORDINAL = '(?:st|nd|rd|th)?';
 // A timestamp's `T` follows the day with no word boundary, so both forms are read (revision 36).
 const ISO_DATE = /\b(\d{4})-(\d{2})-(\d{2})(?=\b|T)/g;
-const DAY_MONTH = new RegExp(`\\b(\\d{1,2})${ORDINAL}\\s+(?:of\\s+)?${MONTH}\\b\\.?(?:,?\\s+(\\d{4}))?`, 'gi');
-const MONTH_DAY = new RegExp(`\\b${MONTH}\\b\\.?\\s+(\\d{1,2})${ORDINAL}\\b(?!\\s*[:%])(?:,?\\s+(\\d{4}))?`, 'gi');
 
 const ms = (t) => Date.parse(t);
 
@@ -39,11 +30,7 @@ const utcDate = (year, month, day) => {
  * The readings of a day and month: one when a year is written, else the three years around the span's end, so a
  * date the model restates from a horizon ("1 October") is read as the run read it (revision 36).
  */
-const readingsOf = (day, monthName, year, spanEnd) => {
-  const month = MONTHS[monthName.toLowerCase()];
-  if (!month) {
-    return [];
-  }
+const readingsOf = (day, month, year, spanEnd) => {
   if (year) {
     return [utcDate(Number(year), month, day)].filter(Boolean);
   }
@@ -51,7 +38,10 @@ const readingsOf = (day, monthName, year, spanEnd) => {
   return [endYear - 1, endYear, endYear + 1].map((y) => utcDate(y, month, day)).filter(Boolean);
 };
 
-/** Every date written in a text, each as its readings (ISO days); "may" is a month only when written as a name. */
+/**
+ * Every date written in a text, each as its readings (ISO days): ISO days and timestamps, and the day-month phrases
+ * the shared matcher reads (src/verify/patterns.js: "may" is a month only when written as a name).
+ */
 const datesIn = (text, spanEnd) => {
   const source = String(text || '');
   const found = [];
@@ -61,22 +51,10 @@ const datesIn = (text, spanEnd) => {
       found.push({ written: match[0], readings: [iso] });
     }
   }
-  for (const match of source.matchAll(DAY_MONTH)) {
-    if (match[2].toLowerCase() === 'may' && match[2] !== 'May') {
-      continue;
-    }
-    const readings = readingsOf(Number(match[1]), match[2], match[3], spanEnd);
+  for (const entry of datePhrases(source)) {
+    const readings = readingsOf(entry.day, entry.month, entry.year, spanEnd);
     if (readings.length) {
-      found.push({ written: match[0], readings });
-    }
-  }
-  for (const match of source.matchAll(MONTH_DAY)) {
-    if (match[1].toLowerCase() === 'may' && match[1] !== 'May') {
-      continue;
-    }
-    const readings = readingsOf(Number(match[2]), match[1], match[3], spanEnd);
-    if (readings.length) {
-      found.push({ written: match[0], readings });
+      found.push({ written: entry.phrase, readings });
     }
   }
   return found;

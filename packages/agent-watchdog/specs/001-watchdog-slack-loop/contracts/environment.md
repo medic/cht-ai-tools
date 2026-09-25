@@ -57,7 +57,7 @@ variables the schema reads).
 |---|---|---|
 | `AGENT_WATCHDOG_GRAFANA_URL` | URL | Hosted watchdog Grafana; also the host allow-listed for dashboard links. |
 | `AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID` | string | Prometheus datasource proxied through Grafana. Required because a Viewer token may not list datasources; stock watchdog installs derive `PBFA97CFB590B2093` from the datasource name, and startup cross-checks the value against the dashboards' targets (research.md R-5). |
-| `AGENT_WATCHDOG_SLACK_CHANNEL_ID` | string | Channel id of `#agents` (FR-047). One channel only (Out of Scope). |
+| `AGENT_WATCHDOG_SLACK_CHANNEL_ID` | string | Id of the channel the brief is posted to (FR-047). One channel only (Out of Scope). |
 | `AGENT_WATCHDOG_DOCS_MCP_URL` | URL | The documentation search service endpoint. |
 | `LANGFUSE_BASE_URL` | URL | Tracing backend. The Langfuse v5 SDK reads this name; the earlier `LANGFUSE_HOST` was never read by any Langfuse SDK (research.md R-8). |
 | `AGENT_WATCHDOG_SPECS_URL` | URL | Footer link to this feature's specification in `cht-ai-tools` (`specs/001-watchdog-slack-loop`); replaced `AGENT_WATCHDOG_PROMPTS_URL` in revision 25 (FR-019). |

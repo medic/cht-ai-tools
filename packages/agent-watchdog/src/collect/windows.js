@@ -142,15 +142,19 @@ const seriesFor = (result, host) => result.filter((series) => {
 /**
  * The one series a per-project query answers (FR-075): the series with the project's instance label, or, when none
  * carries it (a panel scoped by another label, whose series carries the exporter's instance), the single series
- * returned; several matching series are a breakdown and are refused. Shared by collection and the live tool
- * (revision 36), so the two cannot drift.
+ * returned; several series, matching or not, are a breakdown and are refused (revision 37: before it the first of
+ * several was taken). Shared by collection and the live tool (revision 36), so the two cannot drift.
  */
 const pickSeries = (result, host) => {
-  const matching = seriesFor(result || [], host);
+  const all = result || [];
+  const matching = seriesFor(all, host);
   if (matching.length > 1) {
     return { series: null, many: matching };
   }
-  return { series: matching[0] || (result || [])[0] || null, many: null };
+  if (matching.length === 1) {
+    return { series: matching[0], many: null };
+  }
+  return all.length > 1 ? { series: null, many: all } : { series: all[0] || null, many: null };
 };
 
 const IDENTITY_LABELS = new Set(['__name__', 'instance', 'job']);

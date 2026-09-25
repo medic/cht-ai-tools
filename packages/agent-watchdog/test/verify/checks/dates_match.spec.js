@@ -114,3 +114,14 @@ describe('verify/checks/dates_match: what the run gave is exempt in every form (
     expect(check(brief).status).to.equal('pass');
   });
 });
+
+describe('verify/checks/dates_match: what the shared matcher reads as a date (revision 37)', () => {
+  it('reads a capitalised May in either order and never the verb, and no day the month cannot hold', () => {
+    const ctx = baseContext();
+    ctx.items[0].why_now = 'Rising since May 3; 45 may be duplicates and 12 may clear; 31 September was quiet.';
+    // "May 3" is read (and, a year away, refused); "45 may", "12 may" and "31 September" are not dates.
+    expect(check(ctx).reasons).to.deep.equal([
+      'items[0].why_now names 2026-05-03, outside the run\'s windows (2026-09-04 to 2026-09-18)',
+    ]);
+  });
+});

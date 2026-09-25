@@ -77,7 +77,7 @@ files.
 | Principle | Status | How the plan satisfies it |
 |---|---|---|
 | **I. CHT Conventions Are Not Optional** | PASS | CommonJS JavaScript, no TypeScript in this package (the SDK is consumed from JavaScript). Node 22 pinned in `.nvmrc` and the image. `@medic/eslint-config` extended through `@eslint/eslintrc` FlatCompat in `eslint.config.js`, as cht-core does; `npm run lint` with zero warnings is a CI gate. mocha, chai with chai-as-promised, sinon, nyc; `test/` mirrors `src/`. Conventional Commits `type(#issue): subject` enforced by commitlint; PRs target `main`. semantic-release publishes the container image on release. AGPL-3.0 `LICENSE`. The exact eslint and chai majors follow cht-core (research.md R-9). |
-| **II. Test-First and Replayable** | PASS | Red-green-refactor per module. External systems sit behind small modules (`src/collect/grafana.js`, `src/publish/slack.js`, `src/agent/engine-sdk.js`, `src/agent/engine-cli.js`, `src/trace/langfuse.js`, `src/render/browser.js`) stubbed with sinon and driven by recorded fixtures. Every run persists inputs, changes, candidates, prompts and tool results (run-directory contract); `agent-watchdog replay` regenerates findings offline. Prompt, skill and model-parameter changes must pass `npm run replay:eval` and attach the replay diff to the PR (quality gate 3). |
+| **II. Test-First and Replayable** | PASS | Red-green-refactor per module. External systems sit behind small modules (`src/collect/grafana.js`, `src/publish/slack.js`, `src/agent/engine-sdk.js`, `src/agent/engine-cli.js`, `src/trace/langfuse.js`) stubbed with sinon and driven by recorded fixtures. Every run persists inputs, changes, candidates, prompts and tool results (run-directory contract); `agent-watchdog replay` regenerates findings offline. Prompt, skill and model-parameter changes must pass `npm run replay:eval` and attach the replay diff to the PR (quality gate 3). |
 | **III. Deterministic Before Generative** | PASS | `src/analyze/` computes percentage change, deviation, monotonic rise, baselines and expected-load adjustments with unit tests; `src/analyze/candidates.js` applies thresholds. The model runs at most `AGENT_WATCHDOG_PASSES` passes (hard cap 4) of at most `AGENT_WATCHDOG_MAX_TURNS` turns (hard cap 50) under `maxBudgetUsd`, returning schema-validated structured output; later passes review earlier ones and stop on an empty diff. Every model stage has a degraded path (`src/rollup/deterministic-brief.js`) that labels itself. The gate (`src/verify/`) checks schema, known projects and metrics, number matching, dates, link construction and allow-list, structure limits, secrets; failures return to the model at most twice, then degrade. The model composes no URLs: links are built by `src/links/build.js` from `dashboard_ref`, and `reference_urls` must have appeared in tool results. |
 | **IV. Least Privilege and Explicit Trust Boundaries** | PASS | Credentials: Grafana service-account token with Viewer role; Slack bot token with post, upload, read and reaction scopes on one channel (`reactions:write` added by User Story 7 for the "seen" reaction; still the single configured channel, still no write to any deployment); Langfuse write keys. Nothing grants write access to a CHT deployment or to this package. The model's tools are `tools: []` plus an enumerated MCP allow-list (agent-definition contract). Fetched text is wrapped in labelled `<untrusted>` delimiters in prompts and rendered only through Handlebars escaping. The agent writes only its memory (capped, stored as diffs) and proposal files; prompts, tools and skill are read-only paths. Secrets are redacted by key in logs and the effective configuration; Slack user ids never leave `feedback.jsonl`. Partner-facing output is out of scope here; the hostname scan already runs on proposals (FR-033). |
 | **V. Simple, Observable, Boring** | PASS | One process and one entrypoint, `bin/agent-watchdog.js`; the daily CronJob runs `run`, and the weekly `calibrate` and on-demand `distill` are subcommands of the same image, not services. One agent definition consumed by both engines. JSON logs on stderr bound to `run_id` with monotonic timestamps at every stage boundary; one Langfuse trace per run with a span per stage; token usage and cost per run in the footer. Idempotent per date with an explicit `--force`. Loud failure: failure notice plus non-zero exit codes (exit-codes contract). Node built-ins first: `fetch`, `node:util` `parseArgs`, `node:crypto`, `node:fs/promises`, `node:zlib`. Each new dependency is justified in Complexity Tracking and CommonJS-compatible (verified). Twelve-factor configuration validated by zod at startup; the redacted effective configuration is written to the run. |
@@ -101,7 +101,7 @@ adjustment to the Notes are justified in Complexity Tracking.
 | Verification: implemented once under `src/verify/`, wired as the SDK Stop hook and a PostToolUse hook on the findings write, called again before publish; the CLI path loads the same checks through `--settings` | `src/verify/` is called by the harness after every turn on both engines and before publish; the SDK additionally runs it in the Stop hook; PostToolUse records tool calls for replay | Adjusted: `claude --bare` skips hooks (verified in the 2.1.278 help text), so the CLI cannot load the checks through `--settings`; the harness-driven gate gives both engines identical behaviour with the same code (research.md R-3) |
 | Reference sources: cht-docs-mcp via `mcpServers` and `--mcp-config`, watchdog repository indexed, search tools allowed, synthesised-answer tool off by default | `cht-docs` HTTP server with per-tool policies: `search_docs` and `get_sources` allowed, `ask_question` denied; the watchdog repository is already among the service's sources (verified) | Adopted |
 | Metrics through the hosted Grafana's datasource proxy | `src/collect/grafana.js` uses the proxy for PromQL and the Grafana API for dashboards, targets and annotations (research.md R-5) | Adopted |
-| Rendering: the report template filled, never generated, in its original design (a design-skill redesign was tried in revision 24 and set aside in 25); no browser in a run since revision 24 retired the image; `src/render/browser.js` remains for `smoke/render.js --png` | `templates/report.hbs` + `src/render/report.js`; Chromium provisioning per research.md R-7, removal pending the container revision | Adopted |
+| Rendering: the report template filled, never generated, in its original design (a design-skill redesign was tried in revision 24 and set aside in 25); no browser in a run since revision 24 retired the image; the browser renderer and its Chromium path left with the image in revision 30 | `templates/report.hbs` + `src/render/report.js`; Chromium provisioning per research.md R-7, removal pending the container revision | Adopted |
 | Storage: 10 Gi volume under `runs/<date>/<project>/`, memory, feedback, proposals, corpus index beside them; raw corpus outside the repository; retention per FR-040 | run-directory contract; raw series gzip-compressed to fit fifty projects for 14 days | Adopted |
 | CommonJS on Node 22; SDK through dynamic import if ESM-only | The SDK is ESM-only (`exports` has no `require` condition); loaded with `await import()` inside `src/agent/engine-sdk.js` | Adopted |
 
@@ -124,8 +124,6 @@ specs/001-watchdog-slack-loop/
 │   ├── run-directory.md     # Stage inputs and outputs on disk
 │   ├── agent-definition.md  # One definition, two engines
 │   ├── slack-payload.md     # Message and thread shapes; scopes
-│   ├── findings.schema.json # Structured output of an analysis pass
-│   └── brief.schema.json    # Structured output of the roll-up
 └── tasks.md                 # Phase 2 output (/speckit-tasks), not created here
 ```
 
@@ -195,6 +193,7 @@ never lives in this tree. Deployment manifests are not in this package.
 | Chromium in the container image | Removed in revision 30 (FR-086): nothing in a run had used it since revision 24, and `playwright-core` left the dependencies with it | An unused browser in a hardened image widened its attack surface and its size for nothing a reader used (research.md R-35) |
 | Langfuse v5 as four packages (`@langfuse/tracing`, `@langfuse/otel`, `@langfuse/client`, `@opentelemetry/sdk-node`) instead of the single `langfuse` package | The classic package's own npm description calls it a deprecated v3 client and directs new work to these packages; all four load from CommonJS | One dependency instead of four would be simpler, but it builds a new system on a client the vendor has retired |
 | Native Claude Code runtime in the image (about 224 MB) | Inherent to the Agent SDK decision in the Notes; the SDK spawns the platform binary | Calling the Messages API directly would remove the runtime but discard the MCP, hooks, session and structured-output machinery the design relies on |
+| Plain `type: subject` commit headers on this founding branch (constitution I asks for `type(#issue): subject` and an issue) | The branch predates its issues and none will be opened for it; every later change references its issue. Expires when this branch merges: the commitlint scope becomes mandatory then (revision 37). | Opening one issue after the fact would give every commit a reference that says nothing about the work. |
 | Harness-driven verification instead of `--settings` hooks on the CLI engine | `claude --bare` skips hooks by design (verified), so the CLI cannot run the gate as a hook | Running the CLI without `--bare` restores hooks but re-opens filesystem settings discovery; the harness-driven gate keeps both engines on the same code path |
 
 ## Post-design Constitution re-check
@@ -944,3 +943,29 @@ notice description is rebuilt with the replay diff; **VIII** unchanged. Result: 
 the plain `type: subject` form for this founding branch, which references no issue; new work references its
 issue (constitution I), and the eighteen earlier commit messages are rewrapped to the lint's limits in a
 message-only rewrite of the unpushed history (R-41).
+
+### Revision 37 delta: the third review, and what the second's fixes missed in production (FR-016, FR-029, FR-042, FR-062, FR-073, FR-075, FR-083)
+
+Planned on 2026-09-25 from the third review of the branch (research.md R-42): 43 of 66 open findings fixed,
+30 new ones, the top five caused by revision 36. Two of them were tested through spies and never reached
+production: the analysis gate adapter dropped the texts given for dates and built its resolver without the
+egress list. This revision (1) repairs the release pipeline, which revision 36 broke by putting the
+conventionalcommits preset on plugins whose changelog writer cannot render it: both keep their default preset
+and read the CHT headers through parser options, proven by a test that runs the installed analyzer and
+notes generator; (2) forwards the date-only texts and the egress list through the analysis gate adapter,
+tested through the adapter with the real verification module; (3) measures the collection notice over the
+queries sent, so a warm volume whose every query failed is never a quiet heartbeat, and marks the notice;
+(4) closes the "N may" hole with one date matcher shared by the date and number checks, and matches evidence
+within unit families so a relabelled sigma licenses no multiple; the day's restart count is a level of the
+current window again; (5) refuses several series of which none carries the project's instance label instead
+of taking the first; (6) widens the phone rule to any run starting with a plus or a zero and narrows it away
+from ranges, bracketed pairs and dotted dates, masks the digest's unmatched notes like a prompt's, and names
+the refusing checks in words on a degraded brief; (7) the smaller items: the longest active cycle in the
+brief's span, a preview beside a posted record, the supersedes link on a forced heartbeat with the permalink
+looked up from the ts, a message of its own for query_metric, the check's line limit under its own name, the
+alerts reply that gives up its notices last, one trace flush on the failure path; (8) the documents: the
+quickstart cut to what an operator runs, the stale file references and the channel name removed, the
+contradictions the review listed set right, and the commit-convention deviation recorded above with its
+expiry. **I** no dependency; **II** tests first, every production-path fix tested through the adapter or the
+command it runs in; **III** to **VI** unchanged; **VII** no model-facing text changed; **VIII** unchanged.
+Result: PASS.

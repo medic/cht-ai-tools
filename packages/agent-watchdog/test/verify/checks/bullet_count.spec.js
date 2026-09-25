@@ -1,4 +1,4 @@
-const { check, MAX_BULLETS, MAX_CHILDREN } = require('../../../src/verify/checks/bullet_count');
+const { check, MAX_BULLETS, MAX_PROJECT_LINES } = require('../../../src/verify/checks/bullet_count');
 const { baseContext, briefContext } = require('../helpers/context');
 
 const id = (n) => String(n).repeat(12);
@@ -8,7 +8,7 @@ const entry = (n) => ({ lead_id: id(n), item_ids: [id(n)], host: `p${n}.example.
 describe('verify/checks/bullet_count', () => {
   it('exposes two programme slots and three project lines as the limits (FR-010, FR-015, revision 28)', () => {
     expect(MAX_BULLETS).to.equal(2);
-    expect(MAX_CHILDREN).to.equal(3);
+    expect(MAX_PROJECT_LINES).to.equal(3);
   });
 
   it('without a layout, passes up to two bullets and fails three', () => {

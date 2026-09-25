@@ -296,8 +296,11 @@ const run = async (ctx) => {
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],
     expectedLoadNotice: expectedLoadNoticeFrom(activeWindows),
-    // The brief's date span includes the previous cycle when a window with one is active (revision 36).
-    activeWindow: Object.values(activeWindows).find((window) => window && window.cycle_days) || null,
+    // The brief's date span includes the previous cycle when a window with one is active (revision 36): the
+    // longest cycle among them, so every project's previous-cycle date is inside it (revision 37).
+    activeWindow: Object.values(activeWindows)
+      .filter((window) => window && window.cycle_days)
+      .sort((a, b) => b.cycle_days - a.cycle_days)[0] || null,
     referenceSourcesUnavailable,
     footer,
     notices,

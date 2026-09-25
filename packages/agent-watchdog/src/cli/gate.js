@@ -3,6 +3,7 @@
 // (contracts/agent-definition.md): fills in discovery, windows, allow-list, resolver and the attempt counter.
 const { buildAllowlist } = require('../links/allowlist');
 const { createResolver } = require('../links/resolve');
+const { buildEgress } = require('../net/egress');
 
 /**
  * @param {object} options
@@ -40,11 +41,16 @@ const createFindingsGate = ({
     return windowsCache.get(slug);
   };
 
-  return async ({ findings, pass, project, candidates = [], changes = [], toolResultUrls = [], givenText = [] }) => {
+  return async ({
+    findings, pass, project, candidates = [], changes = [], toolResultUrls = [], givenText = [], givenDateText = [],
+  }) => {
     const disc = await discovery();
     if (!offline && !resolver) {
+      // A link outside the egress list is recorded as not requested, never refused by the guard mid-run
+      // (revision 36 for the roll-up; the analysis gate too since revision 37).
       resolver = createResolver({
         fetch, timeoutMs: config.bounds.httpTimeoutMs, discovery: disc, grafanaUrl, allowlist,
+        egress: buildEgress(config),
       });
     }
     const key = `${project.slug}#${pass}`;
@@ -60,6 +66,9 @@ const createFindingsGate = ({
       windows: await windowsFor(project.slug),
       toolResultUrls: new Set(toolResultUrls),
       givenText,
+      // The system prompt with its window notes and memory: given for dates only (revision 36; forwarded here
+      // since revision 37, before which the exemption reached no production run).
+      givenDateText,
       knownCards,
       allowlist,
       attempt,
