@@ -4,8 +4,8 @@ description: Review a pull request to confirm if it delivers what its linked iss
 argument-hint: "[pr-number]"
 # Keep these tools synced with what is configured in the CI workflow jobs using this skill
 allowed-tools:
-  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh:*)
-  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh:*)
+  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh *)
+  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh *)
   - mcp__cht-docs__ask_question
   - mcp__cht-docs__search_docs
   - mcp__plugin_cht-docs-mcp_cht-docs__ask_question
