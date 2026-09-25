@@ -4,13 +4,12 @@ description: Review a pull request to confirm if it delivers what its linked iss
 argument-hint: "[pr-number]"
 # Keep these tools synced with what is configured in the CI workflow jobs using this skill
 allowed-tools:
-  - Read
-  - Grep
-  - Glob
   - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh:*)
   - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh:*)
   - mcp__cht-docs__ask_question
   - mcp__cht-docs__search_docs
+  - mcp__plugin_cht-docs-mcp_cht-docs__ask_question
+  - mcp__plugin_cht-docs-mcp_cht-docs__search_docs
 disallowed-tools:
   - Edit
   - Write
@@ -85,7 +84,7 @@ Does an existing module, helper, or established pattern in this repo already sol
 
 ### Asking the documentation
 
-`mcp__cht-docs__ask_question` answers a question; `mcp__cht-docs__search_docs` is the narrower lookup. At most three queries per review.
+The cht-docs `ask_question` tool answers a question; `search_docs` is the narrower lookup. Depending on how the server was installed, they are named `mcp__cht-docs__*` or `mcp__plugin_cht-docs-mcp_cht-docs__*`. At most three queries per review.
 
 If the tools are unavailable, write "documentation not consulted" in the report rather than answering from memory.
 
