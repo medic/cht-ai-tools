@@ -4,13 +4,12 @@ description: Review a pull request to confirm if it delivers what its linked iss
 argument-hint: "[pr-number]"
 # Keep these tools synced with what is configured in the CI workflow jobs using this skill
 allowed-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh:*)
-  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh:*)
+  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-context.sh*)
+  - Bash(${CLAUDE_SKILL_DIR}/scripts/pr-diff.sh*)
   - mcp__cht-docs__ask_question
   - mcp__cht-docs__search_docs
+  - mcp__plugin_cht-docs-mcp_cht-docs__ask_question
+  - mcp__plugin_cht-docs-mcp_cht-docs__search_docs
 disallowed-tools:
   - Edit
   - Write
@@ -46,7 +45,16 @@ Write out the concrete requirements from those sources as a bullet list, in your
 
 Derive a requirement only from a statement about **behaviour** — what the code will do, or an acceptance criterion. Rationale and motivation ("this is faster", "this makes batch jobs possible") are not requirements.
 
-Requirements come from the issue and the PR description only. Reviewer feedback — the `reviews` and `inline review comments` sections — is context, not a source of requirements: use it to clarify a requirement you already have, and in sections 4 and 5, but never turn a review comment into a bullet of its own. A thread marked `resolved` or `outdated` may already have been dealt with; treat neither marker as proof either way, and do not report an unresolved thread as a missing requirement.
+Requirements come from the issue and the PR. When sources disagree, the higher one wins, in this order:
+
+1. PR comments — the PR's `comments`, `reviews`, and `inline review comments`
+2. PR description
+3. Issue comments
+4. Issue description
+
+Within one source, a later comment wins over an earlier one. If a higher source replaces, reverses, or makes a lower requirement irrelevant, keep only the winning version. Drop the one it replaced completely. Do not list it, bucket it, or mention that it was superseded.
+
+A PR thread marked `resolved` or `outdated` may already have been dealt with; treat neither marker as proof either way, and do not report an unresolved thread as a missing requirement.
 
 ## 2. Read the change, then follow it out of the diff
 
@@ -85,7 +93,7 @@ Does an existing module, helper, or established pattern in this repo already sol
 
 ### Asking the documentation
 
-`mcp__cht-docs__ask_question` answers a question; `mcp__cht-docs__search_docs` is the narrower lookup. At most three queries per review.
+The cht-docs `ask_question` tool answers a question; `search_docs` is the narrower lookup. Depending on how the server was installed, they are named `mcp__cht-docs__*` or `mcp__plugin_cht-docs-mcp_cht-docs__*`. At most three queries per review.
 
 If the tools are unavailable, write "documentation not consulted" in the report rather than answering from memory.
 
