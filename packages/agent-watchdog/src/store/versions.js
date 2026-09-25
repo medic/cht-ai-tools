@@ -53,4 +53,4 @@ const collectVersions = ({ pkg, config, env = process.env, policy = null, deps =
   config_hash: policy && policy.hash ? policy.hash : null,
 });
 
-module.exports = { collectVersions, resolveGitSha, definitionHashes, imageVersion, imageRevision, NULL_HASHES };
+module.exports = { collectVersions, resolveGitSha, definitionHashes, imageVersion, NULL_HASHES };

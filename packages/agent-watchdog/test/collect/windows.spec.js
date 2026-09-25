@@ -110,7 +110,7 @@ describe('collect/windows', () => {
       const { grafana, queries } = recording();
       const result = await collectWindows({ grafana, project: alpha, discovery, runStart: RUN_START, logger: quiet });
       expect(result.windows.every((w) => w.source === 'fetched')).to.equal(true);
-      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8 });
+      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8, failed: 0 });
       expect(queries).to.have.length(8);
     });
 
@@ -138,7 +138,7 @@ describe('collect/windows', () => {
       expect(history.recordCurrent.calledWith('cht_x')).to.equal(true);
       expect(history.recordCurrent.firstCall.args[1]).to.have.length(5);
       expect(history.backfill.called).to.equal(false);
-      expect(result.stats).to.deep.equal({ fetched: 2, reused: 6, queries: 2 });
+      expect(result.stats).to.deep.equal({ fetched: 2, reused: 6, queries: 2, failed: 0 });
     });
 
     it('fetches what the volume lacks and fills the ledger from a fetched trailing window', async () => {
@@ -152,7 +152,7 @@ describe('collect/windows', () => {
       expect(history.backfill.calledWith('cht_x')).to.equal(true);
       expect(history.backfill.firstCall.args[1]).to.have.length(21);
       expect(history.storedWindow.callCount, 'asked for every comparison window').to.equal(4);
-      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8 });
+      expect(result.stats).to.deep.equal({ fetched: 8, reused: 0, queries: 8, failed: 0 });
     });
 
     it('validates the source field on stored windows', () => {
@@ -393,6 +393,28 @@ describe('collect/windows', () => {
       expect(rejected.map((w) => `${w.metric} ${w.window}: ${w.unavailable_reason}`)).to.deep.equal([]);
       expect(result.windows.filter((w) => w.window === 'trailing_14d' && w.metric.startsWith('sum(rate('))
         .every((w) => w.available)).to.equal(true);
+    });
+
+    it('leaves the windows of a panel Prometheus refuses unavailable and collects the rest (revision 36)', async () => {
+      const refused = { status: 'error', errorType: 'execution', error: 'many-to-many matching not allowed' };
+      const refusing = sinon.stub().callsFake(async (url, init) => (
+        decodeURIComponent(String(url)).includes('cht_conflict_count')
+          ? new Response(JSON.stringify(refused), { status: 422 })
+          : fake.fetch(url, init)));
+      const client = createGrafanaClient({
+        baseUrl: fake.baseUrl, token: fake.token, datasourceUid: fake.datasourceUid, timeoutMs: 1000, fetch: refusing,
+        retryDelayMs: 0,
+      });
+      const result = await collectWindows({
+        grafana: client, project: discovery.projects[0], discovery, runStart: RUN_START, activeWindow: null,
+        logger: quiet,
+      });
+      const conflicts = result.windows.filter((w) => w.metric === 'cht_conflict_count');
+      expect(conflicts.length).to.be.greaterThan(2);
+      expect(conflicts.every((w) => !w.available && /^query failed: .*422/.test(w.unavailable_reason))).to.equal(true);
+      const sentinel = result.windows.filter((w) => w.metric === 'cht_sentinel_backlog_count');
+      expect(sentinel.every((w) => w.available)).to.equal(true);
+      expect(result.stats.failed).to.equal(conflicts.length);
     });
 
     it('collects the scrape-target metric for the project', async () => {

@@ -6,8 +6,8 @@ const { dataPaths } = require('../store/run-dir');
 // with the effect it would have had on the last thirty days. Calibration targets the percentage-change rule;
 // the deviation rule is reported in the distribution only. Everything here is computed from stored files.
 const { RunDir } = require('../store/run-dir');
-const { lastAcceptedFindingsFile: lastFindingsFile } = require('../rollup/analysis');
-const { runDate, runSequence } = require('../rollup/history');
+const { lastAcceptedFindingsFile } = require('../rollup/analysis');
+const { lastRunPerDate } = require('../rollup/history');
 const { readOutcomes } = require('../corpus/outcomes');
 const { effectiveThresholds } = require('../analyze/thresholds');
 const { normaliseHost } = require('../config/policy');
@@ -60,18 +60,7 @@ const readIfExists = async (runDir, rel, key) => (runDir.exists(rel) ? asArray(a
  */
 const collectObservations = async ({ dataDir, from, to, projectFilter = null }) => {
   // One run per date, the last (revision 34): a forced re-run is another attempt at the same day, not another day.
-  const speaksFor = new Map();
-  for (const id of await RunDir.list(dataDir)) {
-    const date = runDate(id);
-    if (date < from || date > to) {
-      continue;
-    }
-    const held = speaksFor.get(date);
-    if (!held || runSequence(id) > runSequence(held)) {
-      speaksFor.set(date, id);
-    }
-  }
-  const ids = [...speaksFor.values()].sort();
+  const ids = [...lastRunPerDate(await RunDir.list(dataDir), { from, to }).values()].sort();
   const series = new Map();
   const seriesFor = (project, metric) => {
     const key = `${project.url}\n${metric}`;
@@ -114,7 +103,7 @@ const collectObservations = async ({ dataDir, from, to, projectFilter = null }) 
           set_aside: setAside.get(candidate.candidate_id) || null,
         });
       }
-      const findings = lastFindingsFile(runDir, slug);
+      const findings = lastAcceptedFindingsFile(runDir, slug);
       const items = findings ? asArray(await runDir.readJson(findings), 'items') : [];
       for (const item of items) {
         seriesFor(project, item.metric).items.push({

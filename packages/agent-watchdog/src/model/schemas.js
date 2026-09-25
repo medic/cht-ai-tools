@@ -11,7 +11,10 @@ const url = z.url();
 
 // The body layout's caps (src/rollup/layout.js reads them from here, revision 35): two body slots, and a
 // programme's entry names at most three projects and a count of the rest, four children in all.
-const LAYOUT_CAPS = Object.freeze({ BODY_SLOTS: 2, MAX_CHILDREN: 4 });
+// The layout's caps (src/rollup/layout.js), in one place: two body slots, three project lines per programme and,
+// with the "more projects" line that follows them, four children per bullet (revision 36).
+const MAX_PROJECTS = 3;
+const LAYOUT_CAPS = Object.freeze({ BODY_SLOTS: 2, MAX_PROJECTS, MAX_CHILDREN: MAX_PROJECTS + 1 });
 
 const enums = {
   Severity: z.enum(['low', 'medium', 'high']),
@@ -587,6 +590,8 @@ const CostRecord = z.object({
   run_id: z.string(),
   project_url: url.nullable(),
   stage: z.string(),
+  // The feedback stage's calls say which kind they were, `parse` or `review` (revision 36).
+  kind: z.string().optional(),
   pass: z.number().int().nullable(),
   model: z.string(),
   input_tokens: z.number().int().min(0),

@@ -7,11 +7,10 @@
 
 const { LAYOUT_CAPS } = require('../model/schemas');
 
-const { BODY_SLOTS } = LAYOUT_CAPS;
-const MAX_PROJECTS = 3;
+// The caps live with the entity schema (src/model/schemas.js): the "more projects" line follows the three
+// project lines, so a bullet has at most four children.
+const { BODY_SLOTS, MAX_PROJECTS, MAX_CHILDREN } = LAYOUT_CAPS;
 const OWN_REPLY_MIN_PROJECTS = 2;
-// A "more projects" line follows the three project lines, so a bullet has at most four children.
-const { MAX_CHILDREN } = LAYOUT_CAPS;
 // Hosts matching no programme pattern: a fallback bucket, not a programme, so each of its projects is a unit of one in
 // the body and all of them share the Other reply in the thread.
 const UNGROUPED = 'Other';

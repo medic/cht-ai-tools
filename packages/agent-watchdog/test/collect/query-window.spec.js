@@ -84,6 +84,19 @@ describe('collect/query-window: one series, the panel\'s unit, the active window
     expect(w.unavailable_reason).to.equal('2 series, not one per project (labels: db)');
   });
 
+  it('answers a target-scoped panel whose one series carries the exporter\'s instance, like collection', async () => {
+    const fetch = sinon.stub().callsFake(async () => matrix([
+      {
+        metric: { __name__: 'couch2pg_progress_pending', instance: 'sql-exporter:9399', target: 'alpha.example.org' },
+        values: [[1, '5'], [2, '7']],
+      },
+    ]));
+    const query = createQueryWindow({ grafana: clientWith(fetch), runStart });
+    const w = await query(alpha, 'couch2pg_progress_pending', 'current');
+    expect(w.available).to.equal(true);
+    expect(w.values).to.deep.equal([[1, 5], [2, 7]]);
+  });
+
   it('carries the panel\'s unit from the discovery spec and counts by default', async () => {
     const fetch = sinon.stub().callsFake(async () => matrix([
       { metric: { __name__: 'cht_couchdb_disk_bytes', instance: 'alpha.example.org' }, values: [[1, '5']] },

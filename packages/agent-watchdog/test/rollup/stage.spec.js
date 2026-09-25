@@ -356,7 +356,8 @@ describe('cli/stages/rollup', () => {
   it('masks people and addresses in the memory update before storing it (FR-044, revision 33)', async () => {
     const item = makeItem();
     const replaceWith = 'Call <@U024BE7LH> or U024BE7LH at +254 712 345 678 or ops@example.org about '
-      + 'alpha.example.org.';
+      + 'alpha.example.org. trailing mean 26.263157894736842; disk 1073741824 bytes; window 2026-09-20 - 2026-09-24; '
+      + 'hosting said Mark will drain it.';
     const ctx = ctxWith({
       structuredOutput: {
         headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
@@ -371,7 +372,10 @@ describe('cli/stages/rollup', () => {
     });
     await stage.run(ctx);
     const memory = fs.readFileSync(path.join(dataDir, 'memory', 'memory.md'), 'utf8');
-    expect(memory).to.equal('Call [person] or [person] at [address] or [address] about alpha.example.org.');
+    // Identifiers masked; the counts, decimals, dates and names the memory is for stay (revision 36).
+    expect(memory).to.equal('Call [person] or [person] at [address] or [address] about alpha.example.org. '
+      + 'trailing mean 26.263157894736842; disk 1073741824 bytes; window 2026-09-20 - 2026-09-24; '
+      + 'hosting said Mark will drain it.');
     const patch = fs.readFileSync(path.join(runDir.root, 'memory.patch'), 'utf8');
     expect(patch).to.not.include('U024BE7LH');
     expect(patch).to.not.include('ops@example.org');
@@ -413,6 +417,52 @@ describe('cli/stages/rollup', () => {
     const none = await stage.run(ctxWith(null));
     expect(none.kind).to.not.equal('brief');
     expect(await runDir.readJson('rollup/items.ranked.json')).to.deep.equal([]);
+  });
+
+  it('names a collection that failed most of its queries, and gives the gate the window and date texts', async () => {
+    await runDir.writeJson('collect.summary.json', { projects: 2, metrics: 10, windows: 40, failed: 30 });
+    const discovery = makeDiscovery();
+    discovery.projects[0].expected_load_windows = [{
+      id: 'month-end', kind: 'month_end', days_before: 2, days_after: 2, timezone: 'Africa/Nairobi',
+      note: 'Month-end reporting; volumes rise across most projects and the sync backlog doubles for two days.',
+      cycle_days: 30, scope: 'alpha.example.org',
+    }, {
+      id: 'campaign', kind: 'dates', start: '2026-09-01', end: '2026-09-30', timezone: 'UTC',
+      note: 'Quarterly immunisation campaign; sync volumes double on every project of the programme.', cycle_days: 90,
+      scope: 'alpha.example.org',
+    }];
+    await runDir.writeJson('discovery.json', discovery);
+    await runDir.writeJson('alpha-example-org/changes.json', [
+      { project_url: 'https://alpha.example.org', metric: 'cht_sentinel_backlog_count', expected_load_window_id: 'month-end' },
+      { project_url: 'https://alpha.example.org', metric: 'cht_conflict_count', expected_load_window_id: 'campaign' },
+    ]);
+    const item = makeItem();
+    const ctx = ctxWith({
+      structuredOutput: {
+        headline: 'h', bullets: [{ item_id: item.item_id, text: 'alpha 912 vs 300' }], thread_order: [item.item_id],
+        expected_load_notice: null, memory_update: { replace_with: null }, proposals: [],
+      },
+      result: {
+        subtype: 'success', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0.01, num_turns: 1,
+        duration_ms: 5, session_id: 's',
+      },
+      toolCalls: [],
+      referenceUnavailable: false,
+    });
+    await stage.run({ ...ctx, memory: 'alpha spikes at month end (until 2026-10-02)' });
+    const brief = await runDir.readJson('rollup/brief.json');
+    expect(brief.notices)
+      .to.include('Collection incomplete: 30 of 40 windows failed their query; the brief covers what was collected');
+    // The run's own notice fits the gate's two lines of 120 (revision 36), whole words only.
+    const lines = brief.expected_load_notice.split('\n');
+    expect(lines.length).to.be.at.most(2);
+    expect(lines.every((line) => line.length <= 120)).to.equal(true);
+    expect(brief.expected_load_notice).to.include('Expected-load window active: Month-end reporting');
+    const gateArgs = ctx.gate.verifyBrief.firstCall.args[0];
+    expect(gateArgs.activeWindow).to.include({ id: 'month-end', cycle_days: 30 });
+    const memoryLine = 'alpha spikes at month end (until 2026-10-02)';
+    expect(gateArgs.givenDateText.some((t) => t.includes(memoryLine))).to.equal(true);
+    expect(gateArgs.givenText.some((t) => t.includes('until 2026-10-02')), 'given for dates only').to.equal(false);
   });
 
   it('refuses to run without discovery.json', async () => {

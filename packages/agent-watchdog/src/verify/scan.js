@@ -105,6 +105,7 @@ const scanFile = (file, options = {}) => {
 /** True when a run-directory path holds reference text the model was given rather than the run's own output. */
 const isReferenceFile = (relative) => REFERENCE_FILES.has(String(relative).split('/').pop());
 
+/** Every finding under a directory, with paths relative to it; symbolic links and skipped directories left alone. */
 const scanTree = (root, { phones = false, skipDirs = SKIP_DIRS } = {}) => {
   const findings = [];
   const visit = (dir) => {
@@ -136,7 +137,6 @@ const scanTree = (root, { phones = false, skipDirs = SKIP_DIRS } = {}) => {
 const scanRepository = (root) => scanTree(root, { phones: false });
 
 /** A run directory (or a whole data volume): secrets, e-mail addresses and phone numbers in every artefact. */
-/** Every finding under a directory, with paths relative to it. */
 const scanRunArtefacts = (root) => scanTree(root, { phones: true, skipDirs: new Set(['knowledge-corpus']) });
 
 module.exports = {

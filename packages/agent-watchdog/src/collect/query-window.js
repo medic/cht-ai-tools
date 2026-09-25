@@ -1,7 +1,7 @@
 'use strict';
 // Live single-window query for the model's `query_metric` tool (FR-003): templated PromQL only,
 // one of the five named windows, executed through the Grafana datasource proxy.
-const { windowBounds, trailingQuery, queryFor, unresolvedReason, seriesFor, ManySeriesError } = require('./windows');
+const { windowBounds, trailingQuery, queryFor, unresolvedReason, pickSeries, ManySeriesError } = require('./windows');
 
 /**
  * `specFor(metric)` (sync or async) returns the discovery's query spec for a metric key: its panel expression, the
@@ -38,14 +38,14 @@ const createQueryWindow = ({
     // The panel's unit from the discovery spec, as the collected windows carry it (revision 34).
     unit: spec.unit || 'count',
   };
-  // A per-project metric is one series per project (FR-075): several are refused here as in collection, never
-  // answered with an arbitrary first one (revision 34).
-  const matching = seriesFor(series, project.host);
-  if (matching.length > 1) {
-    return { ...base, values: [], available: false, unavailable_reason: new ManySeriesError(matching).message };
+  // The same series rule as collection (FR-075, revisions 34 and 36): several matching series are refused, and a
+  // single series without the project's instance label (a target-scoped panel) is the answer.
+  const { series: chosen, many } = pickSeries(series, project.host);
+  if (many) {
+    return { ...base, values: [], available: false, unavailable_reason: new ManySeriesError(many).message };
   }
-  const values = matching.length
-    ? matching[0].values.filter((pair) => Number.isFinite(Array.isArray(pair) ? pair[1] : pair))
+  const values = chosen
+    ? chosen.values.filter((pair) => Number.isFinite(Array.isArray(pair) ? pair[1] : pair))
     : [];
   return {
     ...base,

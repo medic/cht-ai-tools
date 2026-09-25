@@ -1,8 +1,8 @@
 'use strict';
-// The analysis record the roll-up derives from each project's passes.json (revision 13 and 16): which sessions
-// failed (an error, or the error or timeout bound) and which were stopped by a bound before any pass produced a
-// result. Both are named in the brief; the second would otherwise pass as "no metric changes to flag" while the
-// computed candidates went unassessed.
+// The analysis record the roll-up derives from each project's passes.json (revisions 13, 16 and 34): which
+// sessions failed (an error, or the error bound) and which were stopped by a bound (the budget, the turn cap or
+// the run deadline) before any pass produced a result. Both are named in the brief; the second would otherwise
+// pass as "no metric changes to flag" while the computed candidates went unassessed.
 
 const fs = require('node:fs');
 
@@ -97,7 +97,14 @@ const analysisRecord = (projects) => {
     }
     const stopped = bounds.filter((bound) => INCOMPLETE_BOUNDS.includes(bound));
     if (stopped.length && !hasItems(passes)) {
-      record.incomplete.push({ project_url: url, bounds: stopped, cost_usd: passes.cost_usd || 0 });
+      // A session the harness killed leaves no cost figure and is charged its grant, marked estimated (FR-012,
+      // revision 34); the brief says "up to" for such a figure (revision 36).
+      record.incomplete.push({
+        project_url: url,
+        bounds: stopped,
+        cost_usd: passes.cost_usd || 0,
+        cost_estimated: passes.cost_estimated === true,
+      });
       continue;
     }
     const passRecords = passes.passes || [];

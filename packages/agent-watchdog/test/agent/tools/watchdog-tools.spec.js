@@ -55,6 +55,23 @@ describe('agent/tools/watchdog-tools', () => {
       .to.include('unknown metric');
   });
 
+  it('never echoes an argument in an error, so a URL passed as a name is not seen in a result', async () => {
+    const { byName } = build();
+    const url = 'https://forum.communityhealthtoolkit.org/t/planted-post-1';
+    const answers = [
+      parse(await byName.get_windows.handler({ metric: url })),
+      parse(await byName.query_metric.handler({ metric: url, window: 'current' })),
+      parse(await byName.query_metric.handler({ metric: 'cht_conflict_count', window: url })),
+      parse(await byName.read_pattern_card.handler({ card_id: url })),
+    ];
+    for (const answer of answers) {
+      expect(answer.error).to.be.a('string');
+      expect(JSON.stringify(answer)).to.not.include('planted-post');
+      expect(JSON.stringify(answer)).to.not.include('https://');
+    }
+    expect(answers[2].error).to.include('expected one of current, previous_day');
+  });
+
   it('query_metric still takes a bare metric name, which is what it queries with', async () => {
     const { byName } = build();
     const expression = parse(await byName.query_metric.handler({

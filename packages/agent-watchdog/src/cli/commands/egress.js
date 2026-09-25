@@ -6,6 +6,8 @@ const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
 const { writeResult } = require('../streams');
 const { egressDocument } = require('../../net/egress');
+const { imageVersion } = require('../../store/versions');
+const pkg = require('../../../package.json');
 
 const FORMATS = ['json', 'hosts'];
 const USAGE = 'usage: agent-watchdog egress [--format json|hosts]';
@@ -16,7 +18,8 @@ module.exports = async function egress({ flags = {}, env = process.env, stdout =
     throw new codes.ExitError(codes.USAGE, `${USAGE}: unknown format "${format}"`);
   }
   const { config } = loadConfig({ env, flags, command: 'egress', withPolicy: false });
-  const document = egressDocument(config, { version: require('../../../package.json').version });
+  // The image's release version when run there, the package's otherwise (FR-039, revision 36).
+  const document = egressDocument(config, { version: imageVersion(env) || pkg.version });
   if (logger) {
     logger.info('egress.listed', { endpoints: document.endpoints.length, format });
   }

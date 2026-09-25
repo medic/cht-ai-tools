@@ -12,7 +12,7 @@ const { normaliseHost } = require('../../config/policy');
 const { ensureDataLayout, dataPaths } = require('../../store/run-dir');
 const atomic = require('../../store/atomic');
 const { writeResult } = require('../streams');
-const { createTracer } = require('../../trace/langfuse');
+const { createTracer, finishTraceSafely } = require('../../trace/langfuse');
 const { schemas } = require('../../model/schemas');
 const { buildAllowlist, allowedHosts } = require('../../links/allowlist');
 const { isoWeekOf, weekRange } = require('../../calibration/week');
@@ -229,23 +229,14 @@ const calibrateLoaded = async ({ flags, env, stdout, logger, deps, config, polic
     });
     // The result first, then the flush: tracing is observability, never the product (revision 35).
     writeResult(stdout, validated);
-    await finishTrace(tracer, log, {
+    await finishTraceSafely(tracer, log, {
       status: 'completed', entries: validated.entries.length, proposals: validated.proposals, cost_usd: costUsd,
     });
     return codes.OK;
   } catch (error) {
     log.error('calibrate.failed', { error });
-    await finishTrace(tracer, log, { status: 'failed', error: error.message });
+    await finishTraceSafely(tracer, log, { status: 'failed', error: error.message });
     throw error;
-  }
-};
-
-/** A rejected trace flush is logged and never changes the exit code. */
-const finishTrace = async (tracer, log, output) => {
-  try {
-    await tracer.finish({ output });
-  } catch (traceError) {
-    log.warn('trace.finish_failed', { error: traceError });
   }
 };
 

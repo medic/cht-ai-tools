@@ -219,6 +219,8 @@ describe('cli/commands/run', () => {
         aaaaaaaaaaaa: { project_url: 'https://a', metric: 'm', pattern_card: null, up: 0, down: 1, notes: [], verdict: 'dismissed' },
         bbbbbbbbbbbb: { project_url: 'https://a', metric: 'n', pattern_card: null, up: 2, down: 0, notes: [], verdict: 'confirmed' },
         cccccccccccc: { project_url: 'https://a', metric: 'o', pattern_card: null, up: 1, down: 1, notes: [], verdict: 'contested' },
+        // A verdict standing from an earlier week, with no record read anew today: not appended again.
+        dddddddddddd: { project_url: 'https://a', metric: 'p', pattern_card: null, up: 3, down: 0, notes: [], verdict: 'confirmed' },
       },
       brief: { up: 1, down: 0, notes: [] },
     };
@@ -235,11 +237,12 @@ describe('cli/commands/run', () => {
     const outcomes = fs.readFileSync(path.join(dataDir, 'corpus', 'outcomes', '2026-09-18.jsonl'), 'utf8')
       .trim().split('\n').map(JSON.parse);
     expect(outcomes.map((o) => o.outcome).sort()).to.deep.equal(['confirmed', 'dismissed']);
+    expect(outcomes.map((o) => o.item_id).sort()).to.deep.equal(['aaaaaaaaaaaa', 'bbbbbbbbbbbb']);
     const analyzeCtx = stages.analyze.run.firstCall.args[0];
     expect(analyzeCtx.feedbackHorizons).to.have.length(1);
     const rollupCtx = stages.rollup.run.firstCall.args[0];
     expect(rollupCtx.feedbackByItem).to.be.instanceOf(Map);
-    expect(rollupCtx.feedbackByItem.size).to.equal(3);
+    expect(rollupCtx.feedbackByItem.size).to.equal(4);
     expect(rollupCtx.feedbackUnmatched).to.have.length(1);
     expect(rollupCtx.feedbackBrief).to.deep.equal({ up: 1, down: 0, notes: [] });
     expect(rollupCtx.memory).to.equal('');
@@ -494,6 +497,12 @@ describe('cli/commands/run: the cost and the links a run accounts for (revision 
     const discovery = JSON.stringify({ projects: [], dashboards: [], metrics: [] });
     fs.writeFileSync(path.join(runDir, 'discovery.json'), discovery);
     fs.writeFileSync(path.join(runDir, 'agent.summary.json'), JSON.stringify({ cost_usd: 0.7, cost_estimated: false }));
+    // The feedback stage's calls are part of the recorded spend too (revision 36).
+    fs.writeFileSync(path.join(runDir, 'feedback.ingested.json'), JSON.stringify({
+      run_id: '2026-09-18', records: [], by_item: {}, unmatched: [], horizons: [],
+      calls: [{ stage: 'feedback', kind: 'parse', cost_usd: 0.01 }],
+      review: { classified: [], unclassified: [], calls: [{ stage: 'feedback', kind: 'review', cost_usd: 0.02 }] },
+    }));
     let seen = null;
     stages.rollup = {
       name: 'rollup',
@@ -506,7 +515,7 @@ describe('cli/commands/run: the cost and the links a run accounts for (revision 
     };
     const second = base(dataDir, { deps: { stages, fetch: sinon.stub() }, flags: { stage: 'rollup' } });
     expect(await runCommand(second.args)).to.equal(0);
-    expect(seen).to.deep.equal({ cost: 0.7, resolver: 'function' });
+    expect(seen).to.deep.equal({ cost: 0.73, resolver: 'function' });
   });
 });
 
@@ -537,6 +546,13 @@ describe('cli/commands/run: bad flags are refused before a run directory exists 
     expect(date.message).to.include('--date');
     const impossible = await refused({ date: '2026-02-30' });
     expect(impossible.code).to.equal(codes.USAGE);
+    // An impossible month is a usage error too, not a RangeError (revision 36), and so is an empty stage.
+    const month = await refused({ date: '2026-13-01' });
+    expect(month.code).to.equal(codes.USAGE);
+    expect(month.message).to.include('--date');
+    const empty = await refused({ stage: '' });
+    expect(empty.code).to.equal(codes.USAGE);
+    expect(empty.message).to.include('unknown stage');
     const since = await refused({ since: 'yesterday' });
     expect(since.code).to.equal(codes.USAGE);
     expect(since.message).to.include('--since');

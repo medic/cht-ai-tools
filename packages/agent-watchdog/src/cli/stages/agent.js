@@ -16,6 +16,7 @@ const { RunDir, dataPaths } = require('../../store/run-dir');
 const { analysedDatesBefore, runDate } = require('../../rollup/history');
 const { splitStanding } = require('../../analyze/standing');
 const { activeWindowOf } = require('../../analyze/calendar');
+const { maskNote } = require('../../corpus/scrub');
 const atomic = require('../../store/atomic');
 // `--project` and `--group` select the projects a run analyses (FR-066, revision 24); one helper for every stage.
 const { selectProjects } = require('../../config/filter');
@@ -79,7 +80,10 @@ const itemHistoryFor = (dataDir, runId, slug) => async (projectUrl, metric, patt
   for (const entry of history) {
     entry.feedback = feedback
       .filter((f) => f.item_id === entry.item_id)
-      .map((f) => ({ verdict: f.verdict, note: f.note, author: f.author }));
+      // The note masked of people, addresses and phones (revision 36); the tool replaces the author key itself.
+      .map((f) => ({
+        verdict: f.verdict, note: f.note === null || f.note === undefined ? f.note : maskNote(f.note), author: f.author,
+      }));
   }
   return history;
 };
@@ -244,7 +248,7 @@ const run = async (ctx) => {
           feedback: feedbackFor(feedbackAll, project),
           alerts: alertsFor(project),
           memory,
-          activeWindow: activeWindowOf(changes, { project, discovery }),
+          activeWindow: activeWindowOf(changes, project),
           config: ctx.config,
           gate: deps.gate,
           runDir: ctx.runDir,

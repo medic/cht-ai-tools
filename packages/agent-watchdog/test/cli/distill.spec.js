@@ -111,6 +111,21 @@ describe('cli/commands/distill', function () {
     expect(JSON.parse(one.out.text()).processed.map((p) => p.relative_path)).to.deep.equal([EXPLAINER]);
   });
 
+  it('masks people, phones and e-mails in a corpus item before the model reads it (revision 36)', async () => {
+    fs.writeFileSync(
+      path.join(rawDir, 'conversations', 'masked.md'),
+      '# A thread\n\n<@U024BE7LH> said the backlog cleared; ring +254 712 345 678 or ops@example.org; '
+        + '1073741824 bytes.\n',
+    );
+    const t = argsFor();
+    expect(await distillCommand(t.args)).to.equal(codes.OK);
+    const prompts = t.engine.singleTurn.getCalls().map((c) => c.args[0].userPrompt);
+    const masked = prompts.find((p) => p.includes('conversations/masked.md'));
+    expect(masked).to.include('[person] said the backlog cleared; ring [address] or [address]; 1073741824 bytes.');
+    expect(masked).to.not.include('U024BE7LH');
+    expect(prompts.join('\n')).to.not.include('254 712');
+  });
+
   it('exits 65 naming the raw directory when it does not exist', async () => {
     const missing = path.join(dataDir, 'missing-raw');
     const t = argsFor({ env: { AGENT_WATCHDOG_CORPUS_RAW_DIR: missing } });

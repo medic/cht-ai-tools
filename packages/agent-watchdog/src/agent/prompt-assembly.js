@@ -1,7 +1,7 @@
 'use strict';
 // Assembles the system prompt (static prefix, dynamic boundary, dynamic suffix) and the per-pass user
 // turns. Untrusted text is delimited and labelled (FR-044); computed data is passed as JSON.
-const { maskPeople } = require('../corpus/scrub');
+const { maskNote } = require('../corpus/scrub');
 
 // The runtime splits a system prompt at this marker: content before it is globally cacheable.
 const DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__';
@@ -78,7 +78,10 @@ const alertsBlock = (alerts) => {
   return wrapUntrusted('alerts', json(sanitiseData(alerts)));
 };
 
-/** Every string leaf with Slack mentions and bare user ids masked (FR-029, revision 33). */
+/**
+ * Every string leaf with people, e-mail addresses and phone numbers masked (FR-029, revisions 33 and 36): the one
+ * masker for every note that reaches a prompt, so nothing personal becomes a numeral the model was "given".
+ */
 const maskStrings = (value) => {
   if (Array.isArray(value)) {
     return value.map(maskStrings);
@@ -86,14 +89,14 @@ const maskStrings = (value) => {
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, maskStrings(inner)]));
   }
-  return typeof value === 'string' ? maskPeople(value) : value;
+  return typeof value === 'string' ? maskNote(value) : value;
 };
 
 const feedbackBlock = (feedback) => {
   if (!feedback || (Array.isArray(feedback) && feedback.length === 0)) {
     return 'No feedback recorded for this project.';
   }
-  // Identity keys are dropped and a person named inside a note is masked: no Slack id reaches the model.
+  // Identity keys are dropped and a person, address or phone inside a note is masked before the model reads it.
   return wrapUntrusted('feedback', json(maskStrings(sanitiseData(feedback, { dropIdentities: true }))));
 };
 
@@ -129,5 +132,5 @@ const buildPassPrompt = ({
 };
 
 module.exports = {
-  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, assembleSystemPrompt, buildPassPrompt, alertsBlock,
+  DYNAMIC_BOUNDARY, fill, wrapUntrusted, sanitiseData, maskStrings, assembleSystemPrompt, buildPassPrompt, alertsBlock,
 };

@@ -1,8 +1,10 @@
 'use strict';
-// Every date the model writes falls within the run's windows (FR-016, revision 33): ISO dates and day-month forms in a
-// finding's prose and evidence notes, and in a brief's headline, bullets and expected-load notice. A date the run gave
-// the model (`givenText`, an item's own entry) is exempt. The former check on evidence `start`/`end` fields is gone:
-// the findings schema never admitted them. The dashboard range code built is still held to the same span.
+// Every date the model writes falls within the run's windows (FR-016, revision 33), unless the run gave it that date:
+// ISO dates and timestamps, and day-month forms with or without a year, in a finding's prose and evidence notes and
+// in a brief's headline, bullets and expected-load notice. A day-month without a year is ambiguous (revision 36): it
+// is exempt when any year's reading of it was given, and otherwise checked in the reading nearest the run. The
+// texts the run gave are `givenText` (prompts and tool results), `givenDateText` (the system prompt with its window
+// notes and memory, or the roll-up's feedback and memory sections) and an item's own entry.
 const { sameMetric } = require('../metric-key');
 const { windowBounds } = require('../../collect/windows');
 
@@ -16,7 +18,8 @@ const MONTHS = {
 const MONTH = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?'
   + '|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
 const ORDINAL = '(?:st|nd|rd|th)?';
-const ISO_DATE = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+// A timestamp's `T` follows the day with no word boundary, so both forms are read (revision 36).
+const ISO_DATE = /\b(\d{4})-(\d{2})-(\d{2})(?=\b|T)/g;
 const DAY_MONTH = new RegExp(`\\b(\\d{1,2})${ORDINAL}\\s+(?:of\\s+)?${MONTH}\\b\\.?(?:,?\\s+(\\d{4}))?`, 'gi');
 const MONTH_DAY = new RegExp(`\\b${MONTH}\\b\\.?\\s+(\\d{1,2})${ORDINAL}\\b(?!\\s*[:%])(?:,?\\s+(\\d{4}))?`, 'gi');
 
@@ -32,49 +35,48 @@ const utcDate = (year, month, day) => {
   return valid ? date.toISOString().slice(0, 10) : null;
 };
 
-/** A day and month without a year take the year that places them at or before the span's end. */
-const resolveDayMonth = (day, monthName, year, spanEnd) => {
+/**
+ * The readings of a day and month: one when a year is written, else the three years around the span's end, so a
+ * date the model restates from a horizon ("1 October") is read as the run read it (revision 36).
+ */
+const readingsOf = (day, monthName, year, spanEnd) => {
   const month = MONTHS[monthName.toLowerCase()];
   if (!month) {
-    return null;
+    return [];
   }
   if (year) {
-    return utcDate(Number(year), month, day);
+    return [utcDate(Number(year), month, day)].filter(Boolean);
   }
   const endYear = Number(dayOf(spanEnd).slice(0, 4));
-  const sameYear = utcDate(endYear, month, day);
-  if (sameYear && sameYear <= dayOf(spanEnd)) {
-    return sameYear;
-  }
-  return utcDate(endYear - 1, month, day);
+  return [endYear - 1, endYear, endYear + 1].map((y) => utcDate(y, month, day)).filter(Boolean);
 };
 
-/** Every date written in a text, as ISO days; "may" is a month only when written as a name. */
+/** Every date written in a text, each as its readings (ISO days); "may" is a month only when written as a name. */
 const datesIn = (text, spanEnd) => {
   const source = String(text || '');
   const found = [];
   for (const match of source.matchAll(ISO_DATE)) {
     const iso = utcDate(Number(match[1]), Number(match[2]), Number(match[3]));
     if (iso) {
-      found.push(iso);
+      found.push({ written: match[0], readings: [iso] });
     }
   }
   for (const match of source.matchAll(DAY_MONTH)) {
     if (match[2].toLowerCase() === 'may' && match[2] !== 'May') {
       continue;
     }
-    const iso = resolveDayMonth(Number(match[1]), match[2], match[3], spanEnd);
-    if (iso) {
-      found.push(iso);
+    const readings = readingsOf(Number(match[1]), match[2], match[3], spanEnd);
+    if (readings.length) {
+      found.push({ written: match[0], readings });
     }
   }
   for (const match of source.matchAll(MONTH_DAY)) {
     if (match[1].toLowerCase() === 'may' && match[1] !== 'May') {
       continue;
     }
-    const iso = resolveDayMonth(Number(match[2]), match[1], match[3], spanEnd);
-    if (iso) {
-      found.push(iso);
+    const readings = readingsOf(Number(match[2]), match[1], match[3], spanEnd);
+    if (readings.length) {
+      found.push({ written: match[0], readings });
     }
   }
   return found;
@@ -85,7 +87,10 @@ const spanOf = (windows) => ({
   end: new Date(Math.max(...windows.map((w) => ms(w.end)))).toISOString(),
 });
 
-/** The brief's span: its windows when given, else the run's window bounds from the discovery's run start. */
+/**
+ * The brief's span: its windows when given, else the run's window bounds from the discovery's run start, with the
+ * previous cycle when an expected-load window with one is active (revision 36).
+ */
 const briefSpan = (ctx) => {
   if ((ctx.windows || []).length) {
     return spanOf(ctx.windows);
@@ -94,24 +99,44 @@ const briefSpan = (ctx) => {
   if (!runStart || Number.isNaN(ms(runStart))) {
     return null;
   }
-  const bounds = windowBounds(new Date(runStart));
+  const bounds = windowBounds(new Date(runStart), { activeWindow: ctx.activeWindow || null });
   return spanOf(bounds.map((b) => ({ start: b.start.toISOString(), end: b.end.toISOString() })));
 };
 
+/** Every reading of every date in the texts the run gave the model. */
 const givenDates = (ctx, span) => {
-  const texts = [...(ctx.givenText || [])];
+  const texts = [...(ctx.givenText || []), ...(ctx.givenDateText || [])];
   if (ctx.itemTexts && typeof ctx.itemTexts.values === 'function') {
     texts.push(...ctx.itemTexts.values());
   }
-  return new Set(texts.flatMap((text) => datesIn(text, span.end)));
+  return new Set(texts.flatMap((text) => datesIn(text, span.end)).flatMap((entry) => entry.readings));
+};
+
+const inside = (iso, span) => iso >= dayOf(span.start) && iso <= dayOf(span.end);
+
+/** The reading nearest the span: inside it when one is, else the least distance from either end. */
+const nearestReading = (readings, span) => {
+  const distance = (iso) => {
+    if (inside(iso, span)) {
+      return 0;
+    }
+    return Math.min(Math.abs(ms(iso) - ms(span.start)), Math.abs(ms(iso) - ms(span.end)));
+  };
+  return [...readings].sort((a, b) => distance(a) - distance(b))[0];
 };
 
 const dateReasons = (where, text, span, given) => {
   const reasons = [];
-  for (const iso of new Set(datesIn(text, span.end))) {
-    if (given.has(iso) || (iso >= dayOf(span.start) && iso <= dayOf(span.end))) {
+  const seen = new Set();
+  for (const entry of datesIn(text, span.end)) {
+    if (entry.readings.some((iso) => given.has(iso))) {
       continue;
     }
+    const iso = nearestReading(entry.readings, span);
+    if (inside(iso, span) || seen.has(iso)) {
+      continue;
+    }
+    seen.add(iso);
     reasons.push(`${where} names ${iso}, outside the run's windows (${dayOf(span.start)} to ${dayOf(span.end)})`);
   }
   return reasons;
@@ -162,4 +187,4 @@ const check = (ctx) => {
   return { name: NAME, status: reasons.length ? 'fail' : 'pass', reasons };
 };
 
-module.exports = { name: NAME, check, datesIn };
+module.exports = { name: NAME, check };

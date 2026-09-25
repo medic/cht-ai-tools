@@ -99,6 +99,25 @@ const createSlackPublisher = ({
     elements: [{ type: 'mrkdwn', text: `Supersedes an earlier post for this date: <${permalink}|earlier brief>` }],
   });
 
+  /**
+   * What reached the channel so far, for a record a later failure cannot lose (revision 34). Reported before the
+   * permalink is looked up (revision 36): the record the guard reads needs only the ts, and a lookup that fails
+   * after the post must not lose it; reported again with the permalink when the lookup answers.
+   */
+  const reportParent = async (onParent, parent, extra = {}) => {
+    if (!onParent) {
+      return null;
+    }
+    const record = {
+      channel_id: parent.channel || channel, ts: parent.ts, permalink: null, replies: [], slack_file_id: null,
+      ...extra, partial: true,
+    };
+    await onParent(record);
+    const permalink = await permalinkOf(parent.ts);
+    await onParent({ ...record, permalink });
+    return permalink;
+  };
+
   const publish = async ({ payload, reportPath = null, superseded = null, onParent = null }) => {
     const post_ = payload;
     let blocks = post_.parent.blocks;
@@ -113,13 +132,7 @@ const createSlackPublisher = ({
       metadata: post_.parent.metadata,
     });
     logger.info('slack.parent_posted', { ts: parent.ts });
-    if (onParent) {
-      // What reached the channel so far, for a record a later failure cannot lose (revision 34).
-      await onParent({
-        channel_id: parent.channel || channel, ts: parent.ts, permalink: await permalinkOf(parent.ts), replies: [],
-        slack_file_id: null, report: null, partial: true,
-      });
-    }
+    const parentPermalink = await reportParent(onParent, parent, { report: null });
     let report = null;
     if (post_.report && reportPath) {
       await pace();
@@ -144,25 +157,21 @@ const createSlackPublisher = ({
     return {
       channel_id: parent.channel || channel,
       ts: parent.ts,
-      permalink: await permalinkOf(parent.ts),
+      permalink: parentPermalink || await permalinkOf(parent.ts),
       replies,
       slack_file_id: null,
       report,
     };
   };
 
-  const postTextOnly = async (payload) => {
+  /** A heartbeat or failure brief: the text alone, reported to `onParent` like a brief's parent (revision 36). */
+  const postTextOnly = async (payload, { onParent = null } = {}) => {
     const posted = await post({ text: payload.parent.text, metadata: payload.parent.metadata });
-    return {
-      channel_id: posted.channel || channel,
-      ts: posted.ts,
-      permalink: await permalinkOf(posted.ts),
-      replies: [],
-      slack_file_id: null,
-    };
+    const permalink = (await reportParent(onParent, posted)) || await permalinkOf(posted.ts);
+    return { channel_id: posted.channel || channel, ts: posted.ts, permalink, replies: [], slack_file_id: null };
   };
 
-  const postHeartbeat = (payload) => postTextOnly(payload);
+  const postHeartbeat = (payload, options) => postTextOnly(payload, options);
 
   /** The feedback digest: one threaded reply under the parent published today (FR-062). */
   const postDigest = async ({ digest, parentTs }) => {

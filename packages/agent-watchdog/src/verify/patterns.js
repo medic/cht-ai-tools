@@ -76,7 +76,24 @@ const phoneMatches = (text) => {
   return out;
 };
 
+const MONTH_NAME = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?'
+  + '|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const DATE_PHRASE_PATTERN = new RegExp(
+  `\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_NAME}\\b\\.?(?:,?\\s+\\d{4})?`
+  + `|\\b${MONTH_NAME}\\b\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b(?!\\s*[:%])(?:,?\\s+\\d{4})?`,
+  'gi',
+);
+
+/**
+ * A day-month or month-day phrase ("15 September", "Sept 16th", "October 1, 2026") is a date the date check reads,
+ * not a numeral the number check should count (revision 36); "may" is a month only when written as a name.
+ */
+const stripDatePhrases = (text) => String(text || '').replace(DATE_PHRASE_PATTERN, (phrase) => (
+  /^may\b/.test(phrase) ? phrase : ' '
+));
+
 module.exports = {
+  stripDatePhrases,
   SECRET_PATTERNS,
   EMAIL_PATTERN,
   PHONE_PATTERN,

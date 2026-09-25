@@ -191,26 +191,32 @@ describe('collect/grafana', () => {
       expect(third.message).to.match(/3 consecutive/);
     });
 
-    it('counts a failed query of any status as consecutive; only a success resets (revision 33)', async () => {
+    it('lets a 4xx or 500 fail its query alone: it neither counts toward unreachable nor resets', async () => {
+      // One refused expression is that expression's problem (FR-073, revision 36): three in a row are three
+      // window failures, and the fourth query still answers.
       const statuses = [422, 500, 400];
-      const fetch = sinon.stub().callsFake(async () => jsonResponse({ message: 'refused' }, statuses.shift() || 200));
+      const fetch = sinon.stub().callsFake(async () => (statuses.length
+        ? jsonResponse({ message: 'refused' }, statuses.shift())
+        : ok()));
       const client = clientWith(fetch, { retryDelayMs: 0, logger: warnings() });
       await expect(range(client)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 422);
       await expect(range(client)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 500);
-      const third = await range(client).catch((e) => e);
+      await expect(range(client)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 400);
+      expect(await range(client), 'the source is not unreachable').to.deep.equal([]);
+      // A 422 between two timeouts does not reset the count either: only a success does.
+      let call = 0;
+      const mixed = sinon.stub().callsFake((url, init) => {
+        call += 1;
+        // Query 1: two timeouts; query 2: a 422; queries 3 and 4: two timeouts each.
+        return call === 3 ? Promise.resolve(jsonResponse({ message: 'refused' }, 422)) : slow(500)(url, init);
+      });
+      const second = clientWith(mixed, { queryTimeoutMs: 30, retryDelayMs: 0, logger: warnings() });
+      await expect(range(second)).to.be.rejectedWith(HttpError);
+      await expect(range(second)).to.be.rejectedWith(HttpError).and.eventually.have.property('status', 422);
+      await expect(range(second)).to.be.rejectedWith(HttpError);
+      const third = await range(second).catch((e) => e);
       expect(third).to.be.instanceOf(codes.ExitError);
       expect(third.code).to.equal(codes.UNAVAILABLE);
-      expect(third.message).to.match(/3 consecutive query failures, last status 400/);
-      const mixed = [422, 200, 422, 422, 200];
-      const flaky = sinon.stub().callsFake(async () => (mixed.shift() === 200
-        ? ok()
-        : jsonResponse({ message: 'refused' }, 422)));
-      const second = clientWith(flaky, { retryDelayMs: 0, logger: warnings() });
-      await expect(range(second)).to.be.rejectedWith(HttpError);
-      expect(await range(second)).to.deep.equal([]);
-      await expect(range(second)).to.be.rejectedWith(HttpError);
-      await expect(range(second)).to.be.rejectedWith(HttpError);
-      expect(await range(second), 'two failures then a success is not unreachable').to.deep.equal([]);
     });
 
     it('retries a 502, 503 or 504 from the proxy once and reports the status when it persists', async () => {

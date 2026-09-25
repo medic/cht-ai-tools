@@ -8,7 +8,7 @@ const { loadConfig } = require('../../config/load');
 const { withEgressGuard } = require('../../net/egress');
 const { ensureDataLayout } = require('../../store/run-dir');
 const { writeResult } = require('../streams');
-const { createTracer } = require('../../trace/langfuse');
+const { createTracer, finishTraceSafely } = require('../../trace/langfuse');
 const { loadPatternCards } = require('../../corpus/cards');
 const { distill } = require('../../corpus/distill');
 
@@ -66,23 +66,14 @@ const distillLoaded = async ({ flags, env, stdout, logger, deps, config }) => {
     });
     // The result first, then the flush: tracing is observability, never the product (revision 13; here revision 35).
     writeResult(stdout, report);
-    await finishTrace(tracer, log, {
+    await finishTraceSafely(tracer, log, {
       status: 'completed', processed: report.processed.length, skipped: report.skipped.length,
       rejected: report.rejected.length, cards: report.cards.length, cost_usd: report.cost_usd,
     });
     return codes.OK;
   } catch (error) {
     log.error('distill.failed', { error });
-    await finishTrace(tracer, log, { status: 'failed', error: error.message });
+    await finishTraceSafely(tracer, log, { status: 'failed', error: error.message });
     throw error;
-  }
-};
-
-/** A rejected trace flush is logged and never changes the exit code. */
-const finishTrace = async (tracer, log, output) => {
-  try {
-    await tracer.finish({ output });
-  } catch (traceError) {
-    log.warn('trace.finish_failed', { error: traceError });
   }
 };

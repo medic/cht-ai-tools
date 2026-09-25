@@ -128,10 +128,39 @@ const locationOf = (response) => (response && response.headers && typeof respons
   ? response.headers.get('location')
   : null);
 
+const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization', 'cookie']);
+
+const headerEntries = (headers) => {
+  if (!headers) {
+    return [];
+  }
+  if (typeof headers.entries === 'function' && !Array.isArray(headers)) {
+    return [...headers.entries()];
+  }
+  return Array.isArray(headers) ? headers.map(([name, value]) => [name, value]) : Object.entries(headers);
+};
+
+/**
+ * The headers without the credentials, as a plain object, for a redirect that leaves the origin (revision 36): the
+ * runtime's own fetch drops them across origins and this guard follows redirects itself, so it must too. The
+ * caller's object is left as it was.
+ */
+const withoutCredentials = (headers) => Object.fromEntries(
+  headerEntries(headers).filter(([name]) => !CREDENTIAL_HEADERS.has(String(name).toLowerCase())),
+);
+
+const sameOrigin = (a, b) => {
+  const from = new URL(a);
+  const to = new URL(b);
+  return from.protocol === to.protocol && from.host === to.host;
+};
+
 /**
  * A fetch that refuses any destination outside `egress` before calling `fetch`; the log names host and port only.
  * Redirects are followed here, not by `fetch` (revision 33): each `Location` is checked like the first URL, so a
  * listed host cannot hand the request to an unlisted one. A caller that asked for manual redirects gets the redirect.
+ * A hop that leaves the origin travels without the credential headers, and a hop from https to http is refused
+ * (revision 36).
  */
 const guardFetch = (fetch, egress, { logger = noop } = {}) => {
   const refuse = (input) => {
@@ -158,6 +187,12 @@ const guardFetch = (fetch, egress, { logger = noop } = {}) => {
       const next = new URL(location, current).toString();
       if (!isEgressAllowed(next, egress)) {
         refuse(next);
+      }
+      if (new URL(current).protocol === 'https:' && new URL(next).protocol !== 'https:') {
+        throw new TypeError(`redirect refused: ${current} redirected to a plain http URL`);
+      }
+      if (!sameOrigin(current, next) && options.headers) {
+        options = { ...options, headers: withoutCredentials(options.headers) };
       }
       const method = String(options.method || 'GET').toUpperCase();
       const status = response.status;

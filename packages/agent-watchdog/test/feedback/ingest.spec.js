@@ -176,8 +176,30 @@ describe('feedback/ingest', () => {
     expect(retraction).to.include({
       author: 'U3', item_id: GAMMA, source_ts: GAMMA_TS, note: 'retracted: up', kind: 'reaction',
     });
-    expect(retraction.feedback_id).to.equal(identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'retracted'));
+    expect(retraction.feedback_id).to.equal(identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'retracted:up'));
     expect(doc.by_item[GAMMA]).to.include({ up: 2, retracted: 1, verdict: 'confirmed' });
+  });
+
+  it('records the retraction of an up and of a down by one person on one message as two records', async () => {
+    await seedRun(dataDir, '2026-09-17');
+    const base_ = {
+      date: '2026-09-17', run_id: '2026-09-17', target: 'item', item_id: GAMMA, kind: 'reaction', note: null,
+      horizon: null, author: 'U3', matched: true, source_ts: GAMMA_TS,
+    };
+    await appendRecords(dataDir, [
+      { ...base_, feedback_id: identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'up'), verdict: 'up' },
+      { ...base_, feedback_id: identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'down'), verdict: 'down' },
+    ]);
+    // The fixture shows neither reaction from U3 today.
+    const doc = await ingest(dataDir, fakeClient());
+    const retractions = doc.records.filter((r) => r.verdict === 'retracted' && r.author === 'U3');
+    expect(retractions.map((r) => r.note).sort()).to.deep.equal(['retracted: down', 'retracted: up']);
+    expect(new Set(retractions.map((r) => r.feedback_id)).size).to.equal(2);
+    expect(retractions.map((r) => r.feedback_id).sort()).to.deep.equal([
+      identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'retracted:up'),
+      identity.feedbackId(GAMMA_TS, 'U3', 'reaction', 'retracted:down'),
+    ].sort());
+    expect(doc.by_item[GAMMA]).to.include({ retracted: 2 });
   });
 
   it('records a reaction added again after a recorded retraction under a new id, and counts it', async () => {
@@ -189,7 +211,7 @@ describe('feedback/ingest', () => {
         note: null, horizon: null, author: 'U1', matched: true, source_ts: GAMMA_TS,
       },
       {
-        feedback_id: identity.feedbackId(GAMMA_TS, 'U1', 'reaction', 'retracted'),
+        feedback_id: identity.feedbackId(GAMMA_TS, 'U1', 'reaction', 'retracted:up'),
         date: '2026-09-17', run_id: '2026-09-17', target: 'item', item_id: GAMMA, kind: 'reaction',
         verdict: 'retracted',
         note: 'retracted: up', horizon: null, author: 'U1', matched: true, source_ts: GAMMA_TS,
@@ -364,6 +386,38 @@ describe('cli/stages/feedback', () => {
     expect(reviewCalls.length).to.equal(doc.review.calls.length);
     const stored = (await readAll(dataDir)).filter((r) => r.kind === 'note');
     expect(stored.every((r) => r.classification === 'none')).to.equal(true);
+  });
+
+  it('counts a failed review attempt on every note it could not classify, run after run (revision 34)', async () => {
+    await seedRun(dataDir, '2026-09-17');
+    const engine = {
+      singleTurn: sinon.stub().callsFake(async ({ name }) => {
+        if (name === 'feedback-review') {
+          throw new Error('model unavailable');
+        }
+        return {
+          structuredOutput: { horizon: null, expected_max: null, item_reference: null },
+          result: { subtype: 'success', usage: {}, total_cost_usd: 0, num_turns: 1, duration_ms: 1, session_id: 's' },
+          toolCalls: [],
+          referenceUnavailable: false,
+        };
+      }),
+    };
+    const first = await RunDir.create(dataDir, '2026-09-18');
+    const ctx1 = await ctxFor(first, { slack: fakeClient() });
+    ctx1.engine = engine;
+    await stage.run(ctx1);
+    const doc = await first.readJson('feedback.ingested.json');
+    expect(doc.review.unclassified.length).to.be.greaterThan(0);
+    const notes = (await readAll(dataDir)).filter((r) => r.kind === 'note');
+    expect(notes.length).to.be.greaterThan(0);
+    expect(notes.map((r) => r.review_attempts)).to.deep.equal(notes.map(() => 1));
+    const second = await RunDir.create(dataDir, '2026-09-19');
+    const ctx2 = await ctxFor(second, { slack: fakeClient() });
+    ctx2.engine = engine;
+    await stage.run(ctx2);
+    const again = (await readAll(dataDir)).filter((r) => r.kind === 'note');
+    expect(again.map((r) => r.review_attempts)).to.deep.equal(again.map(() => 2));
   });
 
   it('records that review was skipped when no engine is available', async () => {
@@ -646,7 +700,9 @@ describe('feedback/ingest: the notes on one item are one conversation (FR-085, r
       .to.have.been.calledWithMatch('feedback.parse_retried', sinon.match({ feedback_id: retried.feedback_id }));
     expect(second.horizons.map((h) => h.horizon)).to.deep.equal(['2026-09-25']);
     expect(second.calls).to.have.length(1);
-    expect(second.calls[0])
-      .to.include({ stage: 'feedback', kind: 'parse', model: 'claude-fable-5-1', cost_usd: 0.002 });
+    expect(second.calls[0]).to.include({
+      stage: 'feedback', kind: 'parse', model: 'claude-fable-5-1', cost_usd: 0.002, run_id: '2026-09-19', pass: null,
+      project_url: null,
+    });
   });
 });

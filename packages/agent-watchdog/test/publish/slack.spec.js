@@ -145,10 +145,43 @@ describe('publish/slack', () => {
     const error = await publisher.publish({ payload: withReport, reportPath: imagePath, onParent }).catch((e) => e);
     expect(error).to.be.instanceOf(codes.ExitError);
     expect(error.code).to.equal(74);
-    expect(onParent).to.have.been.calledOnce;
-    expect(onParent.firstCall.args[0]).to.include({ channel_id: 'C123', ts: '1700000000.000100', partial: true });
-    expect(onParent.firstCall.args[0].permalink).to.include('p1700000000000100');
+    // Reported before the permalink is looked up, then again with it (revision 36).
+    expect(onParent).to.have.been.calledTwice;
+    expect(onParent.firstCall.args[0]).to.include({
+      channel_id: 'C123', ts: '1700000000.000100', partial: true, permalink: null,
+    });
     expect(onParent.firstCall.args[0].replies).to.deep.equal([]);
+    expect(onParent.secondCall.args[0].permalink).to.include('p1700000000000100');
+    expect(onParent.secondCall.args[0]).to.include({ ts: '1700000000.000100', partial: true });
+  });
+
+  it('still reports the parent when its permalink lookup fails after the post (revision 36)', async () => {
+    const client = fakeClient();
+    client.chat.getPermalink = sinon.stub().rejects(new Error('ratelimited'));
+    const onParent = sinon.stub().resolves();
+    const sleep = sinon.stub().resolves();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger(), sleep });
+    const error = await publisher.publish({ payload: payloadFor(), onParent }).catch((e) => e);
+    expect(error).to.be.instanceOf(codes.ExitError);
+    expect(error.code).to.equal(74);
+    expect(onParent).to.have.been.calledOnce;
+    expect(onParent.firstCall.args[0]).to.include({ ts: '1700000000.000100', permalink: null, partial: true });
+  });
+
+  it('reports a heartbeat or failure post the same way, before and after its permalink (revision 36)', async () => {
+    const client = fakeClient();
+    const onParent = sinon.stub().resolves();
+    const publisher = createSlackPublisher({ client, channel: 'C123', logger: quietLogger() });
+    const posted = await publisher.postHeartbeat({ parent: { text: 'quiet day', metadata: {} } }, { onParent });
+    expect(posted).to.include({ channel_id: 'C123', ts: '1700000000.000100' });
+    expect(posted.permalink).to.include('p1700000000000100');
+    expect(onParent).to.have.been.calledTwice;
+    expect(onParent.firstCall.args[0]).to.include({ ts: '1700000000.000100', permalink: null, partial: true });
+    expect(onParent.secondCall.args[0].permalink).to.equal(posted.permalink);
+    // Without a listener nothing changes: one permalink lookup, the record as before.
+    const plain = await publisher.postTextOnly({ parent: { text: 'quiet day', metadata: {} } });
+    expect(plain.permalink).to.include('p1700000000000100');
+    expect(client.chat.getPermalink.callCount).to.equal(2);
   });
 
   it('gives up after three attempts with exit code 74', async () => {

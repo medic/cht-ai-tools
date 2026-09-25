@@ -91,8 +91,6 @@ variables the schema reads).
 | `AGENT_WATCHDOG_LOG_FORMAT` | enum `json\|pretty` | `json` | JSON lines on stderr. |
 | `MCP_TIMEOUT` | integer ms | 30000 | Read by the agent runtime: MCP server startup wait. |
 | `AGENT_WATCHDOG_CLAUDE_PATH` | path | unset | Explicit `claude` executable for `AGENT_WATCHDOG_ENGINE=cli`; when unset, `claude` is resolved on PATH. The image puts the Agent SDK's own Claude Code binary there (revision 32). |
-| `AGENT_WATCHDOG_VERSION` | string | set by the image | The release version the image was built with (`--build-arg VERSION`); the run record and `--version` name it, the development default `0.0.0-development` is ignored (revision 35). Not an operator setting. |
-| `AGENT_WATCHDOG_REVISION` | string | set by the image | The commit the image was built from (`--build-arg REVISION`); the run record's `git_sha` when the tree has no git, `unknown` ignored (revision 35). Not an operator setting. |
 
 ## Set by the container image, not by the deployment
 
@@ -105,6 +103,14 @@ to it because the SDK is run with `persistSession: false`), `HOME=/home/watchdog
 [container.md](./container.md). The runtime
 would also look for a `claude` login under `CLAUDE_CONFIG_DIR`, so the image has none: the scheduled run
 authenticates with `ANTHROPIC_API_KEY`; login mode is for a contributor's machine.
+
+The image also bakes what it was built from (revision 35; filed here rather than with the operator
+settings since revision 36). A deployment never sets these.
+
+| Variable | Type | Value | Notes |
+|---|---|---|---|
+| `AGENT_WATCHDOG_VERSION` | string | `--build-arg VERSION` | The release version; the run record, `--version`, `replay` and `egress` name it, the development default `0.0.0-development` is ignored. |
+| `AGENT_WATCHDOG_REVISION` | string | `--build-arg REVISION` | The commit the image was built from; the run record's `git_sha` when the tree has no git, `unknown` ignored. |
 
 ## Deliberately not configurable
 

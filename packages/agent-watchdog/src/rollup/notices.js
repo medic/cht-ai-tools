@@ -85,4 +85,19 @@ const runBudgetNotice = (summary) => {
     + `${left === 1 ? 'was' : 'were'} not analysed`;
 };
 
-module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice };
+/**
+ * A collection in which half or more of the windows failed their query is said on the brief (FR-073, revision 36):
+ * one refused panel is that panel's problem and no notice, but a day the source answered almost nothing is never
+ * a quiet heartbeat.
+ */
+const collectionNotice = (summary) => {
+  const failed = summary && Number(summary.failed);
+  const windows = summary && Number(summary.windows);
+  if (!failed || !windows || failed * 2 < windows) {
+    return null;
+  }
+  return `Collection incomplete: ${failed} of ${windows} windows failed their query; the brief covers what was `
+    + 'collected';
+};
+
+module.exports = { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice, collectionNotice };

@@ -10,6 +10,7 @@ const {
 const { sameMetric, keyForms, flatPanels } = require('../metric-key');
 const { coveredIds } = require('../../rollup/layout');
 const { enums } = require('../../model/schemas');
+const { stripDatePhrases } = require('../patterns');
 
 const NAME = 'numbers_match';
 
@@ -73,12 +74,25 @@ const decimalsOf = (value) => {
   return dot === -1 ? 0 : text.length - dot - 1;
 };
 
-/** The evidence values of every candidate the item cites: what the analysis was handed for this metric. */
-const citedEvidenceValues = (item, ctx) => {
+// Which computed levels each window holds (revision 36): evidence is checked against its own window's values.
+const WINDOW_LEVELS = {
+  current: ['current_value'],
+  previous_day: ['previous_day_value'],
+  previous_week: ['previous_week_value'],
+  previous_cycle: ['previous_cycle_value'],
+  trailing_14d: ['trailing_mean', 'trailing_stddev'],
+};
+const COUNT_UNITS = new Set(['count', '', null, undefined]);
+
+const changeOf = (item, ctx) => (ctx.changes || [])
+  .find((change) => change.project_url === item.project_url && sameMetric(change.metric, item.metric)) || null;
+
+/** The evidence values of every candidate the item cites, for one window: what the analysis was handed. */
+const citedEvidenceValues = (item, window, ctx) => {
   const referenced = new Set(item.candidate_ids || []);
   return (ctx.candidates || [])
     .filter((candidate) => referenced.has(candidate.candidate_id))
-    .flatMap((candidate) => (candidate.evidence || []).map((e) => Number(e.value)))
+    .flatMap((candidate) => (candidate.evidence || []).filter((e) => e.window === window).map((e) => Number(e.value)))
     .filter(Number.isFinite);
 };
 
@@ -88,30 +102,54 @@ const sampleValues = (item, window, ctx) => (ctx.windows || [])
   .flatMap((w) => (w.values || []).map((pair) => Number(Array.isArray(pair) ? pair[1] : pair)))
   .filter(Number.isFinite);
 
+/** The rates, ratios and cited thresholds of the metric: values without a window, for evidence in their unit. */
+const unitlessValues = (item, ctx) => {
+  const values = [];
+  const change = changeOf(item, ctx);
+  if (change) {
+    values.push(change.pct_change_vs_previous_day, change.deviation_sigma, change.monotonic_rise_hours);
+  }
+  const referenced = new Set(item.candidate_ids || []);
+  for (const candidate of ctx.candidates || []) {
+    if (referenced.has(candidate.candidate_id)) {
+      values.push(candidate.observed, candidate.threshold && candidate.threshold.value);
+    }
+  }
+  return values.map(Number).filter(Number.isFinite);
+};
+
 /**
- * Every `{ window, value }` the model attached must equal, within its own decimals, a computed value of the metric or
- * a collected sample of the named window (FR-016, revision 33). A non-numeric value is the schema's failure.
+ * Every `{ window, value }` the model attached must equal, within its own decimals, a computed level of that window
+ * (the Computed Change's value for it, a cited candidate's evidence for it, a collected sample of it), or, for a
+ * value in a rate, ratio or hour unit, one of the metric's rates and cited thresholds (FR-016, revisions 33 and 36).
+ * The entries that pass are returned as values the prose may quote; an invented one fails here and is quoted nowhere.
  */
 const evidenceReasons = (item, index, ctx) => {
-  const computed = [
-    ...allowedValues(item, ctx, { includeEvidence: false }).map((a) => Number(a.value)).filter(Number.isFinite),
-    ...citedEvidenceValues(item, ctx),
-  ];
   const reasons = [];
+  const verified = [];
+  const change = changeOf(item, ctx);
   (item.evidence || []).forEach((evidence, j) => {
     const value = Number(evidence && evidence.value);
     if (!Number.isFinite(value)) {
       return;
     }
-    const pool = [...computed, ...sampleValues(item, evidence.window, ctx)];
-    if (!pool.some((v) => close(value, v, decimalsOf(evidence.value)))) {
-      reasons.push(
-        `items[${index}].evidence[${j}] value ${evidence.value} for window ${evidence.window} matches no computed or `
-        + 'collected value',
-      );
+    const levels = (WINDOW_LEVELS[evidence.window] || [])
+      .map((field) => (change ? Number(change[field]) : NaN))
+      .filter(Number.isFinite);
+    const pool = [
+      ...levels, ...citedEvidenceValues(item, evidence.window, ctx), ...sampleValues(item, evidence.window, ctx),
+      ...(COUNT_UNITS.has(evidence.unit) ? [] : unitlessValues(item, ctx)),
+    ];
+    if (pool.some((v) => close(value, v, decimalsOf(evidence.value)))) {
+      verified.push({ value: evidence.value, unit: evidence.unit });
+      return;
     }
+    reasons.push(
+      `items[${index}].evidence[${j}] value ${evidence.value} for window ${evidence.window} matches no computed or `
+      + 'collected value of that window',
+    );
   });
-  return reasons;
+  return { reasons, verified };
 };
 
 const matches = (token, allowed) => {
@@ -239,7 +277,8 @@ const rangeTokens = (ctx) => {
  * number to justify.
  */
 const stripRunIdentifiers = (text, ctx) => {
-  let out = String(text || '');
+  // A day-month phrase is a date for dates_match, never a numeral here (revision 36).
+  let out = stripDatePhrases(String(text || ''));
   for (const form of expressionForms(ctx)) {
     if (out.includes(form)) {
       out = out.split(form).join(' ');
@@ -377,8 +416,11 @@ const check = (ctx) => {
     });
   } else {
     (ctx.items || []).forEach((item, i) => {
-      const allowed = allowedValues(item, ctx);
-      reasons.push(...evidenceReasons(item, i, ctx));
+      // The evidence the check verified joins the values the prose may quote (revision 36); invented evidence fails
+      // above and licenses nothing.
+      const evidence = evidenceReasons(item, i, ctx);
+      reasons.push(...evidence.reasons);
+      const allowed = [...allowedValues(item, ctx, { includeEvidence: false }), ...evidence.verified];
       checkText(`items[${i}].why_now`, item.why_now, allowed, spanForms, reasons, ctx, runGiven, ranges);
       checkText(
         `items[${i}].suggested_check`, item.suggested_check, allowed, spanForms, reasons, ctx, runGiven, ranges,
@@ -389,6 +431,6 @@ const check = (ctx) => {
 };
 
 module.exports = {
-  name: NAME, check, allowedValues, evidenceReasons, matches, stripRunIdentifiers, givenNumerals, bareValue,
-  derivedValues, rangeTokens, roundsGiven, levelUnitOf, WINDOW_NAME_TOKENS,
+  name: NAME, check, allowedValues, matches, stripRunIdentifiers, givenNumerals, bareValue, derivedValues,
+  rangeTokens, roundsGiven, levelUnitOf, WINDOW_NAME_TOKENS,
 };

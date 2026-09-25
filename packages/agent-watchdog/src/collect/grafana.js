@@ -146,8 +146,11 @@ const createGrafanaClient = (options) => {
     }
 
     if (isQuery) {
-      // A failed query of any status counts (revision 33); only a successful one resets the count (FR-073).
-      if (!response || !response.ok) {
+      // Toward "unreachable" count only what says something about the source: a timeout, a connection failure or
+      // a gateway status (502, 503, 504). A 4xx or 500 is one expression's problem and neither counts nor resets;
+      // only a success resets (FR-073, revision 36; revision 33 counted every status and one refused panel failed
+      // the run).
+      if (!response || RETRYABLE_STATUSES.has(response.status)) {
         consecutiveQueryFailures += 1;
         if (consecutiveQueryFailures >= MAX_CONSECUTIVE_QUERY_FAILURES) {
           const last = response ? `status ${response.status}` : `a timeout after ${timeout} ms`;
@@ -155,7 +158,7 @@ const createGrafanaClient = (options) => {
           error.name = response ? 'UpstreamError' : 'TimeoutError';
           throw unreachable(url, error, { consecutive_failures: consecutiveQueryFailures });
         }
-      } else {
+      } else if (response.ok) {
         consecutiveQueryFailures = 0;
       }
     }

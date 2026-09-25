@@ -91,11 +91,15 @@ describe('cli/stages/publish', () => {
     await runDir.writeJson('rollup/publication.json', {
       channel_id: 'C123', ts: '1.000', permalink: 'https://slack/p1.000', replies: [], partial: true,
     });
+    // The payload as posted stays on disk: the refusal comes before anything is rebuilt (revision 36).
+    await runDir.writeJson('rollup/payload.json', { as_posted: true, digest: { text: 'yesterday' } });
     const client = fakeClient();
     const error = await stage.run(ctx('stage', client)).catch((e) => e);
     expect(error.code).to.equal(75);
     expect(error.message).to.include('1.000');
     expect(client.chat.postMessage.called).to.equal(false);
+    expect(await runDir.readJson('rollup/payload.json'))
+      .to.deep.equal({ as_posted: true, digest: { text: 'yesterday' } });
     // A preview still builds the payload without posting.
     const preview = await stage.run(ctx('preview', client));
     expect(preview.posted).to.equal(false);
@@ -278,6 +282,25 @@ describe('cli/stages/publish: feedback digest (FR-062)', () => {
     const records = await readAll(dataDir);
     expect(records.find((r) => r.feedback_id === 'f1f1f1f1f1f1').acknowledged_run_id).to.equal('2026-09-18');
     expect(records.find((r) => r.feedback_id === 'f2f2f2f2f2f2').acknowledged_run_id).to.equal(null);
+  });
+
+  it('records a heartbeat as soon as it is posted, so a digest that fails in its thread cannot lose it', async () => {
+    await runDir.writeJson('rollup/brief.json', makeBrief({ kind: 'heartbeat', bullets: [] }));
+    const slack = client();
+    slack.chat.postMessage = sinon.stub().callsFake(async ({ thread_ts: threadTs }) => {
+      if (threadTs) {
+        throw new Error('socket hang up');
+      }
+      return { ok: true, channel: 'C123', ts: '1.000' };
+    });
+    const error = await stage.run(ctx('scheduled', slack, { deps: { slack, sleep: async () => {} } })).catch((e) => e);
+    expect(error.code).to.equal(74);
+    const publication = await runDir.readJson('rollup/publication.json');
+    expect(publication).to.include({ channel_id: 'C123', ts: '1.000', partial: true, permalink: 'https://slack/p1.000' });
+    // The record now refuses a second heartbeat for the date.
+    const again = await stage.run(ctx('stage', client())).catch((e) => e);
+    expect(again.code).to.equal(75);
+    expect((await readAll(dataDir)).every((r) => r.acknowledged_run_id === null)).to.equal(true);
   });
 
   it('posts the digest in a heartbeat thread on a quiet day and survives a failed reaction', async () => {

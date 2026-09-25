@@ -37,6 +37,7 @@
       "description": "Every accepted item id: the body items first, in the order of the bullets, then the rest highest rank first."
     },
     "expected_load_notice": {
+      "description": "Null unless the Expected-load context section gives a notice. Then that notice, extended only by what the items show; at most 2 lines of at most 120 characters; dates and numbers only as given or as the items' evidence; no URLs. The gate checks it like the headline.",
       "type": [
         "string",
         "null"

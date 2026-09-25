@@ -61,6 +61,7 @@ Process new or changed corpus items into proposed pattern cards (FR-035, FR-036)
 |---|---|---|---|
 | `--all` | flag | off | Re-process every item regardless of index status. |
 | `--item` | relative path, repeatable | none | Process only these items. |
+| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | The engine that runs the distillation calls, as for `run` (revision 36). |
 
 Stdout: a JSON distillation report listing processed, skipped (with reason) and produced cards.
 
@@ -72,6 +73,7 @@ Build the weekly Calibration Report and write threshold proposals (US4 scenario 
 |---|---|---|---|
 | `--week` | `YYYY-Www` | current ISO week | Week to report on. |
 | `--project` | URL, repeatable | all | Restrict. |
+| `--engine` | `sdk` \| `cli` | `AGENT_WATCHDOG_ENGINE` | The engine that summarises the report, as for `run` (revision 36). |
 
 ### `check <cht-url>`
 

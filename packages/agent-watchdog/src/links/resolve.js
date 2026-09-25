@@ -3,7 +3,7 @@
 // login), every other link with HEAD then GET, accepting 2xx and 3xx unless the redirect leaves the allow-list.
 const { isAllowed, hostOf } = require('./allowlist');
 const { flatPanels } = require('../verify/metric-key');
-const { EgressRefusedError } = require('../net/egress');
+const { EgressRefusedError, isEgressAllowed, originOf } = require('../net/egress');
 
 const RETRY_WITH_GET = new Set([405, 501]);
 
@@ -38,7 +38,9 @@ const resolveAlertList = (parsed, alerts) => {
   return { ok: true, status: null, reason: 'alert rules and hosts found' };
 };
 
-const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allowlist = null, alerts = null }) => {
+const createResolver = ({
+  fetch, timeoutMs = 15000, discovery, grafanaUrl, allowlist = null, alerts = null, egress = null,
+}) => {
   const grafanaHost = hostOf(grafanaUrl);
   const dashboards = new Map(((discovery && discovery.dashboards) || []).map((d) => [d.uid, d]));
 
@@ -96,9 +98,21 @@ const createResolver = ({ fetch, timeoutMs = 15000, discovery, grafanaUrl, allow
     }
   };
 
+  // A destination outside the egress list is recorded, never requested (FR-083, revision 36): the link allow-list
+  // knows hosts, the egress list host and port, and a listed host on another port is a bad link, not a failed run.
+  const outsideEgress = (url) => {
+    const origin = originOf(url);
+    const where = origin ? `${origin.host}:${origin.port}` : 'not a URL';
+    return { ok: false, status: null, reason: `not requested: ${where} is outside the egress list` };
+  };
+
   return async (urls) => {
     const results = new Map();
     for (const url of new Set(urls || [])) {
+      if (egress && !isEgressAllowed(url, egress)) {
+        results.set(url, outsideEgress(url));
+        continue;
+      }
       const result = hostOf(url) === grafanaHost ? resolveGrafana(url) : await resolveHttp(url);
       results.set(url, result);
     }

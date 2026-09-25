@@ -94,6 +94,8 @@
 - [ ] CHK053 - Is the memory update classified with proposals as text that leaves the model and returns to it, with the masking of people, e-mail addresses and phone numbers before storage stated as a requirement and the masking logged? [Consistency, Spec §FR-044, §FR-033]
 - [ ] CHK054 - Is every place a Slack note reaches a prompt enumerated (analysis feedback block, horizon parse, review, roll-up feedback text), with the masking of Slack user identifiers required in each and refused by the gate on the published surface? [Coverage, Spec §FR-029, §FR-044]
 - [ ] CHK055 - Does the egress requirement cover redirects (a listed host answering a redirect to an unlisted one) and every command that can open a connection, not only the scheduled `run`? [Coverage, Spec §FR-083, contracts/container.md]
+- [ ] CHK056 - Does the egress requirement say what a redirect that leaves the origin may carry (no Authorization, Proxy-Authorization or Cookie header) and that a step down from https to http is refused? [Coverage, Spec §FR-083, contracts/container.md]
+- [ ] CHK057 - Is it stated that a tool's error answer never repeats the model's argument, so a URL passed as a metric or card name cannot become "seen in a tool result" and be cited? [Coverage, Spec §FR-016, §FR-044]
 
 ## Notes
 

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 35)
+**Status**: Draft (revision 36)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -625,7 +625,8 @@ Discovery and collection
   priority list, in that order, and MAY examine additional metrics the analysis judges relevant.
   The live single-window query MUST answer one series per project as collection does (FR-075), refusing
   several with the labels that differ, carry the panel's unit, and know the project's active expected-load
-  window (revision 34).
+  window (revision 34). It keeps collection's single-series fallback, so a target-scoped panel whose one
+  series carries the exporter's own instance label is answered (revision 36).
 - **FR-004**: For each metric and project the system MUST collect the current window and its
   comparison windows: the previous day, the same day of the previous week, and the same phase of
   the previous cycle when an expected-load window is active.
@@ -675,7 +676,7 @@ Analysis
   reaching a bound the run completes with what it has and says so.
   A session the harness stopped or a turn that timed out leaves no runtime cost figure; it MUST be charged
   the rest of its grant, marked as estimated on its record, so the run budget never re-grants money that
-  may already be spent (revision 34).
+  may already be spent (revision 34). The brief says "up to" for such a charge, never "spent" (revision 36).
 - **FR-013**: A project with no candidate items MUST NOT incur model usage. A project whose only
   candidates are standing conditions (FR-014) MUST NOT incur model usage either: code names them,
   and a session spent on them adds nothing the reader does not already know (revision 23).
@@ -810,6 +811,15 @@ Verification gate
   bullets are, for numbers against every item's computed values, for links, length and hosts; and
   every date the model writes, in a finding or in the brief, MUST fall within the run's collected
   windows unless the run gave it that date.
+  Revision 36: a day-month phrase (`18 September`, `Sept 16th`) is a date the date check reads, not a
+  numeral the number check counts; a yearless date is exempt when any reading of it was given (the year
+  that places it at or before the run's end, or the nearest year) and is otherwise read in the year nearest
+  the run; a timestamp (`2026-08-01T12:00:00Z`) is a date; the session's system prompt and, for the brief,
+  the feedback read that day and the memory are given text for dates only, never for numbers; the brief's
+  span carries the previous cycle on a day an expected-load window with a cycle is active; a value the
+  evidence check verified against a collected sample may be quoted in the prose, rounded or derived, and
+  each evidence entry is checked against the values of its own window. A tool's error answer never repeats
+  the model's argument, so a URL passed as a metric or card name cannot become "seen in a tool result".
 - **FR-017**: A draft that fails verification MUST be returned to the analysis with the reasons,
   at most twice; after that the run MUST publish the degraded deterministic brief with a notice.
   For the brief, every attempt MUST share one model session so the ranked items are sent once and
@@ -902,7 +912,11 @@ Feedback
   roll-up's context so the memory update can reflect it (User Story 2, scenario 1).
   Wherever a note reaches a prompt (the analysis feedback block, the horizon parse, the review), Slack
   user identifiers in its text are masked by code first, and the gate refuses one on the published
-  surface (revision 33).
+  surface (revision 33). The same masking, of Slack identifiers, e-mail addresses and phone numbers, covers
+  every remaining path: the roll-up's feedback text and unmatched notes, the item-history tool, the
+  outcome files distillation reads; a phone number carries a plus or a separator and holds no date, so a
+  date range and a list of integers are not phones. The memory update is masked of the same identifiers
+  only, so byte counts, decimals, dates and owners' names survive it (FR-044, revision 36).
   A note's record keeps the expected maximum and the item's observed value its parse found and how the
   horizon was found, so a stored horizon holds its size from the second day on and a failed model parse is
   logged and read again by the next run with a model; a horizon is read against the day the note was
@@ -1034,8 +1048,11 @@ Alerts and groups
   metrics source as unreachable (failure notice, non-zero exit) only when the source cannot be
   connected to or when queries fail consecutively. Range and instant queries MUST have their own
   timeout, distinct from the timeout of the Grafana API calls. Added in revision 11.
-  A query that fails with any status counts toward the consecutive failures; only a successful query
-  resets the count (revision 33).
+  Only a query that cannot be answered, no response or a 502, 503 or 504, counts toward the consecutive
+  failures, and only a successful query resets the count; a 4xx or a 500 is that expression's problem and
+  fails its window alone (revision 33, corrected in revision 36). When half or more of a run's windows
+  failed their query the brief carries a collection notice saying so; the heartbeat is never refused for
+  it (revision 36).
   One host's failed discovery query leaves that project without a version and a history count, logged, and
   the run with its brief (revision 34).
 - **FR-074**: Collection MUST run projects concurrently within the configured project concurrency
@@ -1134,13 +1151,19 @@ Persistence and reproducibility
   explicit force flag.
   A run whose publication record already names a parent post, complete or partial, MUST refuse to post a
   second one with the temporary-failure code; the record is written as soon as the parent is posted, so a
-  failure later in the thread cannot lose it (revision 34).
+  failure later in the thread cannot lose it (revision 34). It is written before the parent's permalink is
+  looked up, so a lookup that fails after the post cannot lose it either; a heartbeat or failure post gets
+  the same record; and the refusal comes before anything is rebuilt, so the payload on disk stays the one
+  that was posted (revision 36).
 - **FR-043**: Each stage MUST be runnable on its own from the files of the previous stage.
   A stage-only roll-up resolves links from the discovery on disk and carries the agent stage's recorded
   spend (revision 34).
   A bad `--stage`, `--date` or `--since` is refused before any run directory exists, so a typo never blocks
   the scheduled run of the day; each command refuses a flag that is not its own with the usage code, and
-  `--log-level` and `--log-format` apply to the command's logger (revision 35).
+  `--log-level` and `--log-format` apply to the command's logger (revision 35). A stage-only roll-up carries
+  the feedback stage's recorded model calls beside the agent's spend; an empty `--stage` and an impossible
+  date such as `2026-13-01` are refused with the usage code; `--engine` is a flag of `distill` and
+  `calibrate` as of `run` and `replay` (revision 36).
 
 Security and trust boundaries
 
@@ -1221,10 +1244,13 @@ Configuration
   names, is exempt from the guard; inside the container the platform policy refuses it.
   The gate resolves only links code built and model-written references that are on the link
   allow-list and appeared in a tool result of the run; every other URL is recorded as unresolved
-  without a request. A refusal by the egress guard during link resolution fails the run (69) rather
-  than reading as a broken link. The guard follows a redirect only to a listed destination, and it
+  without a request. The resolver checks a destination against the egress list before any request and
+  records one outside it as not requested, so a link on a listed host at another port fails the link
+  and never the run (revision 36). The guard follows a redirect only to a listed destination, and it
   is installed for every command that can reach the network: `run`, `tools-server`, `calibrate`,
-  `distill` and `replay` (revision 33).
+  `distill` and `replay` (revision 33). A redirect that leaves the origin travels without the
+  Authorization, Proxy-Authorization and Cookie headers, and a redirect from https to http is refused
+  (revision 36).
   The `hosts` format prints host names for a name-based policy; the ports are in the JSON form, and the
   reference policy's single 443 rule is an assumption its notes state (revision 35).
 - **FR-084**: The Slack app MUST hold exactly the bot scopes the posting needs: `chat:write`,

@@ -22,17 +22,18 @@ const previousRunIds = async (dataDir, runId, n = Infinity) => {
 };
 
 /**
- * The analysed dates strictly before `date`, most recent first, each paired with the run that speaks
- * for it: the last run of that date, because that is the run whose output was published. Forced
- * re-runs of one date therefore contribute one date, and a date with no run at all is not a date the
- * system analysed, so it neither counts nor breaks a streak.
- * @returns {Array<[string, string]>} `[date, runId]` pairs
+ * The run that speaks for each date, the last one of the date (revision 34; one helper for the persistence streak
+ * and calibration, revision 36): a forced re-run is another attempt at the same day, not another day.
+ * @param {string[]} runIds
+ * @param {{ from?: string|null, to?: string|null, before?: string|null }} [bounds] inclusive `from` and `to`,
+ *   exclusive `before`, as dates
+ * @returns {Map<string, string>} date to run id
  */
-const analysedDatesBefore = (runIds, date) => {
+const lastRunPerDate = (runIds, { from = null, to = null, before = null } = {}) => {
   const speaksFor = new Map();
   for (const id of runIds) {
     const own = runDate(id);
-    if (own >= date) {
+    if ((from && own < from) || (to && own > to) || (before && own >= before)) {
       continue;
     }
     const held = speaksFor.get(own);
@@ -40,8 +41,18 @@ const analysedDatesBefore = (runIds, date) => {
       speaksFor.set(own, id);
     }
   }
-  return [...speaksFor.entries()].sort(([a], [b]) => b.localeCompare(a));
+  return speaksFor;
 };
+
+/**
+ * The analysed dates strictly before `date`, most recent first, each paired with the run that speaks
+ * for it: the last run of that date, because that is the run whose output was published. Forced
+ * re-runs of one date therefore contribute one date, and a date with no run at all is not a date the
+ * system analysed, so it neither counts nor breaks a streak.
+ * @returns {Array<[string, string]>} `[date, runId]` pairs
+ */
+const analysedDatesBefore = (runIds, date) => [...lastRunPerDate(runIds, { before: date }).entries()]
+  .sort(([a], [b]) => b.localeCompare(a));
 
 /**
  * Consecutive immediately preceding analysed dates whose ranked items contained each id, by item id;
@@ -70,4 +81,4 @@ const previousItemCounts = async (dataDir, runId) => {
   return counts;
 };
 
-module.exports = { previousItemCounts, previousRunIds, analysedDatesBefore, runDate, runSequence };
+module.exports = { previousItemCounts, previousRunIds, analysedDatesBefore, lastRunPerDate, runDate, runSequence };

@@ -72,7 +72,7 @@ One execution for one date (FR-039, FR-042).
 | `stages` | Stage[] | `{ name, status, started_at, finished_at, duration_ms, error }` per stage. |
 | `projects` | string[] | URLs analysed, in priority order. |
 | `usage` | Usage | Summed token usage across model calls. |
-| `cost_usd` | number | Sum of Cost Records; reconciled with the runtime's estimate (FR-049). |
+| `cost_usd` | number | Sum of Cost Records: the runtime's figure per call, an estimated upper bound when a session leaves none (FR-012, FR-049). |
 | `publications` | Publication[] | Parent post, thread replies, the report share (see Brief, Thread Reply); the image file until revision 24. |
 | `cost_estimated` | boolean | True when any session's cost is an upper bound (revision 34, see Pass). |
 | `trace_id`, `trace_url` | string | One trace per run (FR-049). |
@@ -306,7 +306,7 @@ accepted or rejected by the gate.
 A Pass record whose turn failed before a result carries `error` (the runtime's message) and the
 session's `bounds_hit` includes `error`, distinct from `timeout` (revision 13).
 | `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a sub-bullet of their Project Group's bullet (FR-069). |
-| `slot` | integer or null | 1 to 5: the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
+| `slot` | integer or null | 1 or 2, the layout's body slots (revision 35): the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
 | `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |
 
 Lifecycle: `drafted` (pass 1) → `revised` (later passes) → `ranked` → `placed` → `published` →
@@ -346,9 +346,10 @@ Check names, fixed in code: `schema`, `projects_known`, `metrics_known`, `candid
 `numbers_match`, `dates_match`, `links_built`, `links_allowlisted`, `links_resolve`,
 `severity_rules`, `bullet_count`, `bullet_length`, `secrets_absent`, `personal_data_absent`,
 `pattern_cards_known`. The same list runs inside the analysis and before publication (FR-018).
-`bullet_count` checks top-level bullets (at most five) and sub-bullets per bullet (at most eight);
-`bullet_length` checks two lines of 120 characters per bullet and one line per sub-bullet, and that
-every body item of the layout has exactly one bullet or sub-bullet (FR-015, FR-069).
+`bullet_count` checks the body slots (at most two) and the project lines per bullet (at most four:
+three projects and the count of the rest); `bullet_length` checks two lines of 120 characters per
+bullet and per project line, and that every body item of the layout has exactly one bullet or
+project line (FR-015, FR-069; the caps as revision 35 set them, in `LAYOUT_CAPS`).
 Since revision 33 the brief checks cover the headline and the expected-load notice as they cover a
 bullet (numbers against every item's computed values, links, length, hosts, personal data), and
 `personal_data_absent` refuses a Slack user id or mention anywhere on the published surface.
@@ -474,7 +475,7 @@ A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback
 | `item_id` | string or null | Required when `target` is `item`. |
 | `alert_key` | string or null | Required when `target` is `alert_group`. Recorded and acknowledged like item feedback; it does not change alert ranking in this revision. |
 | `kind` | enum | `reaction` \| `note`. |
-| `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions. For a note, `up` or `down` when the note carries a thumbs (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:` or the emoji), else null; a note's verdict counts in the tallies like a reaction on the item it cites (revision 23). A removed reaction is recorded as `retracted` (Edge Cases). |
+| `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions. For a note, `up` or `down` when the note carries a thumbs (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:` or the emoji), else null; a note's verdict counts in the tallies like a reaction on the item it cites (revision 23). A removed reaction is recorded as `retracted`, its id in the verdict's own space (`retracted:up`, `retracted:down`, numbered again after a re-add; revision 36) (Edge Cases). |
 | `note` | string or null | Thread reply text, verbatim, untrusted. |
 | `horizon` | string or null | Date parsed from the note by the feedback-parsing stage, when one is stated (US2 scenario 1): the note's own statement. The horizon applied to the item is its thread's clarified whole, the last horizon the notes state in thread order (FR-085, revision 29). |
 | `author` | string | Slack user id. Never rendered into partner-facing output. |
@@ -606,6 +607,7 @@ Weekly, per project and metric (US4 scenario 4, FR-058).
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` | integer | |
 | `cost_usd` | number | From the runtime result. |
 | `num_turns`, `duration_ms` | integer | |
+| `kind` | string, optional | On the feedback stage's calls: `parse` (a horizon) or `review` (a note), one record shape for both (revision 36). |
 
 Cache counters are read under both spellings the runtime uses (`cache_read_input_tokens` and
 `cache_read_tokens`) through `normaliseUsage`; the roll-up's records carried zeros until revision 23
@@ -616,7 +618,7 @@ because they read one spelling only.
 - A Run analyses many Projects; each Project has many Metric Windows, one Computed Change per
   metric, zero or more Candidates, and one Pass per analysis pass.
 - An Item references one or more Candidates of the same project and at most one Pattern Card.
-- A Brief carries at most five Bullets in its body; a Bullet holds one Item, one Project Group's
+- A Brief carries at most two Bullets in its body; a Bullet holds one Item, one Project Group's
   Items as sub-bullets, or one Project Group's Alert Groups by category. Every Item of the run has
   one Thread Reply, and so does every Alert Group.
 - A Project belongs to one Project Group. An Alert Instance belongs to one Alert Rule and, through
@@ -661,8 +663,10 @@ because they read one spelling only.
   within the value's own decimals, a computed value of that metric (the Computed Change's levels,
   baselines and rates, a cited candidate's observed value and threshold, a candidate's evidence) or a
   value in the collected series of the named window; evidence never widens the values the prose may
-  quote, so an invented figure has no back door. The headline is checked against the union of every
-  item's allowed values and every item's given entry; the notice against the notice the run gave.
+  quote, so an invented figure has no back door. The headline and the notice are checked against the
+  union of every item's allowed values and every item's given entry, the notice also against the notice
+  the run gave. Revision 36: a value the check verified against a collected sample may be quoted in the
+  prose, rounded or derived, and each evidence entry is checked against the values of its own window.
 - Date matching (FR-016, revision 33): `dates_match` extracts every date the model writes (ISO
   `YYYY-MM-DD`, `1 October`, `October 1`, with or without a year; a day-month form without a year
   takes the year that places it at or before the run's end) from `why_now`, `suggested_check` and the

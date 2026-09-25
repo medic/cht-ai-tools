@@ -70,3 +70,33 @@ describe('cli/stages/agent itemHistoryFor', () => {
     expect(runIds[29]).to.equal('2026-09-01');
   });
 });
+
+describe('cli/stages/agent itemHistoryFor: the notes it serves are masked (FR-029, revision 36)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { dataPaths } = require('../../src/store/run-dir');
+  let dataDir;
+  beforeEach(() => {
+    dataDir = tempDir();
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('masks people, phones and e-mails in every note of the history', async () => {
+    const run = await RunDir.create(dataDir, '2026-09-17');
+    const item = { item_id: 'a1b2c3d4e5f6', metric: METRIC, pattern_card: null, severity: 'medium', confidence: 0.6 };
+    await run.writeJson(`${SLUG}/passes.json`, {
+      passes: [{ pass: 1, items: [item] }], items: [item], converged: true,
+    });
+    fs.writeFileSync(dataPaths(dataDir).feedbackFile, `${JSON.stringify({
+      feedback_id: 'f1f1f1f1f1f1', date: '2026-09-18', run_id: '2026-09-17', target: 'item', item_id: item.item_id,
+      kind: 'note', verdict: 'up', note: '<@U024BE7LH> says call +254 712 345 678, mail ops@example.org', author: 'U9',
+      matched: true, source_ts: '1.1',
+    })}\n`);
+    const history = await itemHistoryFor(dataDir, '2026-09-18', SLUG)(PROJECT, METRIC, null);
+    expect(history).to.have.length(1);
+    expect(history[0].feedback).to.deep.equal([{
+      verdict: 'up', note: '[person] says call [address], mail [address]', author: 'U9',
+    }]);
+    expect(path.basename(dataPaths(dataDir).feedbackFile)).to.equal('feedback.jsonl');
+  });
+});

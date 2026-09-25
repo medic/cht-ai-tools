@@ -24,6 +24,9 @@ const TEXT = {
   bulletText: 'At most 2 lines of at most 120 characters; numbers must match evidence; no URLs.',
   headline: 'At most 2 lines of at most 120 characters; numbers must match the items\' evidence; no URLs.',
   replaceWith: 'Full new memory text within the cap, or null for no change; code stores the diff.',
+  expectedLoadNotice: 'Null unless the Expected-load context section gives a notice. Then that notice, extended '
+    + 'only by what the items show; at most 2 lines of at most 120 characters; dates and numbers only as given or '
+    + 'as the items\' evidence; no URLs. The gate checks it like the headline.',
   brief: 'Structured output of the roll-up call. Bullets reference items by id; the gate checks every number '
     + 'against computed data and every structural limit before publication.',
 };
@@ -85,7 +88,7 @@ const briefSchema = z.object({
     text: z.string().describe(TEXT.bulletText),
   }).strict()).describe(TEXT.bullets),
   thread_order: z.array(z.string()).describe(TEXT.threadOrder),
-  expected_load_notice: z.string().nullable(),
+  expected_load_notice: z.string().nullable().describe(TEXT.expectedLoadNotice),
   memory_update: z.object({
     replace_with: z.string().nullable().describe(TEXT.replaceWith),
   }).strict(),

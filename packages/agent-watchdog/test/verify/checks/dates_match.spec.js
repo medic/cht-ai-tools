@@ -18,7 +18,8 @@ describe('verify/checks/dates_match', () => {
     ]);
     const suggested = baseContext();
     suggested.items[0].suggested_check = 'Look at the deploy of 25 December.';
-    expect(check(suggested).reasons[0]).to.match(/^items\[0\]\.suggested_check names 2025-12-25/);
+    // A yearless date is read in the year nearest the run (revision 36): the coming December here.
+    expect(check(suggested).reasons[0]).to.match(/^items\[0\]\.suggested_check names 2026-12-25/);
     const note = baseContext();
     note.items[0].evidence[0].note = 'peak on 2026-01-05';
     expect(check(note).reasons[0]).to.match(/^items\[0\]\.evidence\[0\]\.note names 2026-01-05/);
@@ -71,5 +72,45 @@ describe('verify/checks/dates_match', () => {
     expect(check(ctx)).to.deep.equal({
       name: 'dates_match', status: 'pass', reasons: ['no run start to check dates against'],
     });
+  });
+});
+
+describe('verify/checks/dates_match: what the run gave is exempt in every form (revision 36)', () => {
+  it('accepts a yearless restatement of a horizon the run gave as an ISO date, and a timestamp it gave', () => {
+    const horizon = baseContext();
+    horizon.givenText = ['{"horizon": "2026-10-01", "expected_max": 500}'];
+    horizon.items[0].why_now = 'Above the 500 the team expected until 1 October.';
+    expect(check(horizon).status).to.equal('pass');
+    const stamped = baseContext();
+    stamped.givenText = ['{"started_at": "2026-08-01T12:00:00.000Z", "title": "Disk"}'];
+    stamped.items[0].why_now = 'The disk alert has fired since 2026-08-01, well before this window.';
+    expect(check(stamped).status).to.equal('pass');
+    const written = baseContext();
+    written.items[0].why_now = 'Rising since 2026-07-01T00:00Z.';
+    expect(check(written).reasons[0]).to.match(/names 2026-07-01/);
+  });
+
+  it('reads the system prompt as given for dates in a finding, and the feedback and memory in a brief', () => {
+    const finding = baseContext();
+    finding.givenDateText = ['# Run context\n- campaign: Measles campaign until 2026-10-10'];
+    finding.items[0].why_now = 'Volumes expected until 2026-10-10 (campaign).';
+    expect(check(finding).status).to.equal('pass');
+    const brief = briefContext();
+    brief.windows = [];
+    brief.discovery.run_start = '2026-09-18T06:00:00Z';
+    brief.givenDateText = ['"horizon": "2026-10-15"', 'alpha spikes at month end (until 2026-11-02)'];
+    brief.draft.bullets[0].text = 'cht.example.org sentinel backlog 912 vs 300, expected until 15 October';
+    brief.draft.headline = 'Two projects, one expected until 2026-11-02';
+    expect(check(brief).status).to.equal('pass');
+  });
+
+  it('puts the previous cycle into the brief\'s span when an expected-load window with one is active', () => {
+    const brief = briefContext();
+    brief.windows = [];
+    brief.discovery.run_start = '2026-09-30T06:00:00Z';
+    brief.draft.headline = 'Volumes up on the same point last cycle (30 August)';
+    expect(check(brief).status).to.equal('fail');
+    brief.activeWindow = { id: 'month-end', kind: 'month_end', cycle_days: 30 };
+    expect(check(brief).status).to.equal('pass');
   });
 });

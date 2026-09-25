@@ -145,3 +145,27 @@ describe('links/resolve: an egress refusal is not a broken link (FR-083, revisio
     await expect(resolve(['https://docs.communityhealthtoolkit.org/x/'])).to.be.rejectedWith(EgressRefusedError);
   });
 });
+
+describe('links/resolve: a destination outside the egress list is recorded, never requested (revision 36)', () => {
+  const { createResolver } = require('../../src/links/resolve');
+  const { buildEgress, guardFetch } = require('../../src/net/egress');
+  const { baseContext, config } = require('../verify/helpers/context');
+
+  it('records a listed host on another port as not requested, so no refusal can fail the run', async () => {
+    const ctx = baseContext();
+    const inner = sinon.stub().resolves(new Response(null, { status: 200 }));
+    const egress = buildEgress(config);
+    const resolve = createResolver({
+      fetch: guardFetch(inner, egress), timeoutMs: 50, discovery: ctx.discovery, grafanaUrl: 'https://watchdog.example.org',
+      allowlist: ctx.allowlist, egress,
+    });
+    const results = await resolve([
+      'https://docs.communityhealthtoolkit.org:8443/hosting/monitoring/', 'https://docs.communityhealthtoolkit.org/x/',
+    ]);
+    expect(results.get('https://docs.communityhealthtoolkit.org:8443/hosting/monitoring/')).to.deep.equal({
+      ok: false, status: null, reason: 'not requested: docs.communityhealthtoolkit.org:8443 is outside the egress list',
+    });
+    expect(results.get('https://docs.communityhealthtoolkit.org/x/').ok).to.equal(true);
+    expect(inner).to.have.been.calledOnce;
+  });
+});

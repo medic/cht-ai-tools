@@ -16,8 +16,8 @@ const GLOBAL_FLAGS = ['config-dir', 'data-dir', 'log-level', 'log-format', 'help
 const COMMAND_FLAGS = {
   run: ['date', 'project', 'group', 'stage', 'engine', 'dry-run', 'force', 'since'],
   replay: ['date', 'project', 'group', 'prompts', 'skill', 'label', 'compare', 'from', 'to', 'engine'],
-  distill: ['all', 'item'],
-  calibrate: ['week', 'project'],
+  distill: ['all', 'item', 'engine'],
+  calibrate: ['week', 'project', 'engine'],
   check: [],
   purge: ['dry-run'],
   egress: ['format'],
@@ -62,8 +62,8 @@ Commands:
   run           the daily pipeline (--date --project --group --stage --engine --dry-run --force --since)
                 --group <label> analyses one programme's projects (repeatable, combines with --project)
   replay        regenerate findings for a stored run offline (--date --project --prompts --skill --label --from --to)
-  distill       turn new corpus items into proposed pattern cards (--all --item)
-  calibrate     weekly calibration report and threshold proposals (--week --project)
+  distill       turn new corpus items into proposed pattern cards (--all --item --engine)
+  calibrate     weekly calibration report and threshold proposals (--week --project --engine)
   check <url>   readiness check for a CHT deployment
   purge         apply retention (--dry-run)
   egress        the destinations a run contacts, for the platform's network policy (--format json|hosts)
@@ -168,4 +168,4 @@ const main = async (argv, options = {}) => {
 };
 
 module.exports = {
-  COMMAND_FLAGS, GLOBAL_FLAGS, main, parseCommandLine, COMMANDS, OPTIONS, USAGE };
+  main, parseCommandLine, COMMANDS, OPTIONS, USAGE };

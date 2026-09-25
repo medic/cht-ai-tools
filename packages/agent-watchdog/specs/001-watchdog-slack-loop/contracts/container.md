@@ -17,7 +17,7 @@ repository, never a second source of truth.
 | Browser | none. The daily run renders no image since revision 24 (FR-019); Playwright, Chromium and the emoji font left the image in revision 30 (FR-086) |
 | User | non-root, fixed UID and GID (`10001:10001`), home `/home/watchdog`, shell `nologin`; the application files are owned by root and read-only to it |
 | Entrypoint | `node bin/agent-watchdog.js`; the CronJob passes the command, for example `run` or `calibrate` |
-| Baked environment | `NODE_ENV=production`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, `HOME=/home/watchdog`, `TMPDIR=/tmp` |
+| Baked environment | `NODE_ENV=production`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, `HOME=/home/watchdog`, `TMPDIR=/tmp`, `AGENT_WATCHDOG_VERSION=<release>`, `AGENT_WATCHDOG_REVISION=<commit>` (the build arguments, revision 35) |
 | Labels | `org.opencontainers.image.source`, `.title`, `.licenses`; `.version` and `.revision` from the `VERSION` and `REVISION` build arguments the release passes |
 | Ports | none exposed; the process listens on nothing |
 | Size budget | under 700 MB compressed; the runtime binary dominates |
@@ -76,9 +76,12 @@ No inbound ports. DNS is the one further egress the pod needs. The runtime's tel
 checks are disabled by the baked environment. The `check <cht-url>` command contacts the host an
 operator names and is exempt from the guard; the platform policy refuses it inside the container.
 The guard follows a redirect only to a listed destination (it fetches with manual redirects and
-re-checks each `Location`, up to five hops); it is installed for `run`, `tools-server`, `calibrate`,
-`distill` and `replay`, every command that can reach the network (revision 33). The gate's link resolver
-never requests a model-written URL that is off the link allow-list or was not seen in a tool result.
+re-checks each `Location`, up to five hops); a hop that leaves the origin travels without the
+Authorization, Proxy-Authorization and Cookie headers, and a step down from https to http is refused
+(revision 36); it is installed for `run`, `tools-server`, `calibrate`, `distill` and `replay`, every
+command that can reach the network (revision 33). The gate's link resolver never requests a
+model-written URL that is off the link allow-list or was not seen in a tool result, and it checks the
+egress list itself before a request, recording a destination outside it as not requested (revision 36).
 
 ## Running it locally with Compose (revision 31)
 

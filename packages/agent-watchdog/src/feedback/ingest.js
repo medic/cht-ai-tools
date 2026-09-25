@@ -317,7 +317,9 @@ const ingestFeedback = async ({
         if (present.has(key) || added <= retracted) {
           continue;
         }
-        const sequence = retracted === 0 ? 'retracted' : `retracted#${retracted}`;
+        // One id space per verdict (revision 36): the retraction of an up and the retraction of a down on the same
+        // message by the same person are two records, not one written twice.
+        const sequence = retracted === 0 ? `retracted:${record.verdict}` : `retracted:${record.verdict}#${retracted}`;
         candidates.push({
           feedback_id: identity.feedbackId(target.ts, record.author, 'reaction', sequence),
           date: observedDate, run_id: record.run_id, target: record.target, item_id: record.item_id,
@@ -380,7 +382,7 @@ const ingestFeedback = async ({
       // later still means that September.
       const noteDate = noteDateOf(message.ts, { earliest: entry.sourceDate || null, latest: observedDate });
       const parsed = await parseNoteWithModel({
-        text: message.text, noteDate, engine, model, definition, earlierNotes,
+        text: message.text, noteDate, engine, model, definition, earlierNotes, runId,
       });
       if (parsed.call) {
         calls.push(parsed.call);

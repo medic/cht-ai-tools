@@ -77,8 +77,11 @@ describe('agent/pattern-index (FR-038, US6 scenarios 4 and 5)', () => {
     expect(hit.text).to.include('## Confirmation steps');
     expect(hit.text).to.include(STEP_ONE);
     const proposed = parse(await read.handler({ card_id: 'proposed-only' }));
-    expect(proposed).to.deep.equal({ error: 'unknown card: proposed-only' });
-    expect(parse(await read.handler({ card_id: 'nope' }))).to.deep.equal({ error: 'unknown card: nope' });
+    // The refusal names no argument (revision 36): a card id is the model's text, and an echoed URL would count as
+    // seen in a tool result.
+    expect(proposed.error).to.match(/^unknown card;/);
+    expect(proposed.error).to.not.include('proposed-only');
+    expect(parse(await read.handler({ card_id: 'nope' })).error).to.match(/^unknown card;/);
     expect(recorded.map((c) => c.tool)).to.deep.equal(['read_pattern_card', 'read_pattern_card', 'read_pattern_card']);
   });
 

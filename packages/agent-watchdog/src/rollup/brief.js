@@ -12,7 +12,7 @@ const { schemas } = require('../model/schemas');
 const { buildDeterministicBrief, buildHeartbeat, checkedCounts, hostOf } = require('./deterministic-brief');
 const { buildLayout, groupOfProjects, assembleBullets, assembleThread, coveredIds } = require('./layout');
 const { MAX_LINE_CHARS } = require('../verify/checks/bullet_length');
-const { fill, wrapUntrusted, sanitiseData } = require('../agent/prompt-assembly');
+const { fill, wrapUntrusted, sanitiseData, maskStrings } = require('../agent/prompt-assembly');
 
 const BUILT_IN_TEMPLATE = [
   'You write the daily CHT Watchdog brief for a technical operations audience.',
@@ -79,10 +79,12 @@ const checkedText = (discovery, candidates, analysedProjects = null) => {
   return `${counts.projects} projects, ${counts.panels} panels, ${counts.candidates} ${noun}`;
 };
 
+// The feedback as the roll-up reads it (FR-029): identity keys dropped and every note masked of people, addresses
+// and phone numbers (revision 36), so the roll-up prompt carries no Slack id however a note was written.
 const feedbackText = (feedback, feedbackBrief) => {
-  const items = (feedback || []).map((entry) => sanitiseData(entry, { dropIdentities: true }));
+  const items = (feedback || []).map((entry) => maskStrings(sanitiseData(entry, { dropIdentities: true })));
   const hasBrief = feedbackBrief && (feedbackBrief.up || feedbackBrief.down || (feedbackBrief.notes || []).length);
-  const brief = hasBrief ? sanitiseData(feedbackBrief, { dropIdentities: true }) : null;
+  const brief = hasBrief ? maskStrings(sanitiseData(feedbackBrief, { dropIdentities: true })) : null;
   if (!items.length && !brief) {
     return 'No feedback was recorded for this run.';
   }
@@ -165,7 +167,9 @@ const buildUserPrompt = ({
   const missing = Object.keys(values).filter((key) => key !== 'date' && !userTemplate.includes(`{{${key}}}`));
   const sections = [fill(userTemplate, values), ...missing.map((key) => `## ${SECTION_TITLES[key]}\n\n${values[key]}`)];
   if (feedbackUnmatched && feedbackUnmatched.length) {
-    sections.push(untrusted('unmatched-feedback-notes', JSON.stringify(feedbackUnmatched, null, 2)));
+    // Whole records: their author key is dropped and their text masked like matched feedback (revision 36).
+    const unmatched = maskStrings(sanitiseData(feedbackUnmatched, { dropIdentities: true }));
+    sections.push(untrusted('unmatched-feedback-notes', JSON.stringify(unmatched, null, 2)));
   }
   for (const rejection of rejections) {
     const reasons = rejection.reasons.map((r) => `- ${r}`).join('\n');
@@ -387,6 +391,8 @@ const analysisCutOff = (analysis) => {
     total: analysis.projects || stopped.length,
     bound: (bounds.length ? bounds : ['budget']).map((b) => BOUND_NAMES[b]).join(' or '),
     spent,
+    // An estimated charge (the grant of a session the harness killed, FR-012) is an upper bound, said as one.
+    estimated: stopped.some((s) => s.cost_estimated === true),
   };
 };
 
@@ -456,7 +462,7 @@ const shortfalls = (analysis) => {
   const cutOff = analysisCutOff(analysis);
   if (cutOff) {
     const text = `model sessions were stopped by the ${cutOff.bound} on ${cutOff.count} of ${cutOff.total} `
-      + `projects before a result (${dollars(cutOff.spent)} spent)`;
+      + `projects before a result (${cutOff.estimated ? 'up to ' : ''}${dollars(cutOff.spent)} spent)`;
     found.push({ notice: text, reason: text });
   }
   // A first pass refused on every attempt leaves no items; with one pass by default the project would otherwise
@@ -475,7 +481,7 @@ const composeBrief = async ({
   ctx, items, discovery, changes, candidates, allCandidates = candidates, memory = null, feedbackUnmatched = [],
   expectedLoadNotice = null, referenceSourcesUnavailable = false, footer, notices: givenNotices = [], feedback = [],
   feedbackBrief = null, layout = null, alertGroups = [], alertLinks = [], staleAfterDays = 14, analysis = null,
-  analysedProjects = null,
+  analysedProjects = null, activeWindow = null,
 }) => {
   // `candidates` are the ones the model was handed; `allCandidates` include the standing conditions code handled,
   // which the counts still cover (FR-014, revision 23).
@@ -532,6 +538,9 @@ const composeBrief = async ({
   ];
   // Each entry's line may quote any item it covers, and nothing of a neighbour's (FR-016, revisions 23 and 28).
   const itemTexts = entryTexts(bodyLayout, items);
+  // The feedback and memory sections carry dates the model may restate (horizons, remembered windows): given for
+  // dates, never for numerals (revision 36).
+  const givenDateText = [feedbackText(feedback, feedbackBrief), memory ? String(memory) : ''].filter(Boolean);
 
   // One session for every attempt (FR-017, revision 23): the items are sent once and cached; a retry carries only
   // the failing bullets and code keeps the rest.
@@ -592,6 +601,8 @@ const composeBrief = async ({
         extraUrls: alertLinks,
         givenText,
         itemTexts,
+        givenDateText,
+        activeWindow,
       });
       drafts.push({ attempt, draft, report });
       if (report.outcome === 'accepted') {

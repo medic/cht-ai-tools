@@ -370,3 +370,20 @@ trace flush and log a rejected flush without changing the exit code. The entity 
 or a fifth entry, and the brief schema the model reads no longer speaks of one-line sub-bullets
 (`npm run schema:build` regenerated `schema/brief.schema.json`; `npm run replay:eval` is the diff). The commit
 header pattern accepts `feat(#12)!: subject`.
+
+## 27. After the re-review (revision 36)
+
+A panel Prometheus refuses (a 422, a 500) fails its own windows and nothing else; the run goes on, and when
+half or more of the windows failed their query the brief carries `Collection incomplete: N of M windows
+failed their query`. A yearless date the model restates from a horizon it was given passes the gate; a
+timestamp in a tool result counts as a date it was given; a day-month phrase is not a numeral; a figure the
+gate verified in the evidence may be quoted rounded. Notes are masked of Slack ids, e-mail addresses and
+phone numbers on every path to a prompt, and the memory keeps its byte counts, decimals and dates. A redirect
+off the origin carries no credentials and a step down to http is refused; a link on a listed host at another
+port is recorded as not requested instead of failing the run. `rollup/publication.json` appears before the
+parent's permalink is known, for heartbeats too, and `run --stage publish` on a posted run refuses before it
+rewrites anything. `run --stage ''` and `run --date 2026-13-01` exit 64; `distill --engine cli` and
+`calibrate --engine cli` are accepted. The alerts reply keeps every programme line, the notices and the link
+to all alerts on a day when one programme's filtered link would not fit. A stopped session's estimated charge
+reads `up to $X spent`. A tool's error answer never repeats what the model passed. The eighteen commits from
+before the first review were rewrapped to the lint's limits in a message-only rewrite; trees are unchanged.

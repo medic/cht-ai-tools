@@ -15,6 +15,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       ├── feedback.ingested.json         # feedback read at start, matched and unmatched      [kept]
 │       ├── discovery.json                 # projects, groups, ignored hosts, dashboards, panels, variables [kept]
 │       ├── alerts.json                    # alert rules and instances as collected (FR-064)    [kept]
+│       ├── collect.summary.json           # projects, metrics, windows, fetched, reused, queries, failed (revision 36) [kept]
 │       ├── alerts.classified.json         # observed_at, ignored_hosts, category, importance, staleness, groups, patterns, evidence, housekeeping; whole even on a filtered run [kept]
 │       ├── <project_slug>/
 │       │   ├── inputs/windows.json.gz     # Metric Windows, raw series, each with its source   [raw]
@@ -38,7 +39,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   ├── report.html                # one-page report (FR-022)                           [kept]
 │       │   ├── payload.json               # exact Slack payload; preview output (FR-025)       [kept]
 │       │   ├── feedback.digest.json       # the digest as built, each item's provenance (FR-062, FR-085) [kept]
-│       │   └── publication.json           # channel, ts, permalinks, the report share's file id; written partial at the parent post (revision 34) [kept]
+│       │   └── publication.json           # channel, ts, permalinks, the report share's file id; written partial at the parent post, before its permalink, for heartbeats too (revisions 34, 36) [kept]
 │       ├── memory.patch                   # memory change made by this run, if any             [kept]
 │       ├── proposals/                     # proposals written by this run (copies)             [kept]
 │       └── trace.json                     # trace id, url, span summary                        [kept]
@@ -70,7 +71,7 @@ are also appended to `corpus/outcomes/<date>.jsonl`.
 |---|---|---|
 | `purge` | retention settings, directory timestamps | deletions only, logged per file |
 | `feedback` | `publication.json` of the previous N runs, Slack | `feedback.ingested.json`, `feedback.jsonl` |
-| `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances), the stored current windows of the runs one and seven days earlier, `history/<slug>.json` | `discovery.json`, `alerts.json`, `<project>/inputs/windows.json.gz` (ignored hosts get no project directory), `history/<slug>.json` extended with the day's maxima |
+| `collect` | configuration, Grafana (metrics, dashboards, alert rules and instances), the stored current windows of the runs one and seven days earlier, `history/<slug>.json` | `discovery.json`, `alerts.json`, `collect.summary.json` (the roll-up's collection notice reads it), `<project>/inputs/windows.json.gz` (ignored hosts get no project directory), `history/<slug>.json` extended with the day's maxima |
 | `analyze` | `discovery.json`, `alerts.json`, the previous run's `alerts.classified.json`, `inputs/windows.json.gz`, `thresholds.yaml`, `projects.yaml`, `alerts.yaml` | `changes.json`, `candidates.json`, `alerts.classified.json` |
 | `agent` | `candidates.json` less its standing conditions (revision 23), `changes.json`, the project's firing alerts from `alerts.classified.json`, memory, pattern-card index, feedback | `prompt.pass<n>.md`, `findings.pass<n>.json`, `verification.pass<n>.json`, `tool-calls.jsonl`, `passes.json`, `session.json` |
 | `rollup` | each project's last accepted `findings.pass<n>.json` (revision 34), every `candidates.json` and `changes.json` (standing conditions, revision 23), `alerts.classified.json`, feedback, memory | `items.ranked.json`, `layout.json`, `standing.json`, `prompt.md`, `brief.draft<n>.json`, `verification.draft<n>.json`, `brief.json`, `memory.patch`, `proposals/`; appends `alerts/episodes.jsonl` and cleared episodes to `corpus/outcomes/` |

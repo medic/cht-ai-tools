@@ -116,4 +116,16 @@ const createTracer = ({ sdk = null, config = null, baseUrl = null } = {}) => {
   };
 };
 
-module.exports = { createTracer, usageDetails };
+/**
+ * Finish a trace once the result is out: tracing is observability, never the product, so a rejected flush is
+ * logged and changes no exit code (revision 35; one helper for every command, revision 36).
+ */
+const finishTraceSafely = async (tracer, logger, output) => {
+  try {
+    await tracer.finish({ output });
+  } catch (traceError) {
+    logger.warn('trace.finish_failed', { error: traceError });
+  }
+};
+
+module.exports = { createTracer, usageDetails, finishTraceSafely };

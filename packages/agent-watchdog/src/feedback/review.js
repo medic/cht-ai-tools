@@ -10,6 +10,7 @@ const { enums } = require('../model/schemas');
 const { fill, wrapUntrusted } = require('../agent/prompt-assembly');
 const { writeProposals } = require('../rollup/proposals');
 const { maskPeople } = require('../corpus/scrub');
+const { normaliseUsage } = require('../agent/turn-mapper');
 const { updateRecords } = require('./store');
 const { threadOrder } = require('./sequence');
 
@@ -98,23 +99,22 @@ const itemDescription = (record, byItem) => {
   return lines.join('\n');
 };
 
-const costRecord = ({ runId, projectUrl, model, result }) => {
-  const usage = result.usage || {};
-  return {
-    run_id: runId,
-    project_url: projectUrl || null,
-    stage: 'feedback',
-    pass: null,
-    model,
-    input_tokens: usage.input_tokens || 0,
-    output_tokens: usage.output_tokens || 0,
-    cache_read_tokens: usage.cache_read_tokens ?? usage.cache_read_input_tokens ?? 0,
-    cache_creation_tokens: usage.cache_creation_tokens ?? usage.cache_creation_input_tokens ?? 0,
-    cost_usd: result.total_cost_usd || 0,
-    num_turns: result.num_turns === undefined ? null : result.num_turns,
-    duration_ms: result.duration_ms === undefined ? null : result.duration_ms,
-  };
-};
+/**
+ * The cost record of one feedback-stage model call (FR-049): the review's or the horizon parse's, told apart by
+ * `kind` (revision 36), on the runtime's usage counters under either spelling (src/agent/turn-mapper.js).
+ */
+const costRecord = ({ runId, projectUrl = null, model, result, kind = 'review' }) => ({
+  run_id: runId,
+  project_url: projectUrl || null,
+  stage: 'feedback',
+  kind,
+  pass: null,
+  model,
+  ...normaliseUsage(result.usage || {}),
+  cost_usd: result.total_cost_usd || 0,
+  num_turns: result.num_turns === undefined ? null : result.num_turns,
+  duration_ms: result.duration_ms === undefined ? null : result.duration_ms,
+});
 
 /** The notes of one thread as the model reads them: one block for a single note, numbered blocks in thread order. */
 const notesBlock = (records) => {
@@ -290,5 +290,5 @@ const MAX_REVIEW_ATTEMPTS = 3;
 
 module.exports = {
   reviewFeedback, splitPrompt, validateProjectsFragment, OUTPUT_SCHEMA, promptFile, PROPOSAL_CLASSIFICATIONS,
-  threadsOf, notesBlock, MAX_REVIEW_ATTEMPTS,
+  threadsOf, notesBlock, MAX_REVIEW_ATTEMPTS, costRecord,
 };

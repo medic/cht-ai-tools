@@ -139,6 +139,20 @@ const seriesFor = (result, host) => result.filter((series) => {
   return !instance || normaliseHost(instance) === host;
 });
 
+/**
+ * The one series a per-project query answers (FR-075): the series with the project's instance label, or, when none
+ * carries it (a panel scoped by another label, whose series carries the exporter's instance), the single series
+ * returned; several matching series are a breakdown and are refused. Shared by collection and the live tool
+ * (revision 36), so the two cannot drift.
+ */
+const pickSeries = (result, host) => {
+  const matching = seriesFor(result || [], host);
+  if (matching.length > 1) {
+    return { series: null, many: matching };
+  }
+  return { series: matching[0] || (result || [])[0] || null, many: null };
+};
+
 const IDENTITY_LABELS = new Set(['__name__', 'instance', 'job']);
 
 /** The labels whose values differ across series: what a breakdown is by. */
@@ -181,7 +195,7 @@ const collectWindows = async ({
 }) => {
   const bounds = windowBounds(runStart, { activeWindow });
   const windows = [];
-  const stats = { fetched: 0, reused: 0, queries: 0 };
+  const stats = { fetched: 0, reused: 0, queries: 0, failed: 0 };
   for (const spec of metricSpecs(discovery)) {
     const { query, unresolved } = queryFor(spec, project.host);
     if (unresolved.length) {
@@ -215,13 +229,12 @@ const collectWindows = async ({
             end: seconds(bound.end),
             step: bound.step_s,
           });
-          const matching = seriesFor(result, project.host);
-          if (matching.length > 1) {
+          const { series, many } = pickSeries(result, project.host);
+          if (many) {
             // A metric that is one series per project (FR-075): several series mean the panel is a breakdown the
             // discovery could not see in the expression, and no series is picked over the others.
-            throw new ManySeriesError(matching);
+            throw new ManySeriesError(many);
           }
-          const series = matching[0] || result[0] || null;
           values = series ? series.values.filter(([, value]) => Number.isFinite(value)) : [];
           if (history && values.length && bound.window === 'current') {
             history.recordCurrent(spec.metric, values);
@@ -245,6 +258,7 @@ const collectWindows = async ({
           reason = error.message;
         } else {
           reason = `query failed: ${error.message}`;
+          stats.failed += 1;
           logger.warn('collect.query_failed', {
             project: project.host, metric: spec.metric, window: bound.window, status: error.status || null,
             message: error.message,
@@ -272,5 +286,5 @@ const collectWindows = async ({
 
 module.exports = {
   windowBounds, withInstance, trailingQuery, metricSpecs, metricSpecFor, queryFor, unresolvedReason, collectWindows,
-  seriesFor, ManySeriesError, DAY, MIN_HISTORY_DAYS,
+  seriesFor, pickSeries, ManySeriesError, DAY, MIN_HISTORY_DAYS,
 };

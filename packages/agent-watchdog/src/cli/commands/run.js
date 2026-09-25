@@ -2,7 +2,7 @@
 // The daily pipeline: purge, feedback, collect, analyze, agent, rollup, render, publish (contracts/cli.md).
 // Owns the run's state machine (data-model.md "Run") and the loud-failure rules (constitution V).
 const codes = require('../exit-codes');
-const { withEgressGuard } = require('../../net/egress');
+const { withEgressGuard, buildEgress } = require('../../net/egress');
 const { redactText } = require('../../publish/redact');
 const { loadConfig } = require('../../config/load');
 const { RunDir, RunExistsError, ensureDataLayout } = require('../../store/run-dir');
@@ -10,7 +10,7 @@ const { collectVersions } = require('../../store/versions');
 const { createContext } = require('../context');
 const { STAGE_ORDER, loadStage, requireInputs } = require('../stages');
 const { writeResult } = require('../streams');
-const { createTracer } = require('../../trace/langfuse');
+const { createTracer, finishTraceSafely } = require('../../trace/langfuse');
 const { createFindingsGate } = require('../gate');
 const { createQueryWindow } = require('../../collect/query-window');
 const { activeWindow } = require('../../analyze/calendar');
@@ -139,12 +139,36 @@ const createResolverSafely = ({ config, deps, runDir, allowlist }) => {
       discovery,
       grafanaUrl: config.endpoints.grafanaUrl,
       allowlist,
+      // A link outside the egress list is recorded as not requested rather than refused by the guard (revision 36).
+      egress: buildEgress(config),
       // Alert-list links resolve against the collected rules and instances (FR-070).
       alerts: runDir.exists('alerts.json') ? await runDir.readJson('alerts.json') : null,
     }));
   } catch {
     return Promise.resolve(null);
   }
+};
+
+/** What the feedback stage's model calls cost: the horizon parses and the reviews (FR-049, revision 34). */
+const feedbackSpend = (ingested) => [...(ingested.calls || []), ...((ingested.review && ingested.review.calls) || [])]
+  .reduce((sum, call) => sum + (call.cost_usd || 0), 0);
+
+/**
+ * The spend the stages that ran in an earlier process recorded (revision 36): the agent stage's summary and the
+ * feedback stage's calls, for a stage-only roll-up that carries the run's cost without having run them (FR-043).
+ */
+const recordedSpend = async (runDir) => {
+  let cost = 0;
+  let estimated = false;
+  if (runDir.exists('agent.summary.json')) {
+    const summary = await runDir.readJson('agent.summary.json');
+    cost += summary.cost_usd || 0;
+    estimated = Boolean(summary.cost_estimated);
+  }
+  if (runDir.exists('feedback.ingested.json')) {
+    cost += feedbackSpend(await runDir.readJson('feedback.ingested.json'));
+  }
+  return { cost_usd: Number(cost.toFixed(6)), cost_estimated: estimated };
 };
 
 /** Put the ingested feedback on the context: items, horizons, unmatched notes, brief reactions and authors. */
@@ -233,12 +257,18 @@ module.exports = async function run({ flags = {}, env = process.env, stdout = pr
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-const validDay = (value) => ISO_DAY.test(String(value))
-  && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+/** A calendar date in ISO form; an impossible month or day is refused, never thrown at (revision 36). */
+const validDay = (value) => {
+  if (!ISO_DAY.test(String(value))) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
 
 /** Refuse a bad stage name or date before a run directory exists (revision 35), so a typo blocks no scheduled run. */
 const validateFlags = (flags) => {
-  if (flags.stage && !STAGE_ORDER.includes(flags.stage)) {
+  if (flags.stage !== undefined && !STAGE_ORDER.includes(flags.stage)) {
     throw new codes.ExitError(codes.USAGE, `unknown stage "${flags.stage}"; expected one of ${STAGE_ORDER.join(', ')}`);
   }
   for (const name of ['date', 'since']) {
@@ -354,15 +384,15 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
       if (name === 'rollup') {
         ctx.memory = (await readMemory(dataDir)).text;
         ctx.previousItemIds = await previousItemCounts(dataDir, runId);
-        // A stage-only roll-up (FR-043) still resolves links and carries the agent's recorded spend (revision 34):
-        // the resolver is built from the discovery on disk, the cost read from agent.summary.json.
+        // A stage-only roll-up (FR-043) still resolves links and carries the recorded spend (revision 34): the
+        // resolver is built from the discovery on disk, the cost read from what the agent and feedback stages wrote.
         if (!ctx.resolveLinks && runDir.exists('discovery.json')) {
           ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });
         }
-        if (!agentResult && runDir.exists('agent.summary.json')) {
-          const summary = await runDir.readJson('agent.summary.json');
-          ctx.costSoFar = Number(((ctx.costSoFar || 0) + (summary.cost_usd || 0)).toFixed(6));
-          ctx.costEstimated = Boolean(ctx.costEstimated || summary.cost_estimated);
+        if (stageOnly) {
+          const spend = await recordedSpend(runDir);
+          ctx.costSoFar = Number(((ctx.costSoFar || 0) + spend.cost_usd).toFixed(6));
+          ctx.costEstimated = Boolean(ctx.costEstimated || spend.cost_estimated);
         }
       }
       await runDir.stageStart(name);
@@ -388,9 +418,7 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
         });
         log.info('corpus.outcomes', { appended, items: ctx.feedbackByItem.size });
         // The feedback stage's own model calls, the horizon parses and the reviews, are part of the run's cost.
-        const feedbackCost = [...(ingested.calls || []), ...((ingested.review && ingested.review.calls) || [])]
-          .reduce((sum, call) => sum + (call.cost_usd || 0), 0);
-        ctx.costSoFar = Number(((ctx.costSoFar || 0) + feedbackCost).toFixed(6));
+        ctx.costSoFar = Number(((ctx.costSoFar || 0) + feedbackSpend(ingested)).toFixed(6));
       }
       if (name === 'collect' && runDir.exists('discovery.json')) {
         ctx.resolveLinks = await createResolverSafely({ config, deps, runDir, allowlist: ctx.allowlist });
@@ -492,12 +520,7 @@ const runLoaded = async ({ flags, env, stdout, logger, deps }, { config, effecti
       reference_findings: referenceFindings.slice(0, 20),
     });
   }
-  try {
-    await tracer.finish({ output: { status: status || 'stage', cost_usd: ctx.costSoFar } });
-  } catch (traceError) {
-    // Tracing is observability, not the product: a rejected flush is logged and never changes the exit code.
-    log.warn('trace.finish_failed', { error: traceError });
-  }
+  await finishTraceSafely(tracer, log, { status: status || 'stage', cost_usd: ctx.costSoFar });
   log.info('run.finish', {
     status: status || 'stage', duration_ms: patch.duration_ms, cost_usd: ctx.costSoFar,
     scan_findings: ownFindings.length,

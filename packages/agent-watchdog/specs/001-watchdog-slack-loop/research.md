@@ -2106,3 +2106,46 @@ been pushed, so the rewrite is local, but it changes every hash after the first 
 operator's call; the offending headers (up to 173 characters) and body lines (over 100) can be rewrapped in an
 interactive rebase without touching the trees. Every commit since the review (revisions 33 to 35) passes
 commitlint as written. A `≤` on the footer's cost when it is an estimate stays deferred (R-39).
+
+## R-41. The re-review, the four rules revision 33 tightened too far, and the decisions of revision 36
+
+**Evidence**: the second review (2026-09-25) re-checked every finding of the first: 38 fixed, 8 partly
+fixed, and 4 whose fix caused a new problem: any failed query status counting toward "unreachable", so
+one refused panel expression ended the run with exit 69; the request options, credentials included, resent
+on every redirect hop; the egress refusal rethrown by the resolver, so a listed host at another port
+failed the run; and collection's single-series fallback dropped from the live query tool. The four share a
+cause: revision 33 applied a stricter rule than the finding asked for, and its tests encoded the stricter
+rule instead of the day the spec protects. Of the 52 new findings the first, scored 80, was Slack ids
+reaching the roll-up prompt through three paths (the feedback text, the unmatched notes' authors, the
+item-history tool) and the outcome files distillation reads.
+
+**Decisions**: `maskNote` masks Slack identifiers, e-mail addresses, phone numbers and secrets and nothing
+else, on every path to a prompt; a phone number carries a plus or a separator and holds no ISO date, so
+`2026-09-20 - 2026-09-24` and `300 310 305` are not phones; the memory update is cut back to the same
+identifiers so byte counts, decimals, dates and owners' names survive. Only no response or a 502, 503 or
+504 counts toward "unreachable" and only a success resets the count; a 4xx or 500 is the expression's
+problem, and a run in which half or more of the windows failed their query says so in a collection notice
+(half, because one refused dashboard of several panels is a notice, not a failure, and a source that
+refuses everything is already unreachable). A yearless date has up to three readings and is exempt when
+any was given, otherwise read nearest the run; timestamps are dates; the system prompt, the feedback and
+the memory are given for dates only (`givenDateText`), never for numbers, so a numeral in the system
+prompt is still checked; the brief's span carries the previous cycle on window days. Day-month phrases are
+stripped before numerals are read (a lowercase `may` stays a verb); evidence the check verified against a
+collected sample is quotable, rounded or derived, and each entry is checked against its own window's
+values. The resolver checks the egress list before a request and records a destination outside it as not
+requested; the guard still refuses anything that reaches it. A redirect off the origin drops
+Authorization, Proxy-Authorization and Cookie, and https to http is refused. The publication record is
+written before the permalink lookup, for heartbeats and failure posts too, and the exit-75 guard runs
+before any write. Retraction ids live in the verdict's own space. The release analyzer reads the
+conventionalcommits preset with the commitlint header pattern. A programme's alert-list link over 1,000
+characters is left off its line rather than rendered with the unfiltered link the reviewer offered: that
+link names every host, and a line saying "alert list" for one programme should not open all of them. The
+person-name refusal the review suggested for the gate is declined: owner values are teams and roles, and a
+check refusing ordinary prose would refuse every brief that names a team. The commit convention keeps the
+plain `type: subject` form for this founding branch, which references no issue and will not open one;
+work after it references its issue (constitution I); the eighteen earlier messages were rewrapped to the
+lint's limits in a message-only rewrite of the unpushed history, trees unchanged.
+
+**Rejected or deferred**: validating the feedback stage's calls against the Cost Record schema (nothing
+reads them by shape; the shape is now one, with `kind`); a `≤` on the footer's cost when it is an estimate
+(R-39); a second digest line for a note whose review is retried (the awaiting line already says it).

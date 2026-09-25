@@ -205,18 +205,27 @@ const alertsLine = (entry) => {
   return `${entry.group}: ${entry.firing} firing (${categories}), ${entry.new} new, ${entry.stale} stale`;
 };
 
+// A programme's own link longer than this is left off its line (revision 36): a host-filtered alert list of
+// sixty hosts runs to nearly 3,000 characters and would push the notices and the link to every alert out of the
+// section. The line keeps its counts, and the link to every firing alert carries no host terms.
+const PROGRAMME_LINK_MAX = 1000;
+
 /**
  * Fit the alerts reply into one section without cutting a link (revision 34): whole programme lines go first, from
- * the end, with a line saying how many more the report holds; then the notices, then the link to every alert.
- * What remains, the summary line and at least one programme, is never longer than the section allows.
+ * the end, with a line saying how many more the report holds; then the notices with one programme; then, before
+ * the notices and the link to every alert are given up, no programme at all (revision 36). What remains is never
+ * longer than the section allows.
  */
 const fitAlertsText = (render, { programmes, notices }) => {
   const attempts = [];
-  for (let shown = programmes; shown >= Math.min(1, programmes); shown -= 1) {
+  for (let shown = programmes; shown >= 1; shown -= 1) {
     attempts.push({ shown, notices, withAll: true });
   }
-  attempts.push({ shown: Math.min(1, programmes), notices: [], withAll: true });
-  attempts.push({ shown: Math.min(1, programmes), notices: [], withAll: false });
+  if (programmes >= 1) {
+    attempts.push({ shown: 1, notices: [], withAll: true });
+  }
+  attempts.push({ shown: 0, notices, withAll: true });
+  attempts.push({ shown: 0, notices: [], withAll: true });
   attempts.push({ shown: 0, notices: [], withAll: false });
   let last = null;
   for (const attempt of attempts) {
@@ -244,9 +253,11 @@ const alertsReplyFor = ({ alertGroups, alertsLinks, notices, runId, date }) => {
   const summaryText = summary.length
     ? `${firing} firing across ${plural(summary.length, 'programme')}`
     : 'none firing';
-  const programmes = summary.map((entry) => ({
-    line: alertsLine(entry), has_link: Boolean(linkFor(entry.group)), link: linkFor(entry.group),
-  }));
+  const programmes = summary.map((entry) => {
+    const url = linkFor(entry.group);
+    const fits = Boolean(url) && url.length <= PROGRAMME_LINK_MAX;
+    return { line: alertsLine(entry), has_link: fits, link: fits ? url : null };
+  });
   const render = ({ shown, notices: shownNotices, withAll }) => template('alerts')({
     summary_text: summaryText,
     programmes: programmes.slice(0, shown),

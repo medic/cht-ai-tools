@@ -45,7 +45,9 @@ describe('model/schemas', () => {
     const brief = { run_id: '2026-09-18', kind: 'brief', headline: 'h', bullets: [1, 2].map(bullet), expected_load_notice: null, checked: { projects: 1, panels: 2, candidates: 3 }, degradation_notice: null, image: null, footer: { specs_url: 'https://a', config_url: 'https://b', trace_url: 'https://c', cost_usd: 0.12 }, publication: null };
     const parsed = schemas.Brief.parse(brief);
     expect(parsed.bullets).to.have.length(2);
-    expect(LAYOUT_CAPS).to.deep.equal({ BODY_SLOTS: 2, MAX_CHILDREN: 4 });
+    // The four-children cap follows from three project lines and the "more projects" line (revision 36).
+    expect(LAYOUT_CAPS).to.deep.equal({ BODY_SLOTS: 2, MAX_PROJECTS: 3, MAX_CHILDREN: 4 });
+    expect(LAYOUT_CAPS.MAX_CHILDREN).to.equal(LAYOUT_CAPS.MAX_PROJECTS + 1);
     // A bare { item_id, text } bullet is an item bullet with no sub-bullets.
     expect(parsed.bullets[0]).to.deep.equal({
       kind: 'item', item_id: bullet(1).item_id, item_ids: [], group: null, text: 'one line', children: [],

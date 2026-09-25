@@ -5,6 +5,7 @@ const fsSync = require('node:fs');
 const path = require('node:path');
 const atomic = require('../store/atomic');
 const { dataPaths } = require('../store/run-dir');
+const { maskNote } = require('./scrub');
 
 const OUTCOME_VERDICTS = new Set(['confirmed', 'dismissed']);
 
@@ -36,7 +37,8 @@ const appendOutcomes = async ({ dataDir, date, runId, byItem, itemIds = null }) 
       outcome: entry.verdict,
       up: entry.up || 0,
       down: entry.down || 0,
-      notes: entry.notes || [],
+      // Notes masked of people, addresses and phones (revision 36): the corpus feeds distillation prompts.
+      notes: (entry.notes || []).map(maskNote),
     });
     existing.add(itemId);
     appended += 1;

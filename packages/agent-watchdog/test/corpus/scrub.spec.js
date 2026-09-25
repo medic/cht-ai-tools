@@ -72,3 +72,28 @@ describe('corpus/scrub (FR-033)', () => {
     expect(scrub('nothing to see')).to.deep.equal({ text: 'nothing to see', flags: [] });
   });
 });
+
+describe('corpus/scrub: the one masker for notes and memory (FR-029, FR-044, revision 36)', () => {
+  const { maskNote, maskPersonalData } = require('../../src/corpus/scrub');
+
+  it('masks Slack ids, mentions, e-mail addresses and phone numbers with separators, and nothing else', () => {
+    const text = 'ask <@U024BE7LH> or U024BE7LH at +254 712 345 678 / ops@example.org; '
+      + 'trailing mean 26.263157894736842; '
+      + 'disk 1073741824 bytes; window 2026-09-20 - 2026-09-24; upgraded to 5.2.0-10700-photo-capture.29102352761 '
+      + 'on 2026-09-20 06:00 UTC; daily peaks 300 310 305; hosting said so';
+    const out = maskNote(text);
+    expect(out).to.equal('ask [person] or [person] at [address] / [address]; trailing mean 26.263157894736842; '
+      + 'disk 1073741824 bytes; window 2026-09-20 - 2026-09-24; upgraded to 5.2.0-10700-photo-capture.29102352761 '
+      + 'on 2026-09-20 06:00 UTC; daily peaks 300 310 305; hosting said so');
+    expect(maskNote(null)).to.equal('');
+  });
+
+  it('reports what it masked by kind, secrets included, and touches no hostname or name', () => {
+    const { text, flags } = maskPersonalData(
+      'token xoxb-1234567890-abcdefghij-test on cht.north.example.org, Mark <@U024BE7LH>',
+    );
+    expect(text).to.include('[secret]').and.include('cht.north.example.org').and.include('Mark [person]');
+    expect(flags.map((f) => f.kind).sort()).to.deep.equal(['person', 'secret']);
+    expect(maskPersonalData('')).to.deep.equal({ text: '', flags: [] });
+  });
+});

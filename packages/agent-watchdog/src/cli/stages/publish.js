@@ -113,6 +113,19 @@ const run = async (ctx) => {
   const { runDir, logger } = ctx;
   requireInputs(runDir, inputs);
   const brief = await runDir.readJson('rollup/brief.json');
+  // A run posts one parent (FR-042, revision 34): a record of an earlier post, complete or partial, means a
+  // retry must supersede it with `run --force` rather than post a second brief for the date. Checked before
+  // anything is rebuilt or written (revision 36), so the payload on disk stays the one that was posted.
+  if (ctx.mode !== 'preview' && runDir.exists('rollup/publication.json')) {
+    const earlier = await runDir.readJson('rollup/publication.json');
+    if (earlier && earlier.ts) {
+      throw new codes.ExitError(
+        codes.TEMPFAIL,
+        `this run already posted its brief as ${earlier.ts}${earlier.partial ? ' (thread incomplete)' : ''}; `
+          + 'run --force to supersede it rather than post a second one',
+      );
+    }
+  }
   const items = runDir.exists('rollup/items.ranked.json') ? await runDir.readJson('rollup/items.ranked.json') : [];
   const discovery = runDir.exists('discovery.json') ? await runDir.readJson('discovery.json') : null;
   const channel = ctx.config.endpoints.slackChannelId || null;
@@ -179,32 +192,21 @@ const run = async (ctx) => {
     return { posted: false, payload };
   }
 
-  // A run posts one parent (FR-042, revision 34): a record of an earlier post, complete or partial, means a
-  // retry must supersede it with `run --force` rather than post a second brief for the date.
-  if (runDir.exists('rollup/publication.json')) {
-    const earlier = await runDir.readJson('rollup/publication.json');
-    if (earlier && earlier.ts) {
-      throw new codes.ExitError(
-        codes.TEMPFAIL,
-        `this run already posted its brief as ${earlier.ts}${earlier.partial ? ' (thread incomplete)' : ''}; `
-          + 'run --force to supersede it rather than post a second one',
-      );
-    }
-  }
   const publisher = createSlackPublisher({
     client: slackClient(ctx), channel, logger, ...(ctx.deps && ctx.deps.sleep ? { sleep: ctx.deps.sleep } : {}),
   });
+  // The record is written as soon as the parent is posted, so a failure in the thread (a reply, the report, the
+  // digest) cannot lose it; a heartbeat or failure post gets the same record (revision 36).
+  const onParent = (partial) => runDir.writeJson('rollup/publication.json', partial);
   let publication;
   if (brief.kind === 'heartbeat' || brief.kind === 'failure') {
-    publication = await publisher.postTextOnly(payload);
+    publication = await publisher.postTextOnly(payload, { onParent });
   } else {
     const reportPath = brief.report && brief.report.path && runDir.exists(brief.report.path)
       ? runDir.path(brief.report.path)
       : null;
     publication = await publisher.publish({
-      payload, reportPath, superseded: ctx.supersededPermalink || null,
-      // The record is written as soon as the parent is posted, so a failure in the thread cannot lose it.
-      onParent: (partial) => runDir.writeJson('rollup/publication.json', partial),
+      payload, reportPath, superseded: ctx.supersededPermalink || null, onParent,
     });
   }
   if (built) {

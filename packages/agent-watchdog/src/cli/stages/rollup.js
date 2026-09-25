@@ -1,10 +1,12 @@
 'use strict';
-// Stage: rollup. Reads every project's last pass, ranks, composes and gates the brief, writes rollup/*.
+// Stage: rollup. Reads every project's last accepted pass, ranks, composes and gates the brief, writes rollup/*.
 const { requireInputs } = require('./index');
 const { rankItems, matchPatternCards } = require('../../rollup/rank');
 const { buildLayout, groupOfProjects } = require('../../rollup/layout');
 const { buildAlertGroupLinks } = require('../../links/build');
-const { housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice } = require('../../rollup/notices');
+const {
+  housekeepingNotice, clearedEpisodes, resolvedNotice, runBudgetNotice, collectionNotice,
+} = require('../../rollup/notices');
 const { analysisRecord, lastAcceptedFindingsFile } = require('../../rollup/analysis');
 const { splitStanding, standingRecords, standingNotices, darkHostsOf } = require('../../analyze/standing');
 const { activeWindowOf } = require('../../analyze/calendar');
@@ -31,13 +33,46 @@ const readIfExists = async (runDir, rel, fallback) => (runDir.exists(rel) ? runD
  * The notice for the windows active today, from the window objects the computed changes name (revision 33): read
  * from the run directory here, so a stage-only roll-up carries it too, and never a bare window id.
  */
+const NOTICE_LEAD = 'Expected-load window active: ';
+const NOTICE_LINE_MAX = 120;
+const NOTICE_LINES_MAX = 2;
+
+/** Greedy word wrap; a single word longer than the line stays whole on its own line. */
+const wrapWords = (text, max) => {
+  const lines = [];
+  let line = '';
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    if (!line) {
+      line = word;
+    } else if (`${line} ${word}`.length <= max) {
+      line = `${line} ${word}`;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) {
+    lines.push(line);
+  }
+  return lines;
+};
+
 const expectedLoadNoticeFrom = (activeWindows) => {
-  if (!activeWindows) {
+  const notes = [...new Set(Object.values(activeWindows).filter(Boolean).map((window) => window.note || window.id))];
+  if (!notes.length) {
     return null;
   }
-  const entries = activeWindows instanceof Map ? [...activeWindows.values()] : Object.values(activeWindows);
-  const notes = [...new Set(entries.filter(Boolean).map((window) => window.note || window.id))];
-  return notes.length ? `Expected-load window active: ${notes.join('; ')}` : null;
+  // The model is told to include the notice, and the gate holds it to two lines of 120 (revision 33), so the
+  // run writes it within that budget (revision 36): notes dropped from the end are counted, never cut mid-word.
+  for (let shown = notes.length; shown >= 1; shown -= 1) {
+    const rest = notes.length - shown;
+    const tail = rest ? ` (+${rest} more window${rest === 1 ? '' : 's'})` : '';
+    const lines = wrapWords(`${NOTICE_LEAD}${notes.slice(0, shown).join('; ')}${tail}`, NOTICE_LINE_MAX);
+    if (lines.length <= NOTICE_LINES_MAX) {
+      return lines.join('\n');
+    }
+  }
+  return wrapWords(`${NOTICE_LEAD}${notes[0]}`, NOTICE_LINE_MAX).slice(0, NOTICE_LINES_MAX).join('\n');
 };
 
 const ownersOf = (policy) => {
@@ -101,7 +136,7 @@ const run = async (ctx) => {
     const own = await readIfExists(runDir, `${slug}/candidates.json`, []);
     candidates.push(...own);
     changes[slug] = await readIfExists(runDir, `${slug}/changes.json`, []);
-    activeWindows[slug] = activeWindowOf(changes[slug], { project, discovery });
+    activeWindows[slug] = activeWindowOf(changes[slug], project);
     forModelCandidates.push(...splitStanding({ candidates: own, changes: changes[slug] }).forModel);
     standing.push(...standingRecords({ candidates: own, changes: changes[slug], project, groupOf }));
     // The last pass the gate accepted (revision 34): a rejected or cut-off later pass drops no accepted items.
@@ -215,6 +250,11 @@ const run = async (ctx) => {
   if (budgetNotice) {
     notices.push(budgetNotice);
   }
+  // A collection that failed most of its queries is said, never passed off as a quiet day (FR-073, revision 36).
+  const collection = collectionNotice(await readIfExists(runDir, 'collect.summary.json', null));
+  if (collection) {
+    notices.push(collection);
+  }
   // Standing conditions (FR-014, revision 23): named once per rule, grouped by programme, and listed per host in the
   // report; the hosts dark today and yesterday join the housekeeping line.
   await runDir.writeJson('rollup/standing.json', standing);
@@ -256,6 +296,8 @@ const run = async (ctx) => {
     memory: ctx.memory || null,
     feedbackUnmatched: ctx.feedbackUnmatched || [],
     expectedLoadNotice: expectedLoadNoticeFrom(activeWindows),
+    // The brief's date span includes the previous cycle when a window with one is active (revision 36).
+    activeWindow: Object.values(activeWindows).find((window) => window && window.cycle_days) || null,
     referenceSourcesUnavailable,
     footer,
     notices,
@@ -290,9 +332,9 @@ const run = async (ctx) => {
   // stored, like a proposal's (FR-044, revision 33); the projects it names are its subject and stay.
   let replaceWith = memoryUpdate && memoryUpdate.replace_with !== undefined ? memoryUpdate.replace_with : null;
   if (typeof replaceWith === 'string') {
-    const masked = maskPersonalData(replaceWith, {
-      persons: [...(ctx.feedbackAuthors || []), ...ownersOf(ctx.policy)],
-    });
+    // Identifiers only (revision 36): Slack ids, addresses, phones with separators, secrets; counts, decimals,
+    // dates, versions and names stay, because the memory is read back into every later prompt.
+    const masked = maskPersonalData(replaceWith);
     if (masked.flags.length) {
       logger.info('rollup.memory_masked', {
         kinds: [...new Set(masked.flags.map((flag) => flag.kind))].sort(), flags: masked.flags.length,
@@ -379,4 +421,4 @@ const run = async (ctx) => {
   };
 };
 
-module.exports = { name, inputs, run, lastFindingsFile: lastAcceptedFindingsFile };
+module.exports = { name, inputs, run };

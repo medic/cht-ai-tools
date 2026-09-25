@@ -1,5 +1,6 @@
-// Conventional Commits in the CHT form `type(#issue): subject`, with plain `type: subject` allowed
-// when no issue exists (constitution I), and the `!` breaking-change marker in either form (revision 35).
+// Conventional Commits in the CHT form `type(#issue): subject` (constitution I). The scope is optional in the
+// pattern because the founding branch was written before any issue existed; work after it references its issue.
+// The `!` breaking-change marker is accepted in either form (revision 35).
 module.exports = {
   extends: ['@commitlint/config-conventional'],
   parserPreset: {

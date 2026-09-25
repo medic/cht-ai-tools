@@ -132,6 +132,16 @@ describe('cli/parse: the flags a command owns, the log flags and the image versi
     expect(egress.code).to.equal(codes.USAGE);
     const global = await run(['egress', '--format', 'hosts', '--data-dir', '/tmp/x']);
     expect(global.code).to.equal(0);
+    // `--engine` belongs to distill and calibrate as it does to run and replay (FR-050, revision 36).
+    for (const command of ['distill', 'calibrate']) {
+      const out = capture();
+      const err = capture();
+      const code = await main([command, '--engine', 'cli'], {
+        env: envFor('/tmp'), stdout: out.stream, stderr: err.stream, commands: { [command]: async () => 0 },
+      });
+      expect(code, `${command} --engine`).to.equal(0);
+      expect(err.text()).to.not.include('is not a flag of');
+    }
   });
 
   it('applies --log-level and --log-format to the command\'s logger and refuses a bad value', async () => {

@@ -6,19 +6,19 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 const codes = require('../exit-codes');
 const { loadConfig } = require('../../config/load');
 const { withEgressGuard } = require('../../net/egress');
 const { RunDir, ensureDataLayout, RUN_ID_PATTERN } = require('../../store/run-dir');
 const { createContext } = require('../context');
 const { writeResult } = require('../streams');
-const { createTracer } = require('../../trace/langfuse');
+const { createTracer, finishTraceSafely } = require('../../trace/langfuse');
 const { createFindingsGate } = require('../gate');
 const { loadDefinition } = require('../../agent/definition');
 const { createReplayLookup } = require('../../agent/tools/replay-shim');
 const { diffItems } = require('../../agent/session-loop');
-const { lastAcceptedFindingsFile: lastFindingsFile } = require('../../rollup/analysis');
+const { lastAcceptedFindingsFile } = require('../../rollup/analysis');
+const { collectVersions } = require('../../store/versions');
 const { selectProjects } = require('../stages/agent');
 const { loadPatternCards } = require('../../corpus/cards');
 const pkg = require('../../../package.json');
@@ -34,17 +34,6 @@ const usage = (message) => new codes.ExitError(codes.USAGE, message);
 /** `YYYYMMDDTHHMMSSZ`, so a replay without --label still gets a unique, sortable directory. */
 const defaultLabel = (now) => now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
-const resolveGitSha = (deps) => {
-  if (deps.gitSha) {
-    return deps.gitSha;
-  }
-  try {
-    const out = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.toString().trim();
-  } catch {
-    return null;
-  }
-};
 
 const resolveDirectory = (value, fallback, flagName) => {
   if (!value) {
@@ -140,7 +129,7 @@ const defaultCreateEngine = ({ engineName, config, definition, mcpConfig, env, l
 };
 
 const passSummary = async (dir, slug) => {
-  const file = lastFindingsFile(dir, slug);
+  const file = lastAcceptedFindingsFile(dir, slug);
   if (!file) {
     return { pass: null, items: [], gate: null, records: [] };
   }
@@ -373,24 +362,17 @@ const replayLoaded = async ({ flags, env, stdout, logger, deps, config, effectiv
   const { range, runIds } = await selectRunIds({ dataDir, flags });
 
   const definition = deps.definition || loadDefinition({ paths: { ...config.paths, promptsDir, skillDir }, env });
-  const versions = {
-    package: pkg.version,
-    git_sha: resolveGitSha(deps),
-    ...definition.hashes,
-    config_hash: policy.hash,
-  };
+  // The same record a run writes (FR-039): the image's version and revision when it runs there (revision 36), the
+  // hashes of the prompt and skill directories replay was given.
+  const versions = collectVersions({
+    pkg, config, env, policy, deps: { ...deps, definitionHashes: definition.hashes },
+  });
   const shared = { config, effective, policy, env, flags, logger, deps, definition, promptsDir, skillDir, versions };
   const tracer = deps.tracer || createTracer({ config });
   const startHr = process.hrtime.bigint();
 
   // A rejected trace flush is logged and never changes the exit code, and the result is printed first (revision 35).
-  const finishTrace = async (output) => {
-    try {
-      await tracer.finish({ output });
-    } catch (traceError) {
-      logger.warn('trace.finish_failed', { error: traceError });
-    }
-  };
+  const finishTrace = (output) => finishTraceSafely(tracer, logger, output);
 
   if (!range) {
     const runId = runIds[0];

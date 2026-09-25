@@ -39,6 +39,34 @@ describe('corpus/outcomes (FR-030)', () => {
     expect(fs.readFileSync(file, 'utf8').trim().split('\n')).to.have.length(2);
   });
 
+  it('masks people, phones and e-mails in the notes it appends, which distillation reads (revision 36)', async () => {
+    await appendOutcomes({ dataDir, date: '2026-09-18', runId: '2026-09-18', byItem: {
+      aaaaaaaaaaaa: entry({
+        up: 1, verdict: 'confirmed', notes: ['ask <@U024BE7LH> on +254 712 345 678, ops@example.org'],
+      }),
+    } });
+    const [line] = fs.readFileSync(path.join(dataDir, 'corpus', 'outcomes', '2026-09-18.jsonl'), 'utf8')
+      .trim().split('\n');
+    expect(JSON.parse(line).notes).to.deep.equal(['ask [person] on [address], [address]']);
+  });
+
+  it('appends only the items named in itemIds, so a standing verdict is not re-appended daily', async () => {
+    const byItem = {
+      aaaaaaaaaaaa: { project_url: 'https://alpha.example.org', metric: 'm', pattern_card: null, up: 2, down: 0, notes: [], verdict: 'confirmed' },
+      bbbbbbbbbbbb: { project_url: 'https://alpha.example.org', metric: 'n', pattern_card: null, up: 0, down: 2, notes: [], verdict: 'dismissed' },
+    };
+    const { appended } = await appendOutcomes({
+      dataDir, date: '2026-09-18', runId: '2026-09-18', byItem, itemIds: ['bbbbbbbbbbbb'],
+    });
+    expect(appended).to.equal(1);
+    const lines = fs.readFileSync(path.join(dataDir, 'corpus', 'outcomes', '2026-09-18.jsonl'), 'utf8')
+      .trim().split('\n').map(JSON.parse);
+    expect(lines.map((line) => line.item_id)).to.deep.equal(['bbbbbbbbbbbb']);
+    // Without the filter every verdict is appended once.
+    const all = await appendOutcomes({ dataDir, date: '2026-09-18', runId: '2026-09-18', byItem });
+    expect(all.appended).to.equal(1);
+  });
+
   it('accepts a Map and reads outcomes back by date range', async () => {
     await appendOutcomes({ dataDir, date: '2026-09-10', runId: '2026-09-10', byItem: new Map(Object.entries(byItem)) });
     await appendOutcomes({ dataDir, date: '2026-09-18', runId: '2026-09-18', byItem });

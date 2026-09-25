@@ -60,7 +60,7 @@ const run = async (ctx) => {
   const dataDir = (config.storage && config.storage.dataDir) || runDir.dataDir;
   const runId = ctx.runId || runDir.runId;
   const concurrency = Math.max(1, (config.bounds && config.bounds.projectConcurrency) || 1);
-  const totals = { fetched: 0, reused: 0, queries: 0 };
+  const totals = { fetched: 0, reused: 0, queries: 0, failed: 0, windows: 0 };
   const collectStarted = process.hrtime.bigint();
   await mapWithConcurrency(projects, concurrency, async (project) => {
     const started = process.hrtime.bigint();
@@ -81,9 +81,10 @@ const run = async (ctx) => {
     if (history) {
       await history.save();
     }
-    for (const key of Object.keys(totals)) {
+    for (const key of Object.keys(stats)) {
       totals[key] += stats[key];
     }
+    totals.windows += windows.length;
     logger.info('collect.project', {
       project: project.host,
       windows: windows.length,
@@ -98,6 +99,10 @@ const run = async (ctx) => {
   logger.info('collect.done', {
     projects: projects.length, concurrency, ...totals,
     duration_ms: Number(process.hrtime.bigint() - collectStarted) / 1e6,
+  });
+  // What the collection managed, for the roll-up's notice when most windows failed their query (FR-073, revision 36).
+  await runDir.writeJson('collect.summary.json', {
+    projects: projects.length, metrics: discovery.metrics.length, ...totals,
   });
 
   return {

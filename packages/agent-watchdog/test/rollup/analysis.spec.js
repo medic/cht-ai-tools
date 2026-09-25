@@ -45,8 +45,8 @@ describe('rollup/analysis analysisRecord', () => {
       },
     ]);
     expect(out.incomplete).to.deep.equal([
-      { project_url: 'https://alpha.example.org', bounds: ['budget'], cost_usd: 0.84874 },
-      { project_url: 'https://beta.example.org', bounds: ['turns'], cost_usd: 0.3 },
+      { project_url: 'https://alpha.example.org', bounds: ['budget'], cost_usd: 0.84874, cost_estimated: false },
+      { project_url: 'https://beta.example.org', bounds: ['turns'], cost_usd: 0.3, cost_estimated: false },
     ]);
     expect(out.failed).to.deep.equal(['https://delta.example.org']);
     expect(INCOMPLETE_BOUNDS).to.deep.equal(['budget', 'turns', 'timeout']);
@@ -113,7 +113,20 @@ describe('rollup/analysis: the run deadline is a shortfall too (revision 34)', (
         }),
       },
     ]);
-    expect(out.incomplete).to.deep.equal([{ project_url: 'https://alpha.example.org', bounds: ['timeout'], cost_usd: 0 }]);
+    expect(out.incomplete).to.deep.equal([{ project_url: 'https://alpha.example.org', bounds: ['timeout'], cost_usd: 0, cost_estimated: false }]);
     expect(out.failed).to.deep.equal(['https://beta.example.org']);
+  });
+});
+
+describe('rollup/analysis: a session charged its grant is marked estimated (FR-012, revision 36)', () => {
+  it('carries cost_estimated on the incomplete entry, so the brief can say "up to"', () => {
+    const out = analysisRecord([
+      { url: 'https://alpha.example.org', passes: passes({ items: [], bounds_hit: ['turns'], cost_usd: 2, cost_estimated: true }) },
+      { url: 'https://beta.example.org', passes: passes({ items: [], bounds_hit: ['turns'], cost_usd: 0.3 }) },
+    ]);
+    expect(out.incomplete).to.deep.equal([
+      { project_url: 'https://alpha.example.org', bounds: ['turns'], cost_usd: 2, cost_estimated: true },
+      { project_url: 'https://beta.example.org', bounds: ['turns'], cost_usd: 0.3, cost_estimated: false },
+    ]);
   });
 });

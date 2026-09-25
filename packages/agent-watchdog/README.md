@@ -226,7 +226,7 @@ is written down under [`specs/001-watchdog-slack-loop/contracts/`](specs/001-wat
 | [`run-directory.md`](specs/001-watchdog-slack-loop/contracts/run-directory.md) | every file a run writes, which stage reads it, and what retention removes |
 | [`slack-payload.md`](specs/001-watchdog-slack-loop/contracts/slack-payload.md) | the exact Slack payload: parent, thread replies, metadata events |
 | [`agent-definition.md`](specs/001-watchdog-slack-loop/contracts/agent-definition.md) | the agent definition both engines run, its tools and structured outputs |
-| [`brief.schema.json`](specs/001-watchdog-slack-loop/contracts/brief.schema.json), [`findings.schema.json`](specs/001-watchdog-slack-loop/contracts/findings.schema.json) | the JSON Schemas of the model's two outputs |
+| [`schema/brief.schema.json`](schema/brief.schema.json), [`schema/findings.schema.json`](schema/findings.schema.json) | the JSON Schemas of the model's two outputs, generated from `src/agent/output-schema.js` by `npm run schema:build` |
 
 ## Dependencies
 

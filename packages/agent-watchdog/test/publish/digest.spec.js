@@ -294,12 +294,19 @@ describe('publish/digest: a note whose review failed is not acknowledged yet (FR
     expect(text).to.include('1 note could not be classified after 3 attempts');
   });
 
-  it('builds no digest when every record is a note still awaiting classification', () => {
-    const none = buildDigest({
+  it('says a note is awaiting classification even when it is the only new record, and builds nothing from none', () => {
+    // Revision 36: before this the digest vanished with the note, so the channel never heard of it.
+    const only = buildDigest({
       runId: 'r', date: 'd', retention: RETENTION, byItem: {}, items: [],
       records: [record({ feedback_id: 'f6f6f6f6f6f6', kind: 'note', verdict: null, note: 'hm', review_attempts: 0 })],
       review: { classified: [], unclassified: ['f6f6f6f6f6f6'] },
     });
+    expect(only.digest.acknowledged).to.deep.equal([]);
+    expect(only.digest.unclassified).to.equal(1);
+    expect(only.text).to.include('Feedback from yesterday: nothing new to acknowledge');
+    expect(only.text).to.include('1 note awaiting classification; the next run will review it.');
+    expect(only.metadata.event_payload.acknowledged).to.equal(0);
+    const none = buildDigest({ runId: 'r', date: 'd', retention: RETENTION, byItem: {}, items: [], records: [] });
     expect(none).to.equal(null);
   });
 });

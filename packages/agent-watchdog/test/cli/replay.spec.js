@@ -159,7 +159,10 @@ describe('cli/commands/replay', function () {
 
   it('regenerates findings under runs-replay/<run_id>/<label> in the run layout, printing the comparison', async () => {
     const engine = findingsEngine();
-    const r = await invoke({ dataDir, flags: { date: '2026-09-18', label: 'baseline' }, deps: { engine } });
+    const r = await invoke({
+      dataDir, flags: { date: '2026-09-18', label: 'baseline' }, deps: { engine },
+      env: { AGENT_WATCHDOG_VERSION: '1.4.0' },
+    });
     expect(r.error, r.error && r.error.stack).to.equal(undefined);
     expect(r.code).to.equal(0);
     const root = path.join(dataDir, 'runs-replay', '2026-09-18', 'baseline');
@@ -181,6 +184,8 @@ describe('cli/commands/replay', function () {
     });
     expect(run.date).to.equal('2026-09-18');
     expect(run.versions.git_sha).to.equal('replay1');
+    // The image's version, as a run records it (FR-039, revision 36).
+    expect(run.versions.package).to.equal('1.4.0');
     expect(run.versions.prompts_hash).to.match(/^[0-9a-f]{64}$/);
     expect(run.versions.config_hash).to.match(/^[0-9a-f]{64}$/);
     expect(run.source_versions).to.deep.equal(readJson(path.join(stored.runDir.root, 'run.json')).versions);

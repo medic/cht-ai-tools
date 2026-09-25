@@ -19,6 +19,7 @@ const METRIC_NAME = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
 // accepts a panel expression too, matched under the gate's own key forms (revision 19). The guard is size and
 // shape: nothing multi-line, nothing longer than the longest key a dashboard could hold.
 const METRIC_KEY_MAX = 200;
+const UNKNOWN_METRIC = 'unknown metric; name one collected this run, as the candidates and computed changes spell it';
 const WINDOWS = enums.WindowName.options;
 const QUERY_CAP = 20;
 const ROLE_LABEL = 'a reviewer';
@@ -78,11 +79,12 @@ const createWatchdogTools = ({
    * The collected key a request names (revision 34): itself when collected, else the one collected key it matches
    * loosely (a base name, a stripped matcher); several matches are ambiguous and none is unknown, both said.
    */
+  // An error names what was expected, never the argument (revision 36): the tool's answer is a tool result, and
+  // a URL echoed in it would count as seen there (FR-016).
   const collectedKeys = [...new Set([...(discovery.metrics || []), ...(deps.metrics || [])])];
   const resolveKey = (metric) => {
-    const short = String(metric).slice(0, 80);
     if (typeof metric !== 'string' || metric.length > METRIC_KEY_MAX || /[\n\r]/.test(metric)) {
-      return { error: `unknown metric: ${short}` };
+      return { error: UNKNOWN_METRIC };
     }
     // Exact first, then the same key without its instance matcher, then the same base metric name; a tie within
     // a tier is ambiguous, and a tier that matches decides before a looser one is tried.
@@ -96,10 +98,10 @@ const createWatchdogTools = ({
         return { key: matches[0] };
       }
       if (matches.length > 1) {
-        return { error: `ambiguous metric: ${short} matches ${matches.join(', ')}; name one of them` };
+        return { error: `ambiguous metric: it matches ${matches.join(', ')}; name one of them` };
       }
     }
-    return { error: `unknown metric: ${short}` };
+    return { error: UNKNOWN_METRIC };
   };
 
   return [
@@ -124,11 +126,10 @@ const createWatchdogTools = ({
       },
       handler: (args) => run('query_metric', args, async () => {
         if (!validMetric(args.metric)) {
-          return { error: `unknown metric: ${String(args.metric).slice(0, 80)}` };
+          return { error: UNKNOWN_METRIC };
         }
         if (!WINDOWS.includes(args.window)) {
-          const expected = WINDOWS.join(', ');
-          return { error: `unknown window: ${String(args.window).slice(0, 40)}; expected one of ${expected}` };
+          return { error: `unknown window; expected one of ${WINDOWS.join(', ')}` };
         }
         if (queries >= QUERY_CAP) {
           return { error: `query_metric call cap of ${QUERY_CAP} reached for this session` };
@@ -143,7 +144,7 @@ const createWatchdogTools = ({
       schema: { card_id: z.string().describe('Card id from the pattern-card index') },
       handler: (args) => run('read_pattern_card', args, async () => {
         if (!cardIds.has(args.card_id)) {
-          return { error: `unknown card: ${String(args.card_id).slice(0, 80)}` };
+          return { error: 'unknown card; the index in your system prompt lists the card ids' };
         }
         return { card_id: args.card_id, text: await patternCards.read(args.card_id) };
       }),

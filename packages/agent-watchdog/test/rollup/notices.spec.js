@@ -88,3 +88,15 @@ describe('rollup/notices: dark hosts in the housekeeping line (FR-080, revision 
     expect(housekeepingNotice([], [])).to.equal(null);
   });
 });
+
+describe('rollup/notices: a collection that failed most of its queries (FR-073, revision 36)', () => {
+  const { collectionNotice } = require('../../src/rollup/notices');
+
+  it('says so when half or more of the windows failed their query, and nothing for one refused panel', () => {
+    expect(collectionNotice({ windows: 120, failed: 60 }))
+      .to.equal('Collection incomplete: 60 of 120 windows failed their query; the brief covers what was collected');
+    expect(collectionNotice({ windows: 120, failed: 4 })).to.equal(null);
+    expect(collectionNotice({ windows: 120, failed: 0 })).to.equal(null);
+    expect(collectionNotice(null)).to.equal(null);
+  });
+});

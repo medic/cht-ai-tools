@@ -99,19 +99,31 @@ const buildTools = async ({
     discovery,
     // The merged cards of the skill directory, as the SDK engine's sessions get them (revision 34): before this
     // the stdio server served none, so the CLI engine could never read a card.
-    patternCards: deps.patternCards || patternCardsFor(config),
+    patternCards: deps.patternCards || patternCardsFor(config, logger),
     replay: replay ? lookup.forServer('watchdog') : null,
     recorder,
   });
 };
 
-const patternCardsFor = (config) => {
+const NO_CARDS = Object.freeze({ index: [], read: async () => '' });
+
+/**
+ * The merged cards of the skill directory, or none: a card that fails to parse is logged and left out, as the SDK
+ * engine's run does (src/cli/commands/run.js), so one malformed file never takes the CLI engine's tools with it
+ * (revision 36).
+ */
+const patternCardsFor = (config, logger) => {
   const skillDir = config && config.paths && config.paths.skillDir;
   if (!skillDir) {
-    return { index: [], read: async () => '' };
+    return NO_CARDS;
   }
   const { loadPatternCards } = require('../../corpus/cards');
-  return loadPatternCards({ skillDir });
+  try {
+    return loadPatternCards({ skillDir });
+  } catch (error) {
+    logger.warn('tools_server.pattern_cards_unavailable', { skill_dir: skillDir, error: error.message });
+    return NO_CARDS;
+  }
 };
 
 /** Command handler: validate, build, serve until the client closes the transport. */

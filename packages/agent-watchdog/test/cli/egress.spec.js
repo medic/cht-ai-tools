@@ -51,6 +51,15 @@ describe('cli/commands/egress', () => {
     expect(new Set(lines).size).to.equal(lines.length);
   });
 
+  it('names the image\'s release version when run there, and the package\'s otherwise (revision 36)', async () => {
+    const image = argsFor({ env: { ...envFor('/tmp'), AGENT_WATCHDOG_VERSION: '1.4.0' } });
+    expect(await egress(image.args)).to.equal(codes.OK);
+    expect(JSON.parse(image.out.text()).version).to.equal('1.4.0');
+    const tree = argsFor({ env: { ...envFor('/tmp'), AGENT_WATCHDOG_VERSION: '0.0.0-development' } });
+    expect(await egress(tree.args)).to.equal(codes.OK);
+    expect(JSON.parse(tree.out.text()).version).to.equal(require('../../package.json').version);
+  });
+
   it('rejects an unknown format as a usage error', async () => {
     const { error } = await attempt(egress, argsFor({ env: envFor('/tmp'), flags: { format: 'yaml' } }).args);
     expect(error.code).to.equal(codes.USAGE);

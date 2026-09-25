@@ -160,7 +160,7 @@ packages/agent-watchdog/
 │   ├── publish/                   # slack.js (post, thread, upload, permalink, reactions), payload.js, digest.js, audience.js
 │   ├── corpus/                    # index.js, distill.js, scrub.js
 │   ├── calibration/               # report.js, suggest.js
-│   ├── trace/                     # langfuse.js, cost.js (reconciliation)
+│   ├── trace/                     # langfuse.js
 │   └── readiness/                 # check.js (CHT URL prerequisites)
 ├── agent/                         # mcp.template.json, tools.json, hooks.js
 ├── prompts/                       # system.md, pass-first.md, pass-review.md, rollup.md, feedback-parse.md,
@@ -904,7 +904,7 @@ meant to use; `AGENTS.md` describes the two-slot body and the one alerts reply; 
 Cilium policy pins 443 and where the ports are; the entity schema's caps match the layout (two slots, four
 children) and the model-facing descriptions no longer speak of one-line sub-bullets; misplaced and stale comments
 are set right; the dead module and the exports used by nothing or by tests alone are removed, and FR-049 is
-reworded to the reconciliation the code can make; retention purges replay directories like runs; a bad `--stage`,
+reworded to what the run records; retention purges replay directories like runs; a bad `--stage`,
 `--date` or `--since` is refused before a run directory exists; each command refuses the flags that are not its
 own, so `replay --stage` exits 64 as the contract says; `--log-level` and `--log-format` apply; the trace flush of
 replay, distill and calibrate is logged and never changes the exit code, and each prints its result first; `check`
@@ -913,3 +913,34 @@ the `!` breaking-change marker. **I** no dependency; **II** tests first; **III**
 brief schema's descriptions are model-facing text, rebuilt into `schema/brief.schema.json` with the replay diff
 attached to the pull request; **VIII** unchanged. Result: PASS. Not done here: rewriting the eighteen commit
 messages that fail commitlint (#48), which rewrites local history and is the operator's decision (R-40).
+
+### Revision 36 delta: the re-review, and the four rules revision 33 tightened too far (FR-003, FR-012, FR-016, FR-029, FR-042, FR-043, FR-073, FR-083)
+
+Planned on 2026-09-25 from the second review of the branch (research.md R-41), which re-checked every finding of
+the first and found 38 fixed, 8 partly fixed and 4 whose fix caused a new problem, plus 52 new findings, one of
+them scored 80. The four regressions share one cause: revision 33 applied a stricter rule than the finding asked
+for, and its tests encoded the stricter rule instead of the day the spec protects. This revision (1) masks a note
+on every remaining path to a prompt: the roll-up's feedback text and unmatched notes, the item-history tool, the
+outcome files distill reads, with e-mail addresses and phone numbers masked beside Slack ids, and cuts the memory
+masking back to the same identifiers so byte counts, decimals, dates and owner names survive; (2) undoes the
+over-strict rules: a 4xx or 500 query neither counts toward "unreachable" nor resets the count, and a collection
+in which most windows failed their query is a notice on the brief, never a refused heartbeat; a yearless date is
+exempt when any reading of it was given and is otherwise read nearest the run; timestamps count as dates; the
+system prompt, the roll-up's feedback and the memory are given text for dates; the brief's span carries the
+previous cycle on window days; day-month phrases are not numerals; the run's own notice is wrapped to the line
+budget; the resolver records a destination outside the egress list as not requested instead of failing the run;
+the live query tool keeps collection's single-series fallback; (3) strips Authorization, Proxy-Authorization and
+Cookie when a redirect changes origin and refuses a downgrade to http; (4) the partial fixes and the small items
+of R-41 in the reviewer's order: the heartbeat's early publication record written before its permalink, the
+exit-75 guard before any write, retraction ids per verdict, the date validation without a RangeError and an empty
+`--stage` refused, `--engine` for distill and calibrate, the release analyzer reading `!`, safe card loading in the
+tools server, "up to" for an estimated spend, the alerts reply that drops a programme's oversized link before its
+notices, replay and the egress document naming the image, a digest that carries a note awaiting its review, one
+helper for a run's recorded spend, the notice's schema description, verified evidence quotable in prose and
+checked per window, tool errors that echo no argument, the layout caps derived in one place, the two missing
+tests, the stale documents and the dead code. **I** no dependency; **II** tests first, and for every rule loosened
+here a second test that proves the normal day still works; **III** to **VI** unchanged; **VII** the brief schema's
+notice description is rebuilt with the replay diff; **VIII** unchanged. Result: PASS. The commit convention keeps
+the plain `type: subject` form for this founding branch, which references no issue; new work references its
+issue (constitution I), and the eighteen earlier commit messages are rewrapped to the lint's limits in a
+message-only rewrite of the unpushed history (R-41).

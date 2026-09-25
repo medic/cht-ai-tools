@@ -60,7 +60,9 @@ behind the alert (`· <metric> <value> now (yesterday <value>)`). An item reply 
    filtered alert list, then the link to every firing alert, then the housekeeping, resolved and
    alerts-unavailable notices; `metadata.event_type: 'agent_watchdog.alerts'`). No item and no alert
    group has a reply of its own since revision 28. Each reply is one section of at most 3,000 characters
-   and a link is never cut. Replies are never broadcast.
+   and a link is never cut; a programme's own alert-list link longer than 1,000 characters is left off its
+   line, which keeps its counts, and the notices and the link to every firing alert are given up only
+   after the last programme line (revision 36). Replies are never broadcast.
 4. **Record** `chat.getPermalink({ channel, message_ts })` for the parent and each reply into
    `publication.json`; permalinks of thread replies carry `thread_ts` and `cid`.
 5. A forced re-run posts a new parent whose first context block links the superseded post's

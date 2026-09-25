@@ -297,3 +297,28 @@ describe('verify/gate: what the resolver may request (FR-083, revision 33)', () 
     await expect(verifyFindings(args(ctx, { resolveLinks }))).to.be.rejectedWith(EgressRefusedError);
   });
 });
+
+describe('verify/gate: a cited link outside the egress list rejects the link, not the run (revision 36)', () => {
+  const { createResolver } = require('../../src/links/resolve');
+  const { buildEgress, guardFetch } = require('../../src/net/egress');
+  const { config } = require('./helpers/context');
+
+  it('fails links_resolve for the link and completes the pass', async () => {
+    const ctx = baseContext();
+    const url = 'https://docs.communityhealthtoolkit.org:8443/hosting/monitoring/';
+    ctx.findings.items[0].reference_urls = [url];
+    ctx.toolResultUrls = new Set([url]);
+    const egress = buildEgress(config);
+    const inner = sinon.stub().resolves(new Response(null, { status: 200 }));
+    const resolveLinks = createResolver({
+      fetch: guardFetch(inner, egress), timeoutMs: 50, discovery: ctx.discovery, grafanaUrl: null,
+      allowlist: ctx.allowlist,
+      egress,
+    });
+    const { report } = await verifyFindings(args(ctx, { resolveLinks }));
+    expect(report.outcome).to.equal('rejected');
+    const resolve = report.checks.find((c) => c.name === 'links_resolve');
+    expect(resolve.reasons.join(' ')).to.include('outside the egress list');
+    expect(inner.called).to.equal(false);
+  });
+});

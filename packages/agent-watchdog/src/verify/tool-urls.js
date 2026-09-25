@@ -6,25 +6,20 @@ const SOURCE_LINE = /Source:\s*(https?:\/\/[^\s<>"')\]\\]+)/g;
 const MARKDOWN_LINK = /\]\((https?:\/\/[^)\s]+)\)/g;
 const BARE_URL = /https?:\/\/[^\s<>"')\]\\]+/g;
 
+const { walkStrings } = require('./walk');
+
 const clean = (url) => url.replace(/[.,;:]+$/, '');
 
 const RESULT_KEYS = ['output', 'response', 'result', 'content', 'tool_response'];
 
-/** Every string inside a value, depth first. */
-const stringsOf = (value, out = []) => {
-  if (typeof value === 'string') {
-    out.push(value);
-  } else if (Array.isArray(value)) {
-    value.forEach((inner) => stringsOf(inner, out));
-  } else if (value && typeof value === 'object') {
-    Object.values(value).forEach((inner) => stringsOf(inner, out));
-  }
-  return out;
-};
-
+/** Every string of the call's result, depth first (the gate's walker, src/verify/walk.js). */
 const textsOf = (call) => {
   const key = RESULT_KEYS.find((name) => call[name] !== undefined);
-  return key === undefined ? [] : stringsOf(call[key]);
+  const out = [];
+  if (key !== undefined) {
+    walkStrings(call[key], (text) => out.push(text));
+  }
+  return out;
 };
 
 const urlsInText = (text) => {
@@ -52,4 +47,4 @@ const collectToolResultUrls = (toolCalls) => {
   return urls;
 };
 
-module.exports = { collectToolResultUrls, urlsInText, stringsOf };
+module.exports = { collectToolResultUrls };

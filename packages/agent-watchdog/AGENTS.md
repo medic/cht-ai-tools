@@ -98,11 +98,13 @@ system prompt; `read_pattern_card` serves a full merged card. `distill` writes p
 volume, never to `skill/`; raw corpus material stays under `AGENT_WATCHDOG_CORPUS_RAW_DIR`.
 
 Body layout (revision 28): two body slots, each a programme or a single project, a programme's slot naming up to
-three projects on lines of two lines each with a count of the rest; every further programme and the "Other"
-projects are one thread reply each in the same form, computed in `src/rollup/layout.js` before the roll-up call
-and written to `rollup/layout.json`. The model writes the item lines and the headline only; group lines are code;
+three projects on lines of two lines each with a count of the rest; every further programme with two or more
+flagged projects gets a thread reply of its own in the same form, and the remaining projects share one "Other"
+reply, all computed in `src/rollup/layout.js` before the roll-up call and written to `rollup/layout.json`. The
+model writes the item lines, the headline and, on a window day, the expected-load notice (the notice code built
+from the window's note is the fallback and the text the model is told to copy); group lines are code;
 `bullet_count`, `bullet_length` and `thread_order` check the draft against the layout, and the headline and the
-expected-load notice are checked like the lines. Ignored hosts never enter `discovery.projects`.
+notice are checked like the lines. Ignored hosts never enter `discovery.projects`.
 
 Collection: a panel expression is scoped to the project and its dashboard variables are resolved by code before
 it is sent (`src/collect/variables.js`; `$interval` to the dashboard's value, Grafana's built-in time variables to

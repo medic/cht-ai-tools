@@ -130,14 +130,17 @@ const outcomeOf = (checks) => (checks.every((c) => c.status === 'pass') ? 'accep
 const verifyFindings = async ({
   findings, pass, project, discovery, changes = [], candidates = [], windows = [], toolResultUrls = new Set(),
   knownCards = [], allowlist = [], attempt = 1, resolveLinks = null, grafanaUrl = null, givenText = [],
+  givenDateText = [],
 }) => {
   validateAttempt(attempt);
   const subjectRef = `${project.slug}/pass${pass}`;
   // `givenText`: the prompts of the session and the tool results it received, whose numerals the model may quote
   // (FR-016, revision 23).
+  // `givenDateText` (revision 36): the system prompt, whose window notes and memory carry dates the model may
+  // restate; its numerals are not given, so the number check never reads it.
   const base = {
     mode: 'findings', findings, project, discovery, changes, candidates, windows, toolResultUrls, knownCards, allowlist,
-    linkResults: null, builtLinks: null, items: [], givenText,
+    linkResults: null, builtLinks: null, items: [], givenText, givenDateText,
   };
   if (!findingsSchema.safeParse(findings).success) {
     const checks = [CHECKS.schema.check(base)];
@@ -153,13 +156,14 @@ const verifyFindings = async ({
 
 /**
  * Verify a roll-up draft against the accepted items before publication. `layout` is the body layout computed by code
- * (src/rollup/layout.js): with it the draft must carry one bullet per body item, sub-bullets on one line. `extraUrls`
- * are code-built links that must resolve too (the alert-list links, FR-070).
+ * (src/rollup/layout.js): with it the draft must carry one bullet per body item, each project line within two lines
+ * of 120 characters. `extraUrls` are code-built links that must resolve too (the alert-list links, FR-070).
  * @returns {Promise<{ report: object }>}
  */
 const verifyBrief = async ({
   draft, items = [], discovery, changes = [], candidates = [], runId, attempt = 1, resolveLinks = null, allowlist = [],
   grafanaUrl = null, toolResultUrls = new Set(), layout = null, extraUrls = [], givenText = [], itemTexts = null,
+  givenDateText = [], activeWindow = null,
 }) => {
   validateAttempt(attempt);
   const linkResults = await resolveAll({
@@ -171,6 +175,9 @@ const verifyBrief = async ({
     mode: 'brief', draft, items, discovery, changes, candidates, windows: [], toolResultUrls, knownCards: [], allowlist,
     linkResults, builtLinks: grafanaUrl ? buildItemLinks(items, discovery, grafanaUrl) : null, findings: null,
     project: null, runId, layout, givenText, itemTexts,
+    // The roll-up's feedback and memory sections are given text for dates (revision 36), and the active window
+    // puts the previous cycle into the brief's span.
+    givenDateText, activeWindow,
   };
   const checks = runChecks(BRIEF_CHECK_NAMES, ctx);
   const report = {

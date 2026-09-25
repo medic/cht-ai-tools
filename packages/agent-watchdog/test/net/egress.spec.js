@@ -192,6 +192,48 @@ describe('net/egress: redirects and the guard around a command (FR-083, revision
     expect(inner.callCount).to.equal(1 + 6);
   });
 
+  it('drops the credentials when a redirect leaves the origin, whatever form the headers came in', async () => {
+    const token = 'xoxb-000-test-token';
+    const forms = [
+      new Headers({
+        Authorization: `Bearer ${token}`, Cookie: 'a=b', 'Proxy-Authorization': 'Basic x', Accept: 'application/json',
+      }),
+      [['authorization', `Bearer ${token}`], ['cookie', 'a=b'], ['accept', 'application/json']],
+      { Authorization: `Bearer ${token}`, cookie: 'a=b', Accept: 'application/json' },
+    ];
+    for (const headers of forms) {
+      const inner = sinon.stub();
+      inner.onCall(0).resolves(redirect(307, 'https://watchdog.example.org/api/next'));
+      inner.onCall(1).resolves(final);
+      const fetch = guardFetch(inner, egress, { logger: quietLogger() });
+      await fetch('https://slack.com/api/start', { method: 'POST', body: 'x', headers });
+      const sent = new Headers(inner.secondCall.args[1].headers);
+      expect(sent.get('authorization'), 'authorization').to.equal(null);
+      expect(sent.get('cookie'), 'cookie').to.equal(null);
+      expect(sent.get('proxy-authorization'), 'proxy-authorization').to.equal(null);
+      expect(sent.get('accept'), 'the other headers travel').to.equal('application/json');
+      expect(JSON.stringify(inner.secondCall.args)).to.not.include(token);
+      // The caller's own headers object is not modified.
+      expect(new Headers(headers).get('authorization')).to.equal(`Bearer ${token}`);
+    }
+  });
+
+  it('keeps the credentials on a redirect within the origin and refuses a step down from https to http', async () => {
+    const inner = sinon.stub();
+    inner.onCall(0).resolves(redirect(302, '/api/again'));
+    inner.onCall(1).resolves(final);
+    const fetch = guardFetch(inner, egress, { logger: quietLogger() });
+    await fetch('https://slack.com/api/start', { headers: { Authorization: 'Bearer keep-me' } });
+    expect(new Headers(inner.secondCall.args[1].headers).get('authorization')).to.equal('Bearer keep-me');
+    const downgrade = sinon.stub().resolves(redirect(301, 'http://slack.com:443/api/plain'));
+    const logger = quietLogger();
+    const guarded = guardFetch(downgrade, egress, { logger });
+    const error = await guarded('https://slack.com/api/start').catch((e) => e);
+    expect(error).to.be.instanceOf(TypeError);
+    expect(error.message).to.equal('redirect refused: https://slack.com/api/start redirected to a plain http URL');
+    expect(downgrade).to.have.been.calledOnce;
+  });
+
   it('withEgressGuard guards the global for a command\'s duration and wraps an injected fetch', async () => {
     const original = sinon.stub().resolves('ok');
     const target = { fetch: original };

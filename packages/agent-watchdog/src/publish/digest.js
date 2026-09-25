@@ -215,7 +215,9 @@ const buildDigest = ({
   const retryingIds = new Set(retrying.map((r) => r.feedback_id));
   const records = given.filter((r) => !retryingIds.has(r.feedback_id));
   const unclassifiable = records.filter((r) => failedIds.has(r.feedback_id)).length;
-  if (!records.length) {
+  // A note still awaiting its review is mentioned even when it is the only new record (revision 36): the digest
+  // then acknowledges nothing and says what the next run will do.
+  if (!records.length && !retrying.length) {
     return null;
   }
   const perItem = new Map();
@@ -291,7 +293,9 @@ const buildDigest = ({
   };
 
   const view = {
-    summary_text: `${plural(reactions, 'reaction')}, ${plural(notes, 'note')}`,
+    summary_text: records.length
+      ? `${plural(reactions, 'reaction')}, ${plural(notes, 'note')}`
+      : 'nothing new to acknowledge',
     items: digestItems.map((entry) => ({
       host: entry.host, metric: entry.metric, tally_text: tallyText(entry), effect_text: effectText(entry),
       provenance: provenanceView(entry.provenance, entry.host),

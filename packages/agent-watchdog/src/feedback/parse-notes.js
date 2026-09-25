@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { z } = require('zod');
 const { PACKAGE_PATHS } = require('../config/schema');
+const { costRecord } = require('./review');
 const { wrapUntrusted } = require('../agent/prompt-assembly');
 const { maskPeople } = require('../corpus/scrub');
 
@@ -151,7 +152,7 @@ const promptText = (definition) => {
  * Returns { horizon, expected_max, item_reference, source }.
  */
 const parseNoteWithModel = async ({
-  text, noteDate, engine = null, model, definition = null, earlierNotes = [],
+  text, noteDate, engine = null, model, definition = null, earlierNotes = [], runId = null,
 }) => {
   const deterministic = parseHorizon(text, { noteDate });
   if (deterministic.horizon || !engine) {
@@ -177,17 +178,9 @@ const parseNoteWithModel = async ({
       name: 'feedback-parse',
     });
     const result = (turn && turn.result) || {};
-    const usage = result.usage || {};
-    // The call is part of the run's cost (FR-049, revision 34), whatever the answer.
-    const call = {
-      stage: 'feedback', kind: 'parse', model,
-      input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0,
-      cache_read_tokens: usage.cache_read_tokens ?? usage.cache_read_input_tokens ?? 0,
-      cache_creation_tokens: usage.cache_creation_tokens ?? usage.cache_creation_input_tokens ?? 0,
-      cost_usd: result.total_cost_usd || 0,
-      num_turns: result.num_turns === undefined ? null : result.num_turns,
-      duration_ms: result.duration_ms === undefined ? null : result.duration_ms,
-    };
+    // The call is part of the run's cost (FR-049, revision 34), whatever the answer; one record shape with the
+    // review's (revision 36).
+    const call = costRecord({ runId, model, result, kind: 'parse' });
     const answer = ModelAnswer.safeParse(turn && turn.structuredOutput);
     if (!answer.success) {
       return {

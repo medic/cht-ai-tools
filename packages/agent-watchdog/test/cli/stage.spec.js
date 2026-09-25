@@ -82,6 +82,10 @@ describe('cli/commands/run --stage', function () {
     expect(collected.error, collected.error && collected.error.stack).to.equal(null);
     expect(fs.existsSync(path.join(runRoot(dataDir), 'discovery.json'))).to.equal(true);
     expect(fs.existsSync(path.join(runRoot(dataDir), 'alpha-example-org', 'inputs', 'windows.json.gz'))).to.equal(true);
+    // The collection's totals, for the roll-up's notice when most windows failed (FR-073, revision 36).
+    const summary = readJson(dataDir, 'collect.summary.json');
+    expect(summary.windows).to.be.greaterThan(0);
+    expect(summary.failed).to.equal(0);
 
     const noNetwork = sinon.stub().rejects(new Error('network must not be used'));
     const { stages } = fakeStages();

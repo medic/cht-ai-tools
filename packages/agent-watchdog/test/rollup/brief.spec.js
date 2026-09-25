@@ -239,6 +239,44 @@ describe('rollup/brief: the roll-up sees the day\'s feedback (FR-029, User Story
     expect(order).to.deep.equal([...order].sort((a, b) => a - b));
   });
 
+  it('masks people, phones and e-mails in the feedback and the unmatched notes, and drops authors', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const noisy = [{
+      ...feedback[0], notes: ['cc <@U04ABCD1234>, ring +254 712 345 678 or ops@example.org, expected until 1 October'],
+    }];
+    await composeBrief({
+      ctx: ctxWith(engine), items, ...inputs(), feedback: noisy,
+      feedbackBrief: { up: 1, down: 0, notes: ['thanks U0999ZZZZ9'] },
+      feedbackUnmatched: [{
+        feedback_id: 'ffffffffffff', author: 'U0456EFGH1', note: 'what about beta? ask <@U0123ABCD9>', source_ts: '1.2',
+      }],
+    });
+    const prompt = engine.session.turn.firstCall.args[0];
+    expect(prompt).to.include('cc [person], ring [address] or [address], expected until 1 October');
+    expect(prompt).to.include('thanks [person]');
+    expect(prompt).to.include('what about beta? ask [person]');
+    for (const id of ['U04ABCD1234', 'U0999ZZZZ9', 'U0456EFGH1', 'U0123ABCD9', 'U0123ABCD']) {
+      expect(prompt).to.not.include(id);
+    }
+    expect(prompt).to.not.match(/"author"/);
+    expect(prompt).to.not.include('254 712');
+    expect(prompt).to.not.include('ops@example.org');
+  });
+
+  it('hands the gate the feedback and memory as given text for dates only, and the active window', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    await composeBrief({
+      ctx: { ...ctxWith(engine), gate }, items, ...inputs(), memory: 'alpha spikes at month end until 2026-11-02',
+      activeWindow: { id: 'month-end', cycle_days: 30 },
+    });
+    const args = gate.verifyBrief.firstCall.args[0];
+    expect(args.givenDateText.join('\n')).to.include('"horizon": "2026-10-01"');
+    expect(args.givenDateText.join('\n')).to.include('until 2026-11-02');
+    expect(args.givenText.join('\n')).to.not.include('2026-10-01');
+    expect(args.activeWindow).to.deep.equal({ id: 'month-end', cycle_days: 30 });
+  });
+
   it('says so when there is no feedback, no memory and no expected-load window', async () => {
     const engine = engineWith(successResult(draftFor(items)));
     await composeBrief({
@@ -445,6 +483,21 @@ describe('rollup/brief: alert bullets (FR-066, User Story 8)', () => {
       + 'a result); model sessions were stopped by the session budget or turn cap on 2 of 3 projects before a result '
       + '($0.75 spent)');
     expect(mixed.brief.notices.filter((n) => n.startsWith('Analysis incomplete'))).to.have.length(2);
+  });
+
+  it('says "up to" when a stopped session\'s charge is the estimated grant, not a measured spend', async () => {
+    const engine = engineWith(successResult(draftFor(items)));
+    const gate = { verifyBrief: sinon.stub().resolves(accepted) };
+    const analysis = {
+      projects: 10, failed: [], errors: [],
+      incomplete: [
+        { project_url: 'https://alpha.example.org', bounds: ['turns'], cost_usd: 2, cost_estimated: true },
+        { project_url: 'https://gamma.example.org', bounds: ['turns'], cost_usd: 2, cost_estimated: true },
+      ],
+    };
+    const out = await composeBrief({ ...base(engine, gate), analysis });
+    expect(out.brief.notices).to.include('Analysis incomplete: model sessions were stopped by the turn cap on 2 of 10 '
+      + 'projects before a result (up to $4.00 spent)');
   });
 
   it('keeps the model brief when only some sessions were stopped before a result, and says so', async () => {

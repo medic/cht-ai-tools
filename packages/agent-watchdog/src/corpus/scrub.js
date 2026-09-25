@@ -6,6 +6,7 @@
 // never stored, only the name of the pattern that matched.
 const {
   SECRET_PATTERNS, EMAIL_PATTERN, PHONE_PATTERN, PHONE_MIN_DIGITS, HOST_LIKE_PATTERN, isProjectLikeHost, countDigits,
+  phoneMatches,
 } = require('../verify/patterns');
 
 // Kinds in the order overlaps are resolved: an e-mail address wins over the hostname inside it.
@@ -127,17 +128,64 @@ const scrub = (text, { hosts = [], persons = [], allowedHosts = [] } = {}) => {
 };
 
 /**
- * Mask people, e-mail addresses, phone numbers and secrets, and keep every hostname: for text that stays on the data
- * volume and returns to the model, such as the memory update (FR-044, revision 33), where the projects are the subject.
+ * A phone number as a person writes one: digit groups with a leading plus, brackets, dots or dashes, and the gate's
+ * refinements (no decimal, no token with letters). A bare run of digits is a count, a byte size or an id; a run of
+ * space-separated integers is a list of values; anything holding a date is a date range (revision 36): memory and
+ * notes keep all of those.
  */
-const maskPersonalData = (text, { persons = [] } = {}) => {
-  const source = text === null || text === undefined ? '' : String(text);
-  if (!source) {
+const ISO_DAY_IN = /\d{4}-\d{2}-\d{2}/;
+const phoneSpans = (text) => phoneMatches(text)
+  .map((match) => match.trim())
+  .filter((match) => /^\+|[().-]/.test(match) && !ISO_DAY_IN.test(match));
+
+/**
+ * Mask what identifies a person and nothing else: Slack mentions and user ids, e-mail addresses, phone numbers with
+ * separators, and secrets. Hostnames, numbers, dates, versions and names stay. This is the rule for text that
+ * stays on the volume and returns to the model (the memory update, FR-044) and for every note that reaches a
+ * prompt (FR-029), revision 36.
+ * @returns {{ text: string, flags: Array<{ kind: string, excerpt: string }> }}
+ */
+const maskPersonalData = (text) => {
+  let out = text === null || text === undefined ? '' : String(text);
+  if (!out) {
     return { text: '', flags: [] };
   }
-  const spans = candidateSpans(source, { hosts: [], persons, allowedHosts: [] }).filter((s) => s.kind !== 'hostname');
-  return applySpans(source, resolveOverlaps(spans));
+  const flags = [];
+  const seen = new Set();
+  const flag = (kind, excerpt) => {
+    const key = `${kind}:${excerpt}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      flags.push({ kind, excerpt });
+    }
+  };
+  for (const { name, pattern } of SECRET_PATTERNS) {
+    out = out.replace(globalOf(pattern), () => {
+      flag('secret', name);
+      return PLACEHOLDER.secret;
+    });
+  }
+  out = out.replace(globalOf(EMAIL_PATTERN), (match) => {
+    flag('address', maskEmail(match));
+    return PLACEHOLDER.address;
+  });
+  for (const match of phoneSpans(out)) {
+    flag('address', maskPhone(match));
+    out = out.split(match).join(PLACEHOLDER.address);
+  }
+  out = out.replace(SLACK_MENTION, (match, id) => {
+    flag('person', id);
+    return PLACEHOLDER.person;
+  });
+  out = out.replace(new RegExp(SLACK_USER_ID.source, 'g'), (match) => {
+    flag('person', match);
+    return PLACEHOLDER.person;
+  });
+  return { text: out, flags };
 };
+
+/** The text of a note as a prompt may carry it: people, addresses and secrets masked, everything else as written. */
+const maskNote = (text) => maskPersonalData(text).text;
 
 /** Replace Slack mentions and bare user ids with [person]; used wherever note text reaches a prompt or a post. */
 const maskPeople = (text) => String(text === null || text === undefined ? '' : text)
@@ -145,5 +193,6 @@ const maskPeople = (text) => String(text === null || text === undefined ? '' : t
   .replace(new RegExp(SLACK_USER_ID.source, 'g'), '[person]');
 
 module.exports = {
-  scrub, maskPersonalData, maskEmail, maskPhone, maskPeople, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER, PLACEHOLDER,
+  scrub, maskPersonalData, maskNote, maskEmail, maskPhone, maskPeople, SLACK_USER_ID, SLACK_MENTION, KIND_ORDER,
+  PLACEHOLDER,
 };

@@ -394,6 +394,54 @@ describe('publish/payload: the alerts reply is fitted line by line, links whole 
   });
 });
 
+describe('publish/payload: a programme whose filtered link is too long keeps its line (revision 36)', () => {
+  const { classified, groupOf: alertGroupOf } = require('../helpers/alerts');
+  const { buildAlertsLinks } = require('../../src/links/build');
+  const item = makeItem({ rank: 1, placement: 'body', slot: 1 });
+  const notices = [
+    'Housekeeping: 2 alerts stale for 24+ days on 1 host with no data (dark.example.org): remove them',
+    'Resolved since the previous run: Sentinel Backlog on quiet.example.org (fired 3d)',
+  ];
+  const brief = makeBrief({
+    bullets: [{
+      kind: 'item', item_id: item.item_id, group: 'Other', text: 'alpha 912 vs 300', children: [], alert_key: null,
+    }],
+    notices,
+  });
+  const hosts = Array.from({ length: 61 }, (_, i) => `programme-${String(i).padStart(2, '0')}.example.org`);
+  const alertGroups = [{ ...alertGroupOf(hosts.map((host) => classified('sentinel', host))), group: 'Other' }];
+  const alertsLinks = buildAlertsLinks({ grafanaUrl: 'https://watchdog.example.org', alertGroups });
+
+  it('leaves the oversized link off the programme line and keeps the line, the notices and the all-alerts link', () => {
+    expect(alertsLinks.byGroup.get('Other').length).to.be.greaterThan(1000);
+    const payload = buildPayload({
+      brief, items: [item], runId: '2026-09-18', date: '2026-09-18', audience: 'internal', channel: 'C123',
+      alertGroups, alertsLinks,
+    });
+    const reply = payload.replies.find((r) => r.kind === 'alerts');
+    expect(reply.text.length).to.be.at.most(3000);
+    expect(reply.text).to.include('*ALERTS* · 61 firing across 1 programme');
+    expect(reply.text).to.match(/\n• Other: 61 firing/);
+    expect(reply.text).to.not.include('|alert list>');
+    expect(reply.text).to.include(`<${alertsLinks.all}|all firing alerts>`);
+    expect(reply.text).to.include('Housekeeping: 2 alerts stale');
+    expect(reply.text).to.include('Resolved since the previous run');
+    expect(reply.text).to.not.include('more programmes in the report');
+    expect(reply.text).to.not.include('…');
+  });
+
+  it('keeps a programme link that fits', () => {
+    const few = [{ ...alertGroupOf([classified('sentinel', 'one.example.org')]), group: 'Other' }];
+    const links = buildAlertsLinks({ grafanaUrl: 'https://watchdog.example.org', alertGroups: few });
+    const payload = buildPayload({
+      brief, items: [item], runId: '2026-09-18', date: '2026-09-18', audience: 'internal', channel: 'C123',
+      alertGroups: few, alertsLinks: links,
+    });
+    const reply = payload.replies.find((r) => r.kind === 'alerts');
+    expect(reply.text).to.include(`<${links.byGroup.get('Other')}|alert list>`);
+  });
+});
+
 describe('publish/payload: the report in the thread and the footer count (revisions 25 and 28)', () => {
   const body = makeItem({ rank: 1, placement: 'body' });
   const threadItem = makeItem({ metric: 'cht_conflict_count', severity: 'low', rank: 2, placement: 'thread' });

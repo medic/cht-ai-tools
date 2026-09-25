@@ -134,6 +134,27 @@ describe('cli/commands/tools-server', () => {
     }
   });
 
+  it('serves no cards, and says so, when one card in the skill directory cannot be parsed (revision 36)', async () => {
+    const { PACKAGE_PATHS } = require('../../src/config/schema');
+    const skillDir = tempDir();
+    fs.cpSync(PACKAGE_PATHS.skillDir, skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, 'pattern-cards', 'README.md'), '# Notes for reviewers\n\nNo front matter.\n');
+    const lines = [];
+    const warning = createLogger({ level: 'warn', stream: new Writable({ write(chunk, encoding, callback) {
+      lines.push(String(chunk)); callback();
+    } }) });
+    try {
+      const tools = byName(await buildTools(base({ config: { paths: { skillDir } }, logger: warning })));
+      const out = parse(await tools.read_pattern_card.handler({ card_id: 'sentinel-stall' }));
+      expect(out.error).to.include('unknown card');
+      expect(tools.get_windows, 'the other tools are still served').to.not.equal(undefined);
+      expect(lines.join('')).to.include('tools_server.pattern_cards_unavailable');
+      expect(lines.join('')).to.include('front matter');
+    } finally {
+      removeDir(skillDir);
+    }
+  });
+
   it('hands the live query the project\'s active expected-load window, so previous_cycle is known', async () => {
     const fetch = sinon.stub().resolves(new Response(JSON.stringify({
       status: 'success',

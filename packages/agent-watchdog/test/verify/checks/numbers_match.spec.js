@@ -257,7 +257,7 @@ describe('verify/checks/numbers_match: evidence, headline and notice (FR-016, re
     const result = check(ctx);
     expect(result.status).to.equal('fail');
     expect(result.reasons).to.include(
-      'items[0].evidence[2] value 777 for window current matches no computed or collected value',
+      'items[0].evidence[2] value 777 for window current matches no computed or collected value of that window',
     );
   });
 
@@ -283,7 +283,7 @@ describe('verify/checks/numbers_match: evidence, headline and notice (FR-016, re
     // A sample of another window is not evidence for this one.
     ctx.items[0].evidence.push({ window: 'previous_day', value: 905, unit: 'count' });
     expect(check(ctx).reasons).to.deep.equal([
-      'items[0].evidence[5] value 905 for window previous_day matches no computed or collected value',
+      'items[0].evidence[5] value 905 for window previous_day matches no computed or collected value of that window',
     ]);
   });
 
@@ -310,5 +310,55 @@ describe('verify/checks/numbers_match: evidence, headline and notice (FR-016, re
     const result = check(added);
     expect(result.status).to.equal('fail');
     expect(result.reasons.some((r) => r.startsWith('expected_load_notice contains 40%'))).to.equal(true);
+  });
+});
+
+describe('verify/checks/numbers_match: date phrases, quotable evidence, evidence per window (revision 36)', () => {
+  const { check } = require('../../../src/verify/checks/numbers_match');
+  const { baseContext, briefContext } = require('../helpers/context');
+
+  it('does not count the day of a day-month phrase the date check reads', () => {
+    const headline = briefContext();
+    headline.draft.headline = 'Disk growth since 18 September on one project, 912 vs 300';
+    expect(check(headline).status).to.equal('pass');
+    const finding = baseContext();
+    finding.items[0].why_now = 'Backlog 912 climbing since Sept 16th, three times the 300 of yesterday.';
+    expect(check(finding).status).to.equal('pass');
+    // "may" followed by a number is the verb, not the month: the numeral is still checked.
+    const may = baseContext();
+    may.items[0].why_now = 'It may 43 times exceed the 300 of yesterday.';
+    expect(check(may).reasons).to.deep.equal(['items[0].why_now contains 43, which matches no computed value']);
+  });
+
+  it('lets the prose quote a rounded or derived form of evidence the check verified against a collected sample', () => {
+    const ctx = baseContext();
+    ctx.windows[0].values = [[1758088800, 905.2], [1758092400, 1234.5678]];
+    ctx.items[0].evidence = [
+      { window: 'current', value: 1235, unit: 'count' }, { window: 'previous_day', value: 300, unit: 'count' },
+    ];
+    ctx.items[0].why_now = 'Peaked at 1,235 overnight, up 935 on yesterday.';
+    expect(check(ctx)).to.deep.equal({ name: 'numbers_match', status: 'pass', reasons: [] });
+    const invented = baseContext();
+    invented.items[0].evidence.push({ window: 'current', value: 777, unit: 'count' });
+    invented.items[0].why_now = 'Peaked at 777 overnight.';
+    expect(check(invented).reasons.filter((r) => r.includes('777'))).to.have.length(2);
+  });
+
+  it('checks each evidence entry against the values of its own window, and rates only in their unit', () => {
+    const wrong = baseContext();
+    wrong.items[0].evidence = [{ window: 'previous_week', value: 912, unit: 'count' }];
+    expect(check(wrong).reasons).to.deep.equal([
+      'items[0].evidence[0] value 912 for window previous_week matches no computed or collected value of that window',
+    ]);
+    const right = baseContext();
+    right.items[0].evidence = [
+      { window: 'previous_week', value: 310, unit: 'count' },
+      { window: 'current', value: 204, unit: 'percent', note: 'change on yesterday' },
+      { window: 'trailing_14d', value: 9.1, unit: 'count', note: 'stddev' },
+    ];
+    expect(check(right).status).to.equal('pass');
+    const rateAsCount = baseContext();
+    rateAsCount.items[0].evidence = [{ window: 'previous_day', value: 204, unit: 'count' }];
+    expect(check(rateAsCount).status).to.equal('fail');
   });
 });

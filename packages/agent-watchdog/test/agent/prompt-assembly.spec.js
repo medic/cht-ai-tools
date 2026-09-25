@@ -92,6 +92,18 @@ describe('agent/prompt-assembly', () => {
       expect(text).to.not.include('U024BE7LH');
     });
 
+    it('masks e-mail addresses and phone numbers in note text as well, so none can become a given numeral', () => {
+      const text = assembly.buildPassPrompt({
+        definition, pass: 1, project, candidates, changes,
+        feedback: [{
+          note: 'ring the partner on +254 712 345 678 or mail ops@example.org; 1073741824 bytes', author: 'U1',
+        }],
+      });
+      expect(text).to.include('ring the partner on [address] or mail [address]; 1073741824 bytes');
+      expect(text).to.not.include('254 712');
+      expect(text).to.not.include('ops@example.org');
+    });
+
     it('builds a review pass with the previous items and unselected candidates', () => {
       const text = assembly.buildPassPrompt({
         definition, pass: 2, project, candidates, changes,

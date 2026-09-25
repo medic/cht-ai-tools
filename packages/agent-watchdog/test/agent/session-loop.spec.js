@@ -389,6 +389,32 @@ describe('agent/session-loop', () => {
   });
 });
 
+describe('agent/session-loop: the system prompt is given for dates only (revision 36)', () => {
+  let dataDir;
+  let runDir;
+  beforeEach(async () => {
+    dataDir = tempDir();
+    runDir = await RunDir.create(dataDir, '2026-09-18');
+  });
+  afterEach(() => removeDir(dataDir));
+
+  it('hands the gate the system prompt as givenDateText and keeps it out of givenText', async () => {
+    const engine = createFakeEngine({ responses: [{ structuredOutput: findings([modelItem()]) }] });
+    const gateSpy = sinon.spy(acceptingGate);
+    await runProjectSession({
+      engine, definition, project, candidates, changes, feedback: [], memory: 'alpha spikes until 2026-10-02',
+      activeWindow: { id: 'campaign', note: 'Measles campaign until 2026-10-10' },
+      config: config({ passes: 1 }), gate: gateSpy, runDir, logger, now: () => new Date('2026-09-18T06:00:00Z'),
+      localTools: [], localServers: {},
+    });
+    const args = gateSpy.firstCall.args[0];
+    expect(args.givenDateText.join('\n')).to.include('Run date (UTC): 2026-09-18');
+    expect(args.givenDateText.join('\n')).to.include('until 2026-10-02');
+    expect(args.givenDateText.join('\n')).to.include('Measles campaign until 2026-10-10');
+    expect(args.givenText.join('\n')).to.not.include('Measles campaign');
+  });
+});
+
 describe('agent/session-loop: tool-result URLs come from the texts, not their JSON encoding (revision 34)', () => {
   let dataDir;
   let runDir;

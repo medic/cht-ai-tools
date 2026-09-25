@@ -139,8 +139,10 @@ const runProjectSession = async ({
   let session = null;
   const toolUrls = new Set();
   // Every text the model was given in this session, prompts and tool results, so the gate can tell a numeral the
-  // model read from one it invented (FR-016, revision 23).
+  // model read from one it invented (FR-016, revision 23). The system prompt is given for dates only (revision 36):
+  // its window notes and memory carry dates the model may restate, its skill text carries no figure of this run.
   const givenTexts = [];
+  const givenDateTexts = [];
 
   const pastDeadline = () => deadline !== null && deadline !== undefined && Date.now() > deadline;
 
@@ -257,6 +259,7 @@ const runProjectSession = async ({
       if (findings && typeof findings === 'object') {
         const verdict = await gate({
           findings, pass, project, candidates, changes, toolResultUrls: [...toolUrls], givenText: [...givenTexts],
+          givenDateText: [...givenDateTexts],
         });
         report = { ...verdict.report, attempt, subject: 'pass', subject_ref: `${slug}/pass${pass}` };
         accepted = verdict.report.outcome === 'accepted';
@@ -351,6 +354,7 @@ const runProjectSession = async ({
 
   const activeWindows = activeWindow ? [activeWindow] : [];
   const systemPrompt = assembleSystemPrompt({ definition, date: runDate, memory, activeWindows });
+  givenDateTexts.push(systemPrompt.filter((part) => typeof part === 'string').join('\n'));
   const open = () => engine.openSession({
     systemPrompt,
     outputSchema: definition.outputSchemas.findings,

@@ -1,4 +1,4 @@
-const { createTracer } = require('../../src/trace/langfuse');
+const { createTracer, finishTraceSafely } = require('../../src/trace/langfuse');
 
 const fakeSdk = () => {
   const observations = [];
@@ -96,5 +96,19 @@ describe('trace/langfuse', () => {
     const tracer = createTracer({ sdk, baseUrl: 'https://langfuse.example.org' });
     await tracer.start({ runId: 'r', date: 'd', mode: 'manual' });
     expect(await tracer.traceUrl()).to.equal('https://langfuse.example.org/trace/trace-1');
+  });
+});
+
+describe('trace/langfuse finishTraceSafely (revision 36)', () => {
+  it('finishes the trace with the output, and logs a rejected flush without throwing', async () => {
+    const logger = { warn: sinon.stub() };
+    const tracer = { finish: sinon.stub().resolves() };
+    await finishTraceSafely(tracer, logger, { status: 'completed' });
+    expect(tracer.finish).to.have.been.calledOnceWith({ output: { status: 'completed' } });
+    expect(logger.warn.called).to.equal(false);
+    const rejected = Object.assign(new Error('Unauthorized'), { name: 'OTLPExporterError' });
+    const broken = { finish: sinon.stub().rejects(rejected) };
+    await finishTraceSafely(broken, logger, { status: 'failed' });
+    expect(logger.warn).to.have.been.calledOnceWith('trace.finish_failed', sinon.match({ error: rejected }));
   });
 });

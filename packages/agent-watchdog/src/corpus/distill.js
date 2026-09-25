@@ -9,7 +9,7 @@ const path = require('node:path');
 const { z } = require('zod');
 const { PACKAGE_PATHS } = require('../config/schema');
 const { fill, wrapUntrusted } = require('../agent/prompt-assembly');
-const { scrub } = require('./scrub');
+const { maskNote, scrub } = require('./scrub');
 const { slugify } = require('../rollup/proposals');
 const { renderCardFile, parseCardFile, loadPatternCards, CARD_FIELDS } = require('./cards');
 const { scanCorpus, writeIndex, DEFAULT_MAX_BYTES } = require('./index');
@@ -261,7 +261,8 @@ const distillItem = async ({
     kind: item.kind,
     relative_path: item.relative_path,
     existing_cards: existingLines.length ? existingLines.join('\n') : '- none yet',
-    content: wrapUntrusted('corpus-item', truncate(rawText, maxPromptChars)),
+    // People, addresses and phones masked before the model reads a corpus item (revision 36).
+    content: wrapUntrusted('corpus-item', truncate(maskNote(rawText), maxPromptChars)),
   });
 
   let turn;

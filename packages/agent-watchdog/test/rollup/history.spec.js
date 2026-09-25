@@ -1,4 +1,4 @@
-const { previousItemCounts, previousRunIds } = require('../../src/rollup/history');
+const { previousItemCounts, previousRunIds, lastRunPerDate, analysedDatesBefore } = require('../../src/rollup/history');
 const { RunDir } = require('../../src/store/run-dir');
 const { tempDir, removeDir } = require('../helpers/fixtures');
 
@@ -103,5 +103,23 @@ describe('rollup/history', () => {
     }
     expect(await previousRunIds(dataDir, '2026-09-18', 2)).to.deep.equal(['2026-09-17', '2026-09-16']);
     expect(await previousRunIds(dataDir, '2026-09-15', 2)).to.deep.equal([]);
+  });
+});
+
+describe('rollup/history lastRunPerDate (revision 36)', () => {
+  const ids = ['2026-09-15', '2026-09-16', '2026-09-16-f2', '2026-09-16-f10', '2026-09-17', '2026-09-18'];
+
+  it('keeps the last run of each date, by its sequence, within the bounds given', () => {
+    expect([...lastRunPerDate(ids).entries()]).to.deep.equal([
+      ['2026-09-15', '2026-09-15'], ['2026-09-16', '2026-09-16-f10'], ['2026-09-17', '2026-09-17'],
+      ['2026-09-18', '2026-09-18'],
+    ]);
+    expect([...lastRunPerDate(ids, { from: '2026-09-16', to: '2026-09-17' }).values()])
+      .to.deep.equal(['2026-09-16-f10', '2026-09-17']);
+    expect([...lastRunPerDate(ids, { before: '2026-09-17' }).keys()]).to.deep.equal(['2026-09-15', '2026-09-16']);
+    // The persistence streak reads the same selection, most recent first.
+    expect(analysedDatesBefore(ids, '2026-09-18')).to.deep.equal([
+      ['2026-09-17', '2026-09-17'], ['2026-09-16', '2026-09-16-f10'], ['2026-09-15', '2026-09-15'],
+    ]);
   });
 });
