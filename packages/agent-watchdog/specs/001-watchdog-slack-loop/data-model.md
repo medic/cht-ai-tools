@@ -305,7 +305,7 @@ accepted or rejected by the gate.
 
 A Pass record whose turn failed before a result carries `error` (the runtime's message) and the
 session's `bounds_hit` includes `error`, distinct from `timeout` (revision 13).
-| `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a sub-bullet of their Project Group's bullet (FR-069). |
+| `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a project line of their Project Group's bullet (FR-069). |
 | `slot` | integer or null | 1 or 2, the layout's body slots (revision 35): the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
 | `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |
 
@@ -618,9 +618,10 @@ because they read one spelling only.
 - A Run analyses many Projects; each Project has many Metric Windows, one Computed Change per
   metric, zero or more Candidates, and one Pass per analysis pass.
 - An Item references one or more Candidates of the same project and at most one Pattern Card.
-- A Brief carries at most two Bullets in its body; a Bullet holds one Item, one Project Group's
-  Items as sub-bullets, or one Project Group's Alert Groups by category. Every Item of the run has
-  one Thread Reply, and so does every Alert Group.
+- A Brief carries at most two Bullets in its body; a Bullet holds one Item or one Project Group's
+  Items as project lines; alerts take no Bullet. Every programme not in the body with two or more
+  flagged projects has one Thread Reply, the remaining projects share one, the alerts share one, and
+  the report share and the feedback digest are the other replies.
 - A Project belongs to one Project Group. An Alert Instance belongs to one Alert Rule and, through
   its host, to one Project and one Project Group; an Alert Episode follows one Alert Instance from
   start to clear and may name one Item as its explanation.

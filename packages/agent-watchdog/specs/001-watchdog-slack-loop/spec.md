@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 38)
+**Status**: Draft (revision 39)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -603,7 +603,7 @@ line that shows the alert and its metric together.
   (FR-009, revision 20).
 - Two items of a run relate to each other, a level and the rate of change of the same thing: both
   are still ranked and posted as themselves; the relation is recorded, given to the roll-up and
-  counted in the weekly report, and it does not change the five bullets (FR-009, FR-069,
+  counted in the weekly report, and it does not change the body layout (FR-009, FR-069,
   revision 20).
 
 ## Requirements *(mandatory)*
@@ -664,7 +664,7 @@ Analysis
   reasons after a prompt sentence against it changed nothing).
 - **FR-010**: The system MUST rank flagged items and place at most two programme bullets in the
   post body, the programmes of the two highest-ranked items; a bullet is one project line when the
-  programme has one flagged project, otherwise a group line with one sub-bullet per project for at
+  programme has one flagged project, otherwise a group line with one project line per project for at
   most three projects in rank order and a count of the rest (FR-069). Alerts take no body bullet
   (FR-066). Revision 28; five slots from revision 9, three before it.
 - **FR-011**: Items MUST be produced in a machine-validated structure; output that fails
@@ -707,7 +707,7 @@ Analysis
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
   they appear in the watchdog, PromQL where it helps the reader confirm; except in the body's
-  sub-bullets and single-project bullets, which start with the project written by code and describe
+  project lines and single-project bullets, which start with the project written by code and describe
   the change in words (FR-069, revision 26). Emoji are permitted as
   status and severity markers. At most two programme bullets, each with at most three project
   lines of at most two lines of 120 characters; the headline at most two such lines; these
@@ -1025,8 +1025,8 @@ Alerts and groups
   ignore list of host patterns. Ignored hosts are discovered and counted but MUST NOT be analysed,
   incur model usage or be named in any post. Hosts matching no group belong to "Other".
 - **FR-069**: When a group has more than one flagged project, the body MUST show one bullet for the
-  group naming the count, with one sub-bullet per project item in rank order; a group with one
-  flagged project shows that item as today. Every sub-bullet MUST start with its project, written by
+  group naming the count, with one project line per project item in rank order; a group with one
+  flagged project shows that item as today. Every project line MUST start with its project, written by
   code from the item's host as the host's first label (`north-a: `), or two labels when two projects
   of the group share the first; a single-project bullet starts with the full host the same way. The
   model writes what follows: the change in words a technical reader can act on, with its values,
@@ -1324,15 +1324,25 @@ Configuration
 - **Daily Maxima Ledger**: per project, one number per metric per day, the maximum of that day's
   current window; extended by every run and the source of the trailing baseline once it holds
   enough days; entries older than the kept retention period are compacted.
+- **Computed Change**: per project and metric, the level of each window, the percentage change, the
+  deviation against the trailing baseline, the sustained rise and, for an uptime, the day's restarts;
+  the deterministic input to candidates (FR-006).
 - **Candidate**: a deterministic flag on a metric window that exceeded a threshold or showed a
   sustained trend; input to analysis.
 - **Item**: a finding the analysis chose to surface; carries a stable identity derived from
   project, metric and pattern so it can be tracked across days.
+- **Pass**: one analysis turn of a project's session: its items, the gate's verdict on them and the
+  differences from the previous pass with their reasons (FR-056 to FR-058).
 - **Verification Report**: the result of the gate for one draft — each check, pass or fail, with
   reasons.
-- **Brief**: the published post for a run: headline, up to five bullets each with optional
-  sub-bullets, the report shared into its thread, footer.
-- **Thread Reply**: the per-item message that carries reactions; alert groups have one too.
+- **Brief**: the published post for a run: headline, at most two programme bullets each with up to
+  three project lines and a count of the rest, the notices, the footer, and the report shared into
+  its thread.
+- **Bullet**: one entry of the body layout: an item bullet, or a programme's group line with its
+  project lines and the count of the rest (FR-010, FR-069).
+- **Thread Reply**: a message under the post: the report share, one reply per programme not in the
+  body with two or more flagged projects, one "Other" reply, one alerts reply and the feedback
+  digest; reactions and notes on the post and its replies are read as feedback (FR-026).
 - **Project Group**: a programme such as North Programme or South Programme, declared by host patterns in
   the project annotations, plus "Other" for unmatched hosts and "Watchdog" for alerts without a
   project.
@@ -1341,6 +1351,8 @@ Configuration
 - **Alert Instance**: one firing evaluation of a rule for one project, with its state and start.
 - **Alert Episode**: the durable record of one instance from start to clear, with the correlations
   computed for it and the explanation the analysis produced, if any.
+- **Alert Pattern**: one rule firing across a programme within two days, presented as one
+  programme-wide event (FR-078).
 - **Feedback**: a verdict (up, down, retracted) or note from a named person about an item or a
   brief, dated; kept permanently; carries the run that acknowledged it and, for notes, its
   classification and the proposal it produced.
@@ -1397,8 +1409,9 @@ Configuration
 - **SC-014**: Every alert firing on the hosted watchdog at run time appears in that day's brief
   body or thread, grouped, with a link that resolves, verified by replay on recorded alert
   fixtures.
-- **SC-015**: No published body exceeds five bullets, two lines per bullet or eight sub-bullets per
-  bullet, verified by the gate report of every post.
+- **SC-015**: No published body exceeds two programme bullets, three project lines per bullet with the
+  count of the rest, or two lines of 120 characters for any bullet or project line, verified by the
+  gate report of every post.
 - **SC-016**: With a warm data volume, a run over one hundred projects fetches one range query per
   metric per project and no trailing query, verified by query counts against the fake watchdog; a
   single failed query never fails a run, verified by test; the hosted collection stage completes

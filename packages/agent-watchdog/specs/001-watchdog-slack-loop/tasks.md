@@ -349,7 +349,7 @@ out in plan.md "Source Code". Contracts referenced below live in `specs/001-watc
 - [X] T108 [P] Run `semantic-release --dry-run` from the package directory and record the result in `README.md` "Releasing"; if path scoping fails, switch `release.config.js` to the workflow-filtered fallback from research.md R-12 (S-12)
 - [X] T109 [P] Add `.github/pull_request_template.md` items for dependency justification, replay diff on prompt or skill changes, and `AGENTS.md` and `README.md` updates (constitution Quality Gates)
 - [X] T110 Update `README.md` and `AGENTS.md` with the final commands, stage list, exit codes, contracts index and smoke-test instructions; confirm `AGENTS.md` agrees with `.specify/memory/constitution.md`
-- [ ] T111 Run quickstart.md sections 1 to 18 against a real watchdog in preview mode, fix what fails, and confirm `npm run lint` reports zero warnings and coverage is at or above `main`
+- [ ] T111 Run quickstart.md sections 1 to 13 and 16 (the how-to sections; 14 and 15 say what to expect) against a real watchdog in preview mode, fix what fails, and confirm `npm run lint` reports zero warnings and coverage is at or above `main`
 
 ---
 

@@ -29,7 +29,7 @@ alone (FR-043) and any run can be replayed offline (FR-041). Paths are relative 
 │       │   └── session.json               # session id, model, usage and trace observation per call (revision 29) [kept]
 │       ├── rollup/
 │       │   ├── items.ranked.json          # merged items with rank, placement and slot         [kept]
-│       │   ├── layout.json                # body layout: slots, sub-bullets, alert bullets      [kept]
+│       │   ├── layout.json                # body layout: slots, project lines, replies       [kept]
 │       │   ├── standing.json              # standing conditions handed to no session (FR-014, revision 23) [kept]
 │       │   ├── prompt.md                  # the exact roll-up prompt and its revisions (revision 23) [kept]
 │       │   ├── alert-groups.json          # the alert groups the brief described, in body order (FR-066) [kept]

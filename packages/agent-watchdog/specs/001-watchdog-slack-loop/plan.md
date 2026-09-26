@@ -11,9 +11,10 @@ Medic's hosted CHT Watchdog through its Grafana, collects metric windows through
 datasource proxy, computes changes and candidates deterministically, then opens one bounded
 Claude Agent SDK session per project with candidates: two passes in one session, read-only MCP
 tools only, schema-validated structured output, and a verification gate that runs in code between
-turns and again before publication. The roll-up posts one Slack message with at most five bullets
-the report shared into the thread, one threaded reply per high item and alert group, and a footer with specification, configuration, trace
-and cost links. The next run reads reactions and notes, updates capped memory by diff, and writes
+turns and again before publication. The roll-up posts one Slack message with at most two programme
+bullets of up to three project lines, the report shared into the thread, one reply per further
+programme with two or more flagged projects, one "Other" reply, one alerts reply, and a footer with
+specification, configuration, trace and cost links. The next run reads reactions and notes, updates capped memory by diff, and writes
 proposals that humans adopt by pull request. Every stage writes files the next stage reads, so any
 run replays offline and any contributor can run the pipeline in preview mode. Deployment manifests
 live in `medic-infrastructure`; this package exposes the contracts under `contracts/`.
@@ -65,8 +66,8 @@ every published number and link is verified in code; secrets never reach prompts
 records; 10 Gi volume; retention 14 days raw and 30 days otherwise; one Slack channel; UTC dates;
 CommonJS-compatible dependencies only.
 
-**Scale/Scope**: 10 to 50 projects, up to 10 dashboards and roughly 200 panel expressions per
-project, one post per day with at most five body bullets of up to eight sub-bullets each, up to
+**Scale/Scope**: up to about a hundred projects, up to 10 dashboards and roughly 200 panel expressions
+per project, one post per day with at most two programme bullets of up to three project lines each, up to
 500 firing alert instances, seven runs of feedback look-back, a knowledge corpus of hundreds of
 files.
 
@@ -76,7 +77,7 @@ files.
 
 | Principle | Status | How the plan satisfies it |
 |---|---|---|
-| **I. CHT Conventions Are Not Optional** | PASS | CommonJS JavaScript, no TypeScript in this package (the SDK is consumed from JavaScript). Node 22 pinned in `.nvmrc` and the image. `@medic/eslint-config` extended through `@eslint/eslintrc` FlatCompat in `eslint.config.js`, as cht-core does; `npm run lint` with zero warnings is a CI gate. mocha, chai with chai-as-promised, sinon, nyc; `test/` mirrors `src/`. Conventional Commits `type(#issue): subject` enforced by commitlint; PRs target `main`. semantic-release publishes the container image on release. AGPL-3.0 `LICENSE`. The exact eslint and chai majors follow cht-core (research.md R-9). |
+| **I. CHT Conventions Are Not Optional** | PASS | CommonJS JavaScript, no TypeScript in this package (the SDK is consumed from JavaScript). Node 22 pinned in `.nvmrc` and the image. `@medic/eslint-config` extended through `@eslint/eslintrc` FlatCompat in `eslint.config.js`, as cht-core does; `npm run lint` with zero warnings is a CI gate. mocha, chai with chai-as-promised, sinon, nyc; `test/` mirrors `src/`. Conventional Commits `type(#issue): subject`, enforced by commitlint with the scope optional until this founding branch merges (Complexity Tracking); PRs target `main`. semantic-release publishes the container image on release. AGPL-3.0 `LICENSE`. The exact eslint and chai majors follow cht-core (research.md R-9). |
 | **II. Test-First and Replayable** | PASS | Red-green-refactor per module. External systems sit behind small modules (`src/collect/grafana.js`, `src/publish/slack.js`, `src/agent/engine-sdk.js`, `src/agent/engine-cli.js`, `src/trace/langfuse.js`) stubbed with sinon and driven by recorded fixtures. Every run persists inputs, changes, candidates, prompts and tool results (run-directory contract); `agent-watchdog replay` regenerates findings offline. Prompt, skill and model-parameter changes must pass `npm run replay:eval` and attach the replay diff to the PR (quality gate 3). |
 | **III. Deterministic Before Generative** | PASS | `src/analyze/` computes percentage change, deviation, monotonic rise, baselines and expected-load adjustments with unit tests; `src/analyze/candidates.js` applies thresholds. The model runs at most `AGENT_WATCHDOG_PASSES` passes (hard cap 4) of at most `AGENT_WATCHDOG_MAX_TURNS` turns (hard cap 50) under `maxBudgetUsd`, returning schema-validated structured output; later passes review earlier ones and stop on an empty diff. Every model stage has a degraded path (`src/rollup/deterministic-brief.js`) that labels itself. The gate (`src/verify/`) checks schema, known projects and metrics, number matching, dates, link construction and allow-list, structure limits, secrets; failures return to the model at most twice, then degrade. The model composes no URLs: links are built by `src/links/build.js` from `dashboard_ref`, and `reference_urls` must have appeared in tool results. |
 | **IV. Least Privilege and Explicit Trust Boundaries** | PASS | Credentials: Grafana service-account token with Viewer role; Slack bot token with post, upload, read and reaction scopes on one channel (`reactions:write` added by User Story 7 for the "seen" reaction; still the single configured channel, still no write to any deployment); Langfuse write keys. Nothing grants write access to a CHT deployment or to this package. The model's tools are `tools: []` plus an enumerated MCP allow-list (agent-definition contract). Fetched text is wrapped in labelled `<untrusted>` delimiters in prompts and rendered only through Handlebars escaping. The agent writes only its memory (capped, stored as diffs) and proposal files; prompts, tools and skill are read-only paths. Secrets are redacted by key in logs and the effective configuration; Slack user ids never leave `feedback.jsonl`. Partner-facing output is out of scope here; the hostname scan already runs on proposals (FR-033). |
@@ -151,7 +152,7 @@ packages/agent-watchdog/
 │   │                              # session-loop.js, hooks.js, tools/ (watchdog MCP tools, replay shim,
 │   │                              # stdio server)
 │   ├── verify/                    # gate.js, format.js, checks/ (one module per check)
-│   ├── rollup/                    # rank.js, layout.js (five slots, sub-bullets, alert bullets; US9),
+│   ├── rollup/                    # rank.js, layout.js (two slots of three project lines; US9),
 │   │                              # brief.js, deterministic-brief.js, memory.js, proposals.js
 │   ├── links/                     # build.js (dashboard deep links, alert-list links), allowlist.js, resolve.js
 │   ├── render/                    # report.js (Handlebars); browser.js retained for the smoke test only
@@ -981,3 +982,14 @@ audit job fails on a high advisory in mocha 11's serialize-javascript (GHSA-5c6j
 payload written beside the package (`payload*.json`) is ignored; and README and AGENTS.md say how a
 contributor installs Spec Kit's Claude skills, points it at the feature directory and runs the workflow.
 **I** to **VIII** unchanged. Result: PASS.
+
+### Revision 39 delta: the artefacts say what the code does (`/speckit-analyze`)
+
+Made on 2026-09-26 from the analysis run over the artefacts: no critical finding, four high ones, all stale
+statements of the layout from before revision 28. SC-015, the Brief and Thread Reply entities, one edge case
+and this plan's summary, scale line and tree comment now state the two-programme-bullet brief; the plan's
+Constitution Check names the tracked commit-header deviation instead of claiming enforcement; "sub-bullet" is
+"project line" in FR-010, FR-015, FR-069, the data model and the run-directory contract, as the code and
+AGENTS.md say; Computed Change, Pass, Bullet and Alert Pattern join the Key Entities, which the data model
+already defined; the open validation task T111 names the quickstart sections that exist. Every story,
+scenario and requirement number is unchanged. **I** to **VIII** unchanged. Result: PASS.
