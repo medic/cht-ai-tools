@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 37)
+**Status**: Draft (revision 38)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -10,16 +10,18 @@ to run the same agent on their own machine and see exactly what it would post.
 
 ## User Scenarios & Testing *(mandatory)*
 
+Stories keep the numbers they were given when they were added, because tasks, tests, contracts and the
+security checklist cite them by number; the priority says what matters, not the position.
+
 ### User Story 1 - Daily brief for the on-call engineer (Priority: P1)
 
 A Medic engineer responsible for hosted CHT projects opens Slack in the morning and finds one
-post from agent-watchdog: a headline, at most five bullets across all monitored projects (a
-bullet may carry sub-bullets for a programme's projects or alerts, User Stories 8 and 9), each
-with the metric evidence, why it matters now, a suggested check and a link straight to the
-relevant dashboard view for that project and time window, plus the full report shared into the
-thread (until revision 24 also a rendered image of the brief, retired as a picture of the message it
-sat under).
-On a day with nothing worth flagging, the post is a single line saying so and what was checked.
+post from agent-watchdog: a headline and at most two programme bullets, each naming up to three
+projects with the change in words, the metric evidence, why it matters now and a suggested check
+(User Stories 8 and 9); every project line links straight to the relevant dashboard view for that
+project and time window, and the full report is shared into the thread with every item numbered
+by rank. On a day with nothing worth flagging, the post is a single line saying so and what was
+checked.
 
 **Why this priority**: the whole system exists to produce this post. Every other story
 improves it.
@@ -38,12 +40,12 @@ quiet day and verify the one-line post.
 2. **Given** no project's metrics differ notably from their baselines, **When** the run
    executes, **Then** a single-line post states all is quiet and how many projects and panels
    were checked, and no thread replies are created.
-3. **Given** more items qualify than five bullets can hold, **When** the run executes, **Then**
-   the two highest-ranked programmes fill the body, each with at most three project lines, every
+3. **Given** more items qualify than the body can hold, **When** the run executes, **Then** the
+   two highest-ranked programmes fill the body, each with at most three project lines, every
    other programme with two or more flagged projects has a thread reply of its own, the remaining
-   projects share one "Other" reply, the alerts share one reply (revision 28), and every item appears in the run's report, shared into
-   the thread as its first reply, where every item is numbered by rank so a note can cite it
-   (revision 23; until then every item had a reply, which reached 159 replies under one post).
+   projects share one "Other" reply, the alerts share one reply, and every item appears in the
+   run's report, shared into the thread as its first reply, where every item is numbered by rank
+   so a note can cite it.
 4. **Given** the run falls inside a configured expected-load window (month-end, sync week),
    **When** a metric rises in line with the same phase of the previous cycle, **Then** it is
    not flagged and the post notes that the window is active.
@@ -51,8 +53,7 @@ quiet day and verify the one-line post.
    outage is itself a flagged item rather than being treated as missing data.
 6. **Given** the analysis passes run, **When** the verification gate rejects a draft, **Then** the
    revision the model is asked for names only the checks that failed, and no rejection is caused by
-   a value the run already computed, so a pass is not spent re-deriving a fact the harness holds
-   (revision 18).
+   a value the run already computed, so a pass is not spent re-deriving a fact the harness holds.
 7. **Given** a draft brief contains a number that does not match the computed data, a project
    name that is not a monitored project, or a link that does not resolve, **When** the run
    reaches publication, **Then** the draft is rejected, the reasons are returned for revision,
@@ -95,7 +96,7 @@ the agent's memory reflect the note.
 6. **Given** a thread note reads "#12 :-1: known migration until 1 October" under a brief whose
    report lists an item ranked 12, **When** it is ingested, **Then** it is recorded as feedback on
    that item with verdict down, the note and its horizon; and a note whose only content is a
-   thumbs, citing no item, is recorded as unmatched (revision 23).
+   thumbs, citing no item, is recorded as unmatched.
 
 ### User Story 3 - Steering, auditing and running it yourself (Priority: P2)
 
@@ -141,11 +142,11 @@ run the full pipeline in preview mode to obtain the would-be post as structured 
    every destination a run contacts, host and port with its purpose, and nothing else; and **Given**
    a run whose code or configuration would reach any other destination, **When** it tries, **Then**
    the request is refused before a connection is made, the run fails with exit 69 and the log names
-   the host and port (FR-083, revision 30).
+   the host and port (FR-083).
 9. **Given** a roll-up draft whose headline names a figure no item's computed data holds, whose
    expected-load notice carries a link or a host not discovered, or whose item evidence states a value
    never computed or collected, **When** the gate checks it, **Then** the draft is refused and each
-   reason names the headline, the notice or the evidence entry (FR-016, revision 33).
+   reason names the headline, the notice or the evidence entry (FR-016).
 
 ### User Story 4 - Self-improvement under review (Priority: P3)
 
@@ -176,10 +177,10 @@ and pattern-level, and that no prompt, skill or threshold file changed.
    and no human has judged them, **When** the weekly calibration runs, **Then** the report states
    how many candidates each rule raised, how many became items, how many the analysis set aside
    and its commonest reasons, and any threshold suggestion drawn from those says so; a human
-   verdict on the same candidate always outranks the analysis's own (revision 20).
+   verdict on the same candidate always outranks the analysis's own.
 6. **Given** the roll-up's memory update quotes a note that carries a Slack mention and a phone
    number, **When** the memory is stored, **Then** both are masked in the memory file and its patch,
-   the log names what was masked, and no later prompt carries them (FR-044, revision 33).
+   the log names what was masked, and no later prompt carries them (FR-044).
 
 ### User Story 5 - New projects and readiness (Priority: P3)
 
@@ -292,7 +293,7 @@ confidence.
    corrected horizon only, the two notes are reviewed together as one whole with at most one
    proposal, and the digest says for that item how the feedback was used: the exact lines it put
    into the project's analysis prompt, quoted, with a link to the run's trace, or the suppression it
-   caused before analysis (FR-085, revision 29).
+   caused before analysis (FR-085).
 
 ### User Story 8 - Alerts in the brief (Priority: P2)
 
@@ -319,18 +320,16 @@ adds nothing.
    how many stale, with a link to that group's filtered alert list and one to every firing alert,
    for example "North Programme: 15 firing (disk usage 12, backlog 3), 2 new, 3 stale"; the post
    body carries no alert bullet, because the alerts are the monitoring stack's own notifications
-   and the body is for what the analysis added (revision 28).
+   and the body is for what the analysis added.
 2. **Given** an alert has been firing longer than the configured staleness threshold, **When**
    the brief is composed, **Then** it is marked stale and counted separately from new and
    persisting alerts.
 3. **Given** the reviewed alert policy assigns importance to rule titles, **When** the alerts
    reply and the report list them, **Then** critical alerts come first and unknown rules are
-   reported as uncategorised with medium importance (alerts no longer compete with items for the
-   body, revision 28).
+   reported as uncategorised with medium importance.
 4. **Given** alerts are numerous, **When** the brief is composed, **Then** the alerts reply
    summarises them per project group with counts and links only, and the full list with every
-   instance is in the report's alerts section (revision 28; until then one reply per alert group
-   listed the instances).
+   instance is in the report's alerts section.
 5. **Given** an alert started or cleared since the previous run, **When** the run completes,
    **Then** an episode record holds when it started and cleared, the expected-load window and any
    CHT version change in force at the start, the flagged items on the same project and metric in
@@ -363,23 +362,21 @@ ignored host's absence from analysis and post, and the "Other" group for unmatch
    starting with the project written by code and covering every issue of that project in the
    model's words, and a last line counting the projects beyond three; the programme has no reply of
    its own when it is in the body, and a programme with two or more flagged projects that is not in
-   the body gets one thread reply in the same form (revision 28; revisions 25 and 26 before it).
+   the body gets one thread reply in the same form.
 2. **Given** a host matches the ignore list, **When** the run executes, **Then** it is discovered
    and counted as ignored but neither analysed, nor charged for model usage, nor named in the post.
 3. **Given** a host matches no group, **When** the brief is composed, **Then** it is reported under
    the group "Other".
 4. **Given** more than two programmes qualify, **When** the brief is composed, **Then** at most
    two programme bullets appear in the body, each with at most three project lines of at most two
-   lines, and the gate rejects a draft that exceeds any of these limits (revision 28; five slots of
-   eight one-line sub-bullets until then).
+   lines, and the gate rejects a draft that exceeds any of these limits.
 
 ### User Story 10 - An honest brief with metrics that mean something (Priority: P2)
 
-*Proposed in revision 13 after the first hosted runs, accepted and planned in revision 14.* The first
-complete preview run computed 2,058 candidates, lost every model session to a runtime error, and
-published "no metric changes to flag". Its candidate list was also two thirds noise: counters and
-clocks, which only ever rise, tripped the sustained-rise rule on every project, and five panels
-were display duplicates of others.
+The first complete preview runs showed why this story is needed: a run that lost every model
+session to a runtime error published "no metric changes to flag", and its candidate list was two
+thirds noise, because counters and clocks, which only ever rise, tripped the sustained-rise rule on
+every project, and several panels were display duplicates of others.
 
 **Why this priority**: a brief that can say "quiet" when the analysis did not run destroys trust
 faster than a missed item; and a candidate list the model must sift for noise costs money and
@@ -404,8 +401,8 @@ restart candidate, clocks produce none, and duplicate display panels collapse in
 
 ### User Story 11 - Correlation and consolidation (Priority: P2)
 
-*Proposed in revision 13, accepted and planned in revision 14.* The on-call reader wants one message that
-holds what a senior engineer would say after reading the alerts and the dashboards together: what
+The on-call reader wants one message that holds what a senior engineer would say after reading the
+alerts and the dashboards together: what
 changed, on which projects, since when, whether it is one event across a programme, and what is
 old news.
 

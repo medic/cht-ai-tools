@@ -969,3 +969,15 @@ contradictions the review listed set right, and the commit-convention deviation 
 expiry. **I** no dependency; **II** tests first, every production-path fix tested through the adapter or the
 command it runs in; **III** to **VI** unchanged; **VII** no model-facing text changed; **VIII** unchanged.
 Result: PASS.
+
+### Revision 38 delta: the stories read as the brief is, and the build passes its audit
+
+Made on 2026-09-26 before the pull request. The eleven user stories keep every number, title, priority and
+scenario count, which tasks, tests, contracts and the security checklist cite; their prose no longer describes
+the five-bullet brief of before revision 28, and the history asides and the one run figure inside them are
+gone, since the plan deltas and research.md hold that history. A note under the section heading says why the
+numbering is stable. mocha moved from 11 to 12 (Node 22.12 or later, which `.nvmrc` pins) because the CI
+audit job fails on a high advisory in mocha 11's serialize-javascript (GHSA-5c6j-r48x-rmvq); every preview
+payload written beside the package (`payload*.json`) is ignored; and README and AGENTS.md say how a
+contributor installs Spec Kit's Claude skills, points it at the feature directory and runs the workflow.
+**I** to **VIII** unchanged. Result: PASS.

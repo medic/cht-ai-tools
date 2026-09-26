@@ -298,6 +298,38 @@ package's commits only. The scoping works, so the R-12 fallback (plain semantic-
 changelog, exec, git and github plugins need `GITHUB_TOKEN`, Docker and a push to `main`, so they were
 not part of the dry run.
 
+## Contributing
+
+The package is developed with [Spec Kit](https://github.com/github/spec-kit): the specification, plan,
+research, data model, contracts and task list live under
+[`specs/001-watchdog-slack-loop/`](specs/001-watchdog-slack-loop/), and the constitution every change is
+held to is [`.specify/memory/constitution.md`](.specify/memory/constitution.md). The `.specify/` directory
+is committed; the coding-agent skills it drives are not (`.claude/` is ignored), so install them once:
+
+```sh
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+cd packages/agent-watchdog
+specify integration install claude          # writes the speckit-* skills into the ignored .claude/skills
+export SPECIFY_FEATURE_DIRECTORY=specs/001-watchdog-slack-loop   # persisted to the local .specify/feature.json
+```
+
+Start Claude Code in `packages/agent-watchdog`, not at the repository root: Spec Kit finds the project by
+walking up from the working directory to `.specify/`. Then:
+
+- `/speckit-analyze` checks the specification, plan and tasks against each other and the constitution; run it
+  before opening a pull request that touches them.
+- `/speckit-converge` compares the code with the specification, plan and tasks and appends what is unbuilt as
+  tasks.
+- New work goes `/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` →
+  `/speckit-implement`, and `/speckit-taskstoissues` turns a task list into GitHub issues, which is where the
+  `type(#issue): subject` commit headers come from.
+- Constitution changes go through `/speckit-constitution`, bump its version, and correct `AGENTS.md` in the
+  same pull request.
+
+Every change also passes the gate in the constitution: `npm run lint`, `npm run test:coverage`,
+`npm run replay:eval` with the replay diff attached when a prompt, skill, schema or analysis rule changes, and
+`node scripts/scan-secrets.js`. Real programme names and hosts stay in `config/local/`, which is ignored.
+
 ## License
 
 AGPL-3.0, like the other CHT tools.

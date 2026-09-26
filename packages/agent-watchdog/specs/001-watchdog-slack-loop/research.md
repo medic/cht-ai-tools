@@ -489,7 +489,8 @@ flag from 22.12, no warning from 22.13).
 **Decision**: follow cht-core. `eslint ^9` with `eslint.config.js` (CommonJS) wrapping
 `@medic/eslint-config` through `@eslint/eslintrc` `FlatCompat`, plus the `max-len` 120 and
 `no-console` rules the shared config already sets. `chai ^4.5`, `chai-as-promised ^7.1`,
-`sinon-chai ^3.7`, `sinon ^21`, `mocha ^11`, `nyc ^17`, all CommonJS-native, so the test suite does
+`sinon-chai ^3.7`, `sinon ^21`, `mocha ^11` (`^12` since revision 38, for an advisory in mocha 11's
+serialize-javascript), `nyc ^17`, all CommonJS-native, so the test suite does
 not depend on `require(esm)`. `engines.node >=22.15.0` and `.nvmrc` `22`.
 
 **Rationale**: constitution I asks for the package to be indistinguishable from cht-core and

@@ -9,6 +9,16 @@ correct this file in the same PR as any constitution amendment.
 A scheduled Node 22 CommonJS command that turns CHT Watchdog metrics into a daily Slack brief. It
 flags, it never acts. Read `specs/001-watchdog-slack-loop/plan.md` before changing structure.
 
+## Spec Kit
+
+The feature's artefacts are under `specs/001-watchdog-slack-loop/` (spec, plan, research, data model,
+contracts, tasks, checklists); `.specify/` holds the constitution, templates and scripts and is committed,
+the `speckit-*` skills are not (`specify integration install claude` from this directory writes them into
+the ignored `.claude/skills`). Work from `packages/agent-watchdog` with `SPECIFY_FEATURE_DIRECTORY` set to
+`specs/001-watchdog-slack-loop`. A spec change keeps every story, scenario and requirement number: tasks,
+tests and contracts cite them. Record a revision as a plan delta and, when a decision was taken, a research
+entry; run `/speckit-analyze` before a pull request that touches the artefacts.
+
 ## Rules that are not negotiable
 
 - JavaScript, CommonJS, Node 22. No TypeScript. `@medic/eslint-config`; `npm run lint` must report
