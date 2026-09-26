@@ -24,7 +24,7 @@ const pass = (n, items) => ({
   tool_calls_path: 'alpha-example-org/tool-calls.jsonl',
 });
 
-describe('cli/stages/rollup: a filtered run (FR-066, revision 19)', () => {
+describe('cli/stages/rollup: a filtered run (FR-087, revision 19)', () => {
   const { analysedHosts, scopeClassified } = require('../../src/rollup/scope');
 
   it('narrows what the brief covers without touching the classified record or the episodes', () => {
@@ -101,7 +101,7 @@ describe('cli/stages/rollup', () => {
     },
   });
 
-  it('counts the analysed projects in what was checked when the run was restricted (FR-066, revision 25)', async () => {
+  it('counts the analysed projects in what was checked when the run was restricted (FR-087, revision 25)', async () => {
     const item = makeItem();
     const ctx = ctxWith({
       structuredOutput: {

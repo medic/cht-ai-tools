@@ -1,5 +1,5 @@
 'use strict';
-// FR-066 (revision 19): a run that analysed only some of the discovered projects briefs only those. The classified
+// FR-087 (revision 19): a run that analysed only some of the discovered projects briefs only those. The classified
 // record and the durable episodes stay whole, so a narrow preview cannot disturb the next full run.
 const { analysedHosts, scopeClassified, onAnalysedHosts } = require('../../src/rollup/scope');
 const { classified: classifiedInstance, alertsPolicy, PROJECT_GROUPS } = require('../helpers/alerts');
@@ -153,7 +153,7 @@ describe('rollup/scope onAnalysedHosts', () => {
   });
 });
 
-describe('rollup/scope: a programme filter (FR-066, revision 24)', () => {
+describe('rollup/scope: a programme filter (FR-087, revision 24)', () => {
   const grouped = {
     ...discovery,
     projects: discovery.projects.map((p) => ({

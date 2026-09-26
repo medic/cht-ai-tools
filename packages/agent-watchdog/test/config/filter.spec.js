@@ -1,4 +1,4 @@
-// The one helper every stage and the presentation scope use to restrict a run (FR-066, revision 24): hosts by
+// The one helper every stage and the presentation scope use to restrict a run (FR-087, revision 24): hosts by
 // `--project`, whole programmes by `--group`, or everything.
 const { selectProjects, filterIsActive } = require('../../src/config/filter');
 

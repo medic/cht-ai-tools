@@ -183,10 +183,10 @@ const run = async (ctx) => {
   if (matching.matched.length) {
     logger.info('rollup.pattern_cards', { matched: matching.matched });
   }
-  // Alert Groups (FR-066) take body slots of their own, ranked among the items by importance; an unavailable
+  // Alert Groups (FR-066) are summarised in the alerts reply and take no body slot (revision 28); an unavailable
   // alerting API is a notice on the brief, never a failure.
   const wholeClassified = await readIfExists(runDir, 'alerts.classified.json', null);
-  // A filtered run briefs only what it analysed (FR-066): the record on disk and the episodes stay whole, so the
+  // A filtered run briefs only what it analysed (FR-087): the record on disk and the episodes stay whole, so the
   // next full run sees the same newness and no other project's episode looks cleared (revision 19).
   const analysed = analysedHosts({ discovery, flags: ctx.flags || {} });
   const classified = scopeClassified(wholeClassified, analysed, {
@@ -290,7 +290,7 @@ const run = async (ctx) => {
     changes,
     candidates: forModelCandidates,
     allCandidates: candidates,
-    // What was checked counts the analysed projects when the run was restricted (FR-066, revision 25).
+    // What was checked counts the analysed projects when the run was restricted (FR-087, revision 25).
     analysedProjects: analysed ? analysed.size : null,
     analysis,
     memory: ctx.memory || null,

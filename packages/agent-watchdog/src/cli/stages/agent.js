@@ -18,7 +18,7 @@ const { splitStanding } = require('../../analyze/standing');
 const { activeWindowOf } = require('../../analyze/calendar');
 const { maskNote } = require('../../corpus/scrub');
 const atomic = require('../../store/atomic');
-// `--project` and `--group` select the projects a run analyses (FR-066, revision 24); one helper for every stage.
+// `--project` and `--group` select the projects a run analyses (FR-087, revision 24); one helper for every stage.
 const { selectProjects } = require('../../config/filter');
 
 const name = 'agent';

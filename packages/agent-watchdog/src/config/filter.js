@@ -1,5 +1,5 @@
 'use strict';
-// The one way a run is restricted to some of the discovered projects (FR-066, revision 24): hosts named with
+// The one way a run is restricted to some of the discovered projects (FR-087, revision 24): hosts named with
 // `--project`, whole programmes named with `--group`, or everything. Every stage and the presentation scope use this
 // helper, so a filtered run analyses, briefs and reports one set.
 const { normaliseHost } = require('./policy');

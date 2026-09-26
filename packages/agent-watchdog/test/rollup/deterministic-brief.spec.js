@@ -130,7 +130,7 @@ describe('rollup/deterministic-brief: alerts (User Story 8, revision 28)', () =>
   });
 });
 
-describe('rollup/deterministic-brief: what was checked counts the analysed projects (FR-066, revision 25)', () => {
+describe('rollup/deterministic-brief: what was checked counts the analysed projects (FR-087, revision 25)', () => {
   const { checkedCounts } = require('../../src/rollup/deterministic-brief');
 
   it('counts the analysed projects when the run was restricted, and every discovered project otherwise', () => {

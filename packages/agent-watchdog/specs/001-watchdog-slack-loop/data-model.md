@@ -389,7 +389,7 @@ carries (FR-019).
 
 ### Bullet
 
-One top-level line of the post body (FR-010, FR-015, FR-066, FR-069).
+One top-level line of the post body (FR-010, FR-015, FR-069).
 
 | Field | Type | Rules |
 |---|---|---|

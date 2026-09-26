@@ -1,5 +1,5 @@
 'use strict';
-// A filtered run briefs only what it analysed (FR-066, revision 19). `--project` and `--group` (revision 24) restrict
+// A filtered run briefs only what it analysed (FR-087, revision 19). `--project` and `--group` (revision 24) restrict
 // the analysis while discovery, collection, `alerts.classified.json` and `alerts/episodes.jsonl` deliberately stay
 // whole: a narrow preview must not make another project's open episode look cleared, nor break the next full run's
 // newness. So the narrowing happens here, on a copy, at presentation time only.

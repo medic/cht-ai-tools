@@ -335,7 +335,7 @@ const briefFromDraft = ({
   publication: null,
 });
 
-/** A day with firing alerts and no flagged item: the alert bullets by code, no model call (FR-066). */
+/** A day with firing alerts and no flagged item: the alerts-only brief by code, no model call (FR-066). */
 const alertsOnlyBrief = ({
   ctx, alertGroups, discovery, candidates, footer, expectedLoadNotice, notices, analysedProjects = null,
 }) => {
@@ -489,7 +489,7 @@ const composeBrief = async ({
   // when they left nothing to publish although candidates exist (revision 13, 16).
   const short = shortfalls(analysis);
   const notices = [...givenNotices, ...short.map((s) => `Analysis incomplete: ${s.notice}`)];
-  // `analysedProjects` counts the projects of a restricted run in what was checked (FR-066, revision 25).
+  // `analysedProjects` counts the projects of a restricted run in what was checked (FR-087, revision 25).
   const base = { runId: ctx.runId, discovery, footer, expectedLoadNotice, notices, analysedProjects };
   // The stage computes the layout from the ranked items, the projects' groups and the alert groups; a caller
   // without one gets the same rule applied here, so the prompt, the gate and the assembled bullets always agree.

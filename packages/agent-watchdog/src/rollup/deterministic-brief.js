@@ -31,7 +31,7 @@ const panelCount = (discovery) => (discovery.dashboards || [])
   .reduce((total, dashboard) => total + (dashboard.panels ? dashboard.panels.length : 0), 0);
 
 /**
- * What was checked: the projects the run analysed when it was restricted (`analysedProjects`, FR-066 revision 25),
+ * What was checked: the projects the run analysed when it was restricted (`analysedProjects`, FR-087 revision 25),
  * else every project discovered; the panels of every dashboard; the candidates computed.
  */
 const checkedCounts = (discovery, candidatesCount, analysedProjects = null) => ({

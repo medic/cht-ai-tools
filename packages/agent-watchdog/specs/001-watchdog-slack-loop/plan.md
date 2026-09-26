@@ -993,3 +993,16 @@ Constitution Check names the tracked commit-header deviation instead of claiming
 AGENTS.md say; Computed Change, Pass, Bullet and Alert Pattern join the Key Entities, which the data model
 already defined; the open validation task T111 names the quickstart sections that exist. Every story,
 scenario and requirement number is unchanged. **I** to **VIII** unchanged. Result: PASS.
+
+### Revision 40 delta: one statement of the layout, and the restricted run in a requirement of its own (FR-010, FR-015, FR-020, FR-066, FR-069, FR-087)
+
+Made on 2026-09-26 from the two remaining medium findings of the analysis run (research.md R-43). FR-010 is now
+the one statement of the body's shape: two programme bullets, a group line with three project lines and the
+count of the rest, two lines of 120 per line, alerts in no bullet, the thread in the same form. FR-015 keeps
+the audience and style, FR-020 the thread order, FR-069 the project line's content and code-written prefix,
+each referring to FR-010 for the shape. The run-restriction rules that FR-066 had gathered in revisions 19, 24
+and 25 (`--project`, `--group`, one helper, the brief covers what it analysed, what was checked counts the
+analysed projects) are FR-087, appended at the end of the requirements; the code, tests and the CLI contract
+that cited FR-066 for them cite FR-087, and two stale alert comments in the roll-up stage and the brief say
+what the code does since revision 28. No number was reused or renumbered. **I** to **VIII** unchanged.
+Result: PASS.

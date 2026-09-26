@@ -2201,3 +2201,21 @@ context it is.
 the test-only alias of the text-only post, the duplicate string walk after sanitising); a per-file skip of a
 malformed pattern card (the SDK engine's run and the tools server both serve none and log it, and the
 comment now says so).
+
+## R-43. One statement of the layout, and the run-scoping rule in a requirement of its own (revision 40)
+
+**Evidence**: the `/speckit-analyze` run over the artefacts on 2026-09-26 found the body-and-thread layout
+stated four times, in FR-010, FR-015, FR-020 and FR-069, with wording that had drifted between them as
+revisions 26 and 28 changed the form, and FR-066, the alerts reply, carrying the run-restriction rules that
+revisions 19, 24 and 25 had appended to it because a filtered run first showed in the alerts.
+
+**Decisions**: FR-010 is the one statement of the shape; the other three refer to it and keep what is theirs
+(style, thread order, the project line's content and prefix). The scoping rules become FR-087, appended at the
+end of the requirements under their own heading: identifiers are never renumbered, since tasks, tests,
+contracts and the security checklist cite them, and a rule that moves takes the next free number. Code, tests
+and the CLI contract that cited FR-066 for scoping cite FR-087 now; the task log keeps FR-066, the id the work
+was done under, and FR-087 says so. The same pass corrected two comments that still gave alerts a body slot.
+
+**Rejected**: renumbering the requirements into thematic order (every citation would move); leaving the
+scoping sentences inside FR-066 under a sub-heading (a reader looking for the restriction rule would still
+have to know it lives with the alerts).

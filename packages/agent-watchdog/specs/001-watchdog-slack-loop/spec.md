@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 39)
+**Status**: Draft (revision 40)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -662,11 +662,15 @@ Analysis
   that names the item's own metric is empty rather than wrong: code drops it when the items are
   normalised and the pass is not rejected for it (revision 24; one run's revisions carried 21 such
   reasons after a prompt sentence against it changed nothing).
-- **FR-010**: The system MUST rank flagged items and place at most two programme bullets in the
-  post body, the programmes of the two highest-ranked items; a bullet is one project line when the
-  programme has one flagged project, otherwise a group line with one project line per project for at
-  most three projects in rank order and a count of the rest (FR-069). Alerts take no body bullet
-  (FR-066). Revision 28; five slots from revision 9, three before it.
+- **FR-010**: The system MUST rank flagged items and lay out the post body as at most two programme
+  bullets, the programmes of the two highest-ranked items. A programme with one flagged project is
+  one project line; a programme with more is a group line naming the programme and the count of its
+  flagged projects, then one project line per project for its three highest-ranked projects in rank
+  order and a count of the rest. A project line starts with the project written by code (FR-069) and
+  covers every flagged item of that project in the model's words, in at most two lines of 120
+  characters; the headline is at most two such lines. Alerts take no body bullet (FR-066). The
+  thread follows the same form (FR-020), and the gate checks every one of these limits (FR-016,
+  FR-018). Revision 28; five slots from revision 9, three before it.
 - **FR-011**: Items MUST be produced in a machine-validated structure; output that fails
   validation MUST NOT be published.
 - **FR-012**: Analysis MUST be bounded per run by maximum tool invocations, tokens and cost; on
@@ -706,13 +710,11 @@ Analysis
   run in which 42 of 43 high items were the chronic backlog through its `monotonic` candidates).
 - **FR-015**: The brief is written for a technical operations audience: metric names as recorded
   in the metrics store, values with units and the comparison window, dashboard and panel names as
-  they appear in the watchdog, PromQL where it helps the reader confirm; except in the body's
-  project lines and single-project bullets, which start with the project written by code and describe
-  the change in words (FR-069, revision 26). Emoji are permitted as
-  status and severity markers. At most two programme bullets, each with at most three project
-  lines of at most two lines of 120 characters; the headline at most two such lines; these
-  structural limits are checked by the verification gate (revision 28; five bullets of eight
-  one-line sub-bullets until then). No separate writing or voice skill is applied. Numbers the report renders are rounded for
+  they appear in the watchdog, PromQL where it helps the reader confirm; except on a project line,
+  which describes the change in words behind the project code writes (FR-069, revision 26). Emoji
+  are permitted as status and severity markers (FR-082). The structural limits are FR-010's, checked
+  by the verification gate (revision 28; five bullets of eight one-line sub-bullets until then). No
+  separate writing or voice skill is applied. Numbers the report renders are rounded for
   reading: at most three decimals, and three significant figures below one, applied by code at render
   time to the values it formats, to long decimals inside an item's prose and to the notes on its
   evidence lines (revision 25); the stored item keeps the full value the gate verified (revision 24).
@@ -860,13 +862,11 @@ Publishing
   it sat under.
 - **FR-020**: The thread under the post MUST hold, in order: the report share (FR-022); one reply
   per programme not in the body that has two or more flagged projects, in rank order, each in the
-  body's form (the programme line, at most three project lines, the count of the rest); one "Other"
-  reply for every remaining project, ungrouped hosts and single-project programmes alike, in the
-  same form; and one alerts reply (FR-066). No item has a reply of its own: every item is in the
-  report, where a note cites it by rank (`#12 👍`), and the parent's footer says how many items are
-  only there (revision 28: the thread is three or four replies a person can read). History: every
-  item had a reply until revision 23 (159 under one post, research.md R-28), body items from 23 to
-  24, high items in 25 to 27.
+  form FR-010 gives a body bullet; one "Other" reply for every remaining project, ungrouped hosts
+  and single-project programmes alike, in the same form; and one alerts reply (FR-066). No item has
+  a reply of its own: every item is in the report, where a note cites it by rank (`#12 👍`), and the
+  parent's footer says how many items are only there (revision 28: the thread is three or four
+  replies a person can read; every item had a reply until revision 23, research.md R-28).
 - **FR-021**: On a quiet day the system MUST post a one-line heartbeat stating what was checked.
 - **FR-022**: The system MUST render a one-page report per run containing every flagged item and
   evidence charts drawn from the collected data, and store it with the run. The report MUST number
@@ -1000,19 +1000,9 @@ Alerts and groups
   and no longer rank against items: the body is for what the analysis added over the monitoring
   stack's own notifications, and the instances are listed in the report's alerts section (revision
   28; until then each alert group had a body bullet and a reply of its own with its instances, fitted
-  into one block, revision 17). When a
-  run analyses only some of the discovered projects, the brief MUST cover only those: alert
-  instances on projects it did not analyse are left out of the groups, the counts, the patterns and
-  the notices, because the reader asked about those projects and cannot act on the rest. Collection,
-  the classified alert record and the durable episodes stay whole regardless, so the next full run
-  still sees the same newness and no episode appears to have cleared. A thread reply MUST describe
-  the same alerts as the bullet above it, so what the brief covered is recorded for the publish step
-  rather than derived a second time (revision 19). A run MAY be restricted by project (`--project`)
-  or by programme (`--group`, every discovered project of a group label), and every stage and the
-  presentation scope MUST resolve the restriction through one helper so they agree on the set
-  (revision 24); the post still goes to the one configured channel. What the brief and the report
-  say was checked MUST count the projects the run analysed, not every project discovered, so a
-  restricted run never counts every discovered project over the ones it analysed (revision 25).
+  into one block, revision 17). A thread reply MUST describe the same alerts as the summary above
+  it, so what the brief covered is recorded for the publish step rather than derived a second time
+  (revision 19). The alerts of a restricted run follow FR-087.
 - **FR-067**: The system MUST keep a durable episode per alert instance: rule, project, category,
   when it started and cleared, its duration, and correlations computed by code (the expected-load
   window active at the start, a CHT version change within a day of the start, flagged items on the
@@ -1024,20 +1014,17 @@ Alerts and groups
 - **FR-068**: `projects.yaml` MUST support project groups (a label and host patterns) and an
   ignore list of host patterns. Ignored hosts are discovered and counted but MUST NOT be analysed,
   incur model usage or be named in any post. Hosts matching no group belong to "Other".
-- **FR-069**: When a group has more than one flagged project, the body MUST show one bullet for the
-  group naming the count, with one project line per project item in rank order; a group with one
-  flagged project shows that item as today. Every project line MUST start with its project, written by
-  code from the item's host as the host's first label (`north-a: `), or two labels when two projects
-  of the group share the first; a single-project bullet starts with the full host the same way. The
-  model writes what follows: the change in words a technical reader can act on, with its values,
-  without metric keys or PromQL, which the report carries; the prompt tells it the project is
-  written for it and the characters it has left, and the length check counts the prefix. A project
-  the model names anyway at the start of its line is not written twice (revision 26, after one run's
-  sub-bullets read as raw metric expressions with no project). One line per project (revision 28):
-  when a project has several flagged items the line covers all of them in at most two lines, the
-  prompt names every item the line must cover and the gate allows every one of their values; a
-  programme shows its three highest-ranked projects and counts the rest, in the body and in its
-  thread reply alike (FR-020).
+- **FR-069**: Every project line MUST start with its project, written by code from the item's host
+  as the host's first label (`north-a: `), or two labels when two projects of the group share the
+  first; a single-project bullet starts with the full host the same way. The model writes what
+  follows: the change in words a technical reader can act on, with its values, without metric keys
+  or PromQL, which the report carries; when a project has several flagged items the line covers all
+  of them, the prompt names every item the line must cover and the gate allows every one of their
+  values. The prompt tells the model the project is written for it and the characters it has left,
+  the length check counts the prefix, and a project the model names anyway at the start of its line
+  is not written twice (revision 26, after one run's project lines read as raw metric expressions
+  with no project; one line per project since revision 28). The shape of the bullet, its three
+  projects and the count of the rest are FR-010's.
 - **FR-070**: Links to alerts MUST be built by code from the collected rule definitions and labels
   to the watchdog's alert list, and MUST pass the same allow-list and resolution checks as
   dashboard links.
@@ -1310,6 +1297,20 @@ Configuration
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.
+
+Restricted runs
+
+- **FR-087**: A run MAY be restricted by project (`--project`) or by programme (`--group`, every
+  discovered project of a group label); every stage and the presentation scope MUST resolve the
+  restriction through one helper so they agree on the set, and the post still goes to the one
+  configured channel. A restricted run's brief MUST cover only the projects it analysed: alert
+  instances on projects it did not analyse are left out of the groups, the counts, the patterns and
+  the notices, because the reader asked about those projects and cannot act on the rest, while
+  collection, the classified alert record and the durable episodes stay whole, so the next full run
+  still sees the same newness and no episode appears to have cleared; and what the brief and the
+  report say was checked MUST count the projects the run analysed, never every project discovered.
+  Moved from FR-066 in revision 40, where it had grown in revisions 19, 24 and 25; the tasks done
+  under those revisions cite FR-066.
 
 ### Key Entities
 
