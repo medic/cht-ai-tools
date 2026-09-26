@@ -10,7 +10,8 @@ coverage/
 # Local policy files with the real programmes and hosts (AGENT_WATCHDOG_CONFIG_DIR=$PWD/config/local); never committed.
 /config/local/
 # Output of a local preview run and design scratch files.
-/payload.json
+# Preview payloads written next to the package by `run --dry-run ... > payload.json` and its variants.
+/payload*.json
 /.design-scratch/
 .env
 *.log
