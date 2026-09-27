@@ -23,8 +23,9 @@ const baseEnv = () => ({
 describe('config/load', () => {
   it('applies defaults from the environment contract when a variable is unset', () => {
     const { config, sources } = loadConfig({ env: baseEnv(), command: 'run' });
-    expect(config.model.name).to.equal('claude-fable-5-1');
-    expect(config.model.effort).to.equal('max');
+    // claude-sonnet-5 at high effort is the default since revision 41, the model the deployment runs.
+    expect(config.model.name).to.equal('claude-sonnet-5');
+    expect(config.model.effort).to.equal('high');
     expect(config.model.engine).to.equal('sdk');
     expect(config.bounds.maxTurns).to.equal(20);
     expect(config.bounds.passes).to.equal(1); // one pass by default since revision 22
@@ -158,7 +159,7 @@ describe('config/load', () => {
     }
     expect(effective.secrets.anthropicApiKey).to.equal('[redacted]');
     expect(effective.secrets.docsMcpToken).to.equal(null);
-    expect(effective.model.name).to.equal('claude-fable-5-1');
+    expect(effective.model.name).to.equal('claude-sonnet-5');
   });
 
   it('does not require ANTHROPIC_API_KEY for model commands when the engine is cli', () => {

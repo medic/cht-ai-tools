@@ -118,13 +118,14 @@ const VARIABLES = [
     env: 'AGENT_WATCHDOG_MODEL',
     path: 'model.name',
     schema: modelId,
-    default: 'claude-fable-5-1',
+    // The model the deployment runs (revision 41); every stage can be moved to another with its own variable.
+    default: 'claude-sonnet-5',
   },
   {
     env: 'AGENT_WATCHDOG_EFFORT',
     path: 'model.effort',
     schema: z.enum(EFFORT_LEVELS),
-    default: 'max',
+    default: 'high',
   },
   {
     env: 'AGENT_WATCHDOG_MODEL_FEEDBACK',

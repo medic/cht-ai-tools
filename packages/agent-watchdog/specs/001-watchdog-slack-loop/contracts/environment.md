@@ -27,8 +27,8 @@ variables the schema reads).
 
 | Variable | Type | Default | Notes |
 |---|---|---|---|
-| `AGENT_WATCHDOG_MODEL` | model id | `claude-fable-5-1` | Analysis and roll-up. Model ids and aliases as the API names them: lowercase letters, digits and hyphens (`claude-opus-4-8`, not `claude-opus-4.8`); anything else is rejected at startup. |
-| `AGENT_WATCHDOG_EFFORT` | enum `low\|medium\|high\|xhigh\|max` | `max` | Passed to the runtime as the effort option. |
+| `AGENT_WATCHDOG_MODEL` | model id | `claude-sonnet-5` | Analysis and roll-up. Model ids and aliases as the API names them: lowercase letters, digits and hyphens (`claude-opus-4-8`, not `claude-opus-4.8`); anything else is rejected at startup. |
+| `AGENT_WATCHDOG_EFFORT` | enum `low\|medium\|high\|xhigh\|max` | `high` | Passed to the runtime as the effort option. |
 | `AGENT_WATCHDOG_MODEL_FEEDBACK` | string | value of `MODEL` | Feedback-note parsing. |
 | `AGENT_WATCHDOG_MODEL_CALIBRATION` | string | value of `MODEL` | Weekly calibration summary. |
 

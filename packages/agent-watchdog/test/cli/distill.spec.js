@@ -81,7 +81,7 @@ describe('cli/commands/distill', function () {
     expect(fs.readdirSync(path.join(dataDir, 'corpus', 'cards.proposed')))
       .to.deep.equal(['sentinel-backlog-climbs-after-an-upgrade.md']);
     expect(t.engine.singleTurn).to.have.callCount(5);
-    expect(t.engine.singleTurn.firstCall.args[0].model).to.equal('claude-fable-5-1');
+    expect(t.engine.singleTurn.firstCall.args[0].model).to.equal('claude-sonnet-5'); // the default (revision 41)
     expect(t.args.deps.tracer.start).to.have.been.calledOnce;
     expect(t.args.deps.tracer.finish).to.have.been.calledOnce;
     const events = t.err.text().split('\n').filter(Boolean).map((line) => JSON.parse(line));

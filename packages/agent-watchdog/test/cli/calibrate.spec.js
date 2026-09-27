@@ -95,7 +95,7 @@ describe('cli/commands/calibrate', function () {
     expect(markdown).to.include('None awaiting review.');
     expect(t.engine.singleTurn).to.have.been.calledOnce;
     const call = t.engine.singleTurn.firstCall.args[0];
-    expect(call.model).to.equal('claude-fable-5-1');
+    expect(call.model).to.equal('claude-sonnet-5'); // the default model (revision 41)
     expect(call.userPrompt).to.include('<untrusted source="calibration-report">');
     expect(t.args.deps.tracer.start).to.have.been.calledOnce;
     expect(t.args.deps.tracer.finish).to.have.been.calledOnce;
