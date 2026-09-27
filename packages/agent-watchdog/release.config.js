@@ -18,11 +18,12 @@ module.exports = {
     ['@semantic-release/release-notes-generator', { parserOpts }],
     ['@semantic-release/changelog', { changelogFile: 'CHANGELOG.md' }],
     ['@semantic-release/exec', {
-      publishCmd: [
-        'docker build --build-arg VERSION=${nextRelease.version} --build-arg REVISION=${nextRelease.gitHead} '
-          + '-t ghcr.io/medic/agent-watchdog:${nextRelease.version} .',
-        'docker push ghcr.io/medic/agent-watchdog:${nextRelease.version}',
-      ].join(' && '),
+      // One tag for both platforms (revision 42): buildx builds linux/amd64 and linux/arm64 (the latter under QEMU
+      // on the x64 runner) and pushes a multi-platform manifest, so Apple silicon and arm64 servers pull their own
+      // image. The Dockerfile is architecture-neutral: the runtime binary follows process.arch (revision 35).
+      publishCmd: 'docker buildx build --platform linux/amd64,linux/arm64 '
+        + '--build-arg VERSION=${nextRelease.version} --build-arg REVISION=${nextRelease.gitHead} '
+        + '-t ghcr.io/medic/agent-watchdog:${nextRelease.version} --push .',
     }],
     ['@semantic-release/git', {
       assets: ['CHANGELOG.md', 'package.json'],

@@ -1016,3 +1016,14 @@ configuration test asserting the new default. The quickstart opens with a full p
 team's vault or a new Slack app, the channel id from the channel's details or a direct message with the bot,
 the files, the build, the preview and the real post; the checkout prerequisites and the numbered sections
 follow unchanged. **I** to **VIII** unchanged. Result: PASS.
+
+### Revision 42 delta: one tag for x64 and arm64 (FR-086)
+
+Planned on 2026-09-27 (research.md R-44). Revision 35 made the image build on either architecture; the release
+still built and pushed the x64 runner's image alone, so an arm64 server or an Apple silicon machine pulling the
+tag ran it under emulation or not at all. The release now runs one `docker buildx build` for `linux/amd64` and
+`linux/arm64`, the second under QEMU on the runner, and pushes a multi-platform manifest under the same tag; the
+pull-request workflow builds both platforms too and runs the smoke on the loaded amd64 image, since a
+multi-platform build cannot be loaded into the daemon. The Dockerfile is unchanged: the runtime binary already
+follows `process.arch`. **I** no dependency (two GitHub actions in the workflows); **II** the test covers the
+release command and both workflows, written first; **III** to **VIII** unchanged. Result: PASS.

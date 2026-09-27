@@ -20,6 +20,7 @@ repository, never a second source of truth.
 | Baked environment | `NODE_ENV=production`, `DISABLE_AUTOUPDATER=1`, `DISABLE_TELEMETRY=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `CLAUDE_CONFIG_DIR=/tmp/agent-watchdog-runtime`, `HOME=/home/watchdog`, `TMPDIR=/tmp`, `AGENT_WATCHDOG_VERSION=<release>`, `AGENT_WATCHDOG_REVISION=<commit>` (the build arguments, revision 35) |
 | Labels | `org.opencontainers.image.source`, `.title`, `.licenses`; `.version` and `.revision` from the `VERSION` and `REVISION` build arguments the release passes |
 | Ports | none exposed; the process listens on nothing |
+| Platforms | `linux/amd64` and `linux/arm64`, published under one tag as a multi-platform manifest by the release (buildx, the arm64 image built under QEMU); Apple silicon and arm64 servers pull their own image, no emulation at run time (revision 42) |
 | Size budget | under 700 MB compressed; the runtime binary dominates |
 
 The image contains no secrets, no configuration policy files, no run data and no browser. Its
@@ -126,5 +127,7 @@ on stdout. The platform collects both streams; nothing is written to log files.
 (`--read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --user 10001:10001`, and
 `--network none` where no network is needed): `--version` prints the package version; `egress
 --format hosts` lists the destinations for a placeholder configuration; `check https://example.invalid`
-exits 69; `smoke/render.js` renders the fixture report writing under `/tmp` alone. `test/container/`
-checks the `Dockerfile`, `.dockerignore` and the reference manifests without Docker.
+exits 69; `smoke/render.js` renders the fixture report writing under `/tmp` alone. CI builds both
+platforms on every pull request and runs the smoke on the loaded `linux/amd64` image (revision 42).
+`test/container/` checks the `Dockerfile`, `.dockerignore`, the reference manifests, the release command
+and the workflows' platform steps without Docker.

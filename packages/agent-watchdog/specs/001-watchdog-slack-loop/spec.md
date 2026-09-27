@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 41)
+**Status**: Draft (revision 42)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -1293,7 +1293,9 @@ Configuration
   container, into a named volume that every service mounts and nothing else reads, so the CLI engine
   runs on that login (login mode, FR-050); the scheduled deployment never carries a login (revision 32).
   The image links the runtime package of its own architecture, so it builds on x64 and arm64 alike
-  (revision 35).
+  (revision 35). The release MUST publish the image for `linux/amd64` and `linux/arm64` under one tag as
+  a multi-platform manifest, so the same tag runs on x64 servers, arm64 servers and Apple silicon
+  without emulation, and CI MUST build both platforms on every pull request (revision 42).
 - **FR-055**: Precedence MUST be command-line flag, then environment variable, then configuration
   file default. All settings MUST be validated at startup, failing fast on an invalid or missing
   value, and the effective values with secrets redacted MUST be written to the run record.

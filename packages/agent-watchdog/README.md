@@ -264,8 +264,9 @@ Scripts under `smoke/` are not part of `npm test`; each confirms a behaviour onl
 The image runs as user `10001:10001` with a read-only root filesystem and writes only to `/data` (the
 volume) and `/tmp`; it carries no browser, no secrets, no policy files and no run data, and exposes no
 port ([`contracts/container.md`](specs/001-watchdog-slack-loop/contracts/container.md), FR-086).
-[`compose.yaml`](compose.yaml) runs it the same way on a contributor's machine, on x64 or arm64; a run from the
-released image names the image's version and revision in its record and in `--version`.
+[`compose.yaml`](compose.yaml) runs it the same way on a contributor's machine, on x64 or arm64; the released
+image is published for `linux/amd64` and `linux/arm64` under one tag, so it pulls natively on Apple silicon
+and arm64 servers; a run from it names the image's version and revision in its record and in `--version`.
 `agent-watchdog egress` prints every destination a run contacts, from the effective configuration, for the
 platform's network policy, and a run refuses any other destination itself before a connection is made
 (FR-083). [`deploy/`](deploy/README.md) holds reference manifests with placeholder hosts: the CronJob with its
@@ -277,8 +278,9 @@ them in step with the contract. `medic-infrastructure` owns what is applied.
 [`.github/workflows/agent-watchdog-release.yml`](../../.github/workflows/agent-watchdog-release.yml)
 runs semantic-release from this directory on a push to `main` that touches the package.
 `release.config.js` extends `semantic-release-monorepo`, which scopes the commit analysis to this
-package; tags are `agent-watchdog-v<version>`, `@semantic-release/exec` builds and pushes the container
-image, and the changelog, git and github plugins do the rest. The repository's root `release.yml`
+package; tags are `agent-watchdog-v<version>`, `@semantic-release/exec` builds the container image for
+`linux/amd64` and `linux/arm64` with buildx and pushes the multi-platform manifest, and the changelog, git
+and github plugins do the rest. The repository's root `release.yml`
 releases the root package and is not involved.
 
 The dry run recorded on 2026-09-20 (research.md R-12) ran against a local bare clone carrying the

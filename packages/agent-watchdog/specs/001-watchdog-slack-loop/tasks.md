@@ -968,3 +968,8 @@ US3 can proceed in parallel, then US4, US5 and US6.
 ## Phase 42: Revision 40, one statement of the layout and the restricted run in its own requirement (plan.md revision 40 delta, research.md R-43)
 
 - [X] T332 [US3] spec.md: FR-010 holds the body's shape; FR-015, FR-020 and FR-069 refer to it and keep the style, the thread order and the project line's content; the run-restriction rules move from FR-066 to FR-087, appended under "Restricted runs"; `src/cli/stages/{agent,rollup}.js`, `src/config/filter.js`, `src/rollup/{scope,brief,deterministic-brief}.js`, their specs and `contracts/cli.md` cite FR-087 for scoping; `data-model.md` no longer cites FR-066 on the Bullet; two alert comments say alerts take no body slot; plan.md revision 40 delta, research.md R-43
+
+## Phase 43: Revision 42, one tag for x64 and arm64 (plan.md revision 42 delta, research.md R-44)
+
+- [X] T333 [US3] Test first: `test/container/dockerfile.spec.js` asserts the release command builds `linux/amd64,linux/arm64` with buildx and pushes, that both workflows set up QEMU, and that the pull-request workflow builds both platforms and loads the amd64 image for the smoke
+- [X] T334 [US3] `release.config.js` publish command, `.github/workflows/agent-watchdog-release.yml` and `.github/workflows/agent-watchdog.yml`; FR-086 amended; `contracts/container.md` Platforms row and CI section; README and quickstart; plan.md revision 42 delta; research.md R-44

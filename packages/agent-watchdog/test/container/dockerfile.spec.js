@@ -63,6 +63,26 @@ describe('container: the image definition (FR-086, contracts/container.md)', () 
     expect(dockerfile).to.not.match(/npm install -g|@anthropic-ai\/claude-code/);
   });
 
+  it('is published for linux/amd64 and linux/arm64 under one tag, and CI builds both (revision 42)', () => {
+    // The Dockerfile is architecture-neutral (the runtime binary follows process.arch), so one buildx invocation
+    // pushes a multi-platform manifest; Apple silicon and arm64 servers pull the arm64 image, x64 the other.
+    const release = read('release.config.js');
+    expect(release).to.include('docker buildx build --platform linux/amd64,linux/arm64');
+    expect(release).to.include('--push');
+    expect(release).to.not.match(/'docker push /);
+    const workflows = path.join(ROOT, '..', '..', '.github', 'workflows');
+    const releaseWorkflow = fs.readFileSync(path.join(workflows, 'agent-watchdog-release.yml'), 'utf8');
+    const qemu = releaseWorkflow.indexOf('docker/setup-qemu-action');
+    expect(qemu).to.be.greaterThan(-1);
+    expect(qemu).to.be.lessThan(releaseWorkflow.indexOf('docker/setup-buildx-action'));
+    const ci = fs.readFileSync(path.join(workflows, 'agent-watchdog.yml'), 'utf8');
+    expect(ci).to.include('docker/setup-qemu-action');
+    expect(ci).to.include('platforms: linux/amd64,linux/arm64');
+    // The smoke still runs on a loaded amd64 image: a multi-platform build cannot be loaded into the daemon.
+    expect(ci).to.include('platforms: linux/amd64\n');
+    expect(ci).to.include('load: true');
+  });
+
   it('labels the image with its source, licence, version and revision from build arguments', () => {
     expect(lines).to.include('ARG VERSION=0.0.0-development');
     expect(lines).to.include('ARG REVISION=unknown');

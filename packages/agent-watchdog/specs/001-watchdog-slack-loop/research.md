@@ -2219,3 +2219,23 @@ was done under, and FR-087 says so. The same pass corrected two comments that st
 **Rejected**: renumbering the requirements into thematic order (every citation would move); leaving the
 scoping sentences inside FR-066 under a sub-heading (a reader looking for the restriction rule would still
 have to know it lives with the alerts).
+
+## R-44. Publishing the image for x64 and arm64 under one tag (revision 42)
+
+**Evidence**: `docker buildx build --platform linux/amd64,linux/arm64 --push` produces one manifest list; the
+docker/setup-qemu-action registers binfmt handlers so the x64 runner can run the arm64 build stages, and
+docker/setup-buildx-action's default docker-container driver supports several platforms. A multi-platform build
+cannot be `--load`ed into the daemon, only pushed or left in the build cache. The Agent SDK ships its runtime as
+per-platform packages (`@anthropic-ai/claude-agent-sdk-linux-x64`, `-linux-arm64` and the musl and darwin
+variants, R-2), and the Dockerfile links the one `node -p process.arch` names (revision 35), so an arm64 build
+stage under QEMU installs and links the arm64 binary by itself. GitHub's build cache (`type=gha`) keeps the
+second, single-platform build for the smoke to seconds.
+
+**Decisions**: one buildx invocation in the release's publish command with both platforms and `--push`; QEMU
+set up in both workflows; the pull-request workflow builds both platforms without pushing and then loads the
+amd64 image for `smoke/container.js`. The arm64 build under QEMU is slower (the `npm ci` stage runs emulated);
+accepted, since it runs in CI only and the cache carries the dependency layer between runs.
+
+**Rejected**: building the arm64 image on an arm64 runner (none is configured for the repository); selecting
+the runtime package by a `TARGETARCH` build argument to avoid emulation (the Dockerfile would then diverge
+from what a local build does, and `npm ci` would still install the build platform's optional package).

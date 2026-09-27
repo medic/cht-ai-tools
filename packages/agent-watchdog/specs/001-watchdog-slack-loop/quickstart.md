@@ -300,8 +300,9 @@ escalation, user `10001:10001`, no network for the checks that need none; the re
 `deploy/` show the CronJob's security context, mounts, limits and deadline and an egress policy whose names
 are that list, and `npm test` keeps them in step with the contract.
 
-`docker compose build` builds the image as CI does, on x64 and arm64 alike, and runs it as the CronJob
-will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/data` a named volume. The preview
+`docker compose build` builds the image as CI does, on x64 and arm64 alike, and the released tag on
+`ghcr.io/medic/agent-watchdog` pulls the right image on either, Apple silicon included; Compose runs it as the
+CronJob will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/data` a named volume. The preview
 and the real pass are at the top of this document; `docker compose --profile offline run --rm offline run
 --dry-run --stage analyze --date <date>` runs a stage that needs no network with none at all.
 
