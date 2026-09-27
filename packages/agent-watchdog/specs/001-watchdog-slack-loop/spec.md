@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-watchdog-slack-loop`
 **Created**: 2026-09-19
-**Status**: Draft (revision 40)
+**Status**: Draft (revision 41)
 **Input**: Daily analysis of the CHT projects monitored by Medic's hosted CHT Watchdog, posted to
 Slack as a short brief that flags what a human should look into, with a feedback loop, a knowledge
 corpus the agent learns from under review, and the ability for anyone with a watchdog installation
@@ -1689,7 +1689,7 @@ Decisions already taken during design that belong in the plan, listed so they ar
   semantics: no filesystem settings discovery, explicit allow-listed tools, shell and web tools
   disabled, permission prompts off. A contributor's `claude -p` run without an API key uses the
   contributor's login with the same isolation achieved by flags (revision 15).
-- Model: `claude-fable-5-1` at maximum effort for analysis and roll-up, both read from the
+- Model: `claude-sonnet-5` at high effort for analysis and roll-up, both read from the
   environment; per-stage model overrides so small stages can be moved to a cheaper model later;
   cost bounded per project and per run with the SDK's budget option; prompt caching kept effective
   by holding the static prefix (skill, memory, pattern-card index) identical across calls and

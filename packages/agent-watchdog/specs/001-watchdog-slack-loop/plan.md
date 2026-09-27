@@ -96,7 +96,7 @@ adjustment to the Notes are justified in Complexity Tracking.
 | Note | Plan | Status |
 |---|---|---|
 | Engine: Agent SDK in production, `claude -p` as the identical local face, one configuration source, bare-mode semantics | `src/agent/engine-sdk.js` and `src/agent/engine-cli.js` consume the same `agent/` definition; isolation via `settingSources: []`, `tools: []`, `permissionMode: 'dontAsk'`, `--bare`, `--tools ""`, `--strict-mcp-config` | Adopted |
-| Model `claude-fable-5-1` at maximum effort from the environment; per-stage overrides; SDK budget option; prompt caching by static prefix | `AGENT_WATCHDOG_MODEL`, `AGENT_WATCHDOG_EFFORT`, `_FEEDBACK`, `_CALIBRATION`, `_DISTILL`; `maxBudgetUsd`; system prompt split at the runtime's dynamic-boundary marker so the skill, index and memory are cached across the run's sessions | Adopted |
+| Model `claude-sonnet-5` at high effort from the environment (the shipped default stays `claude-fable-5-1` at `max`, contracts/environment.md); per-stage overrides; SDK budget option; prompt caching by static prefix | `AGENT_WATCHDOG_MODEL`, `AGENT_WATCHDOG_EFFORT`, `_FEEDBACK`, `_CALIBRATION`, `_DISTILL`; `maxBudgetUsd`; system prompt split at the runtime's dynamic-boundary marker so the skill, index and memory are cached across the run's sessions | Adopted |
 | Passes: one SDK session per project driven as a multi-turn conversation; pass prompts in `prompts/`; each pass ends with the Stop hook and writes `findings.pass<N>.json`; harness diffs passes | Streaming-input session per project; pass prompts as user turns; findings arrive as `structured_output` on each result and the harness writes `findings.pass<N>.json`; the Stop hook runs the gate as a second line of defence | Adopted; the file is written by the harness because structured output makes a model-side file write unnecessary |
 | Configuration: `AGENT_WATCHDOG_` variables, vendor names for vendor credentials, committed `.env.example`, `--env-file`, ConfigMap and External Secrets, zod validation, redacted effective config | environment and config-files contracts; `src/config/` | Adopted |
 | Verification: implemented once under `src/verify/`, wired as the SDK Stop hook and a PostToolUse hook on the findings write, called again before publish; the CLI path loads the same checks through `--settings` | `src/verify/` is called by the harness after every turn on both engines and before publish; the SDK additionally runs it in the Stop hook; PostToolUse records tool calls for replay | Adjusted: `claude --bare` skips hooks (verified in the 2.1.278 help text), so the CLI cannot load the checks through `--settings`; the harness-driven gate gives both engines identical behaviour with the same code (research.md R-3) |
@@ -1006,3 +1006,13 @@ analysed projects) are FR-087, appended at the end of the requirements; the code
 that cited FR-066 for them cite FR-087, and two stale alert comments in the roll-up stage and the brief say
 what the code does since revision 28. No number was reused or renumbered. **I** to **VIII** unchanged.
 Result: PASS.
+
+### Revision 41 delta: the model in use, and a full pass in Docker first
+
+Made on 2026-09-26. The design notes in spec.md and this plan name the model the deployment sets,
+`claude-sonnet-5` at high effort, read from the environment as before; the shipped default in
+`src/config/schema.js`, `.env.example` and contracts/environment.md stays `claude-fable-5-1` at `max` until
+the operator decides otherwise. The quickstart opens with a full pass in Docker: the Slack bot token from the
+team's vault or a new Slack app, the channel id from the channel's details or a direct message with the bot,
+the files, the build, the preview and the real post; the checkout prerequisites and the numbered sections
+follow unchanged. **I** to **VIII** unchanged. Result: PASS.

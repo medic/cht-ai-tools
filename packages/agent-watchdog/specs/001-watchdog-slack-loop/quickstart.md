@@ -7,18 +7,60 @@ How to run the pipeline and prove each user story end to end. Commands and flags
 artefact paths follow [contracts/run-directory.md](./contracts/run-directory.md). Nothing here posts
 to Slack unless the step says so.
 
-## Prerequisites
+## Run a full pass in Docker
 
-- Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`.
-- No browser: the report is HTML and nothing renders an image.
-- Credentials in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY` (or, with
-  `AGENT_WATCHDOG_ENGINE=cli`, a `claude` login and the key left blank); a Grafana service-account
-  token with the Viewer role on the watchdog you point at (`AGENT_WATCHDOG_GRAFANA_TOKEN`,
-  `AGENT_WATCHDOG_GRAFANA_URL`, `AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID`); Langfuse keys and
-  `LANGFUSE_BASE_URL`. `SLACK_BOT_TOKEN` and `AGENT_WATCHDOG_SLACK_CHANNEL_ID` are needed only for
-  the steps that post or read Slack.
-- Local paths: `AGENT_WATCHDOG_DATA_DIR=./.data` and `AGENT_WATCHDOG_CONFIG_DIR=./config/local`
-  (copy `config/defaults/` and edit `projects.yaml`).
+The quickest way to see what the watchdog would post, then to let it post. Everything runs in the image
+the platform runs, from your own `.env` and policy files; nothing here reaches Slack until the last step.
+
+1. **Slack.** The bot token: take the `agent-watchdog` bot token from the team's 1Password vault, or
+   create a Slack app for your workspace with the bot scopes in
+   [contracts/slack-payload.md](./contracts/slack-payload.md) (`chat:write`, `files:write`,
+   `reactions:read`, `reactions:write`, `channels:history`), install it to the workspace and copy its
+   *Bot User OAuth Token* (`xoxb-…`). The channel id: click the channel's name to open its details and
+   copy the *Channel ID* at the bottom of the *About* tab; or, to post to yourself, open a direct
+   message with the bot and take the id beginning with `D` from the conversation's URL, adding the
+   `im:write` and `im:history` scopes. Invite the bot to the channel: posting and reading both need
+   membership, and a run refused for it exits 74.
+2. **The other credentials.** An Anthropic API key (or a Claude login, section 16); a Grafana
+   service-account token with the Viewer role on the watchdog you point at, its URL and the Prometheus
+   datasource UID; Langfuse keys and base URL.
+3. **Files.** `cp .env.example .env` and fill it in (`SLACK_BOT_TOKEN`, `AGENT_WATCHDOG_SLACK_CHANNEL_ID`
+   and the rest; comments on their own lines). `cp -r config/defaults config/local` and put the real
+   programmes and hosts in `config/local/projects.yaml`: that directory is ignored by git and is the only
+   place real names live.
+4. **Build and check.**
+
+   ```sh
+   docker compose build
+   docker compose run --rm agent-watchdog --version
+   docker compose run --rm agent-watchdog egress --format hosts     # every host a run contacts
+   ```
+
+5. **Preview a full pass**, nothing posted:
+
+   ```sh
+   docker compose run --rm agent-watchdog run --dry-run --date "$(date -u -d yesterday +%F)" > payload.json
+   docker compose run --rm --entrypoint cat agent-watchdog /data/runs/<date>/rollup/report.html > report.html
+   ```
+
+   `payload.json` is the exact Slack payload. The run directory under `/data/runs/<date>/` in the
+   `agent-watchdog-data` volume holds every artefact: `rollup/brief.json`, the gate reports, `run.json`
+   with the cost.
+6. **Post for real:** `docker compose run --rm agent-watchdog run --date <date>`. One post goes to the
+   configured channel with its thread. A second run for the same date exits 75 unless `--force` is given,
+   and a forced run links the post it supersedes.
+
+For the stages one at a time, a replay with a changed prompt, or the engine on your own Claude login,
+see sections 4, 5 and 16.
+
+## Prerequisites for running from a checkout
+
+- Node 22 (`nvm use` reads `.nvmrc`); `npm ci` from `packages/agent-watchdog`. No browser: the report
+  is HTML and nothing renders an image.
+- The same `.env` and `config/local` as above, with `AGENT_WATCHDOG_DATA_DIR=./.data` and
+  `AGENT_WATCHDOG_CONFIG_DIR=./config/local`; with `AGENT_WATCHDOG_ENGINE=cli` and a `claude` login the
+  key can stay blank. `SLACK_BOT_TOKEN` and `AGENT_WATCHDOG_SLACK_CHANNEL_ID` are needed only for the
+  steps that post or read Slack.
 
 Every command below is `node --env-file=.env bin/agent-watchdog.js …`, abbreviated to
 `agent-watchdog …`.
@@ -258,14 +300,10 @@ escalation, user `10001:10001`, no network for the checks that need none; the re
 `deploy/` show the CronJob's security context, mounts, limits and deadline and an egress policy whose names
 are that list, and `npm test` keeps them in step with the contract.
 
-`docker compose build` builds the image as CI does, on x64 and arm64 alike; `docker compose run --rm
-agent-watchdog --version` runs it as the CronJob will: user 10001, read-only root, no capabilities, `/tmp` a
-tmpfs, `/data` a named volume. Your `.env` supplies secrets and endpoints (comments on their own lines, as in
-`.env.example`) and `config/local` the policy files. `docker compose run --rm agent-watchdog run --dry-run
---date <date> > payload.json` previews without posting; without `--dry-run` it posts. `docker compose
---profile offline run --rm offline run --dry-run --stage analyze --date <date>` runs a stage that needs no
-network with none at all. Read an artefact back with `docker compose run --rm --entrypoint cat
-agent-watchdog /data/runs/<id>/rollup/report.html`.
+`docker compose build` builds the image as CI does, on x64 and arm64 alike, and runs it as the CronJob
+will: user 10001, read-only root, no capabilities, `/tmp` a tmpfs, `/data` a named volume. The preview
+and the real pass are at the top of this document; `docker compose --profile offline run --rm offline run
+--dry-run --stage analyze --date <date>` runs a stage that needs no network with none at all.
 
 For individual use on a Claude subscription instead of an API key: `docker compose --profile login run --rm
 login` runs `claude auth login` and keeps the login in the named volume `agent-watchdog-login`; then run
