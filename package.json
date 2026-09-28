@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "bench:ai-review": "node benchmark/ai-review/run.mjs",
     "prepublishOnly": "npm run build",
     "cz": "cz",
     "semantic-release": "semantic-release",
@@ -59,6 +60,7 @@
     "semantic-release": "^25.0.3",
     "tsup": "^8.3.5",
     "typescript": "^5.7.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.9.1"
   }
 }

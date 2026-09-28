@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "repo": "medic/cht-core",
+      "pr": 11427,
+      "notes": "The PR adding the ai-review workflow itself"
+    }
+  ]
+}

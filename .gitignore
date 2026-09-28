@@ -30,3 +30,6 @@ docs/plans/
 *.tmp
 *.temp
 .claude/
+
+# Benchmark output
+bench-results/
