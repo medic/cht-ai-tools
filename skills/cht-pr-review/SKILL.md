@@ -54,7 +54,7 @@ Requirements come from the issue and the PR. When sources disagree, the higher o
 
 Within one source, a later comment wins over an earlier one. If a higher source replaces, reverses, or makes a lower requirement irrelevant, keep only the winning version. Drop the one it replaced completely. Do not list it, bucket it, or mention that it was superseded.
 
-A PR thread marked `resolved` or `outdated` may already have been dealt with; treat neither marker as proof either way, and do not report an unresolved thread as a missing requirement.
+A PR thread marked `resolved` or `outdated` may already have been dealt with; treat neither marker as proof either way, and do not report an unresolved thread as a missing requirement. A review comment can state a requirement, but an open thread on its own isn't proof the requirement is missing.
 
 ## 2. Read the change, then follow it out of the diff
 
@@ -67,7 +67,7 @@ It prints the patch. Generated files still appear by path, but their patch body 
 - Then read and search the working tree to follow the code **outward**: registration sites, exports, barrel files, command tables, call sites, and anything the new code must be wired into in order to actually run.
 - A requirement counts as delivered only if the whole path from user entrypoint to new code is complete. New code that is never registered, exported, or called delivers nothing, even when it is correct in isolation.
 - Trace only requirements that add user-facing surface (a command, endpoint, export, menu item), and name the registration site in the report. Reach for `Grep` before `Read`, and stop at the first site that proves the path rather than mapping the whole call graph.
-- Where a requirement's delivery depends on a library or framework **default** rather than on code in the diff, do not assert the default from memory. Either cite documentation for it, or put the requirement in **Pending verification** and name the default you could not confirm.
+- Where a requirement's delivery depends on a library or framework **default** rather than on code in the diff, do not assert the default from memory. Either cite documentation for it, cite an automated test that exercises it, or put the requirement in **Pending verification** and name the default you could not confirm.
 
 ## 3. Bucket every requirement
 
@@ -76,6 +76,8 @@ Put each requirement from section 1 into exactly one of these three buckets:
 - **Delivered** — cite the `file:line` that satisfies it
 - **Not delivered** — say what is missing
 - **Pending verification** — a requirement whose delivery cannot be settled by reading code alone (e.g. behaviour against a live CouchDB, output rendering in a real terminal)
+
+Assume the automated tests in the working tree pass. A requirement exercised by a unit, integration, or e2e test is **Delivered** — cite the code and the test — even when the test runs against a live service. Only a requirement no test exercises can be **Pending verification**.
 
 Then, separately, list **Preconditions to confirm**: operational facts the change depends on that are not requirements and belong to no bucket — a secret or environment variable that must exist, an external binary or service that must be reachable, a model or API version that must still be valid. These are a checklist for whoever merges, never folded into the counts above.
 
