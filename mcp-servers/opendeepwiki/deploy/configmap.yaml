@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opendeepwiki-config
+  namespace: mcp-servers
+  labels:
+    app.kubernetes.io/name: opendeepwiki
+data:
+  # Runtime
+  ASPNETCORE_ENVIRONMENT: "Production"
+  URLS: "http://+:8080"
+
+  # Database
+  DB_TYPE: "sqlite"
+  CONNECTION_STRING: "Data Source=/data/opendeepwiki.db"
+
+  # Primary AI config
+  CHAT_REQUEST_TYPE: "Anthropic"
+  ENDPOINT: "https://api.anthropic.com"
+
+  # Wiki catalog generation (directory structure analysis)
+  WIKI_CATALOG_MODEL: "claude-haiku-4-5-20251001"
+  WIKI_CATALOG_ENDPOINT: "https://api.anthropic.com"
+  WIKI_CATALOG_REQUEST_TYPE: "Anthropic"
+
+  # Wiki content generation (page content)
+  WIKI_CONTENT_MODEL: "claude-haiku-4-5-20251001"
+  WIKI_CONTENT_ENDPOINT: "https://api.anthropic.com"
+  WIKI_CONTENT_REQUEST_TYPE: "Anthropic"
+
+  # Processing
+  WIKI_PARALLEL_COUNT: "3"
+  WIKI_LANGUAGES: "en"
+  REPOSITORIES_DIRECTORY: "/data"
+
+  # File reading limit during indexing — 70% of Haiku 4.5 context window (200K)
+  READ_MAX_TOKENS: "140000"
+
+  # Chat conversation compression for ask_question MCP sessions
+  AUTO_CONTEXT_COMPRESS_ENABLED: "true"
+  AUTO_CONTEXT_COMPRESS_TOKEN_LIMIT: "100000"
+  AUTO_CONTEXT_COMPRESS_MAX_TOKEN_LIMIT: "200000"
+
+  # Auth
+  JWT_SECRET_KEY: "REPLACE-WITH-A-LONG-RANDOM-STRING"

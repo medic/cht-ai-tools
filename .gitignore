@@ -30,3 +30,8 @@ docs/plans/
 *.tmp
 *.temp
 .claude/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
