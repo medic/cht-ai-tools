@@ -75,7 +75,7 @@ Put each requirement from section 1 into exactly one of these three buckets:
 
 - **Delivered** — cite the `file:line` that satisfies it
 - **Not delivered** — say what is missing
-- **Pending verification** — a requirement whose delivery cannot be settled by reading code alone (e.g. behaviour against a live CouchDB, output rendering in a real terminal)
+- **Pending verification** — a requirement whose delivery cannot be settled by reading code alone (e.g. behaviour against a live CouchDB that no test exercises, output rendering in a real terminal)
 
 Assume the automated tests in the working tree pass. A requirement exercised by a unit, integration, or e2e test is **Delivered** — cite the code and the test — even when the test runs against a live service. Only a requirement no test exercises can be **Pending verification**.
 
