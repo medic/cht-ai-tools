@@ -77,7 +77,7 @@ Put each requirement from section 1 into exactly one of these three buckets:
 - **Not delivered** — say what is missing
 - **Pending verification** — a requirement whose delivery cannot be settled by reading code alone (e.g. behaviour against a live CouchDB that no test exercises, output rendering in a real terminal)
 
-Assume the automated tests in the working tree pass. A requirement exercised by a unit, integration, or e2e test is **Delivered** — cite the code and the test — even when the test runs against a live service. Only a requirement no test exercises can be **Pending verification**.
+Assume the automated tests in the working tree pass. A requirement exercised by a unit, integration, or e2e test is **Delivered** — cite the code and/or the test — even when the test runs against a live service. Only a requirement no test exercises can be **Pending verification**.
 
 Then, separately, list **Preconditions to confirm**: operational facts the change depends on that are not requirements and belong to no bucket — a secret or environment variable that must exist, an external binary or service that must be reachable, a model or API version that must still be valid. These are a checklist for whoever merges, never folded into the counts above.
 
@@ -106,6 +106,7 @@ Report sections 3, 4, and 5 under the headings "Requirements", "Undisclosed Chan
 One line per item, in this shape:
 
 - **Delivered** — <requirement> — `path/to/file.js:42`
+- **Delivered** — <requirement> — `path/to/file.js:42`, tested at `test/file.spec.js:17`
 - **Not delivered** — <requirement> — <what is missing>
 - **Pending verification** — <requirement> — <what would settle it>
 
