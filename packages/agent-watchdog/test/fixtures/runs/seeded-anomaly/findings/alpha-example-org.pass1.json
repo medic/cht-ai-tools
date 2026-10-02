@@ -1,0 +1,38 @@
+{
+  "project_url": "https://alpha.example.org",
+  "pass": 1,
+  "items": [
+    {
+      "item_key": {
+        "metric": "cht_sentinel_backlog_count",
+        "pattern_card": null
+      },
+      "severity": "high",
+      "evidence": [
+        {
+          "window": "current",
+          "value": 912,
+          "unit": "count"
+        },
+        {
+          "window": "previous_day",
+          "value": 294.758,
+          "unit": "count"
+        }
+      ],
+      "why_now": "The backlog has climbed steadily for hours and is now well above yesterday.",
+      "suggested_check": "Open the dashboard panel and confirm the trend before paging anyone.",
+      "confidence": 0.85,
+      "candidate_ids": [
+        "a3effa6da9db",
+        "783041727160",
+        "15d8b610d1f2"
+      ],
+      "reference_urls": []
+    }
+  ],
+  "not_selected": [],
+  "changes": [],
+  "converged": false,
+  "notes": ""
+}

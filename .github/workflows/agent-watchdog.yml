@@ -1,0 +1,120 @@
+name: agent-watchdog
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/agent-watchdog/**', '.github/workflows/agent-watchdog.yml']
+  pull_request:
+    paths: ['packages/agent-watchdog/**', '.github/workflows/agent-watchdog.yml']
+
+defaults:
+  run:
+    working-directory: packages/agent-watchdog
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/agent-watchdog/package-lock.json
+      - run: npm ci
+      - run: npm run lint -- --max-warnings=0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/agent-watchdog/package-lock.json
+      - run: npm ci
+      # Coverage thresholds live in .nycrc and are raised as coverage grows (constitution quality gate 2).
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: packages/agent-watchdog/coverage/lcov.info
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  replay-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      # Replay evaluation over recorded fixtures; required for any change to prompts, skill, schema or analysis.
+      # The script arrives with User Story 3 (T081); until then the step says so instead of failing.
+      - run: |
+          if [ -f scripts/replay-eval.js ]; then npm run replay:eval; else echo 'replay evaluation arrives with User Story 3 (T081)'; fi
+
+  scan-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - run: npm ci
+      # The scanner arrives with the polish phase (T105); until then the step says so instead of failing.
+      - run: |
+          if [ -f scripts/scan-secrets.js ]; then node scripts/scan-secrets.js .; else echo 'secret scan arrives with the polish phase (T105)'; fi
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: packages/agent-watchdog/.nvmrc
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      # Both platforms build on every pull request (arm64 under QEMU), as the release will push them (revision 42).
+      - uses: docker/build-push-action@v6
+        with:
+          context: packages/agent-watchdog
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # The smoke needs an image in the daemon, which only a single-platform build can load; the cache makes it quick.
+      - uses: docker/build-push-action@v6
+        with:
+          context: packages/agent-watchdog
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: agent-watchdog:ci
+          cache-from: type=gha
+      # The image under the constraints the platform applies (FR-086, SC-017): read-only root, no capabilities, no
+      # privilege escalation, the fixed user, and no network for the checks that need none (contracts/container.md).
+      - run: node smoke/container.js --no-build --image agent-watchdog:ci

@@ -1,0 +1,11 @@
+{
+  "builtins": [],
+  "allowed": [
+    "mcp__cht-docs__search_docs",
+    "mcp__cht-docs__get_sources",
+    "mcp__watchdog__get_windows",
+    "mcp__watchdog__query_metric",
+    "mcp__watchdog__read_pattern_card",
+    "mcp__watchdog__get_item_history"
+  ]
+}

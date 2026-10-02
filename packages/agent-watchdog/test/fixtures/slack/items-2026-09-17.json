@@ -1,0 +1,76 @@
+[
+  {
+    "item_id": "49bd5cd2499f",
+    "project_url": "https://alpha.example.org",
+    "metric": "cht_sentinel_backlog_count",
+    "severity": "high",
+    "evidence": [
+      {
+        "window": "current",
+        "value": 912,
+        "unit": "count"
+      },
+      {
+        "window": "previous_day",
+        "value": 300,
+        "unit": "count"
+      }
+    ],
+    "why_now": "w",
+    "suggested_check": "s",
+    "dashboard_ref": {
+      "dashboard_uid": "oa2OfL-Vk",
+      "panel_id": 3,
+      "project_url": "https://alpha.example.org",
+      "from": "2026-09-16T06:00:00Z",
+      "to": "2026-09-17T06:00:00Z"
+    },
+    "confidence": 0.85,
+    "persisting_days": 1,
+    "pattern_card": null,
+    "candidate_ids": [
+      "0123456789ab"
+    ],
+    "reference_urls": [],
+    "rank": 1,
+    "placement": "body",
+    "pass_history": []
+  },
+  {
+    "item_id": "a09c1ddc330a",
+    "project_url": "https://gamma.example.org",
+    "metric": "up{job=\"cht\"}",
+    "severity": "high",
+    "evidence": [
+      {
+        "window": "current",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "window": "previous_day",
+        "value": 1,
+        "unit": "count"
+      }
+    ],
+    "why_now": "w",
+    "suggested_check": "s",
+    "dashboard_ref": {
+      "dashboard_uid": "oa2OfL-Vk",
+      "panel_id": 16,
+      "project_url": "https://gamma.example.org",
+      "from": "2026-09-16T06:00:00Z",
+      "to": "2026-09-17T06:00:00Z"
+    },
+    "confidence": 0.85,
+    "persisting_days": 1,
+    "pattern_card": null,
+    "candidate_ids": [
+      "0123456789ab"
+    ],
+    "reference_urls": [],
+    "rank": 2,
+    "placement": "body",
+    "pass_history": []
+  }
+]

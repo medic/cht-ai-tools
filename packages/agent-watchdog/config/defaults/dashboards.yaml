@@ -1,0 +1,14 @@
+# The priority list (FR-003): stock cht-watchdog dashboard uids (research.md R-6).
+dashboards:
+  - uid: oa2OfL-Vk
+    title: CHT Admin Overview
+    panels: [2, 3, 21, 7, 14, 16, 19, 13, 8, 23, 27, 50]   # panel ids, in order of interest
+  - uid: hkQUbyfVk
+    title: CHT Admin Details
+    panels: []                          # empty means every panel on the dashboard
+  - uid: 3J_78b6Zz
+    title: CHT API Server
+    panels: []
+  - uid: d4f05050-804e-4ea4-9642-4d088cc39a1b
+    title: CHT Replication
+    panels: []

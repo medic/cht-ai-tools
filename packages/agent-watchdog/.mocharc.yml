@@ -1,0 +1,5 @@
+# The spec glob lives in package.json scripts so that `npx mocha <files>` runs only those files.
+require: test/setup.js
+timeout: 10000
+recursive: true
+exit: true

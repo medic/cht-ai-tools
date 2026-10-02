@@ -1,0 +1,253 @@
+{
+  "meta": {
+    "slug": "cht-admin-details",
+    "url": "/d/hkQUbyfVk/cht-admin-details",
+    "folderTitle": "CHT"
+  },
+  "dashboard": {
+    "uid": "hkQUbyfVk",
+    "title": "CHT Admin Details",
+    "timezone": "utc",
+    "templating": {
+      "list": [
+        {
+          "name": "cht_instance",
+          "type": "query",
+          "label": "CHT Instance",
+          "query": "query_result(up{job=~\"cht\"})",
+          "regex": "/.*instance=\"([^\"]+).*/",
+          "multi": false,
+          "includeAll": false,
+          "current": {
+            "text": "alpha.example.org",
+            "value": "alpha.example.org"
+          }
+        },
+        {
+          "name": "db_name",
+          "type": "custom",
+          "hide": 2,
+          "multi": true,
+          "query": "medic,sentinel",
+          "current": {
+            "value": [
+              "medic"
+            ]
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 2,
+        "title": "Doc Count [medic]",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_couchdb_doc_total{instance=~\"$cht_instance\", db=\"medic\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Doc Count [sentinel]",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_couchdb_doc_total{instance=~\"$cht_instance\", db=\"sentinel\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Doc Count [medic-users-meta]",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_couchdb_doc_total{instance=~\"$cht_instance\", db=\"medic-users-meta\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Doc Count [_users]",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_couchdb_doc_total{instance=~\"$cht_instance\", db=\"_users\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Conflicts",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_conflict_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 69,
+        "title": "Sentinel Backlog",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_sentinel_backlog_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 66,
+        "title": "Outbound Push Backlog",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "cht_outbound_push_backlog_count{instance=~\"$cht_instance\"}",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      }
+    ]
+  }
+}

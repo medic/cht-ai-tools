@@ -1,0 +1,25 @@
+{
+  "description": "The seeded-anomaly day with Grafana-managed alerts firing across two programmes; alpha's sentinel backlog climbs and gamma's scrape target is down as before.",
+  "quiet": false,
+  "candidates": [
+    {
+      "host": "alpha.example.org",
+      "metric_contains": "cht_sentinel_backlog_count",
+      "rules": [
+        "pct_change",
+        "deviation",
+        "monotonic"
+      ],
+      "severity_floor": "high"
+    },
+    {
+      "host": "gamma.example.org",
+      "metric_contains": "up",
+      "rules": [
+        "deviation",
+        "target_down"
+      ],
+      "severity_floor": "high"
+    }
+  ]
+}

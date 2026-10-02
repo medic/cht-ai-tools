@@ -1,0 +1,18 @@
+{
+  "channel_id": "C123",
+  "ts": "1758088800.000100",
+  "permalink": "https://example.slack.com/archives/C123/p1758088800000100",
+  "replies": [
+    {
+      "item_id": "49bd5cd2499f",
+      "ts": "1758088801.000200",
+      "permalink": "https://example.slack.com/archives/C123/p1758088801000200"
+    },
+    {
+      "item_id": "a09c1ddc330a",
+      "ts": "1758088802.000300",
+      "permalink": "https://example.slack.com/archives/C123/p1758088802000300"
+    }
+  ],
+  "slack_file_id": "F0001"
+}

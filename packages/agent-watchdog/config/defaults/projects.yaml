@@ -1,0 +1,20 @@
+# Per-project annotations, keyed by the instance label (bare host). Projects absent here are
+# still analysed (FR-001). See contracts/config-files.md.
+defaults:
+  expected_load_windows:
+    - id: month-end
+      kind: month_end                   # last 2 days and first 2 days of each month
+      days_before: 2
+      days_after: 2
+      timezone: Africa/Nairobi
+      note: Month-end reporting; volumes rise across most projects.
+      cycle_days: 30
+projects: {}
+groups:                                 # programmes (FR-068): first matching pattern wins, in file order
+  - label: North Programme                    # PLACEHOLDER patterns until the hosting team sets the real ones
+    host_patterns: ['*north*']
+  - label: South Programme                  # PLACEHOLDER
+    host_patterns: ['*south*']
+ignore:                                 # development instances: discovered and counted, never analysed or posted
+  - '*.dev.*'
+  - '*-dev.*'

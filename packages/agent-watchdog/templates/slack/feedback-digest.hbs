@@ -1,0 +1,48 @@
+Feedback from yesterday: {{mrkdwn summary_text}}
+{{#each items}}
+• {{mrkdwn host}} `{{mrkdwn metric}}`: {{mrkdwn tally_text}}; {{mrkdwn effect_text}}
+{{#if provenance.has_suppressed}}
+  ↳ {{mrkdwn provenance.suppressed_text}}
+{{/if}}
+{{#if provenance.has_prompt}}
+  ↳ {{mrkdwn provenance.prompt_text}}{{#if provenance.has_trace}} · {{link provenance.trace_url 'trace'}}{{/if}}
+{{#each provenance.quoted}}
+> {{mrkdwn this}}
+{{/each}}
+{{#if provenance.has_more}}
+> {{mrkdwn provenance.more_text}}
+{{/if}}
+{{/if}}
+{{#if provenance.has_none}}
+  ↳ {{mrkdwn provenance.none_text}}
+{{/if}}
+{{/each}}
+{{#if has_brief}}
+• the brief itself: {{mrkdwn brief_text}}
+{{/if}}
+{{#if has_alerts}}
+_Alert groups:_
+{{#each alerts}}
+• {{mrkdwn key_text}}: {{mrkdwn tally_text}}
+{{/each}}
+{{/if}}
+{{#if has_proposals}}
+_Proposals written for review:_
+{{#each proposals}}
+• {{mrkdwn destination_text}}: {{mrkdwn path_text}}
+{{/each}}
+{{/if}}
+{{#if has_unmatched}}
+_Notes I could not match to an item_ ({{mrkdwn unmatched_count}}):
+{{#each unmatched}}
+• {{mrkdwn this}}
+{{/each}}
+Mention the project host or the metric in a note so the next run can attach it.
+{{/if}}
+{{#if has_unclassified}}
+{{mrkdwn unclassified_text}}
+{{/if}}
+{{#if has_unclassifiable}}
+{{mrkdwn unclassifiable_text}}
+{{/if}}
+{{mrkdwn retention_text}}

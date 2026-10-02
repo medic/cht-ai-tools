@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "1758002400.000100",
+      "thread_ts": "1758002400.000100",
+      "bot_id": "B001",
+      "app_id": "A001",
+      "text": "Watchdog brief: 1 item",
+      "reply_count": 1,
+      "metadata": {
+        "event_type": "agent_watchdog.brief",
+        "event_payload": {
+          "run_id": "2026-09-16",
+          "date": "2026-09-16",
+          "kind": "brief"
+        }
+      }
+    },
+    {
+      "type": "message",
+      "ts": "1758002401.000200",
+      "thread_ts": "1758002400.000100",
+      "bot_id": "B001",
+      "app_id": "A001",
+      "text": "beta.example.org cht_conflict_count: 40 now vs 15 yesterday",
+      "metadata": {
+        "event_type": "agent_watchdog.item",
+        "event_payload": {
+          "run_id": "2026-09-16",
+          "item_id": "aee954327c15",
+          "project_url": "https://beta.example.org",
+          "metric": "cht_conflict_count"
+        }
+      }
+    }
+  ],
+  "has_more": false,
+  "response_metadata": {
+    "next_cursor": ""
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "project_url": "https://cht.example.org",
+  "pass": 1,
+  "items": [
+    {
+      "item_key": { "metric": "cht_sentinel_backlog_count", "pattern_card": null },
+      "severity": "high",
+      "evidence": [
+        { "window": "current", "value": 912, "unit": "count", "note": "last sample" },
+        { "window": "previous_day", "value": 300, "unit": "count" }
+      ],
+      "why_now": "Sentinel backlog has climbed steadily for six hours to three times yesterday's level.",
+      "suggested_check": "Check sentinel logs for a stuck transition and confirm CouchDB is responsive.",
+      "confidence": 0.85,
+      "candidate_ids": ["0123456789ab", "ba9876543210"],
+      "reference_urls": []
+    }
+  ],
+  "not_selected": [ { "candidate_id": "cafebabecafe", "reason": "within normal month-end range" } ],
+  "changes": [],
+  "converged": false,
+  "notes": ""
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "uid": "oa2OfL-Vk",
+    "title": "CHT Admin Overview",
+    "uri": "db/cht-admin-overview",
+    "url": "/d/oa2OfL-Vk/cht-admin-overview",
+    "type": "dash-db",
+    "tags": [],
+    "folderUid": "cht",
+    "folderTitle": "CHT"
+  },
+  {
+    "id": 1,
+    "uid": "hkQUbyfVk",
+    "title": "CHT Admin Details",
+    "uri": "db/cht-admin-details",
+    "url": "/d/hkQUbyfVk/cht-admin-details",
+    "type": "dash-db",
+    "tags": [],
+    "folderUid": "cht",
+    "folderTitle": "CHT"
+  },
+  {
+    "id": 1,
+    "uid": "3J_78b6Zz",
+    "title": "CHT API Server",
+    "uri": "db/cht-api-server",
+    "url": "/d/3J_78b6Zz/cht-api-server",
+    "type": "dash-db",
+    "tags": [
+      "CHT 4.3+"
+    ],
+    "folderUid": "cht",
+    "folderTitle": "CHT"
+  },
+  {
+    "id": 1,
+    "uid": "d4f05050-804e-4ea4-9642-4d088cc39a1b",
+    "title": "CHT Replication",
+    "uri": "db/cht-replication",
+    "url": "/d/d4f05050-804e-4ea4-9642-4d088cc39a1b/cht-replication",
+    "type": "dash-db",
+    "tags": [
+      "CHT 4.3+"
+    ],
+    "folderUid": "cht",
+    "folderTitle": "CHT"
+  }
+]

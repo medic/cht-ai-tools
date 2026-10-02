@@ -1,0 +1,732 @@
+# Data Model: Watchdog Slack Loop
+
+**Feature**: `001-watchdog-slack-loop` | **Date**: 2026-09-19 | **Spec**: [spec.md](./spec.md)
+
+Every entity below is persisted as a plain JSON, JSONL or Markdown file under the layout in
+[contracts/run-directory.md](./contracts/run-directory.md). Identity rules, validation rules and
+state transitions are stated here once; zod schemas under `src/**/schema.js` and the verification
+gate under `src/verify/` implement them and are tested against fixtures. `FR-nnn` references point
+at the spec.
+
+## Conventions
+
+- Timestamps are ISO-8601 UTC strings (`2026-09-19T06:00:00Z`). Dates are `YYYY-MM-DD` in UTC.
+- Identifiers are lowercase and URL-safe. Hashes are hex SHA-256 truncated to 12 characters
+  unless stated otherwise.
+- `cost_usd` is a number with at most six decimals. Token counts are integers.
+- Enumerations are closed sets; an unknown value fails validation (FR-011).
+- Anything the model wrote is untrusted until the gate accepts it (FR-016, FR-044).
+- Anything fetched from outside (tool results, Slack text, corpus items) is data, never
+  instructions (FR-044); it is stored verbatim for replay and escaped on render.
+
+## Entities
+
+### Project
+
+A monitored CHT deployment, discovered from the metrics store on every run (FR-001).
+
+| Field | Type | Rules |
+|---|---|---|
+| `host` | string | Identity. The `instance` label value as recorded in the metrics store: a bare, lowercased hostname (research.md R-6). |
+| `url` | string | Derived: `https://<host>`; this is the `project_url` used everywhere else in this model. |
+| `slug` | string | Derived: `host` with `.` replaced by `-`; used for directory names only. |
+| `configured` | boolean | True when `projects.yaml` has an entry for `url` (US5 scenario 1). |
+| `owner` | string or null | From `projects.yaml`. |
+| `notes` | string or null | From `projects.yaml`. Rendered through escaping templates. |
+| `thresholds` | object or null | Per-project overrides, same shape as `thresholds.yaml` (FR-014). |
+| `expected_load_windows` | ExpectedLoadWindow[] | Per-project windows merged with global defaults (FR-007). |
+| `cht_version` | string or null | Collected each run (FR-005). |
+| `history_days` | integer | Days of metric history available. Below 14, history comparisons are `available: false` (US5 scenario 3). |
+| `scrape_targets` | ScrapeTarget[] | `{ job, scrape_url, health: 'up' \| 'down' \| 'unknown', last_error }` (FR-005). |
+| `group` | string | Label of the first Project Group whose pattern matches `host`, else `Other` (FR-068). |
+
+A host matching a pattern under `projects.yaml` `ignore` never becomes a Project: `discovery.json` lists
+it under `ignored` as `{ host, pattern }` and it is neither queried, analysed, charged nor named in a post
+(FR-068). `discovery.json` also lists `groups` as `{ label, hosts }` in file order with `Other` last.
+
+### Project Group
+
+A programme the hosted watchdog serves, declared in `projects.yaml` (FR-068). Two labels are
+reserved and always present: `Other` for hosts no pattern matches and `Watchdog` for alerts that
+carry no `instance` label.
+
+| Field | Type | Rules |
+|---|---|---|
+| `label` | string | Identity; unique, at most 40 characters, shown in the post exactly as written. |
+| `host_patterns` | string[] | Lowercase globs matched against the bare host: `*` matches any run of characters, `?` one character; converted to anchored regular expressions in code, no glob library. The first group whose pattern matches wins, in file order. Empty for the reserved labels. |
+| `hosts` | string[] | Hosts assigned this run, ignored hosts excluded. |
+
+### Run
+
+One execution for one date (FR-039, FR-042).
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | `YYYY-MM-DD` for the first run of a date; `YYYY-MM-DD-f<n>` for the n-th forced run. |
+| `date` | string | UTC date the run analyses. |
+| `mode` | enum | `scheduled` \| `manual` \| `preview` \| `replay` \| `stage`. |
+| `status` | enum | See state machine below. |
+| `started_at`, `finished_at` | timestamp | Monotonic `duration_ms` recorded alongside. |
+| `versions` | object | `{ package, git_sha, prompts_hash, skill_hash, schema_hash, config_hash }` (US3 scenario 4). |
+| `config_effective_path` | string | Redacted effective configuration file (FR-055). |
+| `stages` | Stage[] | `{ name, status, started_at, finished_at, duration_ms, error }` per stage. |
+| `projects` | string[] | URLs analysed, in priority order. |
+| `usage` | Usage | Summed token usage across model calls. |
+| `cost_usd` | number | Sum of Cost Records: the runtime's figure per call, an estimated upper bound when a session leaves none (FR-012, FR-049). |
+| `publications` | Publication[] | Parent post, thread replies, the report share (see Brief, Thread Reply); the image file until revision 24. |
+| `cost_estimated` | boolean | True when any session's cost is an upper bound (revision 34, see Pass). |
+| `trace_id`, `trace_url` | string | One trace per run (FR-049). |
+| `supersedes`, `superseded_by` | string or null | Linked forced runs (Edge Cases). |
+| `bounds_hit` | string[] | Which bounds ended work early, if any (FR-012). |
+
+**State machine** (terminal states in bold; exit codes in
+[contracts/exit-codes.md](./contracts/exit-codes.md)):
+
+| From | Event | To |
+|---|---|---|
+| (start) | run directory for `date` exists and no `--force` | **refused** |
+| (start) | configuration valid, directory created | `created` |
+| `created` | feedback ingested, metrics and target health collected | `collected` |
+| `created` | metrics source unreachable or timed out | **failed** (notice posted) |
+| `collected` | deltas and candidates computed for every project | `analysed` |
+| `analysed` | model passes complete or every model-dependent stage degraded | `drafted` |
+| `drafted` | publish gate accepts the brief | `verified` |
+| `drafted` | gate rejects three drafts, or model output unusable | `degraded` (deterministic brief built) |
+| `verified` or `degraded` | report rendered (and the image until revision 24) | `rendered` |
+| `rendered` | `mode = preview` | **previewed** (payload emitted, nothing posted) |
+| `rendered` | posted, with items | **published** |
+| `rendered` | posted, no items | **heartbeat** |
+| `rendered` | Slack unavailable after retries | **unposted** |
+| any non-terminal | unexpected error | **failed** (notice posted if Slack reachable) |
+
+`degraded` is not a failure: the run publishes the deterministic brief with an explicit notice
+(Edge Cases, FR-017) and exits 0 with `status: degraded` in `run.json`.
+
+### Metric Window
+
+A metric's values over one named period for one project (FR-004).
+
+| Field | Type | Rules |
+|---|---|---|
+| `project_url` | string | Project identity. |
+| `metric` | string | Metric key: the PromQL expression identifier from the dashboard panel target, or the bare metric name for target health. |
+| `panel_ref` | PanelRef | `{ dashboard_uid, panel_id, panel_title, ref_id }` — where the expression came from (FR-003). |
+| `window` | enum | `current` \| `previous_day` \| `previous_week` \| `previous_cycle` \| `trailing_14d`. |
+| `start`, `end` | timestamp | Inclusive bounds. `current` is the 24 hours ending at run start. |
+| `step_s` | integer | Query step in seconds. |
+| `unit` | string | From the panel's field config, else `count`. |
+| `values` | [number, number][] | `[epoch_seconds, value]` pairs; empty when unavailable. |
+| `available` | boolean | False when history is shorter than the window needs or the query failed. |
+| `unavailable_reason` | string or null | Required when `available` is false: `no data`, `insufficient history: N days`, `query failed: <detail>`, or `unresolved variable $name` when the panel expression depends on a dashboard variable with no single value (FR-071); the last is decided before any query is sent. |
+| `source` | string | `fetched` (queried this run), `stored:<run_id>` (the current window of that earlier run, reused because its bounds, step and metric match exactly) or `ledger` (built from the Daily Maxima Ledger); default `fetched` (FR-072). |
+
+A window is also unavailable with `N series, not one per project (labels: …)` when the query answered
+several series for the project (FR-075); no series is chosen over the others.
+
+### Alert Pattern (revision 14)
+
+One rule firing across a programme (FR-078), carried on the Alert Group as `patterns[]`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `group`, `category`, `title` | string | The programme, its category and the rule title. |
+| `count`, `of` | integer | Firing hosts and the programme's size from discovery (the hosts seen when unknown); `count >= 3` and `count / of >= 0.5`. |
+| `since_min`, `since_max` | date | First occurrences, at most two days apart. |
+| `hosts`, `instance_ids` | string[] | Sorted; the instances a thread reply lists as one paragraph. |
+
+An Alert Instance also carries `housekeeping` (stale on a host whose scrape target read zero all
+day, FR-080) and `evidence` (the computed change of a category metric for its project, FR-079:
+`metric`, `aggregate`, `current_value`, `previous_day_value`, `pct_change_vs_previous_day`).
+`alerts.classified.json` lists the housekeeping instances under `housekeeping[]` and counts them.
+
+Raw windows are the only artefact under the short retention period (FR-040).
+
+Each dashboard in `discovery.json` carries `variables`, what its templating variables resolve to
+(a literal or null), and each panel record `variables` (the names its expression uses) and
+`unresolved` (those with no single value), so a window's `unresolved variable` reason is traceable
+to the dashboard document (FR-071). A panel record's `breakdown` is null for one series per project,
+or `{ kind: by | without | topk | bottomk, labels }` for a panel that yields one series per label value
+or a ranked set; such panels are left out of `metrics` and never queried (FR-075). A panel record's
+`reference_line` is null, or `{ subject, source }` for a target after the first on a multi-target panel
+whose expression is another series adjusted only by constant arithmetic (`subject` the first target's
+metric key, `source` the bare metric the line is drawn from); such targets are likewise left out of
+`metrics` and never queried (FR-075, revision 23): the collection's query list skips them and the
+analysis computes changes for `metrics` only, so a stored window kept from an earlier run cannot bring
+one back (revision 24).
+
+### Daily Maxima Ledger
+
+One file per project, `history/<project_slug>.json`, the source of the trailing baseline once it
+holds enough days (FR-072).
+
+| Field | Type | Rules |
+|---|---|---|
+| `host`, `project_url` | string | Project identity. |
+| `updated_at`, `run_id` | timestamp, string | The run that last wrote the file. |
+| `metrics` | object | `metric key → { "YYYY-MM-DD": number }`: the maximum of the current window whose end falls on that date at run start, or the trailing point of a fetched window for that date (backfill). One entry per metric per day; a forced re-run replaces the day's entry. |
+
+Entries older than the kept retention period are compacted by purge; the file itself persists.
+A trailing window is built from the ledger only when at least fourteen of its days are present;
+otherwise it is fetched and the fetched points fill the ledger.
+
+### Computed Change
+
+The deterministic comparison of a metric across windows (FR-006, FR-007). One per project and
+metric per run; kept for the long retention period because the model saw it.
+
+| Field | Type | Rules |
+|---|---|---|
+| `project_url`, `metric`, `panel_ref` | | As above. |
+| `kind` | enum | `gauge` \| `counter` \| `uptime` \| `clock`, from `thresholds.yaml` `metric_kinds` by bare metric name (FR-076); default `gauge`. |
+| `aggregate` | enum | `level` (gauge, clock) \| `increase` (counter: every value below is the increase over its window) \| `restarts` (uptime) \| `excluded` (clock: no rule applies). |
+| `restarts_24h` | integer or null | Uptime only: samples in `current` that fell below half their predecessor. |
+| `current_value` | number or null | Last value of `current`, or for a counter its increase over `current`. |
+| `previous_day_value`, `previous_week_value`, `previous_cycle_value` | number or null | Null when the window is unavailable. |
+| `pct_change_vs_previous_day` | number or null | `(current - previous_day) / abs(previous_day) * 100`; null when `previous_day` is 0 or unavailable. |
+| `trailing_mean`, `trailing_stddev` | number or null | Over `trailing_14d` daily values; null below 14 days of history. |
+| `deviation_sigma` | number or null | `(current - trailing_mean) / trailing_stddev`; null when stddev is 0 or unavailable. |
+| `monotonic_rise_hours` | number | Longest run of non-decreasing consecutive samples ending at the last sample, in hours; 0 when none. |
+| `baseline` | enum | `previous_day` \| `previous_cycle` — `previous_cycle` when an expected-load window is active (FR-007). |
+| `expected_load_window_id` | string or null | Active window, if any. |
+
+### Candidate
+
+A deterministic flag on a Computed Change (Key Entities; FR-006, FR-014).
+
+| Field | Type | Rules |
+|---|---|---|
+| `candidate_id` | string | Hash of `project_url`, `metric`, `rule`, `date`. |
+| `project_url`, `metric`, `panel_ref` | | As above. |
+| `rule` | enum | `pct_change` \| `deviation` \| `monotonic` \| `target_down` \| `backlog_absolute`. | `restart` (uptime reset, medium floor; FR-076).
+| `threshold` | object | `{ source: 'default' \| 'global' \| 'project', value }` — which threshold fired (FR-014). |
+| `observed` | number | The value compared against the threshold. |
+| `severity_floor` | enum | `low` \| `medium` \| `high`. `high` only from the FR-014 high rules: `target_down`; outbound push backlog above zero; sentinel backlog above three times its baseline. |
+| `evidence` | Evidence[] | See Item. |
+| `expected_load_window_id` | string or null | Copied from the Computed Change. |
+
+**Standing condition** (FR-013, FR-014, revision 23): a `backlog_absolute` candidate whose
+previous-day evidence is above zero, or a `target_down` candidate on a project whose scrape-target
+change read zero on the previous day and whose trailing mean is zero (dark throughout the trailing
+fortnight; an outage in its second day stays with the model). Derived by code from fields the candidate and its
+Computed Change already carry and never stored on the candidate. The agent stage withholds standing
+candidates from the session and opens none when nothing else remains; the roll-up names them in one
+notice per rule grouped by programme, folds dark hosts into the housekeeping notice, writes them to
+`rollup/standing.json` (`{ rule, project_url, host, group, value, previous_day_value }`) so the
+report can list them per host, and leaves them out of the degraded brief's bullets while
+`checked.candidates` still counts them. A condition new today is an ordinary high-floor candidate. A
+standing rule does not set the floor of the other candidates on its metric, and `monotonic` raises no
+candidate on a standing metric; `deviation` and `pct_change` there carry the floor they earn alone
+(revision 24). A standing record also carries the candidate's `panel_ref`, so the report can link the
+host's panel (revision 24).
+
+### Alert Rule
+
+A Grafana-managed alert rule provisioned on the hosted watchdog, read live each run (FR-064).
+
+| Field | Type | Rules |
+|---|---|---|
+| `rule_uid` | string | Identity; the rule UID as Grafana reports it. |
+| `title` | string | The provisioned title (`cht.yml` `title`); the key into `alerts.yaml`. Untrusted text, escaped on render. |
+| `folder`, `rule_group` | string | Grafana folder and evaluation group (`10m`, `1m` on the stock watchdog). |
+| `pending_for` | string | The rule's `for` duration as provisioned. |
+| `dashboard_uid`, `panel_id` | string or null, integer or null | From the rule annotations `__dashboardUid__` and `__panelId__`; used for the dashboard link when present. |
+| `category` | string | From `alerts.yaml`; `uncategorised` when the title is unknown (FR-065). |
+| `importance` | enum | `critical` \| `high` \| `medium` \| `low`; `medium` when the title is unknown (FR-065). |
+| `known` | boolean | False when the title has no `alerts.yaml` entry; the brief says so. |
+
+### Alert Instance
+
+One evaluation of a rule for one label set, as reported at run time (FR-064, FR-065).
+
+| Field | Type | Rules |
+|---|---|---|
+| `instance_id` | string | Hash of `rule_uid` and the sorted label pairs, `alertname` excluded. |
+| `rule_uid`, `title`, `category`, `importance` | | Copied from the Alert Rule. |
+| `host` | string or null | The `instance` label, normalised as for Projects (research.md R-6) and with a scrape port (`:9100`) removed; null when the rule has no such label. |
+| `project_url` | string or null | Derived from `host`. |
+| `group` | string | The host's Project Group label; `Watchdog` when `host` is null. Instances on ignored hosts are dropped at collection and counted in `alerts.json`. |
+| `labels`, `annotations` | object | As collected; untrusted data. |
+| `state` | enum | `firing` \| `pending` \| `nodata` \| `error`, normalised by code from Grafana's state names (research.md R-14). Only `firing` instances are counted, grouped and posted; the others are stored for the record. |
+| `active_at` | timestamp or null | Grafana's `activeAt` when reported. |
+| `started_at` | timestamp | `active_at`, else the time the first run that observed the instance firing read the alerts (Edge Cases: no state history). |
+| `days_firing` | integer | Whole days from `started_at` to the time the alerts were read (`observed_at` on the classified file: the run start within seconds for the scheduled run, the re-run's clock for a forced re-run; a stored file without a time falls back to the run start). Never negative. |
+| `stale` | boolean | `days_firing >= stale_after_days` from `alerts.yaml` (default 14; FR-065). |
+| `new` | boolean | True when the previous run's `alerts.classified.json` did not hold this `instance_id` firing. |
+| `value` | string or null | The evaluated value as Grafana reports it; untrusted, never rendered into bullet text. |
+
+Instances are grouped for the post by `group` and `category` (FR-066): each Alert Group carries
+`{ alert_key, group, category, importance (highest), firing, new, stale, oldest_started_at, rule_uids,
+titles, instance_ids, hosts, instances }`, where `titles` and `hosts` are what the link builder turns
+into the filtered alert-list links, one for the group and one per rule (FR-070). Groups are ordered by
+importance, then group and category in code-point order. A group's thread reply lists at most fifty instances and the count of the
+rest (Edge Cases).
+
+### Alert Episode
+
+The durable record of one Alert Instance from start to clear (FR-067), kept as append-only events
+in `alerts/episodes.jsonl`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `episode_id` | string | Hash of `instance_id` and the date of `started_at`. |
+| `event` | enum | `opened` (first run to see it firing) \| `observed` (each later run while firing) \| `cleared` (first run that no longer sees it firing). |
+| `run_id`, `at` | string, timestamp | The run that wrote the event and the time it read the alerts (its start within seconds for the scheduled run; a forced re-run's own clock). An open episode on a host the run now ignores (`ignored_hosts` on the classified file) is neither observed nor cleared. |
+| `instance_id`, `rule_uid`, `title`, `host`, `project_url`, `group`, `category`, `importance` | | Copied from the instance. |
+| `started_at`, `cleared_at` | timestamp, timestamp or null | `cleared_at` only on `cleared`. |
+| `duration_hours` | number or null | On `cleared`; never negative (clock skew between the source and the run is recorded as zero and logged). |
+| `correlations` | object | Built by code at `opened` and refreshed on every event: `{ expected_load_window_id, version_change: { from, to, observed } or null, related_candidates: candidate_id[], related_items: item_id[] }`; a version change counts when the project's `cht_version` differs between the runs on either side of `started_at`; candidates and items are related when they are on the same project and their metric is listed under the category in `alerts.yaml`, within one day of `started_at`. |
+| `explanation` | object or null | `{ item_id, why_now }` when an accepted Item of the same project and category exists; model prose, gate-accepted, copied by code. |
+
+An episode that clears is also appended to `corpus/outcomes/<date>.jsonl` as
+`{ kind: 'alert_episode', ... }` so distillation can learn from it (FR-067, FR-030).
+
+### Item
+
+A finding the analysis chose to surface (FR-009). Written by the model, validated by schema, then
+accepted or rejected by the gate.
+
+| Field | Type | Rules |
+|---|---|---|
+| `item_id` | string | **Stable identity**: hash of `project_url`, `metric` and `pattern_card` (or the literal `none`). Computed by code from the model's `item_key`, never by the model (Key Entities). |
+| `project_url` | string | Must be a discovered project (FR-016). |
+| `metric` | string | Must be a metric collected this run. |
+| `severity` | enum | `low` \| `medium` \| `high`. `high` requires at least one referenced candidate with `severity_floor: high`; otherwise the gate rejects with a reason. |
+| `evidence` | Evidence[] | `{ window, value, unit, start, end }`; every `value` must equal a computed value for the metric and window (FR-016). |
+| `why_now` | string | Prose; escaped on render. |
+| `suggested_check` | string | Prose, or the matched pattern card's confirmation steps (US6 scenario 4). |
+| `relates_to` | object or null | `{ item_id, metric, relation }` when the analysis named another item of the same run and project as related, else null (FR-009, revision 20). The analysis names the sibling by its `metric` and code resolves the identity; `relation` is one of `level_of`, `rate_of`, `same_cause`, `consequence_of`. Verification rejects a metric that is not another item of the same findings, or the item's own. Recorded, given to the roll-up and counted in the weekly report; it does not change the two-slot layout (FR-069). When the related item ranks higher, this item is presented under it: nested in the report, named in the higher item's thread reply with the relation and rank, and given no thread reply of its own unless it is a body item (revision 23). A relation naming the item's own metric is dropped by code when the items are normalised, not rejected (revision 24). |
+| `dashboard_ref` | DashboardRef | `{ dashboard_uid, panel_id, project_url, from, to }`, built by code, never by the model (FR-009, revision 18): the dashboard and panel from the metric's own collected `panel_ref`, the bounds from the window the item's leading evidence cites, falling back to `current` and then to the full collected span. `panel_id` is null when the metric's recorded panel is on no priority dashboard (scrape-target health carries a pseudo reference), which links the dashboard rather than an unrelated panel. The link is built from it (FR-016). |
+| `confidence` | number | 0 to 1 inclusive, checked in code. |
+| `persisting_days` | integer | Consecutive prior analysed **dates** whose ranked items contained this `item_id`, plus one (FR-009, revision 21). The date of a run is the first ten characters of its id, and the latest run of a date speaks for that date, so forced re-runs of one date count once and a re-run reports what the date's first run reported. A date whose latest run wrote no ranked items ends the streak. Set by code, never by the model; the agent stage carries a placeholder `1` because persistence is a roll-up concern it cannot know. |
+| `pattern_card` | string or null | Card id from the merged index; unknown ids are rejected. |
+| `candidate_ids` | string[] | Non-empty; every id must exist in this run's candidates. |
+| `reference_urls` | string[] | URLs the model cites; each must have appeared in a tool result this run and be on the allow-list (FR-016). |
+| `rank` | integer | Assigned by the roll-up; 1 is highest. |
+
+A Pass record whose turn failed before a result carries `error` (the runtime's message) and the
+session's `bounds_hit` includes `error`, distinct from `timeout` (revision 13).
+| `placement` | enum | `body` \| `thread` (FR-010). Body items occupy a top-level bullet alone or appear as a project line of their Project Group's bullet (FR-069). |
+| `slot` | integer or null | 1 or 2, the layout's body slots (revision 35): the top-level bullet the item appears in; null in the thread. Assigned by the layout rule under Bullet. |
+| `pass_history` | PassChange[] | `{ pass, change: 'added' \| 'removed' \| 'changed', reason }` (FR-056). |
+
+Lifecycle: `drafted` (pass 1) → `revised` (later passes) → `ranked` → `placed` → `published` →
+`tracked` (a run on a later date increments `persisting_days`) → `reviewed` (Feedback) → `outcome`
+(`confirmed` \| `dismissed` \| `unreviewed`, appended to the corpus as a run outcome, FR-030).
+
+### Pass
+
+One model pass over one project (FR-056 to FR-058).
+
+| Field | Type | Rules |
+|---|---|---|
+| `pass` | integer | 1-based; at most the hard cap in code. |
+| `session_id` | string | Shared by all passes of the project (FR-057). |
+| `items` | Item[] | Output of this pass after schema validation. |
+| `not_selected` | `{ candidate_id, reason? }[]` | Candidates examined but not surfaced. The written `reason` is asked for where the candidate's severity floor is medium or high; a low floor records the id alone, so a project with thirty low-floor candidates does not spend output tokens on thirty paragraphs. The review pass reads this list (FR-057, revision 19). |
+| `changes` | PassChange[] | Empty for pass 1; required for later passes. |
+| `converged` | boolean | True when items match the previous pass on identity, severity and evidence within display rounding (FR-057). |
+| `gate` | VerificationReport | Result of the in-analysis gate for this pass: the final attempt's report. A project with no items, no error and no stopping bound whose every pass carries `outcome: rejected` is named in the brief's incomplete-analysis notice with its commonest failing check (FR-056, revision 22); the roll-up reads this field, nothing new is stored. |
+| `usage`, `cost_usd`, `num_turns`, `duration_ms` | | From the runtime result. |
+| `cost_estimated` (on `passes.json`) | boolean | True when a turn ended without a runtime cost figure (a timeout, the harness turn cap) and the session was charged the rest of its grant instead (revision 34); `cost_usd` on `passes.json`, `agent.summary.json` and the Run is then an upper bound. |
+| `tool_calls_path` | string | JSONL of every tool call and result, for replay (FR-041). |
+
+### Verification Report
+
+The gate's verdict on one draft (FR-016 to FR-018).
+
+| Field | Type | Rules |
+|---|---|---|
+| `subject` | enum | `pass` \| `brief`. |
+| `subject_ref` | string | `<project_slug>/pass<n>` or `rollup/draft<n>`. |
+| `attempt` | integer | 1 to 3; the third failure degrades the run (FR-017). |
+| `checks` | Check[] | `{ name, status: 'pass' \| 'fail', reasons: string[] }`. |
+| `outcome` | enum | `accepted` \| `rejected`. |
+
+Check names, fixed in code: `schema`, `projects_known`, `metrics_known`, `candidates_known`,
+`numbers_match`, `dates_match`, `links_built`, `links_allowlisted`, `links_resolve`,
+`severity_rules`, `bullet_count`, `bullet_length`, `secrets_absent`, `personal_data_absent`,
+`pattern_cards_known`. The same list runs inside the analysis and before publication (FR-018).
+`bullet_count` checks the body slots (at most two) and the project lines per bullet (at most three;
+the count of the rest is a fourth line code writes); `bullet_length` checks two lines of 120 characters per
+bullet and per project line, and that every body item of the layout has exactly one bullet or
+project line (FR-015, FR-069; the caps as revision 35 set them, in `LAYOUT_CAPS`).
+Since revision 33 the brief checks cover the headline and the expected-load notice as they cover a
+bullet (numbers against every item's computed values, links, length, hosts, personal data), and
+`personal_data_absent` refuses a Slack user id or mention anywhere on the published surface.
+
+### Brief
+
+The published post for a run (FR-019 to FR-025).
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | |
+| `kind` | enum | `brief` \| `heartbeat` \| `degraded` \| `failure`. |
+| `headline` | string | One line. |
+\1| `thread` | Bullet[] | The thread bullets (revision 28): one `group` bullet per programme reply (`group` its label) and one for the `Other` reply, in posting order, each with at most three project entries and a count of the rest; built like the body bullets from the layout's `replies`. |\n| `expected_load_notice` | string or null | Present when a window was active (FR-007). |
+| `checked` | object | `{ projects, panels, candidates }` counts, shown on heartbeats (FR-021). |
+| `degradation_notice` | string or null | Required when `kind` is `degraded`. |
+| `notices` | string[] | Added by code, never by the model: projects new since the previous run, marked unconfigured when they have no `projects.yaml` entry (FR-001, SC-008); standing conditions per rule and dark hosts in the housekeeping line (FR-014, FR-080, revision 23); the incomplete-analysis notices, which name the rejected projects by host (up to three, then the count) and the refusing check in plain words (FR-056, revision 25). Empty on most days. |
+| `image` | object or null | Retired in revision 24 (FR-019): always null. Until then `{ path, slack_file_id }`, a screenshot of the report's summary. |
+| `report` | object or null | `{ path, slack_file_id, ts }`: the one-page report shared into the thread as its first reply (FR-022, revision 23); null for a heartbeat or failure; `slack_file_id` and `ts` null in preview. |
+
+**Report** (`rollup/report.html`, FR-022, revision 24): the document a reader opens. Sections in order:
+the summary (headline, bullets, notices, what was checked), the items numbered by rank with related
+items nested (FR-009), the alert groups the brief covered with their instances, the standing conditions
+per host (FR-014), and a footer with the specification, configuration and trace links, the cost, the run id
+and the citation line. Every reference is a link built by code from the structured references the
+thread replies use (`dashboard_ref`, the standing record's `panel_ref`, the alert group's hosts and
+titles) when `AGENT_WATCHDOG_REPORT_LINKS` is `internal`, and a name alone when it is `none`. Numbers
+are rounded for reading at render time (at most three decimals; three significant figures below one),
+in the evidence tables, the standing values, the evidence notes and long decimals inside an item's
+prose; the stored item is untouched. The template is the original design (revision 25): boxed summary
+and item cards, severity chips, window names as recorded, an item header of rank, severity, host,
+metric, persistence and identity with the confidence on its own line beneath the rank; markers follow
+FR-082. The footer line (specs, configuration, trace, cost, run id) is the same line the Slack post
+carries (FR-019).
+| `footer` | object | `{ specs_url, config_url, trace_url, cost_usd }` (FR-019; `specs_url` replaced `prompts_url` in revision 25). |
+| `publication` | Publication or null | `{ channel_id, ts, permalink }` after posting. |
+
+### Bullet
+
+One top-level line of the post body (FR-010, FR-015, FR-069).
+
+| Field | Type | Rules |
+|---|---|---|
+| `kind` | enum | `item` \| `group` \| `alerts`. |
+| `item_id` | string or null | Required when `kind` is `item`; null otherwise. |
+| `group` | string or null | Project Group label; required for `group` and `alerts`. |
+| `text` | string | At most 2 lines of at most 120 characters, no URLs. For `item`: the full host written by code, then the model's description covering every Item of the project (revisions 26 and 28); built by code for `group` ("<label>: <n> projects with <m> issues", counting the whole programme). |
+| `item_ids` | string[] | Every Item an `item` bullet's line covers, the lead first (revision 28); empty for `group`. |
+| `children` | Child[] | At most 4 (revision 28; 8 before). `{ item_id or null, item_ids, text }`: for `group`, one per project entry for at most three projects in rank order, `item_id` the entry's lead and `item_ids` every Item the line covers, its text the project's short host written by code (`north-a: `, two labels when two members share the first) followed by the model's description of all that project's issues in at most two lines (FR-069, revisions 26 and 28), then one code-written line counting the projects beyond three (`item_id` null). `alerts` bullets no longer exist in the body (revision 28). Empty for `item`. |
+| `alert_key` | string or null | For `alerts`: `<group>/<category>` of the group when the bullet holds one category, else `<group>`; the thread reply and its link are built from the Alert Groups it covers (FR-070). |
+
+**Layout rule** (code, before the roll-up call; the result is `rollup/layout.json`, revision 28): group the
+ranked Items by programme (`groupOf`) and, within a programme, by project, both in rank order of their best
+Item. The body holds at most two units, the programmes of the two highest-ranked Items, where an ungrouped
+(`Other`) project counts as a unit of one; a unit of one project is an `item` bullet, a unit of several a
+`group` bullet with one **entry** per project for the three highest-ranked projects and a count of the rest.
+Every programme not in the body with two or more flagged projects becomes a `programme` thread reply in the
+same form; every remaining project, ungrouped or a single-project programme, joins one `other` reply. Alerts
+take no slot. An entry is `{ lead_id, item_ids, host, prefix }`: the project's Items in rank order, its lead the
+first, and the prefix code writes (the short host in a group, the full host for an item bullet). The model's
+draft carries one `{ item_id: lead_id, text }` per entry, body entries then reply entries, each text covering
+every Item of the entry in at most two lines; code assembles the Bullets and the thread bullets from the draft
+and the layout, and the gate rejects a draft whose lead ids differ from the layout's. `rollup/layout.json`
+lists `slots` and `replies` (each with `kind`, `group`, `projects_total`, `entries`, `item_ids`, `more_projects`),
+`entries` by lead id (`item_ids`, `host`, `prefix`, `budget`, `where`, `group`), `body_items`, `reply_items`,
+`thread_items` (every Item not covered by a body entry), `thread_alerts` (every Alert Group key; `body_alerts`
+is empty and `one_line` retired).
+
+### Thread Reply
+
+The messages under the post (FR-020, FR-066, revision 28): the report share first, then one `programme`
+reply per programme not in the body with two or more flagged projects, one `other` reply for the remaining
+projects, and one `alerts` reply with per-programme counts, links and the alert-derived notices. No Item has
+a reply of its own; a note cites an Item by its rank in the report. History: every Item had a reply until
+revision 23, body Items in 23 and 24, high Items in 25 to 27, and each Alert Group had one from revision 14
+to 27.
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | |
+| `kind` | enum | `programme` \| `other` \| `alerts` (revision 28). |
+| `group` | string or null | The programme label for `programme`, `Other` for `other`, null for `alerts`. |
+| `item_id` | string or null | Always null since revision 28 (an Item had its own reply until then). |
+| `alert_key` | string or null | Always null since revision 28 (each Alert Group had its own reply until then). |
+| `text` | string | For `programme` and `other`: the group line and its project lines, escaped. For `alerts`: one line per programme with the firing count and its categories, the new and stale counts and a link to that programme's filtered alert list, then a link to every firing alert, then the housekeeping, resolved and alerts-unavailable notices. |
+| `publication` | Publication | `{ channel_id, ts, permalink }`. |
+
+### Feedback Digest
+
+The once-per-run thread reply that acknowledges new feedback (FR-062, US7). Stored as
+`rollup/feedback.digest.json` and carried in the payload as `digest`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id` | string | |
+| `acknowledged` | string[] | `feedback_id` values acknowledged by this digest; each appears in exactly one digest ever. |
+| `items` | object[] | Per item with new feedback: `{ item_id, host, metric, up, down, notes, effect }` where `effect` is `confidence_up` \| `confidence_down` \| `suppressed` \| `none` and, when suppressed, `until` the horizon date. Since revision 29 (FR-085) also `provenance`: `{ applied, prompt_path, records, lines, lines_total, trace_url, suppressed_until, suppressed_path }` where `applied` is `prompt` \| `suppressed` \| `both` \| `none`; `lines` are the exact `kind`, `verdict`, `note` and `horizon` lines the item's records put into the feedback block of `<slug>/prompt.pass1.md` (each verified to occur in the file), `lines_total` how many lines those records took, `trace_url` the run's trace, pointing at the pass-1 generation when the tracer gave its id, and `suppressed_until` the horizon that held the item's candidates back before analysis. |
+| `brief` | object | `{ up, down, notes }` for reactions on the parent post. |
+| `proposals` | object[] | `{ proposal_id, type, path }` written from this feedback, each once: the notes of one item thread share one proposal (revision 29). |
+| `unclassified` | integer | Notes whose classification call failed and which have attempts left: left out of `acknowledged` and the tallies, reviewed again next run (revision 34). |
+| `unclassifiable` | integer | Notes acknowledged by this digest after their last failed attempt, said so in words (revision 34). |
+| `retention` | object | `{ records_path, influence_days }`: where the records live permanently and how long they adjust ranking. |
+| `reactions` | object[] | `{ source_ts, name: 'eyes', ok }` per acknowledged note after posting; empty in preview. |
+| `publication` | Publication or null | The digest's own message in the brief's or heartbeat's thread. |
+
+The digest names no person: authors are counted, never shown.
+
+**The publication record (revision 34).** `rollup/publication.json` is written as soon as the parent post
+is up, with `partial: true`, `replies: []` and no report, and rewritten whole once the thread and the digest
+are posted; a Slack failure in between leaves the record of what reached the channel, a forced re-run links
+it as superseded, and a stage-only publish refuses to post a second parent for the run (exit 75).
+
+### Feedback
+
+A reaction or note from a named person (FR-026 to FR-029). Appended to `feedback.jsonl`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `feedback_id` | string | Hash of `source_ts`, `author`, `kind`, `verdict`. Duplicate ids are ignored on re-ingestion. |
+| `date` | string | Date the feedback was observed. |
+| `run_id` | string | Run whose post carried the reaction or note. |
+| `target` | enum | `item` \| `brief` \| `alert_group`. A reaction on the parent post targets the brief (US2 scenario 3); one on an alert-group reply targets that group (FR-066). |
+| `item_id` | string or null | Required when `target` is `item`. |
+| `alert_key` | string or null | Required when `target` is `alert_group`. Recorded and acknowledged like item feedback; it does not change alert ranking in this revision. |
+| `kind` | enum | `reaction` \| `note`. |
+| `verdict` | enum or null | `up` \| `down` \| `retracted` for reactions. For a note, `up` or `down` when the note carries a thumbs (`:+1:`, `:thumbsup:`, `:-1:`, `:thumbsdown:` or the emoji), else null; a note's verdict counts in the tallies like a reaction on the item it cites (revision 23). A removed reaction is recorded as `retracted`, its id in the verdict's own space (`retracted:up`, `retracted:down`, numbered again after a re-add; revision 36) (Edge Cases). |
+| `note` | string or null | Thread reply text, verbatim, untrusted. |
+| `horizon` | string or null | Date parsed from the note by the feedback-parsing stage, when one is stated (US2 scenario 1): the note's own statement. The horizon applied to the item is its thread's clarified whole, the last horizon the notes state in thread order (FR-085, revision 29). |
+| `author` | string | Slack user id. Never rendered into partner-facing output. |
+| `matched` | boolean | False when a note names no item; surfaced next run (US2 scenario 4). |
+| `source_ts` | string | Slack message timestamp the feedback was read from. |
+| `acknowledged_run_id` | string or null | Run whose digest acknowledged this record; set once, by the run that posted it, never in preview (FR-062). |
+| `classification` | enum or null | For notes: `expectation` \| `project_annotation` \| `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `none`; null until reviewed, and still null after a failed classification call so the next run retries (FR-061). Reactions are never classified. The unreviewed notes of one item are reviewed together in thread order and share the classification of the clarified whole (FR-085, revision 29). |
+| `proposal_id` | string or null | Proposal written from this note, when its classification produced one (FR-061); shared by the notes of one item thread reviewed together, whose ids the proposal's evidence and source line all carry (revision 29). |
+| `expected_max` | number or null | The largest value the note said to expect, as its parse found it (revision 34); the thread's last stated maximum is the one a horizon applies. |
+| `observed_value` | number or null | The item's current value when the note was matched to it (revision 34), the bar an unnoted expectation is measured against. |
+| `horizon_source` | enum or null | How the horizon was found: `deterministic` \| `model` \| `model-invalid` \| `model-failed` \| `none` (revision 34). A stored note with `model-failed` or `model-invalid` and no horizon is read again by the next run that has a model. |
+| `review_attempts` | integer | Classification calls that failed on the note (revision 34); after `MAX_REVIEW_ATTEMPTS` (3) the note is acknowledged unclassified. |
+
+Records are kept permanently (FR-059); `purge` never removes or compacts `feedback.jsonl`. Only
+the ranking tallies apply the influence window (FR-060): a record older than
+`AGENT_WATCHDOG_FEEDBACK_INFLUENCE_DAYS` counts for nothing, while its horizon, if any, holds until
+its date.
+
+**Thread order and the clarified whole (FR-085, revision 29).** The notes on one item are one conversation:
+in thread order (the run whose post they sit under, then `source_ts`), the last note that states a horizon sets
+the horizon applied, the last that states an expected maximum sets that, and every author is counted. The
+ingester writes one such horizon per item into `feedback.ingested.json` `horizons` (`author_count` is the
+number of authors in the thread, `note` the note that set the horizon), never a superseded one, and
+`by_item[].horizon` follows the same rule over every stored note of the item. A note that states no date and
+reaches the model is parsed with the earlier notes of its thread as context. Each record keeps its own
+`horizon` for audit.
+
+### Memory
+
+The agent's curated notes (FR-031).
+
+| Field | Type | Rules |
+|---|---|---|
+| `path` | string | `memory/memory.md`. |
+| `max_tokens` | integer | From `AGENT_WATCHDOG_MEMORY_MAX_TOKENS`; estimated as `ceil(chars / 4)` with a 10 % margin, in code. |
+| `version` | integer | Incremented per change. |
+| `diffs` | string[] | `memory/history/<run_id>.patch`, one unified diff per run that changed memory. |
+
+At the cap the agent condenses within the cap; the run does not fail (US4 scenario 2).
+
+### Proposal
+
+A suggested change awaiting human review (FR-032, FR-033).
+
+| Field | Type | Rules |
+|---|---|---|
+| `proposal_id` | string | `<date>-<type>-<slug>`. |
+| `type` | enum | `skill` \| `prompt` \| `threshold` \| `pattern_card` \| `project_annotation`. A `project_annotation` body carries a ready-to-paste `projects.yaml` fragment in a fenced block plus a short rationale (FR-061). |
+| `run_id` | string | Run that produced it. |
+| `title`, `body` | string | Pattern-level Markdown. |
+| `evidence` | object[] | Replayed evidence: for thresholds, current value, proposed value, observed distribution, effect on the last 30 days of items including confirmed items kept (US4 scenario 4). |
+| `flags` | Flag[] | `{ kind: 'hostname' \| 'person' \| 'address' \| 'secret', excerpt }` — identifiers found; the proposal is written with the identifier masked and the flag shown to the reviewer (FR-033). |
+| `status` | enum | `proposed` \| `superseded`. Acceptance happens by PR, outside this system. |
+
+### Corpus Item
+
+A raw file placed in the knowledge corpus (FR-034, FR-035).
+
+| Field | Type | Rules |
+|---|---|---|
+| `relative_path` | string | Under `AGENT_WATCHDOG_CORPUS_RAW_DIR`; never copied into a proposal. |
+| `content_hash` | string | Full SHA-256; identity for change detection (US6 scenario 2). |
+| `size_bytes` | integer | |
+| `kind` | enum | `conversation` \| `export` \| `incident` \| `explainer` \| `run_outcome` \| `unknown`. |
+| `status` | enum | `new` \| `distilled` \| `skipped`. A changed hash resets to `new`. |
+| `skipped_reason` | string or null | Required when skipped, for example `binary` or `too_large` (Edge Cases). |
+| `distilled_at` | timestamp or null | |
+| `card_ids` | string[] | Cards that cite this item. |
+
+The corpus index (`corpus/index.json`) holds these records and nothing of the content (FR-037).
+
+### Pattern Card
+
+A reviewed description of a recurring pattern (FR-035, FR-036, FR-038). Markdown with YAML front
+matter under `skill/cht-watchdog/pattern-cards/<card_id>.md`; a one-line-per-card index at
+`skill/cht-watchdog/pattern-cards/index.md` is what the daily analysis loads.
+
+| Field | Type | Rules |
+|---|---|---|
+| `card_id` | string | Slug; identity. |
+| `title` | string | |
+| `symptom` | string | |
+| `metrics` | `{ metric, shape }[]` | Shape is prose such as `rises over hours`. |
+| `watchdog_appearance` | string | |
+| `root_cause`, `resolution` | string | |
+| `confirmation_steps` | string[] | Used as `suggested_check` when matched (US6 scenario 4). |
+| `false_positives` | string[] | |
+| `sources` | string[] | Corpus item content hashes. |
+| `status` | enum | `proposed` \| `merged`. Only merged cards are indexed. |
+
+### Calibration Report
+
+Weekly, per project and metric (US4 scenario 4, FR-058).
+
+| Field | Type | Rules |
+|---|---|---|
+| `week` | string | ISO week `YYYY-Www`. |
+| `entries` | Entry[] | Per `project_url` and `metric`: `distribution` (percentiles of daily percentage change and deviation), `outcomes` `{ confirmed, dismissed, unreviewed, model_dismissed }`, `selection` `{ raised, became_items, set_aside, reasons: [{ reason, count }] }` (FR-014a, FR-058, revision 20), `current_threshold`, `suggested_threshold`, `effect_last_30d` `{ items_kept, items_dropped, confirmed_kept }`. A suggestion resting on the analysis's own dismissals says so in its reason; a person's verdict on the same candidate outranks it. |
+| `pass_change_rate` | number | Share of projects where a later pass changed the outcome (FR-058). |
+| `related_metric_pairs` | object[] | `{ metrics: [a, b], relation, count }`, commonest first: the metric pairs the analysis reported as related, unordered within a pair (FR-009, revision 20). |
+| `proposals` | string[] | Threshold proposal ids written from this report. |
+| `open_proposals` | object[] | Every proposal still `proposed`, as `{ proposal_id, type, age_days }`, so the weekly report is the one reminder of what awaits review (FR-063). |
+| `feedback_rate` | object | `{ window_days: 60, overall, by_month: [{ month, rate, items }] }`, computed from `corpus/outcomes/`, which outlive run-record retention (SC-002). |
+
+### Expected-Load Window
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | string | Slug. |
+| `scope` | string | `all` or a project URL. |
+| `kind` | enum | `month_end` \| `dates` \| `weekly`. |
+| `start`, `end` | string | Local dates or day offsets per `kind`. |
+| `timezone` | string | IANA zone; required (Edge Cases). |
+| `note` | string | Shown in the post when active (FR-007). |
+| `cycle_days` | integer | Length of the cycle used for `previous_cycle` comparison. |
+
+### Priority List
+
+| Field | Type | Rules |
+|---|---|---|
+| `dashboards` | `{ uid, title, panel_ids }[]` | Ordered; `panel_ids` empty means every panel. The analysis may still look beyond the list (FR-003). |
+
+### Cost Record
+
+| Field | Type | Rules |
+|---|---|---|
+| `run_id`, `project_url`, `stage`, `pass` | | `project_url` null for roll-up and feedback parsing. |
+| `model` | string | |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` | integer | |
+| `cost_usd` | number | From the runtime result. |
+| `num_turns`, `duration_ms` | integer | |
+| `kind` | string, optional | On the feedback stage's calls: `parse` (a horizon) or `review` (a note), one record shape for both (revision 36). |
+
+Cache counters are read under both spellings the runtime uses (`cache_read_input_tokens` and
+`cache_read_tokens`) through `normaliseUsage`; the roll-up's records carried zeros until revision 23
+because they read one spelling only.
+
+## Relationships
+
+- A Run analyses many Projects; each Project has many Metric Windows, one Computed Change per
+  metric, zero or more Candidates, and one Pass per analysis pass.
+- An Item references one or more Candidates of the same project and at most one Pattern Card.
+- A Brief carries at most two Bullets in its body; a Bullet holds one Item or one Project Group's
+  Items as project lines; alerts take no Bullet. Every programme not in the body with two or more
+  flagged projects has one Thread Reply, the remaining projects share one, the alerts share one, and
+  the report share and the feedback digest are the other replies.
+- A Project belongs to one Project Group. An Alert Instance belongs to one Alert Rule and, through
+  its host, to one Project and one Project Group; an Alert Episode follows one Alert Instance from
+  start to clear and may name one Item as its explanation.
+- Feedback targets one Item or the Brief; Items accumulate Feedback across runs by `item_id`.
+- A Proposal belongs to the Run that wrote it; Pattern Cards cite Corpus Items by hash.
+- A Calibration Report reads Runs, Items and Feedback from the retention window.
+
+## Cross-cutting validation rules
+
+- Number matching (FR-016): the gate extracts every numeric token from bullet text, formats each
+  computed value for the metric with the same display formatter, and requires every token to match
+  one formatted value. Formatter, fixed in code: integers with thousands separators; other values to
+  three significant figures; percentages with one decimal and a `%` sign; durations as `Nh` or
+  `Nd`. Numerals inside backtick code spans are exempt from matching; instead each code span must
+  equal, character for character, a PromQL expression from a collected panel target or a metric
+  name collected this run, otherwise `numbers_match` fails. Bullet text outside code spans never
+  contains PromQL. Three further token sets are exempt, all built in code from the run's own
+  discovery (revision 22): every numeric form of a window name (`14` and `14d` alike), every numeral
+  inside a collected metric key or panel expression (so `60`, `60`, `24` from a rate-per-day
+  expression written in prose), and every collected panel id. They are identifiers the run gave the
+  model, not figures it computed. A fourth set is the numerals of the text the model was given in
+  its session (revision 23): for findings, every prompt of the session and every tool result it
+  received (`givenText`); for a brief bullet, that item's own prompt entry and the run-wide counts
+  only, never another item's. These sets match on the bare value, separators and unit letter
+  dropped. A fifth set is the **derived values** (revision 24): for every pair of count values the item
+  may quote (levels and increases; a ratio, a percentage or a duration pairs with nothing), their
+  difference, their ratio and their percent change, matched within display rounding like a computed
+  value, so "+27" for 845 against 818 and "-56%" for a fall the model worked out pass, and the run's
+  revisions no longer refuse correct subtraction. Pairing every unit let almost any two-digit numeral
+  through, which is why the pairs are counts alone. A numeral in none of the sets that matches no
+  computed or derived value fails, as before. Revision 25 (research.md R-30): the tokeniser reads a
+  comma as a thousands separator only in groups of three after a first group of one to three digits,
+  so `1789538400,390778880` in a tool result is two given numbers; a token with a decimal point or a
+  percent sign that rounds a given numeral within its own decimals is that numeral; a percentage
+  matches by magnitude; a numeral followed by `days` or `hours` carries the unit, and a metric whose
+  key ends in `_seconds` has values in seconds; the range literals of collected expressions (`24h`)
+  join the identifier sets; and the brief's gate receives the run's candidates, so a cited
+  candidate's observed and threshold values count in a bullet.
+  Evidence (revision 33): every `{ window, value }` the model attaches to an item must itself equal,
+  within the value's own decimals, a computed value of that metric (the Computed Change's levels,
+  baselines and rates, a cited candidate's observed value and threshold, a candidate's evidence) or a
+  value in the collected series of the named window; evidence never widens the values the prose may
+  quote, so an invented figure has no back door. The headline and the notice are checked against the
+  union of every item's allowed values and every item's given entry, the notice also against the notice
+  the run gave. Revision 36: a value the check verified against a collected sample may be quoted in the
+  prose, rounded or derived, and each evidence entry is checked against the values of its own window.
+  Revision 37: evidence in a percentage, multiple, sigma or hour unit matches only the metric's values
+  in that unit family, and a verified entry is quoted under the unit of the value it matched; the day's
+  restart count is a level of the current window.
+- Date matching (FR-016, revisions 33, 36 and 37): `dates_match` extracts every date the model writes
+  (ISO `YYYY-MM-DD` and timestamps, `1 October`, `October 1`, with or without a year) from `why_now`,
+  `suggested_check` and the evidence notes of a finding, and from the headline, bullets and
+  expected-load notice of a brief, and requires each to fall within the run's windows: for a finding
+  the span of its metric's collected windows, for a brief the span from the trailing window's start to
+  the current window's end, widened to the previous cycle of the longest active expected-load window.
+  A day-month phrase without a year has three readings, the years around the span's end: it is exempt
+  when any reading was given, and otherwise checked in the reading nearest the run. A date the model was
+  given is exempt: `givenText` (prompts and tool results), `givenDateText` (the session's system prompt
+  with its window notes and memory; for a brief the feedback read that day and the memory, given for
+  dates only, never for numerals) and an item's own entry. The one matcher for a written date is shared
+  with the number check (`src/verify/patterns.js`): a lowercase "may" beside a number is the verb, and a
+  day the month cannot hold is a numeral. The `dashboard_ref` range is still held to the same span. The
+  former check on evidence `start`/`end` fields is gone: the findings schema never admitted them.
+- Links (FR-016): the model emits no URLs except `reference_urls`. Dashboard links are built by
+  code from `dashboard_ref`; every link must resolve (HTTP 2xx or 3xx) and its host must be on the
+  allow-list held in code: the configured Grafana host, `docs.communityhealthtoolkit.org`,
+  (alert-list links are built by code from an Alert Group's rule titles and hosts as a `search`
+  filter and resolve by confirming every title and host exists in the collected Alert Rules and
+  Instances, research.md R-14; FR-070),
+  `forum.communityhealthtoolkit.org`, `github.com/medic/`, the tracing host, and the hosts of
+  `AGENT_WATCHDOG_SPECS_URL` and `AGENT_WATCHDOG_CONFIG_URL`.
+- Secrets and personal data (FR-016, FR-045): reject on patterns for Slack tokens (`xox[abp]-`),
+  Anthropic keys (`sk-ant-`), Grafana tokens (`glsa_`), bearer strings, e-mail addresses and
+  phone numbers. A run of nine or more digits that equals, as an integer, a value the number check
+  allows for the item (evidence, the metric's computed changes, a cited candidate's observed or
+  threshold value) is a number and not a phone number; one matching nothing computed is still
+  rejected (revision 22). A phone-shaped match whose whitespace- or bracket-separated parts are each
+  a decimal number, a date or a time is a list of values, not a phone number, and a host-like token
+  that is the leading two or more labels of a discovered host names that project (`projects_known`;
+  revision 23). A decimal may carry a leading sign (revision 24). A run of digits equal to a numeral
+  in the text the model was given (its prompts and tool results; for a bullet, its item's own entry)
+  is a number it read, not a phone number, and the reason names the digits refused (revision 25).
+  The failure notice (FR-024) is code text outside the gate; its quoted error message passes through
+  these same patterns with every match redacted before it is posted (revision 27). These lists, the
+  check names and the link allow-list are closed and fixed in code; the spec names them (FR-016,
+  revision 27). Partner-facing scans are out of scope here (feature 002).
+- Untrusted text (FR-044): tool results, notes and corpus excerpts are wrapped in labelled
+  delimiters in prompts and rendered only through Handlebars `{{ }}` escaping; `{{{ }}}` is
+  forbidden by lint rule in templates.
+- Identity stability: `item_id` ignores severity, values and wording so an item persists across
+  days while its evidence changes.
+
+## Scale assumptions
+
+- Up to 100 projects, 10 dashboards and roughly 200 panel expressions per project (revision 11:
+  the hosted watchdog had 95 analysed projects and 91 per-project metrics on 2026-09-20).
+- Queries per day: four per metric per project on a cold volume, one from the eighth consecutive
+  day (FR-072); at 100 projects and 100 metrics that is 10,000 range queries, about ten minutes at
+  concurrency 3 and 180 ms per query. The ledger adds one number per metric per day per project,
+  under one megabyte across the volume.
+- Raw windows: five windows of 24 hours at a 5-minute step plus the 14-day trailing window is
+  about 5,500 samples per metric. At 200 metrics a project's raw file is roughly 10 MB uncompressed;
+  50 projects for 14 days is under 10 GB only if raw files are gzip-compressed on write, so
+  `inputs/windows.json.gz` is written compressed. Everything else is small.
+- Up to 500 firing Alert Instances per run; a group's thread reply lists at most fifty of them, and
+  `alerts/episodes.jsonl` grows by one line per firing instance per day, kilobytes a year.
+- Model usage is bounded per project and per run by configuration with hard caps in code
+  (FR-012); projects with no candidates cost nothing (FR-013).

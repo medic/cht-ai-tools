@@ -1,0 +1,27 @@
+# The reviewed alert policy (FR-065): category and importance per Grafana-managed rule title, the staleness
+# threshold, and the metric names that count as related to each category when episodes are correlated (FR-067).
+# Titles match the rules the hosted watchdog provisions (cht-watchdog grafana/provisioning/alerting/cht.yml). A
+# firing rule whose title is absent here is reported as uncategorised with medium importance; add it here by PR.
+stale_after_days: 14                    # firing this long or longer is "stale"
+rules:                                  # keyed by rule title exactly as provisioned
+  API Server Down:              { category: availability,  importance: critical }
+  Sentinel Backlog:             { category: backlog,       importance: high }
+  Outbound Push Backlog:        { category: backlog,       importance: high }
+  Message Delivery Rate:        { category: messaging,     importance: high }
+  DB Conflicts Rate:            { category: database,      importance: medium }
+  Client Feedback/Error Rate:   { category: client_errors, importance: medium }
+  Users Over Replication Limit: { category: replication,   importance: medium }
+  DB Fragmentation:             { category: database,      importance: low }
+  Server Time Accurate:         { category: host,          importance: low }
+  Message Delivery (2h):        { category: messaging,     importance: high }
+  Low Disk Space - 80% Full:    { category: capacity,      importance: high }
+  Sentinel Backlog >50:         { category: backlog,       importance: medium }   # the hosted lower threshold (R-28)
+categories:                             # metric names related to a category; a metric key that contains one counts
+  availability: ['up{job="cht"}']
+  backlog: [cht_sentinel_backlog_count, cht_outbound_push_backlog_count]
+  messaging: [cht_messaging_outgoing_total]
+  database: [cht_conflict_count, cht_couchdb_fragmentation]
+  client_errors: [cht_feedback_total]
+  replication: [cht_replication_limit_count]
+  host: [cht_date_current_millis]
+  capacity: []                          # node exporter disk metrics are not on the collected dashboards

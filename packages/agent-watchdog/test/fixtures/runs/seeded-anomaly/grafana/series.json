@@ -1,0 +1,258 @@
+{
+  "run_start": "2026-09-18T06:00:00Z",
+  "hosts": [
+    "alpha.example.org",
+    "beta.example.org",
+    "gamma.example.org"
+  ],
+  "down": [
+    "gamma.example.org"
+  ],
+  "versions": {
+    "alpha.example.org": {
+      "app": "4.11.0",
+      "node": "v20.11.1",
+      "couchdb": "3.3.3"
+    },
+    "beta.example.org": {
+      "app": "4.5.2",
+      "node": "v20.11.1",
+      "couchdb": "3.3.3"
+    },
+    "gamma.example.org": {
+      "app": "3.17.0",
+      "node": "v20.11.1",
+      "couchdb": "2.3.1"
+    }
+  },
+  "metrics": {
+    "cht_outbound_push_backlog_count": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 0,
+          "noise": 0
+        },
+        "beta.example.org": {
+          "base": 0,
+          "noise": 0
+        },
+        "gamma.example.org": {
+          "base": 0,
+          "noise": 0
+        }
+      }
+    },
+    "cht_sentinel_backlog_count": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 300,
+          "noise": 0.03
+        },
+        "beta.example.org": {
+          "base": 120,
+          "noise": 0.03
+        },
+        "gamma.example.org": {
+          "base": 40,
+          "noise": 0.03
+        }
+      },
+      "anomaly": {
+        "host": "alpha.example.org",
+        "kind": "monotonic_rise",
+        "hours": 7,
+        "to": 912
+      }
+    },
+    "cht_replication_limit_count": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 5,
+          "noise": 0.05
+        },
+        "beta.example.org": {
+          "base": 5,
+          "noise": 0.05
+        },
+        "gamma.example.org": {
+          "base": 5,
+          "noise": 0.05
+        }
+      }
+    },
+    "cht_conflict_count": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 15,
+          "noise": 0.04
+        },
+        "beta.example.org": {
+          "base": 15,
+          "noise": 0.04
+        },
+        "gamma.example.org": {
+          "base": 15,
+          "noise": 0.04
+        }
+      }
+    },
+    "cht_feedback_total": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 4,
+          "noise": 0.05
+        },
+        "beta.example.org": {
+          "base": 4,
+          "noise": 0.05
+        },
+        "gamma.example.org": {
+          "base": 4,
+          "noise": 0.05
+        }
+      }
+    },
+    "cht_date_uptime_seconds": {
+      "unit": "s",
+      "levels": {
+        "alpha.example.org": {
+          "base": 2592000,
+          "noise": 0.001
+        },
+        "beta.example.org": {
+          "base": 2592000,
+          "noise": 0.001
+        },
+        "gamma.example.org": {
+          "base": 2592000,
+          "noise": 0.001
+        }
+      }
+    },
+    "cht_date_current_millis": {
+      "unit": "ms",
+      "levels": {
+        "alpha.example.org": {
+          "base": 120,
+          "noise": 0.02
+        },
+        "beta.example.org": {
+          "base": 120,
+          "noise": 0.02
+        },
+        "gamma.example.org": {
+          "base": 120,
+          "noise": 0.02
+        }
+      }
+    },
+    "cht_couchdb_fragmentation": {
+      "unit": "ratio",
+      "levels": {
+        "alpha.example.org": {
+          "base": 2.3,
+          "noise": 0.01
+        },
+        "beta.example.org": {
+          "base": 2.3,
+          "noise": 0.01
+        },
+        "gamma.example.org": {
+          "base": 2.3,
+          "noise": 0.01
+        }
+      }
+    },
+    "cht_couchdb_doc_total": {
+      "unit": "count",
+      "kind": "counter",
+      "levels": {
+        "alpha.example.org": {
+          "base": 1200,
+          "noise": 0.02
+        },
+        "beta.example.org": {
+          "base": 1200,
+          "noise": 0.02
+        },
+        "gamma.example.org": {
+          "base": 1200,
+          "noise": 0.02
+        }
+      }
+    },
+    "cht_connected_users_count": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 1085,
+          "noise": 0.02
+        },
+        "beta.example.org": {
+          "base": 1085,
+          "noise": 0.02
+        },
+        "gamma.example.org": {
+          "base": 1085,
+          "noise": 0.02
+        }
+      }
+    },
+    "cht_messaging_outgoing_total": {
+      "unit": "count",
+      "levels": {
+        "alpha.example.org": {
+          "base": 950,
+          "noise": 0.03
+        },
+        "beta.example.org": {
+          "base": 950,
+          "noise": 0.03
+        },
+        "gamma.example.org": {
+          "base": 950,
+          "noise": 0.03
+        }
+      }
+    },
+    "cht_api_http_request_total": {
+      "unit": "reqps",
+      "levels": {
+        "alpha.example.org": {
+          "base": 12,
+          "noise": 0.05
+        },
+        "beta.example.org": {
+          "base": 12,
+          "noise": 0.05
+        },
+        "gamma.example.org": {
+          "base": 12,
+          "noise": 0.05
+        }
+      }
+    },
+    "cht_api_http_request_duration_seconds_bucket": {
+      "unit": "s",
+      "levels": {
+        "alpha.example.org": {
+          "base": 0.31,
+          "noise": 0.04
+        },
+        "beta.example.org": {
+          "base": 0.31,
+          "noise": 0.04
+        },
+        "gamma.example.org": {
+          "base": 0.31,
+          "noise": 0.04
+        }
+      }
+    }
+  }
+}

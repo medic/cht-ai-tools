@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "slug": "cht-api-server",
+    "url": "/d/3J_78b6Zz/cht-api-server",
+    "folderTitle": "CHT"
+  },
+  "dashboard": {
+    "uid": "3J_78b6Zz",
+    "title": "CHT API Server",
+    "tags": [
+      "CHT 4.3+"
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "cht_instance",
+          "type": "query",
+          "label": "CHT Instance",
+          "query": "query_result(up{job=~\"cht\"})",
+          "regex": "/.*instance=\"([^\"]+).*/",
+          "multi": false,
+          "includeAll": false,
+          "current": {
+            "text": "alpha.example.org",
+            "value": "alpha.example.org"
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Requests per second",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "sum(rate(cht_api_http_request_total{instance=~\"$cht_instance\"}[5m]))",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "p95 latency",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "expr": "histogram_quantile(0.95, sum(rate(cht_api_http_request_duration_seconds_bucket{instance=~\"$cht_instance\"}[5m])) by (le))",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "PBFA97CFB590B2093"
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      }
+    ]
+  }
+}

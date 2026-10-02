@@ -1,0 +1,90 @@
+# Reference only (deploy/README.md): the scheduled run under the container contract (FR-086). Placeholder hosts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-watchdog-env
+  namespace: agent-watchdog
+data:
+  AGENT_WATCHDOG_DATA_DIR: /data
+  AGENT_WATCHDOG_CONFIG_DIR: /etc/agent-watchdog
+  AGENT_WATCHDOG_GRAFANA_URL: https://watchdog.example.org
+  AGENT_WATCHDOG_PROMETHEUS_DATASOURCE_UID: PBFA97CFB590B2093
+  AGENT_WATCHDOG_SLACK_CHANNEL_ID: C0000000000
+  AGENT_WATCHDOG_DOCS_MCP_URL: https://docs-mcp.example.org/mcp
+  LANGFUSE_BASE_URL: https://langfuse.example.org
+  AGENT_WATCHDOG_SPECS_URL: https://github.com/medic/cht-ai-tools/tree/main/packages/agent-watchdog/specs/001-watchdog-slack-loop
+  AGENT_WATCHDOG_CONFIG_URL: https://github.com/medic/medic-infrastructure
+  AGENT_WATCHDOG_RUN_TIMEOUT_MS: "3600000"
+  AGENT_WATCHDOG_LOG_FORMAT: json
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: agent-watchdog
+  namespace: agent-watchdog
+spec:
+  schedule: "0 6 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # The run's own timeout (AGENT_WATCHDOG_RUN_TIMEOUT_MS) plus ten minutes, so the package posts its failure
+      # notice before the platform ends the pod.
+      activeDeadlineSeconds: 4200
+      template:
+        metadata:
+          labels:
+            app: agent-watchdog
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: agent-watchdog
+              image: ghcr.io/medic/agent-watchdog:1.0.0
+              args: ["run"]
+              envFrom:
+                - configMapRef:
+                    name: agent-watchdog-env
+                - secretRef:
+                    name: agent-watchdog-secrets
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: tmp
+                  mountPath: /tmp
+                - name: policy
+                  mountPath: /etc/agent-watchdog
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: agent-watchdog-data
+            - name: tmp
+              emptyDir:
+                sizeLimit: 1Gi
+            - name: policy
+              configMap:
+                name: agent-watchdog-policy

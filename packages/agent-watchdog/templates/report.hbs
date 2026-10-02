@@ -1,0 +1,125 @@
+<!doctype html>
+<!--
+  Design read (recorded once, per the plan): the audience is an on-call engineer who opened the report from the
+  thread to act on a check or dig further. One column, generous type, high contrast; severity is written as a word as
+  well as coloured; numbers are large and the comparison sits next to them; no external assets, no scripts, nothing
+  depends on network. Revision 24 tried a redesign under a design skill; revision 25 returned to this original design
+  at the operator's request, keeping the links to panels and alert lists, the alerts card, the one footer shared with
+  the Slack post and the rounding for reading. Every value is rendered through Handlebars escaping; the only raw
+  markup is the numeric SVG sparkline and the code-built href values.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Watchdog report {{run_id}}</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; padding: 24px; background: #f6f7f9; color: #0f172a; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: #0369a1; }
+  #brief-summary { width: 840px; background: #fff; border: 1px solid #d9dee5; border-radius: 12px; padding: 24px 28px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .meta { font-size: 12px; color: #4b5563; text-transform: uppercase; letter-spacing: .04em; }
+  h1 { font-size: 24px; margin: 6px 0 14px; line-height: 1.25; }
+  .kind { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #e5e7eb; color: #0f172a; }
+  .kind-degraded { background: #fde68a; }
+  .kind-heartbeat { background: #bbf7d0; }
+  .notice { margin: 8px 0; padding: 8px 12px; border-left: 4px solid #6b7280; background: #f3f4f6; }
+  ul.bullets { padding-left: 20px; margin: 0 0 8px; }
+  ul.bullets li { margin: 6px 0; font-size: 16px; }
+  ul.sub { padding-left: 18px; margin: 4px 0 0; list-style: circle; }
+  ul.sub li { margin: 2px 0; font-size: 14px; }
+  .checked { font-size: 13px; color: #4b5563; margin-top: 8px; }
+  section.item { width: 840px; background: #fff; border: 1px solid #d9dee5; border-radius: 12px; padding: 18px 28px; margin-top: 16px; }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .sev { font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+  .sev-high { background: #fecaca; color: #7f1d1d; }
+  .sev-medium { background: #fde68a; color: #78350f; }
+  .sev-low { background: #e5e7eb; color: #0f172a; }
+  .metric { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
+  .confidence { font-size: 13px; color: #4b5563; margin: 4px 0 0 2px; }
+  table.evidence { border-collapse: collapse; margin: 8px 0; }
+  table.evidence td { padding: 2px 12px 2px 0; font-variant-numeric: tabular-nums; }
+  .value { font-size: 22px; font-weight: 700; }
+  .note { font-size: 12px; color: #6b7280; }
+  .spark { margin: 6px 0; }
+  .footer { font-size: 12px; color: #4b5563; margin-top: 12px; }
+  .cite { font-size: 12px; color: #4b5563; margin-top: 6px; }
+  .rank { font-weight: 700; margin-right: 4px; }
+  .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #6b7280; margin-left: 16px; }
+  ul.related { padding-left: 18px; margin: 8px 0 0; border-left: 3px solid #d9dee5; list-style: none; }
+  ul.related li { margin: 6px 0; font-size: 14px; }
+  .relation { font-style: italic; color: #4b5563; margin-right: 6px; }
+  section.standing, section.alerts { width: 840px; background: #fff; border: 1px solid #d9dee5; border-radius: 12px; padding: 18px 28px; margin-top: 16px; }
+  section.standing h2, section.alerts h2 { font-size: 18px; margin: 0 0 8px; }
+  section.standing h3, section.alerts h3 { font-size: 14px; margin: 10px 0 4px; color: #4b5563; }
+  .summary { font-size: 13px; color: #4b5563; margin-left: 8px; }
+</style>
+</head>
+<body>
+<div id="brief-summary">
+  <div class="meta">agent-watchdog · run {{run_id}} · {{date}} <span class="kind kind-{{kind}}">{{kind_label}}</span></div>
+  <h1>{{headline}}</h1>
+{{#if has_bullets}}
+  <ul class="bullets">
+{{#each bullets}}
+    <li>{{text}}{{#if has_children}}
+      <ul class="sub">
+{{#each children}}
+        <li>{{text}}</li>
+{{/each}}
+      </ul>
+    {{/if}}</li>
+{{/each}}
+  </ul>
+{{/if}}
+{{#each notices}}
+  <div class="notice">{{text}}</div>
+{{/each}}
+  <div class="checked">Checked {{checked.projects}} projects, {{checked.panels}} panels, {{checked.candidates}} candidates.</div>
+  <div class="footer">{{#if footer.links}}{{#if footer.specs_url}}<a href="{{href footer.specs_url}}">specs</a>{{else}}specs{{/if}} · {{#if footer.config_url}}<a href="{{href footer.config_url}}">configuration</a>{{else}}configuration{{/if}} · {{#if footer.trace_url}}<a href="{{href footer.trace_url}}">trace</a>{{else}}trace: none{{/if}}{{else}}specs · configuration · trace: {{footer.trace_text}}{{/if}} · cost {{footer.cost_text}} · run {{run_id}}</div>
+  <div class="cite">To cite an item in a thread note, give its number (#rank) or its host and metric; a thumbs up or down in the note is its verdict.</div>
+</div>
+{{#each items}}
+<section class="item">
+  <div class="head"><span class="rank">{{rank_text}}</span><span class="sev sev-{{severity}}">{{severity_label}}</span><strong>{{host}}</strong> · <span class="metric">{{metric}}</span>{{#if link}} · <a href="{{href link}}">panel</a>{{/if}} · {{persisting_text}}<code class="id">{{item_id}}</code></div>
+  <div class="confidence">confidence {{confidence_pct}}%</div>
+  <table class="evidence">
+{{#each evidence}}
+    <tr><td>{{window}}</td><td class="value">{{value}}</td><td>{{unit}}</td><td class="note">{{note}}</td></tr>
+{{/each}}
+  </table>
+  <div class="spark">{{sparkline samples}}</div>
+  <p>{{why_now}}</p>
+  <p><em>Check:</em> {{suggested_check}}</p>
+{{#if has_related}}
+{{> related}}
+{{/if}}
+</section>
+{{/each}}
+{{#if has_alerts}}
+<section class="alerts">
+  <h2>Alerts</h2>
+{{#each alerts}}
+  <h3>{{#if link}}<a href="{{href link}}">{{group}} · {{category}}</a>{{else}}{{group}} · {{category}}{{/if}} <span class="sev sev-{{importance}}">{{importance_label}}</span><span class="summary">{{summary_text}}</span></h3>
+  <table class="evidence">
+{{#each instances}}
+    <tr><td>{{#if link}}<a href="{{href link}}">{{title}}</a>{{else}}{{title}}{{/if}}</td><td><strong>{{host}}</strong></td><td>since {{since}} ({{days_text}})</td><td class="note">{{flags}}</td></tr>
+{{/each}}
+  </table>
+{{/each}}
+</section>
+{{/if}}
+{{#if has_standing}}
+<section class="standing">
+  <h2>Standing conditions</h2>
+{{#each standing}}
+  <h3>{{rule_text}}</h3>
+  <table class="evidence">
+{{#each hosts}}
+    <tr><td>{{group}}</td><td><strong>{{#if link}}<a href="{{href link}}">{{host}}</a>{{else}}{{host}}{{/if}}</strong></td><td class="metric">{{metric}}</td><td class="value">{{value}}</td><td>yesterday {{previous}}</td></tr>
+{{/each}}
+  </table>
+{{/each}}
+</section>
+{{/if}}
+</body>
+</html>
