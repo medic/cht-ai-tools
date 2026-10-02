@@ -32,7 +32,7 @@ be established, return that as the report; an inconclusive report is still the r
 const CLAUDE_ARGS = [
   '--model', 'claude-opus-5',
   '--setting-sources', 'user',
-  '--allowedTools', 'Skill,Grep,Glob,Bash(/home/runner/.claude/plugins/cache/medic-cht-ai-tools/cht-pr-review/*/scripts/pr-context.sh*),Bash(/home/runner/.claude/plugins/cache/medic-cht-ai-tools/cht-pr-review/*/scripts/pr-diff.sh*),mcp__plugin_cht-docs-mcp_cht-docs__ask_question,mcp__plugin_cht-docs-mcp_cht-docs__search_docs',
+  '--allowedTools', 'Skill,Grep,Glob,Bash(/opt/cht-ai-tools/skills/cht-pr-review/scripts/pr-context.sh*),Bash(/opt/cht-ai-tools/skills/cht-pr-review/scripts/pr-diff.sh*),mcp__plugin_cht-docs-mcp_cht-docs__ask_question,mcp__plugin_cht-docs-mcp_cht-docs__search_docs',
   '--disallowedTools', 'Edit,Write,NotebookEdit,Monitor,PowerShell,WebFetch,WebSearch',
   '--json-schema', '{"type":"object","required":["report_markdown"],"additionalProperties":false,"properties":{"report_markdown":{"type":"string","description":"The complete review report as GitHub-flavored markdown."}}}',
 ];
@@ -58,7 +58,10 @@ const git = (cwd, ...args) => sh('git', args, { cwd });
 
 // Built from the repo root so the image installs the plugins from this checkout. Docker's layer cache makes this quick,
 // and rebuilds from the plugin COPY onward when the skill has changed.
-const buildImage = () => sh('docker', ['build', '-t', IMAGE, '-f', join(HERE, 'Dockerfile'), TOOLS_ROOT], { stdio: 'inherit' });
+const buildImage = () => sh('docker', ['build', '-t', IMAGE,
+  '--build-arg', `UID=${process.getuid()}`,
+  '--build-arg', `GID=${process.getgid()}`,
+  '-f', join(HERE, 'Dockerfile'), TOOLS_ROOT], { stdio: 'inherit' });
 
 /** Bare clone per repo, reused across runs, so each PR checkout is a cheap local clone. */
 const repoCache = (repo, pr) => {
@@ -80,7 +83,6 @@ const checkout = (cacheDir, repo, dir, sha) => {
 const runContainer = ({ workspace, outDir, env, script, args }) => {
   const result = spawnSync('docker', [
     'run', '--rm', '--init',
-    '--user', `${process.getuid()}:${process.getgid()}`,
     '-v', `${workspace}:${RUNNER_WORKSPACE}:z`,
     '-v', `${outDir}:/out:z`,
     '-w', RUNNER_WORKSPACE,
@@ -92,9 +94,11 @@ const runContainer = ({ workspace, outDir, env, script, args }) => {
 
 const codeReview = ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
-  // pull_request_target checks out the base branch; OCR reviews from the merge-base to the PR head
-  checkout(cacheDir, repo, workspace, pull.base.sha);
-  const mergeBase = git(workspace, 'merge-base', pull.base.sha, pull.head.sha);
+  // pull_request_target checks out the tip of the base branch (so its .opencodereview rules apply), and OCR reviews
+  // from the merge-base to the PR head
+  const baseSha = git(cacheDir, 'rev-parse', `refs/heads/${pull.base.ref}`);
+  checkout(cacheDir, repo, workspace, baseSha);
+  const mergeBase = git(workspace, 'merge-base', baseSha, pull.head.sha);
   const status = runContainer({
     workspace,
     outDir,

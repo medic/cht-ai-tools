@@ -1,6 +1,7 @@
 # Runtime for the ai-review benchmark: the tools the `code-review` (OpenCodeReview) and
 # `completeness-review` (claude-code-action) jobs install on the GitHub runner.
-FROM node:22-bookworm
+# trixie, for a git new enough for OCR (>= 2.41)
+FROM node:22-trixie
 
 # Versions from https://github.com/medic/cht-core/blob/master/.github/workflows/ai-review.yml
 ARG OCR_VERSION=1.12.9
@@ -22,13 +23,16 @@ ENV OCR_NO_UPDATE=1 \
   OCR_LLM_TIMEOUT=300 \
   OCR_TASK_TIMEOUT=15
 
-# The runner's home, so the plugin cache paths in the workflow's --allowedTools resolve unchanged.
-# The container runs as the host user, so the home must be writable by any uid.
+# Everything under the runner's home is created as the host user (passed in by run.mjs), who the container runs as.
+# Otherwise OCR and Claude can't update their config at run time.
+ARG UID=1000
+ARG GID=1000
 ENV HOME=/home/runner
-RUN mkdir -p "$HOME" \
-  && curl -fsSL https://claude.ai/install.sh | bash -s -- "${CLAUDE_CODE_VERSION}" \
-  && chmod -R a+rwX "$HOME" \
+RUN mkdir -p "$HOME" && chown "${UID}:${GID}" "$HOME" \
   && git config --system --add safe.directory '*'
+USER ${UID}:${GID}
+RUN curl -fsSL https://claude.ai/install.sh | bash -s -- "${CLAUDE_CODE_VERSION}" \
+  && mkdir -p "$HOME/.claude"
 ENV PATH=/home/runner/.local/bin:$PATH \
   DISABLE_AUTOUPDATER=1
 
@@ -47,7 +51,8 @@ RUN ocr config unset provider \
 
 # What claude-code-action sets up before running the prompt: the workflow's settings and plugins.
 # The plugins come from this checkout (the build context is the repo root), so local changes to the skill are tested.
-COPY benchmark/ai-review/claude-settings.json /home/runner/.claude/settings.json
+# Before the plugin installs, which add the plugins to enabledPlugins in this file
+COPY --chown=${UID}:${GID} benchmark/ai-review/claude-settings.json /home/runner/.claude/settings.json
 COPY .claude-plugin /opt/cht-ai-tools/.claude-plugin
 COPY .mcp.json /opt/cht-ai-tools/.mcp.json
 COPY skills /opt/cht-ai-tools/skills
@@ -55,7 +60,6 @@ COPY hooks /opt/cht-ai-tools/hooks
 COPY commands /opt/cht-ai-tools/commands
 RUN claude plugin marketplace add /opt/cht-ai-tools \
   && claude plugin install cht-pr-review@medic-cht-ai-tools \
-  && claude plugin install cht-docs-mcp@medic-cht-ai-tools \
-  && chmod -R a+rwX "$HOME"
+  && claude plugin install cht-docs-mcp@medic-cht-ai-tools
 
 WORKDIR /home/runner/work
