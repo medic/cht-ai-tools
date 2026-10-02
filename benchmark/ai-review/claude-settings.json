@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "blockReadsOutsideWorkingDirectories": true,
+    "deny": [
+      "Read(.git/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "-c",
+              "c=$(jq -r .tool_input.command); re='^/home/runner/[.]claude/plugins/cache/medic-cht-ai-tools/cht-pr-review/[0-9]+([.][0-9]+)*/scripts/pr-(context|diff)[.]sh( [0-9]+)?$'; [[ $c =~ $re ]] || { echo 'Blocked: only the cht-pr-review scripts may run in Bash. Use Read, Grep and Glob to explore the code.' >&2; exit 2; }"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "enableAllProjectMcpServers": true
+}

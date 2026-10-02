@@ -1,0 +1,8 @@
+# Only benchmark/ai-review/Dockerfile builds from the repo root, and it needs just the plugin files
+*
+!.claude-plugin
+!.mcp.json
+!skills
+!hooks
+!commands
+!benchmark/ai-review/claude-settings.json
