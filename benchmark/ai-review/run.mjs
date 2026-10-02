@@ -53,10 +53,9 @@ claude -p "$CLAUDE_PROMPT" --output-format stream-json --verbose "$@" > /out/exe
 const IMAGE = 'cht-ai-review-bench';
 const RUNNER_WORKSPACE = '/home/runner/work/workspace';
 
-const sh = (cmd, args, opts) => execFileSync(cmd, args, { encoding: 'utf8', ...opts }).trim();
+const sh = (cmd, args, opts) => execFileSync(cmd, args, { encoding: 'utf8', ...opts })?.trim();
 const git = (cwd, ...args) => sh('git', args, { cwd });
 
-// Docker's layer cache makes this quick when the Dockerfile hasn't changed
 // Built from the repo root so the image installs the plugins from this checkout. Docker's layer cache makes this quick,
 // and rebuilds from the plugin COPY onward when the skill has changed.
 const buildImage = () => sh('docker', ['build', '-t', IMAGE, '-f', join(HERE, 'Dockerfile'), TOOLS_ROOT], { stdio: 'inherit' });
