@@ -7,7 +7,7 @@
  *
  * Requires docker, git, gh (logged in) and ANTHROPIC_API_KEY.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,26 +80,27 @@ const checkout = (cacheDir, repo, dir, sha) => {
   git(dir, 'checkout', '--quiet', '--detach', sha);
 };
 
-const runContainer = ({ workspace, outDir, env, script, args }) => {
-  const result = spawnSync('docker', [
+const runContainer = ({ workspace, outDir, env, script, args }) => new Promise((resolvePromise, reject) => {
+  spawn('docker', [
     'run', '--rm', '--init',
     '-v', `${workspace}:${RUNNER_WORKSPACE}:z`,
     '-v', `${outDir}:/out:z`,
     '-w', RUNNER_WORKSPACE,
     ...Object.keys(env).flatMap(k => ['-e', k]), // values come from our env, keeping secrets off the command line
     IMAGE, 'bash', '-c', script, 'bash', ...args,
-  ], { stdio: 'inherit', env: { ...process.env, ...env } });
-  return result.status;
-};
+  ], { stdio: 'inherit', env: { ...process.env, ...env } })
+    .on('error', reject)
+    .on('close', resolvePromise);
+});
 
-const codeReview = ({ repo, pull, cacheDir, outDir }) => {
+const codeReview = async ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
   // pull_request_target checks out the tip of the base branch (so its .opencodereview rules apply), and OCR reviews
   // from the merge-base to the PR head
   const baseSha = git(cacheDir, 'rev-parse', `refs/heads/${pull.base.ref}`);
   checkout(cacheDir, repo, workspace, baseSha);
   const mergeBase = git(workspace, 'merge-base', baseSha, pull.head.sha);
-  const status = runContainer({
+  const status = await runContainer({
     workspace,
     outDir,
     env: { ...OCR_ENV, OCR_LLM_TOKEN: process.env.ANTHROPIC_API_KEY },
@@ -111,11 +112,11 @@ const codeReview = ({ repo, pull, cacheDir, outDir }) => {
   return status;
 };
 
-const completenessReview = ({ repo, pull, cacheDir, outDir }) => {
+const completenessReview = async ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
   checkout(cacheDir, repo, workspace, pull.head.sha);
   const ghToken = process.env.GH_TOKEN || sh('gh', ['auth', 'token']);
-  const status = runContainer({
+  const status = await runContainer({
     workspace,
     outDir,
     env: {
@@ -138,7 +139,7 @@ const completenessReview = ({ repo, pull, cacheDir, outDir }) => {
   return status;
 };
 
-const main = () => {
+const main = async () => {
   const prs = process.argv.slice(2).map(spec => {
     const match = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(spec);
     if (!match) {
@@ -159,15 +160,19 @@ const main = () => {
   for (const { repo, number } of prs) {
     const pull = JSON.parse(sh('gh', ['api', `repos/${repo}/pulls/${number}`]));
     const cacheDir = repoCache(repo, number);
-    for (const [job, review] of [['code-review', codeReview], ['completeness-review', completenessReview]]) {
+    // The jobs run in parallel in the workflow, so run them in parallel here too
+    await Promise.all([['code-review', codeReview], ['completeness-review', completenessReview]].map(async ([job, review]) => {
       const outDir = join(runDir, `${repo.replace('/', '__')}__${number}`, job);
       mkdirSync(outDir, { recursive: true });
       console.error(`${repo}#${number} ${job}`);
-      const status = review({ repo, pull, cacheDir, outDir });
-      console.error(`${repo}#${number} ${job} exited ${status}`);
-    }
+      const started = Date.now();
+      const exitCode = await review({ repo, pull, cacheDir, outDir });
+      const durationMs = Date.now() - started;
+      writeFileSync(join(outDir, 'run.json'), `${JSON.stringify({ exitCode, durationMs }, null, 2)}\n`);
+      console.error(`${repo}#${number} ${job} exited ${exitCode} after ${Math.round(durationMs / 1000)}s`);
+    }));
   }
   console.error(`Results in ${runDir}`);
 };
 
-main();
+await main();

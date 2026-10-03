@@ -19,6 +19,8 @@ Output goes to `bench-results/<timestamp>/`:
 
 ```
 <owner>__<repo>__<pr>/
-  code-review/               ocr-result.json, ocr-stderr.log
-  completeness-review/       execution.jsonl, claude-stderr.log, report.md
+  code-review/               run.json, ocr-result.json, ocr-stderr.log
+  completeness-review/       run.json, execution.jsonl, claude-stderr.log, report.md
 ```
+
+`run.json` holds each job's exit code and wall-clock duration (`durationMs`).
