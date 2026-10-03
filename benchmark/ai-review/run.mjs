@@ -5,7 +5,7 @@
  *
  * Usage: node benchmark/ai-review/run.mjs <owner/repo#pr>...
  *
- * Requires docker, git, gh (logged in) and ANTHROPIC_API_KEY.
+ * Requires docker, git, ANTHROPIC_API_KEY and GITHUB_TOKEN.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -31,6 +31,7 @@ be established, return that as the report; an inconclusive report is still the r
 `;
 const CLAUDE_ARGS = [
   '--model', 'claude-opus-5',
+  '--permission-mode', 'default',
   '--setting-sources', 'user',
   '--allowedTools', 'Skill,Grep,Glob,Bash(/opt/cht-ai-tools/skills/cht-pr-review/scripts/pr-context.sh*),Bash(/opt/cht-ai-tools/skills/cht-pr-review/scripts/pr-diff.sh*),mcp__plugin_cht-docs-mcp_cht-docs__ask_question,mcp__plugin_cht-docs-mcp_cht-docs__search_docs',
   '--disallowedTools', 'Edit,Write,NotebookEdit,Monitor,PowerShell,WebFetch,WebSearch',
@@ -42,12 +43,12 @@ const OCR_SCRIPT = `
 set -eo pipefail
 ocr config set llm.model "$OCR_LLM_MODEL"
 ocr config set llm.extra_body "$OCR_EXTRA_BODY"
-ocr review --timeout "$OCR_TASK_TIMEOUT" "$@" > /out/ocr-result.json 2> /out/ocr-stderr.log
+exec ocr review --timeout "$OCR_TASK_TIMEOUT" "$@" > /out/ocr-result.json 2> /out/ocr-stderr.log
 `;
 
 // The image already has the workflow's settings and plugins (see the Dockerfile)
 const CLAUDE_SCRIPT = `
-claude -p "$CLAUDE_PROMPT" --output-format stream-json --verbose "$@" > /out/execution.jsonl 2> /out/claude-stderr.log
+exec claude -p "$CLAUDE_PROMPT" --output-format stream-json --verbose "$@" > /out/execution.jsonl 2> /out/claude-stderr.log
 `;
 
 const IMAGE = 'cht-ai-review-bench';
@@ -63,13 +64,15 @@ const buildImage = () => sh('docker', ['build', '-t', IMAGE,
   '--build-arg', `GID=${process.getgid()}`,
   '-f', join(HERE, 'Dockerfile'), TOOLS_ROOT], { stdio: 'inherit' });
 
-/** Bare clone per repo, reused across runs, so each PR checkout is a cheap local clone. */
+/**
+ * Bare repo per repo, reused across runs, so each PR checkout is a cheap local clone. `init` is a no-op on an existing
+ * repo, so an interrupted first fetch just resumes next time.
+ */
 const repoCache = (repo, pr) => {
   const dir = join(OUT_ROOT, '.cache', `${repo.replace('/', '__')}.git`);
-  if (!existsSync(dir)) {
-    sh('git', ['clone', '--bare', `https://github.com/${repo}.git`, dir], { stdio: 'inherit' });
-  }
-  git(dir, 'fetch', '--quiet', 'origin', `+refs/pull/${pr}/head:refs/pull/${pr}/head`, '+refs/heads/*:refs/heads/*');
+  sh('git', ['init', '--quiet', '--bare', dir]);
+  sh('git', ['-C', dir, 'fetch', `https://github.com/${repo}.git`,
+    `+refs/pull/${pr}/head:refs/pull/${pr}/head`, '+refs/heads/*:refs/heads/*'], { stdio: 'inherit' });
   return dir;
 };
 
@@ -93,6 +96,16 @@ const runContainer = ({ workspace, outDir, env, script, args }) => new Promise((
     .on('close', resolvePromise);
 });
 
+const getPull = async (repo, number) => {
+  const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${number}`, {
+    headers: { 'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json' },
+  });
+  if (!res.ok) {
+    throw new Error(`Fetching ${repo}#${number} failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+};
+
 const codeReview = async ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
   // pull_request_target checks out the tip of the base branch (so its .opencodereview rules apply), and OCR reviews
@@ -115,14 +128,13 @@ const codeReview = async ({ repo, pull, cacheDir, outDir }) => {
 const completenessReview = async ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
   checkout(cacheDir, repo, workspace, pull.head.sha);
-  const ghToken = process.env.GH_TOKEN || sh('gh', ['auth', 'token']);
   const status = await runContainer({
     workspace,
     outDir,
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-      GH_TOKEN: ghToken,
-      GITHUB_TOKEN: ghToken,
+      GH_TOKEN: process.env.GITHUB_TOKEN,
+      GITHUB_TOKEN: process.env.GITHUB_TOKEN,
       CLAUDE_CODE_ENTRYPOINT: 'claude-code-github-action',
       CLAUDE_PROMPT: claudePrompt(repo, pull.number),
     },
@@ -131,8 +143,12 @@ const completenessReview = async ({ repo, pull, cacheDir, outDir }) => {
   });
   rmSync(workspace, { recursive: true, force: true });
 
-  const result = readFileSync(join(outDir, 'execution.jsonl'), 'utf8')
-    .split('\n').filter(Boolean).map(line => JSON.parse(line)).findLast(m => m.type === 'result');
+  // Missing if the container failed to start; the last line may be cut off if Claude was killed
+  const executionFile = join(outDir, 'execution.jsonl');
+  const lines = existsSync(executionFile) ? readFileSync(executionFile, 'utf8').split('\n').filter(Boolean) : [];
+  const result = lines
+    .flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } })
+    .findLast(m => m.type === 'result');
   if (result?.structured_output?.report_markdown) {
     writeFileSync(join(outDir, 'report.md'), `${result.structured_output.report_markdown}\n`);
   }
@@ -150,15 +166,17 @@ const main = async () => {
   if (!prs.length) {
     throw new Error('Usage: node benchmark/ai-review/run.mjs <owner/repo#pr>...');
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY is not set');
+  for (const name of ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN']) {
+    if (!process.env[name]) {
+      throw new Error(`${name} is not set`);
+    }
   }
 
   buildImage();
   const runDir = join(OUT_ROOT, new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19));
 
   for (const { repo, number } of prs) {
-    const pull = JSON.parse(sh('gh', ['api', `repos/${repo}/pulls/${number}`]));
+    const pull = await getPull(repo, number);
     const cacheDir = repoCache(repo, number);
     // The jobs run in parallel in the workflow, so run them in parallel here too
     await Promise.all([['code-review', codeReview], ['completeness-review', completenessReview]].map(async ([job, review]) => {

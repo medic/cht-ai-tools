@@ -9,10 +9,10 @@ The config is copied by hand from the workflow on `master`. The tool versions, f
 
 ## Usage
 
-Requires `docker`, `git`, `gh` (logged in) and `ANTHROPIC_API_KEY`.
+Requires `docker`, `git`, `ANTHROPIC_API_KEY`, and `GITHUB_TOKEN` (used to read the PR, and by the skill's `gh` calls in the container; a read-only token matches CI).
 
 ```bash
-ANTHROPIC_API_KEY=... npm run bench:ai-review -- medic/cht-core#11427
+ANTHROPIC_API_KEY=... GITHUB_TOKEN=... npm run bench:ai-review -- medic/cht-core#11427
 ```
 
 Output goes to `bench-results/<timestamp>/`:
