@@ -9,6 +9,9 @@
  * baseline.json's `runs`, and the judge's per-finding matches and usage. Prints a one-line summary per score, and when
  * baseline.json already holds a score for the same run, the differences, which is how the judge is checked.
  *
+ * The judge runs twice per job, and any disagreement between the passes is printed; the score is the first pass's.
+ * --passes <n> changes how many times it runs.
+ *
  * --dry-run skips the judge: it prints each run's metrics and the findings that would be judged, at no cost.
  *
  * Requires ANTHROPIC_API_KEY (except with --dry-run).
@@ -97,6 +100,8 @@ const completenessMetrics = (messages, run) => {
 // ---- The judge
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const passesArg = process.argv.indexOf('--passes');
+const PASSES = passesArg === -1 ? 2 : Number(process.argv[passesArg + 1]);
 const client = DRY_RUN ? null : new Anthropic();
 
 const JUDGE_SYSTEM = `You score an AI code review of one pull request against an answer key for it.
@@ -279,31 +284,27 @@ const scoreCompleteness = async (items, dir) => {
   };
 };
 
-// ---- Baseline check
+// ---- Comparing scores
 
-const compareWithBaseline = (entry) => {
-  if (!existsSync(BASELINE)) {
-    return;
-  }
-  const base = readJson(BASELINE).runs.find(r => r.case === entry.case && r.run === entry.run);
-  if (!base) {
-    return;
-  }
-  for (const job of ['code-review', 'completeness-review']) {
-    for (const field of ['found', 'failed', 'rejected', 'unmatched']) {
-      const want = JSON.stringify(base[job]?.[field]);
-      const got = JSON.stringify(entry[job]?.[field]);
-      if (want !== got) {
-        console.error(`${entry.run} ${entry.case} ${job}.${field}: baseline ${want}, scored ${got}`);
-      }
-    }
-  }
-};
+const SCORE_FIELDS = ['found', 'failed', 'rejected', 'unmatched'];
+
+const differences = (a, b) => ['code-review', 'completeness-review'].flatMap(job => SCORE_FIELDS
+  .filter(field => JSON.stringify(a[job]?.[field]) !== JSON.stringify(b[job]?.[field]))
+  .map(field => ({ field: `${job}.${field}`, a: a[job]?.[field], b: b[job]?.[field] })));
+
+const baselineScore = entry => existsSync(BASELINE)
+  ? readJson(BASELINE).runs.find(r => r.case === entry.case && r.run === entry.run)
+  : undefined;
 
 const main = async () => {
-  const runDirs = process.argv.slice(2).filter(a => a !== '--dry-run').map(d => resolve(d));
+  const runDirs = process.argv.slice(2)
+    .filter((a, i, args) => a !== '--dry-run' && a !== '--passes' && args[i - 1] !== '--passes')
+    .map(d => resolve(d));
   if (!runDirs.length) {
     throw new Error('Usage: node benchmark/ai-review/score.mjs <bench-results/run-dir>...');
+  }
+  if (!Number.isInteger(PASSES) || PASSES < 1) {
+    throw new Error('--passes takes a whole number of at least 1');
   }
   if (!DRY_RUN && !process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not set');
@@ -321,24 +322,45 @@ const main = async () => {
     const dir = join(runDir, caseName);
     const run = basename(runDir);
     console.error(`${run} ${caseName}: judging`);
-    const [cr, cp] = await Promise.all([
-      scoreCodeReview(items, join(dir, 'code-review')),
-      scoreCompleteness(items, join(dir, 'completeness-review')),
-    ]);
-    const entry = { case: caseName, run, 'code-review': cr.score, 'completeness-review': cp.score };
+    const passes = await Promise.all(Array.from({ length: DRY_RUN ? 1 : PASSES }, async () => {
+      const [cr, cp] = await Promise.all([
+        scoreCodeReview(items, join(dir, 'code-review')),
+        scoreCompleteness(items, join(dir, 'completeness-review')),
+      ]);
+      return {
+        score: { case: caseName, run, 'code-review': cr.score, 'completeness-review': cp.score },
+        judgments: { 'code-review': cr.judgment, 'completeness-review': cp.judgment },
+      };
+    }));
+    const [{ score, judgments }, ...otherPasses] = passes;
     if (DRY_RUN) {
-      console.log(JSON.stringify({ ...entry, judgments: { 'code-review': cr.judgment, 'completeness-review': cp.judgment } }, null, 2));
+      console.log(JSON.stringify({ ...score, judgments }, null, 2));
       return;
     }
+
+    const disagreements = otherPasses.map((pass, i) => ({ pass: i + 2, differences: differences(score, pass.score) }))
+      .filter(d => d.differences.length);
     const file = join(dir, 'score.json');
     writeFileSync(file, `${JSON.stringify({
-      score: entry,
-      judgments: { 'code-review': cr.judgment, 'completeness-review': cp.judgment },
+      score,
+      judgments,
+      ...(otherPasses.length && { other_passes: otherPasses, disagreements }),
     }, null, 2)}\n`);
+
     const counts = s => `found ${s.found.length}${s.failed ? `, failed ${s.failed.length}` : ''}, ` +
       `rejected ${s.rejected.length}, unmatched ${s.unmatched}`;
-    console.log(`${run} ${caseName}: code-review ${counts(cr.score)}; completeness-review ${counts(cp.score)} -> ${file}`);
-    compareWithBaseline(entry);
+    const agreement = otherPasses.length ? `; ${PASSES} judge passes ${disagreements.length ? 'DISAGREE' : 'agree'}` : '';
+    console.log(`${run} ${caseName}: code-review ${counts(score['code-review'])}; ` +
+      `completeness-review ${counts(score['completeness-review'])}${agreement} -> ${file}`);
+    for (const { pass, differences: diffs } of disagreements) {
+      for (const d of diffs) {
+        console.error(`  ${d.field}: pass 1 ${JSON.stringify(d.a)}, pass ${pass} ${JSON.stringify(d.b)}`);
+      }
+    }
+    const base = baselineScore(score);
+    for (const d of base ? differences(base, score) : []) {
+      console.error(`  ${d.field}: baseline ${JSON.stringify(d.a)}, scored ${JSON.stringify(d.b)}`);
+    }
   }));
 };
 

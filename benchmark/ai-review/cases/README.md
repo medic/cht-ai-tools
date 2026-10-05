@@ -107,7 +107,7 @@ Every item has an `id` and:
 ANTHROPIC_API_KEY=... npm run bench:ai-review:score -- bench-results/2026-10-05T14-57-09 bench-results/2026-10-05T15-07-06
 ```
 
-For every case a run has results for, it computes the metrics, has an LLM judge (Claude Opus 5.5, `JUDGE_MODEL` in the script) match each finding to the case's items, and derives the score from those matches. It writes `<run-dir>/<case>/score.json`, holding the score (`score`, in the shape of an entry in the baseline's `runs`) and the judge's decision for every finding with its reason (`judgments`), and prints a one-line summary per score. When the baseline already holds a score for the same run, every difference is printed, which is how the judge is checked (see below). `--dry-run` skips the judge and prints the metrics and the findings that would be judged, at no cost.
+For every case a run has results for, it computes the metrics, has an LLM judge (Claude Opus 5.5, `JUDGE_MODEL` in the script) match each finding to the case's items, and derives the score from those matches. It writes `<run-dir>/<case>/score.json`, holding the score (`score`, in the shape of an entry in the baseline's `runs`) and the judge's decision for every finding with its reason (`judgments`), and prints a one-line summary per score. When the baseline already holds a score for the same run, every difference is printed, which is how the judge is checked (see below). The judge runs twice per job, and the summary says whether the passes agree; any difference is printed and recorded in `score.json` (`other_passes`, `disagreements`). The score is the first pass's, so settle a disagreement by reading both passes' reasons before using it. `--passes <n>` changes the number of passes; at about $0.05 per job per pass on 11263, two is cheap. `--dry-run` skips the judge and prints the metrics and the findings that would be judged, at no cost.
 
 The judge sees only the case and the findings, not the code, so a case's summaries must stand on their own. It is held to the rules below in code: a requirement only counts in an accepted bucket, an item only in its own section, and a comment that failed to post never counts as found. Read the `reason`s in `score.json` for any finding it left unmatched before adding it to a case.
 
@@ -129,7 +129,7 @@ Matching rules:
 - When a report puts one requirement in two buckets, the accepted one counts.
 - A finding needn't cite the item's `locations`. The run's severity isn't compared with the case's.
 - Unmatched findings are for a human to judge. A correct one is added to the case's `required` or `extra_credit`, a wrong one to `rejected`.
-- Check the judge before trusting it: scored again, the baseline's runs should reproduce their `found`, `failed`, `rejected` and `unmatched`. A judge is itself an LLM, so score them more than once, and treat a difference as a question about the case's `match` rules or the judge, not the review.
+- Check the judge before trusting it: scored again, the baseline's runs should reproduce their `found`, `failed`, `rejected` and `unmatched`. A judge is itself an LLM, so its passes must also agree with each other. Treat any difference as a question about the case's `match` rules or the judge, not the review.
 
 ### Metrics
 
