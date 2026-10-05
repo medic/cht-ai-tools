@@ -24,4 +24,8 @@ Output goes to `bench-results/<timestamp>/`:
   completeness-review/       run.json, execution.jsonl, claude-stderr.log, report.md
 ```
 
-`run.json` holds each job's exit code and wall-clock duration (`durationMs`).
+`run.json` holds each job's exit code, wall-clock duration (`durationMs`), what it ran against (`versions`: the OCR and Claude Code versions, and the cht-ai-tools commit with whether the tree was `dirty`), its model and options (`config`), and the commits it reviewed (`range` for OCR, `head` for Claude).
+
+## Cases
+
+[`cases/`](cases) holds an answer key per benchmarked PR: the findings a review of it should make, and a baseline of how the reviews performed. Its [README](cases/README.md) describes the format and how to build a key from a set of benchmark results.

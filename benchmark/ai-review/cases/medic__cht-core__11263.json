@@ -1,0 +1,346 @@
+{
+  "pr": "medic/cht-core#11263",
+  "title": "fix: handle invalid JSON responses in CouchDB handlers",
+  "issue": "medic/cht-core#11304",
+  "commits": {
+    "base": "f3c9ca854c529233ee7123da61f69e7f803a15b4",
+    "head": "bebb84ddfc1ee83c420edf0a79d2638099cdbcab"
+  },
+  "notes": "Closed without merging or a human code review, so nothing on the PR gives away the findings. The fix itself is sound; the defects are in its tests and in how the 502 is sent.",
+  "baseline": {
+    "notes": "The runs the key and its min/max/average figures were drawn from, and what they ran with. Hardcoded here because these runs predate the `versions` field in run.json.",
+    "runs": [
+      "2026-10-05T14-57-09",
+      "2026-10-05T15-07-06",
+      "2026-10-05T15-21-34"
+    ],
+    "versions": {
+      "ocr": "1.12.9",
+      "claudeCode": "2.1.287",
+      "chtAiTools": {
+        "commit": "f07944c76a03e076c186948be2634a92fab7377a"
+      }
+    }
+  },
+  "code-review": {
+    "notes": "`severity` is what OCR gave the finding: the most common across the runs that reported it, the higher one on a tie. `required` includes correct findings whose comment failed to post in some runs (e.g. 502-inherits-upstream-headers); when scoring a run, only posted comments count. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "config": {
+      "model": "claude-sonnet-5",
+      "extraBody": "{\"output_config\": {\"effort\": \"xhigh\"}}",
+      "effort": "medium",
+      "rulesSha": "3572c9bb404ba490a7133630d4819190a298442a"
+    },
+    "total_tokens": {
+      "min": 629144,
+      "max": 951786,
+      "average": 741979
+    },
+    "tool_calls_total": {
+      "min": 39,
+      "max": 51,
+      "average": 43
+    },
+    "tool_calls_failure": {
+      "min": 0,
+      "max": 3,
+      "average": 2
+    },
+    "duration_ms": {
+      "min": 323329,
+      "max": 353918,
+      "average": 338588
+    },
+    "required": [
+      {
+        "id": "routing-tests-copy-handler",
+        "severity": "high",
+        "summary": "The new routing.spec.js tests exercise an inline copy of the proxyForAuth handler, never the real one in api/src/routing.js, so they would still pass if the fix were reverted.",
+        "locations": [
+          "api/tests/mocha/routing.spec.js:27",
+          "api/tests/mocha/routing.spec.js:80"
+        ],
+        "match": "Says the tests don't load or run the real routing.js handler. Only pointing out that `routing` and `proxyForAuthHandler` are unused is not a match: that is routing-spec-unused-vars."
+      },
+      {
+        "id": "infodoc-stubs-miss",
+        "severity": "high",
+        "summary": "infodoc.spec.js assigns recordDocumentWrite/recordDocumentWrites stubs onto the controller's own exports, but the controller calls the @medic/infodoc library, so the stubs are never invoked and the success-path tests can't pass as intended.",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:34",
+          "api/src/controllers/infodoc.js:27"
+        ],
+        "match": "Says the stubs are on the wrong object, so the code under test never calls them. Only saying they should use sinon.stub so sinon.restore() undoes them is not a match: that is infodoc-stubs-not-restored."
+      },
+      {
+        "id": "infodoc-stubs-not-restored",
+        "severity": "high",
+        "summary": "infodoc.spec.js replaces recordDocumentWrite/recordDocumentWrites by plain assignment rather than sinon.stub, so afterEach's sinon.restore() never undoes it and the replacement leaks into later specs in the same mocha run.",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:34",
+          "api/tests/mocha/controllers/infodoc.spec.js:65"
+        ],
+        "match": "Says the assignments are never restored. Saying it overwrites @medic/infodoc is a match too, though wrong in detail: the assignments land on the controller's exports."
+      },
+      {
+        "id": "502-bypasses-serverutils",
+        "severity": "medium",
+        "summary": "The 502 is hand-written with res.status(502).json({ error, details }) instead of the serverUtils error helpers used elsewhere in the same handler, so it lacks the `code` field and Accept-based content negotiation of the API's standard error envelope.",
+        "locations": [
+          "api/src/routing.js:1138",
+          "api/src/server-utils.js:60"
+        ],
+        "match": "Points at serverUtils (error/serverError/writeJSON) or the API's standard error shape as what the 502 should use."
+      },
+      {
+        "id": "502-inherits-upstream-headers",
+        "severity": "medium",
+        "summary": "copyProxyHeaders has already copied the upstream status message and headers (including Content-Type) onto res before the parse fails, and res.json() keeps an existing Content-Type, so the JSON 502 goes out labelled as e.g. text/html.",
+        "locations": [
+          "api/src/routing.js:1127",
+          "api/src/routing.js:1138",
+          "api/src/routing.js:993"
+        ],
+        "match": "Says the 502 response carries the upstream's headers or Content-Type."
+      },
+      {
+        "id": "body-preview-logged",
+        "severity": "medium",
+        "summary": "Logging a 100-character preview of the unparseable upstream body could put sensitive data in the logs.",
+        "locations": [
+          "api/src/routing.js:1136"
+        ],
+        "match": "Says the logged body preview could expose sensitive data. A comment only about the log level or format is not a match."
+      },
+      {
+        "id": "partial-bulk-test-weak",
+        "severity": "medium",
+        "summary": "The infodoc.spec.js test claiming to record only successful writes from a partial bulk response asserts only that the bulk stub was called, never which ids it got, so forwarding the failed doc too would still pass.",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:294"
+        ],
+        "match": "Says the partial-bulk test doesn't check which ids were recorded, so it can't tell that the failed doc was filtered out. The same point about the other tests is weak-test-assertions."
+      },
+      {
+        "id": "infodoc-skip-on-parse-failure",
+        "severity": "medium",
+        "summary": "When the body can't be parsed, infodoc skips the metadata update even if the write succeeded, leaving infodocs stale; log at a higher level.",
+        "locations": [
+          "api/src/controllers/infodoc.js:20",
+          "api/src/controllers/infodoc.js:22"
+        ],
+        "match": "Says a successful write can go unrecorded in the infodocs when its response can't be parsed."
+      },
+      {
+        "id": "weak-test-assertions",
+        "severity": "low",
+        "summary": "infodoc.spec.js tests assert only that a stub was called, or only the log template, not the ids or message passed (e.g. the chunked-data and bulk-write tests, and 'should log error with status code and error message').",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:67",
+          "api/tests/mocha/controllers/infodoc.spec.js:92",
+          "api/tests/mocha/controllers/infodoc.spec.js:146"
+        ],
+        "match": "Says an infodoc.spec.js test other than the partial-bulk one asserts only that something was called, or only part of what was logged, not the arguments it claims to check."
+      },
+      {
+        "id": "routing-spec-unused-vars",
+        "severity": "low",
+        "summary": "`routing` and `proxyForAuthHandler` in routing.spec.js are declared but never assigned or used.",
+        "locations": [
+          "api/tests/mocha/routing.spec.js:27"
+        ],
+        "match": "Says `routing` and/or `proxyForAuthHandler` are declared but never assigned or used. A finding that goes on to say the tests never run the real handler is routing-tests-copy-handler, and also matches this."
+      },
+      {
+        "id": "duplicated-parse-handling",
+        "severity": "low",
+        "summary": "The try/catch around JSON.parse is duplicated between routing.js and infodoc.js; extract a shared helper.",
+        "locations": [
+          "api/src/routing.js:1133",
+          "api/src/controllers/infodoc.js:17"
+        ],
+        "match": "Says the parse-and-catch logic is duplicated across routing.js and infodoc.js, or suggests a shared helper for it."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "null-body-throws",
+        "severity": "medium",
+        "summary": "A body of `null` is valid JSON, so it skips the catch, and `body.id` then throws a TypeError in infodoc.js, the same class of crash the PR is fixing.",
+        "locations": [
+          "api/src/controllers/infodoc.js:18",
+          "api/src/controllers/infodoc.js:25"
+        ],
+        "match": "Says a body that parses to null (or another non-object) gets past the catch and throws on `body.id`."
+      },
+      {
+        "id": "audit-skipped-on-parse-failure",
+        "severity": "medium",
+        "summary": "The early return on parse failure skips audit.expressCallback, so the request leaves no audit entry.",
+        "locations": [
+          "api/src/routing.js:1138",
+          "api/src/routing.js:1145"
+        ],
+        "match": "Says the early return on a parse failure skips audit.expressCallback, so the request isn't audited."
+      },
+      {
+        "id": "hardcoded-502",
+        "severity": "medium",
+        "summary": "The handler always responds 502, discarding a meaningful upstream status (e.g. 403/404) that came with a non-JSON body.",
+        "locations": [
+          "api/src/routing.js:1138"
+        ],
+        "match": "Says the upstream status code is replaced by 502 and should be passed through when meaningful. Comments about the 502's body or headers are 502-bypasses-serverutils or 502-inherits-upstream-headers."
+      }
+    ]
+  },
+  "completeness-review": {
+    "config": {
+      "model": "claude-opus-5"
+    },
+    "total_tokens": {
+      "min": 546344,
+      "max": 579599,
+      "average": 568360
+    },
+    "tool_calls_total": {
+      "min": 17,
+      "max": 21,
+      "average": 19
+    },
+    "tool_calls_failure": {
+      "min": 1,
+      "max": 2,
+      "average": 1
+    },
+    "duration_ms": {
+      "min": 166955,
+      "max": 188577,
+      "average": 175035
+    },
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each expected requirement is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None.",
+      "required": [
+        {
+          "id": "infodoc-parse-guarded",
+          "status": "Delivered",
+          "summary": "infodoc.js catches the JSON.parse failure, logs a warning with the upstream status code and error message, and returns early without recording an infodoc write.",
+          "locations": [
+            "api/src/controllers/infodoc.js:17",
+            "api/src/controllers/infodoc.js:20",
+            "api/src/controllers/infodoc.js:22"
+          ],
+          "match": "A Delivered item saying infodoc.js catches the parse failure, logs it and skips the infodoc write. Separate items for the catch, the log and the early return together match."
+        },
+        {
+          "id": "routing-parse-guarded",
+          "status": "Delivered",
+          "summary": "routing.js catches the JSON.parse failure in the proxyForAuth handler and logs an error with the status code, error message and a 100-character body preview.",
+          "locations": [
+            "api/src/routing.js:1133",
+            "api/src/routing.js:1136"
+          ],
+          "match": "A Delivered item saying routing.js catches the parse failure and logs it with the status, error and body preview."
+        },
+        {
+          "id": "routing-responds-502",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "routing.js responds 502 with error details on a parse failure, returning early so no second response is sent.",
+          "locations": [
+            "api/src/routing.js:1138"
+          ],
+          "match": "A Delivered item for the 502 response and the early return. Pending verification matches only when it names the upstream headers / Content-Type copied onto res (see code-review 502-inherits-upstream-headers)."
+        },
+        {
+          "id": "request-completes",
+          "status": "Delivered",
+          "summary": "An invalid upstream response no longer leaves the request hanging: both handlers now finish (routing.js by responding, infodoc.js by returning from a side-effect handler).",
+          "locations": [
+            "api/src/routing.js:1138",
+            "api/src/controllers/infodoc.js:22"
+          ],
+          "match": "A Delivered item saying the request completes instead of hanging, or the 502 and early-return items when no separate item covers it. Pending verification on whether the request hangs is a miss: res.json() ends the response."
+        },
+        {
+          "id": "valid-json-unchanged",
+          "status": "Delivered",
+          "summary": "Valid JSON responses keep their existing behaviour, including interceptResponse and the audit callback in routing.js and the infodoc recording.",
+          "locations": [
+            "api/src/routing.js:1140",
+            "api/src/routing.js:1145",
+            "api/src/controllers/infodoc.js:25"
+          ],
+          "match": "A Delivered item saying valid JSON responses follow the existing path unchanged."
+        },
+        {
+          "id": "infodoc-error-tests",
+          "status": "Delivered",
+          "summary": "infodoc.spec.js error-path tests (HTML page, truncated JSON, empty body, non-UTF8 bytes, logging) run against the real handler.",
+          "locations": [
+            "api/tests/mocha/controllers/infodoc.spec.js:101"
+          ],
+          "match": "A Delivered item for the infodoc.spec.js error-path tests (invalid, truncated, empty or non-UTF8 bodies)."
+        },
+        {
+          "id": "infodoc-success-tests",
+          "status": "Not delivered",
+          "summary": "The promised success-path regression tests (valid JSON, chunked data, bulk writes) don't test anything: their stubs are assigned onto the controller's exports, while the controller calls @medic/infodoc.",
+          "locations": [
+            "api/tests/mocha/controllers/infodoc.spec.js:34",
+            "api/src/controllers/infodoc.js:27"
+          ],
+          "match": "Not delivered because the stubs are never invoked. Delivered, or Not delivered for some other reason, is a miss."
+        },
+        {
+          "id": "routing-tests",
+          "status": "Not delivered",
+          "summary": "The promised routing.js tests (502 generation, error logging, chunked invalid bodies, valid-JSON regression) run an inline copy of the handler and never load api/src/routing.js.",
+          "locations": [
+            "api/tests/mocha/routing.spec.js:27",
+            "api/tests/mocha/routing.spec.js:80"
+          ],
+          "match": "Not delivered because the tests don't exercise the real handler. Delivered, or Not delivered for some other reason, is a miss."
+        },
+        {
+          "id": "no-other-unguarded-parse",
+          "status": "Delivered",
+          "summary": "The issue's 'at least these locations' is covered: these are the only JSON.parse(body.toString()) call sites under api/src.",
+          "locations": [
+            "api/src/routing.js:1134",
+            "api/src/controllers/infodoc.js:18"
+          ],
+          "match": "A Delivered item saying no other unguarded JSON.parse of a CouchDB response remains in the API."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Every changed file (two sources, two specs) is described in the PR, so the expected answer is None.",
+      "required": []
+    },
+    "alternative_approaches": {
+      "required": [
+        {
+          "id": "use-serverutils",
+          "summary": "Use the serverUtils error helpers (error/serverError, backed by writeJSON), already used in the same handler, instead of the hand-written res.status(502).json(...): they give the standard { code, error, details } envelope, Accept-based content negotiation and a headersSent guard.",
+          "locations": [
+            "api/src/server-utils.js:60",
+            "api/src/server-utils.js:14",
+            "api/src/routing.js:1124"
+          ],
+          "match": "Cites serverUtils as the existing way to send the error. Mentioning the missing `code` field or a needed 502 branch alongside it is part of the same item."
+        },
+        {
+          "id": "use-rewire",
+          "summary": "routing.spec.js already uses rewire, which would let the new tests reach and run the real proxyRes handler instead of a copy.",
+          "locations": [
+            "api/tests/mocha/routing.spec.js:1"
+          ],
+          "match": "Cites rewire (or the existing rewire usage) as a way to test the real handler."
+        }
+      ]
+    }
+  }
+}

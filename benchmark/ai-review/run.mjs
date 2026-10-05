@@ -57,6 +57,18 @@ exec claude -p "$CLAUDE_PROMPT" --output-format stream-json --verbose "$@" > /ou
 const IMAGE = 'cht-ai-review-bench';
 const RUNNER_WORKSPACE = '/home/runner/work/workspace';
 
+/** What a run was measured against, so results from different runs can be compared */
+const versions = () => {
+  const dockerfile = readFileSync(join(HERE, 'Dockerfile'), 'utf8');
+  const arg = name => new RegExp(`^ARG ${name}=(.+)$`, 'm').exec(dockerfile)[1];
+  return {
+    ocr: arg('OCR_VERSION'),
+    claudeCode: arg('CLAUDE_CODE_VERSION'),
+    // The image is built from this checkout, so uncommitted changes are part of what ran
+    chtAiTools: { commit: git(TOOLS_ROOT, 'rev-parse', 'HEAD'), dirty: !!git(TOOLS_ROOT, 'status', '--porcelain') },
+  };
+};
+
 const sh = (cmd, args, opts) => execFileSync(cmd, args, { encoding: 'utf8', ...opts })?.trim();
 const git = (cwd, ...args) => sh('git', args, { cwd });
 
@@ -125,7 +137,11 @@ const codeReview = async ({ repo, pull, cacheDir, outDir }) => {
       '--background', pull.title, '--effort', OCR_EFFORT],
   });
   rmSync(workspace, { recursive: true, force: true });
-  return status;
+  return {
+    exitCode: status,
+    config: { model: OCR_ENV.OCR_LLM_MODEL, extraBody: OCR_ENV.OCR_EXTRA_BODY, effort: OCR_EFFORT, rulesSha: OCR_RULES_SHA },
+    range: { from: mergeBase, to: pull.head.sha },
+  };
 };
 
 const completenessReview = async ({ repo, pull, cacheDir, outDir }) => {
@@ -155,7 +171,11 @@ const completenessReview = async ({ repo, pull, cacheDir, outDir }) => {
   if (result?.structured_output?.report_markdown) {
     writeFileSync(join(outDir, 'report.md'), `${result.structured_output.report_markdown}\n`);
   }
-  return status;
+  return {
+    exitCode: status,
+    config: { model: CLAUDE_ARGS[CLAUDE_ARGS.indexOf('--model') + 1] },
+    head: pull.head.sha,
+  };
 };
 
 const main = async () => {
@@ -176,6 +196,7 @@ const main = async () => {
   }
 
   buildImage();
+  const runVersions = versions();
   const runDir = join(OUT_ROOT, new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19));
 
   for (const { repo, number } of prs) {
@@ -187,9 +208,10 @@ const main = async () => {
       mkdirSync(outDir, { recursive: true });
       console.error(`${repo}#${number} ${job}`);
       const started = Date.now();
-      const exitCode = await review({ repo, pull, cacheDir, outDir });
+      const { exitCode, ...inputs } = await review({ repo, pull, cacheDir, outDir });
       const durationMs = Date.now() - started;
-      writeFileSync(join(outDir, 'run.json'), `${JSON.stringify({ exitCode, durationMs }, null, 2)}\n`);
+      const run = { exitCode, durationMs, versions: runVersions, ...inputs };
+      writeFileSync(join(outDir, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
       console.error(`${repo}#${number} ${job} exited ${exitCode} after ${Math.round(durationMs / 1000)}s`);
     }));
   }
