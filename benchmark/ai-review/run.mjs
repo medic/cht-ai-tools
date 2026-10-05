@@ -22,6 +22,9 @@ const OCR_ENV = {
   OCR_EXTRA_BODY: '{"output_config": {"effort": "xhigh"}}',
 };
 const OCR_EFFORT = 'medium';
+// The cht-core commit whose .opencodereview rules every run uses, so results don't shift as the rules change. Bump it
+// deliberately to benchmark new rules.
+const OCR_RULES_SHA = '3572c9bb404ba490a7133630d4819190a298442a';
 const claudePrompt = (repo, pr) => `Use the cht-pr-review skill to review pull request
 ${pr} in ${repo}.
 Follow that skill exactly.
@@ -108,11 +111,11 @@ const getPull = async (repo, number) => {
 
 const codeReview = async ({ repo, pull, cacheDir, outDir }) => {
   const workspace = join(outDir, 'workspace');
-  // pull_request_target checks out the tip of the base branch (so its .opencodereview rules apply), and OCR reviews
-  // from the merge-base to the PR head
-  const baseSha = git(cacheDir, 'rev-parse', `refs/heads/${pull.base.ref}`);
-  checkout(cacheDir, repo, workspace, baseSha);
-  const mergeBase = git(workspace, 'merge-base', baseSha, pull.head.sha);
+  // pull_request_target checks out the tip of the base branch so its .opencodereview rules apply. That is all OCR takes
+  // from the checkout: in range mode its tools read the code at the PR head. So check out the pinned rules instead.
+  checkout(cacheDir, repo, workspace, OCR_RULES_SHA);
+  // The base as of the PR's last push: today's tip may already hold a merged PR, which would leave nothing to review
+  const mergeBase = git(workspace, 'merge-base', pull.base.sha, pull.head.sha);
   const status = await runContainer({
     workspace,
     outDir,
