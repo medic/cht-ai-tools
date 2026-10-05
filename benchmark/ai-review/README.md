@@ -28,4 +28,4 @@ Output goes to `bench-results/<timestamp>/`:
 
 ## Cases
 
-[`cases/`](cases) holds an answer key per benchmarked PR: the findings a review of it should make, and a baseline of how the reviews performed. Its [README](cases/README.md) describes the format and how to build a key from a set of benchmark results.
+[`cases/`](cases) holds the gold standard per benchmarked PR: the findings a review of it should make. [`baseline.json`](baseline.json) holds the scores of the current configuration against those cases, to compare later runs with. The [cases README](cases/README.md) describes both, how to build a case from a set of benchmark results, and how to score a run.
