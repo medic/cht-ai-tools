@@ -16,12 +16,19 @@ ANTHROPIC_API_KEY=$(op read "op://Private/platform.claude.com/password") GITHUB_
 
 ```
 
+To score runs against the [cases](cases), and compare them with [`baseline.json`](baseline.json):
+
+```bash
+ANTHROPIC_API_KEY=$(op read "op://Private/platform.claude.com/password") npm run bench:ai-review:score -- bench-results/<timestamp>...
+```
+
 Output goes to `bench-results/<timestamp>/`:
 
 ```
 <owner>__<repo>__<pr>/
   code-review/               run.json, ocr-result.json, ocr-stderr.log
   completeness-review/       run.json, execution.jsonl, claude-stderr.log, report.md
+  score.json                 written by the scorer
 ```
 
 `run.json` holds each job's exit code, wall-clock duration (`durationMs`), what it ran against (`versions`: the OCR and Claude Code versions, and the cht-ai-tools commit with whether the tree was `dirty`), its model and options (`config`), and the commits it reviewed (`range` for OCR, `head` for Claude).

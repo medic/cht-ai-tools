@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "bench:ai-review": "node benchmark/ai-review/run.mjs",
+    "bench:ai-review:score": "node benchmark/ai-review/score.mjs",
     "prepublishOnly": "npm run build",
     "cz": "cz",
     "semantic-release": "semantic-release",
@@ -49,6 +50,7 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@commitlint/cli": "^20.4.1",
     "@commitlint/config-conventional": "^20.4.1",
     "@semantic-release/changelog": "^6.0.3",
