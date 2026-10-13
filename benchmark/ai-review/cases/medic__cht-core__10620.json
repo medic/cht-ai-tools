@@ -1,0 +1,253 @@
+{
+  "pr": "medic/cht-core#10620",
+  "title": "feat(#10139): add ability to hide contact forms for muted places",
+  "issue": "medic/cht-core#10139",
+  "commits": {
+    "base": "58697bba201371326186e6d15ce39699688993f5",
+    "head": "123a2b74daa062c68e17492948b25e7950f6a7ec"
+  },
+  "notes": "Closed without merging after a stale notice. There was no human code review. Its comments (the author asking how to test it from the frontend, and a maintainer explaining that there are no special forms: create a place, mute it and check whether 'create new person' shows depending on the permission, then the stale notice) name no defects. The issue's comments are about labelling, plus a maintainer's one-line design: 'add a permission and hide the add button when the permission is not set and the contact is muted', which the PR follows. The contact page's add buttons are hidden correctly; the defects are the contacts list page's add buttons, which aren't wired up, tests that cover only that unwired path, and a permission that config/default doesn't define, so admins can't grant it from the admin app.",
+  "code-review": {
+    "notes": "`severity` is the severity the finding deserves, taken from OCR's own ratings: the most common across the runs that reported it, the higher one on a tie. Items no run has reported yet (muted-tests-cover-unwired-path, not-in-default-config, default-hides-for-existing-users, add-route-unguarded) keep an estimated severity. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "list-fab-not-wired",
+        "severity": "high",
+        "summary": "Only ContactsContentComponent (the contact's own page) passes the new `parentContact`. ContactsComponent.updateFastActions(), unchanged, still calls getContactLeftSideActions with only parentFacilityId (the user's home place) and childContactTypes, so `parentContact` is undefined there and the muted check never runs. On the contacts list page, a user with a single home place still sees 'add place'/'add person' buttons that create children of that home place, even when it is muted.",
+        "locations": [
+          "webapp/src/ts/modules/contacts/contacts.component.ts:509",
+          "webapp/src/ts/services/fast-action-button.service.ts:109"
+        ],
+        "match": "Says the contacts list page (contacts.component.ts / getContactLeftSideActions' real caller) never passes parentContact, so its add buttons for the home place aren't hidden when that place is muted. Only saying the new tests use getContactLeftSideActions is not a match: that is muted-tests-cover-unwired-path."
+      },
+      {
+        "id": "muted-tests-cover-unwired-path",
+        "severity": "low",
+        "summary": "All three new karma tests call getContactLeftSideActions with a `parentContact`, which its only real caller (contacts.component.ts) never supplies, so they test a path the app doesn't use. The path that is wired, getContactRightSideActions from contacts-content.component.ts, gets no muted test, and nothing checks that contacts-content passes the selected doc as parentContact.",
+        "locations": [
+          "webapp/tests/karma/ts/services/fast-action-button.service.spec.ts:598",
+          "webapp/tests/karma/ts/services/fast-action-button.service.spec.ts:620",
+          "webapp/tests/karma/ts/services/fast-action-button.service.spec.ts:656",
+          "webapp/tests/karma/ts/services/fast-action-button.service.spec.ts:202"
+        ],
+        "match": "Says the new tests only cover getContactLeftSideActions (or pass a parentContact the real list caller never provides), and/or that getContactRightSideActions / the contact page path has no muted test. Only saying the list page isn't wired is not a match: that is list-fab-not-wired."
+      },
+      {
+        "id": "not-in-default-config",
+        "severity": "medium",
+        "summary": "can_create_contacts_under_muted_places is added only to config/covid-19 and the test config, not to config/default or config/demo. The admin app's permissions page lists only the keys already in settings.permissions, and the API fills in missing permissions only from the default settings doc, built from config/default, so upgrades never add the key. On a deployment using the default config, admins can't see or grant the new permission in the admin app; it has to be added to app_settings by hand (e.g. with cht-conf).",
+        "locations": [
+          "config/default/app_settings.json:110",
+          "admin/src/js/controllers/authorization-permissions.js:27",
+          "api/src/services/settings.js:103"
+        ],
+        "match": "Says the new permission is missing from config/default (or demo) app_settings, so admins can't see or grant it in the admin permissions page, or upgrades don't add it. Only saying existing users lose the add buttons by default is not a match: that is default-hides-for-existing-users."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "default-hides-for-existing-users",
+        "severity": "medium",
+        "summary": "The permission is opt-out: a user without `can_create_contacts_under_muted_places` loses the add buttons on muted places. No role in config/default or config/demo has it, so on upgrade every non-admin user stops seeing add person/place on muted places until an admin grants it, and the PR doesn't say so. A disagreement with a stated design: the maintainer asked for exactly 'hide the add button when the permission is not set and the contact is muted' on the issue.",
+        "locations": [
+          "webapp/src/ts/services/fast-action-button.service.ts:111",
+          "config/default/app_settings.json:110",
+          "config/demo/app_settings.json:107"
+        ],
+        "match": "Says existing users lose the ability to add contacts under muted places by default (on upgrade) because no role has the new permission, or suggests inverting it into a restricting permission. Only saying the key is missing from config/default so admins can't grant it is not a match: that is not-in-default-config."
+      },
+      {
+        "id": "add-route-unguarded",
+        "severity": "low",
+        "summary": "Only the fast-action buttons are hidden. The /contacts/:parent_id/add/:type route, guarded only by can_edit, still opens the create form for a muted parent from a typed or bookmarked URL, and nothing stops the contact being saved. The issue asks only to hide the buttons, and the route doesn't check can_create_people/places either, so this matches existing practice.",
+        "locations": [
+          "webapp/src/ts/modules/contacts/contacts.routes.ts:45",
+          "webapp/src/ts/services/fast-action-button.service.ts:109"
+        ],
+        "match": "Says the restriction is UI-only: the add route (or the save/API) still lets a user create a contact under a muted place."
+      },
+      {
+        "id": "muted-check-per-type",
+        "severity": "low",
+        "summary": "The muted check and the can_create_contacts_under_muted_places lookup don't depend on the contact type, but run inside each type's canDisplay, so they repeat once per child contact type; they could be computed once before the .map(). Cheap in practice (getMuted is synchronous, authService.has reads cached settings).",
+        "locations": [
+          "webapp/src/ts/services/fast-action-button.service.ts:109"
+        ],
+        "match": "Suggests hoisting the muted / permission check out of the per-contact-type .map() or canDisplay, because it repeats for every type."
+      },
+      {
+        "id": "positional-params",
+        "severity": "low",
+        "summary": "getContactFormActions now takes four positional parameters, two nullable, and getContactRightSideActions passes null for queryParams just to reach parentContact; both are Record<string, any> | null, so swapping them still compiles. An options object would be clearer.",
+        "locations": [
+          "webapp/src/ts/services/fast-action-button.service.ts:87"
+        ],
+        "match": "Suggests replacing getContactFormActions' trailing positional/nullable parameters with an options object, or points out callers passing null to reach parentContact."
+      },
+      {
+        "id": "translation-key-order",
+        "severity": "low",
+        "summary": "The new permission.description key is placed after can_create_places rather than with its alphabetical neighbours (before can_create_people), in every messages-*.properties file. True but cosmetic: the files aren't strictly sorted elsewhere either, and nothing checks the order.",
+        "locations": [
+          "api/resources/translations/messages-en.properties:1014"
+        ],
+        "match": "Says the new translation key is out of alphabetical order in the messages files. One item however many files a run comments on."
+      },
+      {
+        "id": "muted-mistranslated",
+        "severity": "low",
+        "summary": "The French and Swahili descriptions use a different word for 'muted' from the rest of their files: French 'désactivées' (disabled) where the file uses 'sourdine'/'sourdiné', Swahili 'yaliyokomewa' where it uses the 'nyamazishwa' root.",
+        "locations": [
+          "api/resources/translations/messages-fr.properties:1014",
+          "api/resources/translations/messages-sw.properties:1014"
+        ],
+        "match": "Says the French or Swahili translation uses a different term for 'muted' than the rest of its file. One item for either or both languages."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "candisplay-not-awaited",
+        "summary": "canDisplay is now async, so the filter treats the returned Promise as truthy and never hides the buttons.",
+        "reason": "filterActions awaits every canDisplay() (fast-action-button.service.ts:47), and the old canDisplay already returned the Promise from authService.has.",
+        "match": "Claims the async canDisplay isn't awaited, or that a Promise is used as a boolean, so hiding doesn't work."
+      },
+      {
+        "id": "muted-ancestor-missed",
+        "summary": "getMuted(parentContact) only checks the place's own `muted` field, so a place under a muted ancestor still shows the add buttons.",
+        "reason": "ContactViewModelGenerator already sets the selected doc's `muted` from its lineage (contact-view-model-generator.service.ts:137), ContactMutedService.getMuted also walks doc.parent (contact-muted.service.ts:24), and Sentinel's muting transition writes `muted` onto every descendant anyway.",
+        "match": "Claims a place whose ancestor is muted is not treated as muted."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. Requirements come from the issue (hide add person/place for muted places, via a user permission) and the maintainer's design comment; the PR description adds nothing beyond them. An item about adding the permission's description or translations is part of permission-controls-it. A Delivered item for a trivial detail (the ContactMutedService injection) matches nothing and is not scored. The template checklist's UI claims (old navigation design, RTL) are not a requirement here: a report item for them matches nothing and counts as unmatched. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'. `rejected` holds findings reviews have made that are wrong.",
+      "required": [
+        {
+          "id": "hidden-on-contact-page",
+          "status": "Delivered",
+          "summary": "On a muted place's own page, the add person/place fast actions are hidden for users without can_create_contacts_under_muted_places: contacts-content passes the selected doc as parentContact, and canDisplay checks getMuted and the new permission.",
+          "locations": [
+            "webapp/src/ts/modules/contacts/contacts-content.component.ts:294",
+            "webapp/src/ts/services/fast-action-button.service.ts:109"
+          ],
+          "match": "A Delivered item saying the add buttons are hidden for muted places on the contact (detail) page, or hidden for muted places without naming a page. A report that splits the list page out as Not delivered still matches this with its Delivered part."
+        },
+        {
+          "id": "hidden-on-contacts-list",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The contacts list page's add buttons (which create children of the user's home place) are not hidden when the home place is muted: contacts.component.ts never passes parentContact (see code-review list-fab-not-wired).",
+          "locations": [
+            "webapp/src/ts/modules/contacts/contacts.component.ts:509"
+          ],
+          "match": "Not delivered, or Pending verification, because the contacts list page / home-place add buttons don't pass parentContact. A Delivered item for hiding the buttons in general is hidden-on-contact-page, not this."
+        },
+        {
+          "id": "permission-controls-it",
+          "status": "Delivered",
+          "summary": "The behaviour is controlled by a new user permission, can_create_contacts_under_muted_places: users who have it still see the add buttons on muted places, and admins pass every permission check.",
+          "locations": [
+            "webapp/src/ts/services/fast-action-button.service.ts:111"
+          ],
+          "match": "A Delivered item saying the hiding is based on a user permission (can_create_contacts_under_muted_places), that users holding it still see the buttons on muted places, or that the PR adds the permission, its description or its translations for the admin permissions page."
+        },
+        {
+          "id": "unmuted-unchanged",
+          "status": "Delivered",
+          "summary": "Places that aren't muted (and any context without a parentContact) keep the existing behaviour: the add buttons depend only on can_edit plus can_create_people / can_create_places.",
+          "locations": [
+            "webapp/src/ts/services/fast-action-button.service.ts:99",
+            "webapp/src/ts/services/fast-action-button.service.ts:114"
+          ],
+          "match": "A Delivered item saying the add options still show, or behave as before, on places that aren't muted."
+        },
+        {
+          "id": "permission-grantable",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The permission can't be granted from the admin app on a deployment using the default config: config/default and config/demo don't define it, the admin permissions page lists only keys already in settings.permissions, and upgrades don't add it (see code-review not-in-default-config).",
+          "locations": [
+            "config/default/app_settings.json:110",
+            "admin/src/js/controllers/authorization-permissions.js:27"
+          ],
+          "match": "Not delivered, or Pending verification, because the permission isn't in the default/demo (shipped) configs, so admins can't see or grant it. The same point listed only as a precondition is grant-new-permission, not this."
+        }
+      ],
+      "preconditions_to_confirm": [
+        {
+          "id": "grant-new-permission",
+          "summary": "Deployments must add can_create_contacts_under_muted_places to app_settings' permissions and grant it to every role that should keep adding people/places under muted places; until they do, all non-admin users lose those buttons on muted places after upgrading. The admin app can't do it for them, since it lists only keys already in settings.",
+          "locations": [
+            "config/default/app_settings.json:110",
+            "config/demo/app_settings.json:107"
+          ],
+          "match": "Lists configuring/granting the new can_create_contacts_under_muted_places permission to roles (or adding it to settings.permissions) as something to confirm before release."
+        }
+      ],
+      "rejected": [
+        {
+          "id": "muting-transition-precondition",
+          "summary": "Precondition to confirm: the parent doc must carry `muted`, which depends on the muting transition being enabled.",
+          "reason": "Without muting there are no muted places, and the feature has nothing to do; it is not an operational fact this change depends on.",
+          "match": "Lists the muting transition being enabled, or docs carrying `muted`, as a precondition."
+        },
+        {
+          "id": "translation-lint-precondition",
+          "summary": "Precondition to confirm: the translation lint covers en, es, fr, ne and sw, all of which are present.",
+          "reason": "A build/CI check, not an operational fact the deployment depends on, and the PR already adds every file.",
+          "match": "Lists translation lint or translation coverage as a precondition."
+        }
+      ]
+    },
+    "undisclosed_changes": {
+      "notes": "The description is one sentence. The translations, the covid-19 and test config keys, the contacts-content wiring and the karma tests are all part of adding the described permission and aren't scored either way. The one change that goes undescribed is the default: existing users lose a capability unless the permission is granted. `rejected` holds findings reviews have made that are wrong.",
+      "required": [
+        {
+          "id": "default-behaviour-change",
+          "summary": "The PR changes default behaviour for existing deployments: because the permission grants (rather than removes) the ability and isn't added to the default or demo configs, every non-admin user stops seeing add person/place on muted places after upgrade. The description presents it only as a new control.",
+          "locations": [
+            "webapp/src/ts/services/fast-action-button.service.ts:111",
+            "config/default/app_settings.json:110"
+          ],
+          "match": "Lists, as an undisclosed change, that existing users lose the add buttons on muted places by default (a breaking/behaviour change on upgrade). Listing only the translations or config keys is not a match."
+        }
+      ],
+      "rejected": [
+        {
+          "id": "gate-scope-wider",
+          "summary": "Undisclosed change: the gate fires for any muted ancestor and for muted person contacts, not only for muted places as described.",
+          "reason": "A place under a muted ancestor is itself muted (the view model sets `muted` from the lineage, and Sentinel copies it onto descendants), and a person has no child contact types, so no add buttons to hide. The behaviour is what the description says.",
+          "match": "Lists the gate applying to muted ancestors or muted persons as an undisclosed change."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": [
+        {
+          "id": "use-resolved-muted-state",
+          "summary": "The selected contact's muted state is already resolved before the actions are built: ContactViewModelGenerator sets doc.muted from the lineage, and contacts-content already computes isMuted for its report forms' showUnmuteModal flag. The component could pass that flag to the fast action service, the way report forms get showUnmuteModal, instead of the service taking the whole doc and injecting ContactMutedService.",
+          "locations": [
+            "webapp/src/ts/services/contact-view-model-generator.service.ts:137",
+            "webapp/src/ts/modules/contacts/contacts-content.component.ts:389",
+            "webapp/src/ts/modules/contacts/contacts-content.component.ts:396"
+          ],
+          "match": "Cites the already-resolved muted state (selectedContact.doc.muted, ContactViewModelGenerator, the isMuted/showUnmuteModal computation, or getMuted's lineage argument) as something to reuse instead of resolving it in the fast action service."
+        },
+        {
+          "id": "use-conditional-permission-list",
+          "summary": "The send-message action in the same file builds its permission list conditionally and makes one authService.has call; the contact form actions could append can_create_contacts_under_muted_places to the list when the parent is muted, instead of two sequential has() calls.",
+          "locations": [
+            "webapp/src/ts/services/fast-action-button.service.ts:144",
+            "webapp/src/ts/services/fast-action-button.service.ts:99"
+          ],
+          "match": "Cites the conditional permission list (as in the send-message action) as a way to make one authService.has call."
+        }
+      ]
+    }
+  }
+}

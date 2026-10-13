@@ -1,5 +1,5 @@
 {
-  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded because these runs predate the `versions` field in run.json; whether the cht-ai-tools tree was dirty during them is not known.",
+  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded because these runs predate the `versions` field in run.json; whether the cht-ai-tools tree was dirty during them is not known. The medic__cht-core__10620 runs were made at cht-ai-tools 6e561de, which changes only what run.json records and adds the scorer, not the image or the review configuration; their tree was dirty only from staged, uncommitted case files, which the image doesn't use.",
   "versions": {
     "ocr": "v1.12.9",
     "claudeCode": "2.1.287",
@@ -151,6 +151,122 @@
         "tool_calls_total": 19,
         "tool_calls_failure": 2,
         "duration_ms": 166955
+      }
+    },
+    {
+      "case": "medic__cht-core__10620",
+      "run": "2026-10-13T21-31-35",
+      "code-review": {
+        "found": [
+          "list-fab-not-wired",
+          "muted-check-per-type",
+          "positional-params",
+          "translation-key-order",
+          "muted-mistranslated"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 950399,
+        "tool_calls_total": 49,
+        "tool_calls_failure": 1,
+        "duration_ms": 350705
+      },
+      "completeness-review": {
+        "found": [
+          "hidden-on-contact-page",
+          "hidden-on-contacts-list",
+          "permission-controls-it",
+          "unmuted-unchanged",
+          "permission-grantable",
+          "grant-new-permission",
+          "use-resolved-muted-state"
+        ],
+        "rejected": [
+          "gate-scope-wider"
+        ],
+        "unmatched": 0,
+        "total_tokens": 1679498,
+        "tool_calls_total": 38,
+        "tool_calls_failure": 1,
+        "duration_ms": 238799
+      }
+    },
+    {
+      "case": "medic__cht-core__10620",
+      "run": "2026-10-13T21-47-37",
+      "code-review": {
+        "found": [
+          "list-fab-not-wired",
+          "muted-check-per-type",
+          "translation-key-order",
+          "muted-mistranslated"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 708579,
+        "tool_calls_total": 45,
+        "tool_calls_failure": 0,
+        "duration_ms": 254336
+      },
+      "completeness-review": {
+        "found": [
+          "hidden-on-contact-page",
+          "hidden-on-contacts-list",
+          "permission-controls-it",
+          "unmuted-unchanged",
+          "permission-grantable",
+          "grant-new-permission",
+          "use-resolved-muted-state"
+        ],
+        "rejected": [
+          "muting-transition-precondition"
+        ],
+        "unmatched": 1,
+        "total_tokens": 1075144,
+        "tool_calls_total": 39,
+        "tool_calls_failure": 2,
+        "duration_ms": 247629
+      }
+    },
+    {
+      "case": "medic__cht-core__10620",
+      "run": "2026-10-13T21-52-30",
+      "code-review": {
+        "found": [
+          "list-fab-not-wired",
+          "muted-check-per-type",
+          "translation-key-order",
+          "muted-mistranslated"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 851283,
+        "tool_calls_total": 52,
+        "tool_calls_failure": 0,
+        "duration_ms": 244205
+      },
+      "completeness-review": {
+        "found": [
+          "hidden-on-contact-page",
+          "hidden-on-contacts-list",
+          "permission-controls-it",
+          "unmuted-unchanged",
+          "permission-grantable",
+          "grant-new-permission",
+          "use-resolved-muted-state",
+          "use-conditional-permission-list"
+        ],
+        "rejected": [
+          "translation-lint-precondition"
+        ],
+        "unmatched": 0,
+        "total_tokens": 969742,
+        "tool_calls_total": 30,
+        "tool_calls_failure": 1,
+        "duration_ms": 249236
       }
     }
   ]

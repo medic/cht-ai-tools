@@ -251,7 +251,7 @@ const judgeCompleteness = async (items, { report, metrics }) => {
       'Split the report into its items: every bullet under Requirements, Preconditions to confirm, Undisclosed Changes ' +
       'and Alternative Approaches. Skip a section that says "None". Give each item its section, its bucket (for ' +
       'requirements; "none" otherwise), and its opening words as text. An item matches a key item only in that item\'s ' +
-      'section, and a requirement only when its bucket is the status or an acceptable bucket and it meets the match rule. ' +
+      'section (requirements and preconditions_to_confirm count as one section), and a requirement only when its bucket is the status or an acceptable bucket and it meets the match rule. ' +
       'Set trivial to true only for a Delivered requirement that matches nothing and states a trivial change (an ' +
       'import, a rename, a file or test count); otherwise false.',
     decisionsSchema('items', items, {
