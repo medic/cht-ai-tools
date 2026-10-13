@@ -26,7 +26,7 @@ The PR is read live on every run, so anyone commenting on it later changes the i
 npm run bench:ai-review -- medic/cht-core#11263
 ```
 
-Run it at least three times, without changing the benchmark, the skill or the image in between. Both jobs give different findings from run to run, so one run shows only part of what a review can find. Check every run's `run.json` before using it:
+This runs it three times in parallel, into `bench-results/<timestamp>-1` to `-3`. If you run it again, don't change the benchmark, the skill or the image in between. Both jobs give different findings from run to run, so one run shows only part of what a review can find. Check every run's `run.json` before using it:
 
 - `exitCode` is 0 for both jobs.
 - `versions` and `config` are the same across the runs, and `versions.chtAiTools.dirty` is `false`. If it's `true`, the runs measured uncommitted changes and can't be reproduced from the commit.
@@ -101,7 +101,7 @@ Every item has an `id` and:
 
 ## Scoring a run
 
-[`../score.mjs`](../score.mjs) does it:
+[`../score.mjs`](../score.mjs) does it. `run.mjs` calls it for each run as it completes, when the PR has a case. To score runs again, e.g. after the case changes:
 
 ```bash
 ANTHROPIC_API_KEY=... npm run bench:ai-review:score -- bench-results/2026-10-05T14-57-09 bench-results/2026-10-05T15-07-06
@@ -194,7 +194,7 @@ jq '{versions: (.versions | del(.chtAiTools.dirty)), config}' "$f/code-review/ru
 jq '{config}' "$f/completeness-review/run.json"
 ```
 
-For runs made before `run.json` had `versions`, like 11263's, these commands print `null`. Fill the values in by hand from:
+For runs made before `run.json` had `versions`, like 11263's earlier runs, these commands print `null`. Fill the values in by hand from:
 - **OCR version:** `manifest.execution.ocr_version` in `ocr-result.json`. Copy it as written, e.g. `v1.12.9`.
 - **Claude Code version:** `claude_code_version` in the `system` `init` message of `execution.jsonl`.
 - **cht-ai-tools commit:** the commit from when the runs were made.

@@ -1,5 +1,5 @@
 {
-  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded because these runs predate the `versions` field in run.json; whether the cht-ai-tools tree was dirty during them is not known. The medic__cht-core__10620 runs were made at cht-ai-tools 6e561de, which changes only what run.json records and adds the scorer, not the image or the review configuration; their tree was dirty only from staged, uncommitted case files, which the image doesn't use.",
+  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded: `chtAiTools.commit` is the commit the configuration was first benchmarked at, and later commits listed here change nothing the image or the review configuration uses (skills, hooks, commands, the plugin manifests, the Dockerfile, claude-settings.json, the models and options in run.mjs). The medic__cht-core__10620 runs were made at cht-ai-tools 6e561de, which changes only what run.json records and adds the scorer; their tree was dirty only from staged, uncommitted case files, which the image doesn't use. The medic__cht-core__11263 runs were made at c6660f2, which adds only cases and scorer changes; their tree was dirty only from staged benchmark scripts and case files, which the image doesn't use. They replace 11263's earlier runs (2026-10-05), which could not be rescored after the case gained items from these runs.",
   "versions": {
     "ocr": "v1.12.9",
     "claudeCode": "2.1.287",
@@ -21,119 +21,27 @@
   "runs": [
     {
       "case": "medic__cht-core__11263",
-      "run": "2026-10-05T14-57-09",
-      "code-review": {
-        "found": [
-          "routing-tests-copy-handler",
-          "infodoc-stubs-miss",
-          "502-bypasses-serverutils",
-          "partial-bulk-test-weak",
-          "weak-test-assertions",
-          "routing-spec-unused-vars",
-          "infodoc-stubs-not-restored"
-        ],
-        "failed": [
-          "502-inherits-upstream-headers"
-        ],
-        "rejected": [],
-        "unmatched": 0,
-        "total_tokens": 951786,
-        "tool_calls_total": 51,
-        "tool_calls_failure": 3,
-        "duration_ms": 353918
-      },
-      "completeness-review": {
-        "found": [
-          "infodoc-parse-guarded",
-          "routing-parse-guarded",
-          "routing-responds-502",
-          "valid-json-unchanged",
-          "infodoc-error-tests",
-          "infodoc-success-tests",
-          "routing-tests",
-          "no-other-unguarded-parse",
-          "use-serverutils",
-          "use-rewire"
-        ],
-        "rejected": [
-          "logger-resolvable"
-        ],
-        "unmatched": 0,
-        "total_tokens": 579599,
-        "tool_calls_total": 21,
-        "tool_calls_failure": 1,
-        "duration_ms": 188577
-      }
-    },
-    {
-      "case": "medic__cht-core__11263",
-      "run": "2026-10-05T15-07-06",
-      "code-review": {
-        "found": [
-          "routing-tests-copy-handler",
-          "body-preview-logged",
-          "partial-bulk-test-weak",
-          "weak-test-assertions",
-          "routing-spec-unused-vars",
-          "duplicated-parse-handling",
-          "infodoc-stubs-not-restored",
-          "infodoc-skip-on-parse-failure",
-          "audit-skipped-on-parse-failure",
-          "hardcoded-502"
-        ],
-        "failed": [],
-        "rejected": [],
-        "unmatched": 0,
-        "total_tokens": 629144,
-        "tool_calls_total": 39,
-        "tool_calls_failure": 0,
-        "duration_ms": 323329
-      },
-      "completeness-review": {
-        "found": [
-          "infodoc-parse-guarded",
-          "routing-parse-guarded",
-          "routing-responds-502",
-          "valid-json-unchanged",
-          "infodoc-error-tests",
-          "infodoc-success-tests",
-          "routing-tests",
-          "use-serverutils",
-          "use-rewire"
-        ],
-        "rejected": [
-          "routing-spec-unused-vars-undisclosed"
-        ],
-        "unmatched": 0,
-        "total_tokens": 546344,
-        "tool_calls_total": 17,
-        "tool_calls_failure": 1,
-        "duration_ms": 169573
-      }
-    },
-    {
-      "case": "medic__cht-core__11263",
-      "run": "2026-10-05T15-21-34",
+      "run": "2026-10-13T22-35-05-1",
       "code-review": {
         "found": [
           "routing-tests-copy-handler",
           "infodoc-stubs-miss",
           "502-inherits-upstream-headers",
-          "body-preview-logged",
           "partial-bulk-test-weak",
-          "weak-test-assertions",
           "routing-spec-unused-vars",
-          "duplicated-parse-handling",
           "infodoc-stubs-not-restored",
-          "null-body-throws"
+          "null-body-throws",
+          "hardcoded-502",
+          "infodoc-spec-unused-original-update",
+          "infodoc-spec-dead-body-listener"
         ],
         "failed": [],
         "rejected": [],
         "unmatched": 0,
-        "total_tokens": 645007,
-        "tool_calls_total": 40,
-        "tool_calls_failure": 2,
-        "duration_ms": 338517
+        "total_tokens": 704545,
+        "tool_calls_total": 32,
+        "tool_calls_failure": 0,
+        "duration_ms": 475816
       },
       "completeness-review": {
         "found": [
@@ -142,15 +50,110 @@
           "routing-responds-502",
           "valid-json-unchanged",
           "infodoc-error-tests",
+          "infodoc-success-tests",
+          "routing-tests",
+          "use-serverutils",
+          "test-real-handler"
+        ],
+        "rejected": [
+          "chunked-test-delivered",
+          "502-conflation-precondition",
+          "infodoc-stubs-not-restored-undisclosed"
+        ],
+        "unmatched": 0,
+        "total_tokens": 944567,
+        "tool_calls_total": 29,
+        "tool_calls_failure": 2,
+        "duration_ms": 268655
+      }
+    },
+    {
+      "case": "medic__cht-core__11263",
+      "run": "2026-10-13T22-35-05-2",
+      "code-review": {
+        "found": [
+          "infodoc-stubs-miss",
+          "502-inherits-upstream-headers",
+          "partial-bulk-test-weak",
+          "routing-spec-unused-vars",
+          "infodoc-stubs-not-restored",
+          "audit-skipped-on-parse-failure",
+          "hardcoded-502",
+          "infodoc-spec-unused-original-update"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 686924,
+        "tool_calls_total": 39,
+        "tool_calls_failure": 0,
+        "duration_ms": 431216
+      },
+      "completeness-review": {
+        "found": [
+          "infodoc-parse-guarded",
+          "routing-parse-guarded",
+          "routing-responds-502",
+          "valid-json-unchanged",
+          "infodoc-error-tests",
+          "infodoc-success-tests",
           "routing-tests",
           "use-serverutils"
         ],
+        "rejected": [
+          "logger-resolvable"
+        ],
+        "unmatched": 1,
+        "total_tokens": 686325,
+        "tool_calls_total": 22,
+        "tool_calls_failure": 1,
+        "duration_ms": 179002
+      }
+    },
+    {
+      "case": "medic__cht-core__11263",
+      "run": "2026-10-13T22-35-05-3",
+      "code-review": {
+        "found": [
+          "routing-tests-copy-handler",
+          "infodoc-stubs-miss",
+          "502-bypasses-serverutils",
+          "502-inherits-upstream-headers",
+          "partial-bulk-test-weak",
+          "weak-test-assertions",
+          "routing-spec-unused-vars",
+          "infodoc-stubs-not-restored"
+        ],
+        "failed": [],
         "rejected": [],
         "unmatched": 0,
-        "total_tokens": 579137,
-        "tool_calls_total": 19,
+        "total_tokens": 904924,
+        "tool_calls_total": 53,
+        "tool_calls_failure": 0,
+        "duration_ms": 327634
+      },
+      "completeness-review": {
+        "found": [
+          "infodoc-parse-guarded",
+          "routing-parse-guarded",
+          "routing-responds-502",
+          "valid-json-unchanged",
+          "infodoc-error-tests",
+          "infodoc-success-tests",
+          "routing-tests",
+          "use-serverutils",
+          "test-real-handler"
+        ],
+        "rejected": [
+          "unit-env-exit-precondition",
+          "spec-glob-precondition",
+          "use-errors-js"
+        ],
+        "unmatched": 0,
+        "total_tokens": 931171,
+        "tool_calls_total": 25,
         "tool_calls_failure": 2,
-        "duration_ms": 166955
+        "duration_ms": 213088
       }
     },
     {

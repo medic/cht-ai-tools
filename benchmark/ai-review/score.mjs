@@ -15,7 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CASES_DIR = join(HERE, 'cases');
@@ -295,7 +295,11 @@ const differences = (a, b) => JOBS.flatMap(job => SCORE_FIELDS
   .filter(field => JSON.stringify(a[job][field]) !== JSON.stringify(b[job][field]))
   .map(field => `${job}.${field}: ${JSON.stringify(a[job][field])} vs ${JSON.stringify(b[job][field])}`));
 
-const scoreCase = async (runDir, caseName, baseline) => {
+export const hasCase = caseName => existsSync(join(CASES_DIR, `${caseName}.json`));
+
+export const readBaseline = () => existsSync(BASELINE) ? readJson(BASELINE) : undefined;
+
+export const scoreCase = async (runDir, caseName, baseline) => {
   const items = caseItems(readJson(join(CASES_DIR, `${caseName}.json`)));
   const dir = join(runDir, caseName);
   const run = basename(runDir);
@@ -339,12 +343,12 @@ const main = async () => {
     throw new Error('ANTHROPIC_API_KEY is not set');
   }
   const work = runDirs.flatMap(runDir => readdirSync(runDir, { withFileTypes: true })
-    .filter(d => d.isDirectory() && existsSync(join(CASES_DIR, `${d.name}.json`)))
+    .filter(d => d.isDirectory() && hasCase(d.name))
     .map(d => [runDir, d.name]));
   if (!work.length) {
     throw new Error(`No results for a case in ${CASES_DIR}`);
   }
-  const baseline = existsSync(BASELINE) ? readJson(BASELINE) : undefined;
+  const baseline = readBaseline();
   // One case failing shouldn't lose the others' scores, which are already paid for
   await Promise.all(work.map(([runDir, caseName]) => scoreCase(runDir, caseName, baseline).catch(err => {
     console.error(`${basename(runDir)} ${caseName}: ${err.message}`);
@@ -352,4 +356,7 @@ const main = async () => {
   })));
 };
 
-await main();
+// run.mjs imports scoreCase, to score each run as it completes
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await main();
+}

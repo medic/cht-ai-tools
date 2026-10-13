@@ -150,12 +150,31 @@
           "api/src/routing.js:1138"
         ],
         "match": "Says the upstream status code is replaced by 502 and should be passed through when meaningful. Comments about the 502's body or headers are 502-bypasses-serverutils or 502-inherits-upstream-headers."
+      },
+      {
+        "id": "infodoc-spec-unused-original-update",
+        "severity": "low",
+        "summary": "infodoc.spec.js's first test declares `const originalUpdate = infodoc.update` and never reads it: left over from a save-and-restore that was never written. Dead code with no effect on the test.",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:33"
+        ],
+        "match": "Says `originalUpdate` is declared but never used. Saying the stubs are never restored is infodoc-stubs-not-restored, not this item."
+      },
+      {
+        "id": "infodoc-spec-dead-body-listener",
+        "severity": "low",
+        "summary": "infodoc.spec.js's first test adds its own 'data' listener that collects a local `body` buffer, which is never read or asserted on. Dead code with no effect on the test.",
+        "locations": [
+          "api/tests/mocha/controllers/infodoc.spec.js:38",
+          "api/tests/mocha/controllers/infodoc.spec.js:39"
+        ],
+        "match": "Says the test's local `body` buffer, or the extra 'data' listener that fills it, is never used."
       }
     ]
   },
   "completeness-review": {
     "requirements": {
-      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (the logger import, the parsedBody rename, the test count) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings reviews have made that are wrong.",
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (the logger import, the parsedBody rename, the test count) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings reviews have made that are wrong. A Delivered item saying only that the handlers are still wired to the proxies describes no change and no promise: it matches nothing and counts as unmatched.",
       "required": [
         {
           "id": "infodoc-parse-guarded",
@@ -176,7 +195,7 @@
             "api/src/routing.js:1133",
             "api/src/routing.js:1136"
           ],
-          "match": "A Delivered item saying routing.js catches the parse failure and logs it with the status, error and body preview."
+          "match": "A Delivered item saying routing.js catches the parse failure and logs it with the status, error and body preview. Separate items for the catch and the log together match."
         },
         {
           "id": "routing-responds-502",
@@ -189,7 +208,7 @@
             "api/src/routing.js:1138",
             "api/server.js:15"
           ],
-          "match": "A Delivered item for the 502 response or for the request completing instead of hanging. Pending verification matches only when it names the upstream headers / Content-Type copied onto res (see code-review 502-inherits-upstream-headers). A report saying the old behaviour was a crash rather than a hang matches too."
+          "match": "A Delivered item for the 502 response, for the request completing instead of hanging, or for the early return that prevents a second response. Pending verification matches only when it names the upstream headers / Content-Type copied onto res (see code-review 502-inherits-upstream-headers). A report saying the old behaviour was a crash rather than a hang matches too."
         },
         {
           "id": "valid-json-unchanged",
@@ -252,6 +271,30 @@
           "summary": "Precondition to confirm: @medic/logger must be resolvable from api/src/controllers/infodoc.js at runtime.",
           "reason": "The API already uses @medic/logger throughout; it is not an operational fact this change depends on.",
           "match": "Lists @medic/logger (or the logger import) being available or resolvable as a precondition."
+        },
+        {
+          "id": "chunked-test-delivered",
+          "summary": "Delivered: chunked response bodies are assembled before parsing, citing the chunked-data test in infodoc.spec.js.",
+          "reason": "The chunk assembly is unchanged code, and what the PR promises is its test. That test is one of the success-path tests whose stub is never called (infodoc-success-tests), so the coverage is not delivered.",
+          "match": "A Delivered item for chunked data assembly or its test in infodoc.spec.js."
+        },
+        {
+          "id": "502-conflation-precondition",
+          "summary": "Precondition to confirm: 502 is otherwise only sent by the nginx layer, so confirm that clients and monitoring won't mistake the new application 502 for a gateway failure.",
+          "reason": "Not an operational fact the change depends on, but an opinion on its design. And 502 Bad Gateway is the standard status for an invalid response from an upstream server, which is what this is.",
+          "match": "Lists the choice of 502, or its confusion with gateway/nginx 502s, as a precondition."
+        },
+        {
+          "id": "unit-env-exit-precondition",
+          "summary": "Precondition to confirm: requiring the infodoc controller in a unit test runs initLib against the UNIT_TEST_ENV db stubs, whose unstubbed methods call process.exit(1).",
+          "reason": "True, but it is the defect behind infodoc-success-tests and infodoc-error-tests, not an operational precondition. Listed as a precondition it reaches no bucket and doesn't say the tests fail.",
+          "match": "Lists the UNIT_TEST_ENV db stubs, process.exit or initLib running under the unit tests as a precondition."
+        },
+        {
+          "id": "spec-glob-precondition",
+          "summary": "Precondition to confirm: the new spec file is picked up by the api/tests/mocha/**/*.js glob in package.json.",
+          "reason": "True, but it is how the repo's unit tests already run, not an operational fact this change depends on.",
+          "match": "Lists the new spec being picked up by the mocha glob, or the test runner config, as a precondition."
         }
       ]
     },
@@ -264,6 +307,12 @@
           "summary": "Undisclosed change: routing.spec.js declares `routing` and `proxyForAuthHandler`, never assigned or read, next to an empty before() hook.",
           "reason": "Part of the routing tests the PR describes, so not an undisclosed change. The real problem is the routing-tests requirement.",
           "match": "Lists the unused `routing` / `proxyForAuthHandler` declarations, or the empty before() hook, as an undisclosed change."
+        },
+        {
+          "id": "infodoc-stubs-not-restored-undisclosed",
+          "summary": "Undisclosed change: infodoc.spec.js assigns recordDocumentWrite/recordDocumentWrites onto the controller's exports without restoring them, leaving them set for later specs.",
+          "reason": "infodoc.spec.js is a test file the PR describes, so not an undisclosed change. The leftover properties are also harmless: nothing reads them (see code-review infodoc-stubs-not-restored), and the run exits before later specs (infodoc-stubs-miss).",
+          "match": "Lists the unrestored stub assignments in infodoc.spec.js as an undisclosed change."
         }
       ]
     },
@@ -277,15 +326,24 @@
             "api/src/server-utils.js:14",
             "api/src/routing.js:1124"
           ],
-          "match": "Cites serverUtils as the existing way to send the error. Mentioning the missing `code` field or a needed 502 branch alongside it is part of the same item."
+          "match": "Cites serverUtils as the existing way to send the error. Mentioning the missing `code` field or a needed 502 branch alongside it is part of the same item. A bullet whose point is errors.js's typed error classes is use-errors-js, not this item, even when it names serverUtils.error."
         },
         {
-          "id": "use-rewire",
-          "summary": "routing.spec.js already uses rewire, which would let the new tests reach and run the real proxyRes handler instead of a copy.",
+          "id": "test-real-handler",
+          "summary": "There are existing ways for the new routing tests to run the real proxyRes handler instead of a copy: routing.spec.js already uses rewire to reach into routing.js, and the infodoc controller shows the other pattern, a handler exported from its module and required by its spec.",
           "locations": [
-            "api/tests/mocha/routing.spec.js:1"
+            "api/tests/mocha/routing.spec.js:1",
+            "api/src/controllers/infodoc.js:12"
           ],
-          "match": "Cites rewire (or the existing rewire usage) as a way to test the real handler."
+          "match": "Cites rewire (or the existing rewire usage), or exporting the handler as the infodoc controller does, as a way to test the real handler."
+        }
+      ],
+      "rejected": [
+        {
+          "id": "use-errors-js",
+          "summary": "Use the typed error classes in api/src/errors.js, which serverUtils.error dispatches on, to raise the upstream-response failure instead of building the error inline.",
+          "reason": "errors.js has no class that fits an invalid upstream response (it has 401, 403, 404 and a public-message error), and serverUtils.error sends any 5xx through serverError as a 500, so it cannot give the 502 either. The serverUtils point itself is use-serverutils.",
+          "match": "Proposes errors.js or its typed error classes as the way to raise or send the error."
         }
       ]
     }

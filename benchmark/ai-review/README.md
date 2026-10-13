@@ -16,13 +16,15 @@ ANTHROPIC_API_KEY=$(op read "op://Private/platform.claude.com/password") GITHUB_
 
 ```
 
-To score runs against the [cases](cases), and compare them with [`baseline.json`](baseline.json):
+Each PR is reviewed `RUNS` (3) times in parallel, because both jobs give different findings from run to run. When a run of a PR completes, it is scored against the PR's [case](cases), if there is one, and compared with [`baseline.json`](baseline.json). The scores print as they arrive. The next PR's runs start without waiting for the scoring.
+
+To score runs again, e.g. after a case changes:
 
 ```bash
 ANTHROPIC_API_KEY=$(op read "op://Private/platform.claude.com/password") npm run bench:ai-review:score -- bench-results/<timestamp>...
 ```
 
-Output goes to `bench-results/<timestamp>/`:
+Output goes to one directory per run, `bench-results/<timestamp>-<n>/`:
 
 ```
 <owner>__<repo>__<pr>/

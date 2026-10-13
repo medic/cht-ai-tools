@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Runs the two review jobs of the cht-core ai-review workflow against PRs, in a container, and saves their raw output
- * instead of posting it to the PR.
+ * instead of posting it to the PR. Each PR is reviewed RUNS times in parallel, and each run is scored against its case
+ * (if there is one) as soon as it completes.
  *
  * Usage: node benchmark/ai-review/run.mjs <owner/repo#pr>...
  *
@@ -9,12 +10,16 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hasCase, readBaseline, scoreCase } from './score.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOOLS_ROOT = resolve(HERE, '../..');
 const OUT_ROOT = join(TOOLS_ROOT, 'bench-results');
+
+// Both jobs give different findings from run to run, so one run shows only part of what a review can find
+const RUNS = 3;
 
 // Config copied from https://github.com/medic/cht-core/blob/master/.github/workflows/ai-review.yml
 const OCR_ENV = {
@@ -197,25 +202,44 @@ const main = async () => {
 
   buildImage();
   const runVersions = versions();
-  const runDir = join(OUT_ROOT, new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19));
+  const baseline = readBaseline();
+  // One directory per run, so each scores as its own run, as baseline.json's `runs` expect
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const runDirs = Array.from({ length: RUNS }, (_, i) => join(OUT_ROOT, `${stamp}-${i + 1}`));
 
+  const scoring = [];
   for (const { repo, number } of prs) {
     const pull = await getPull(repo, number);
     const cacheDir = repoCache(repo, number);
-    // The jobs run in parallel in the workflow, so run them in parallel here too
-    await Promise.all([['code-review', codeReview], ['completeness-review', completenessReview]].map(async ([job, review]) => {
-      const outDir = join(runDir, `${repo.replace('/', '__')}__${number}`, job);
-      mkdirSync(outDir, { recursive: true });
-      console.error(`${repo}#${number} ${job}`);
-      const started = Date.now();
-      const { exitCode, ...inputs } = await review({ repo, pull, cacheDir, outDir });
-      const durationMs = Date.now() - started;
-      const run = { exitCode, durationMs, versions: runVersions, ...inputs };
-      writeFileSync(join(outDir, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
-      console.error(`${repo}#${number} ${job} exited ${exitCode} after ${Math.round(durationMs / 1000)}s`);
+    const caseName = `${repo.replace('/', '__')}__${number}`;
+    await Promise.all(runDirs.map(async runDir => {
+      const label = `${basename(runDir)} ${repo}#${number}`;
+      // The jobs run in parallel in the workflow, so run them in parallel here too
+      await Promise.all([['code-review', codeReview], ['completeness-review', completenessReview]].map(async ([job, review]) => {
+        const outDir = join(runDir, caseName, job);
+        mkdirSync(outDir, { recursive: true });
+        console.error(`${label} ${job}`);
+        const started = Date.now();
+        const { exitCode, ...inputs } = await review({ repo, pull, cacheDir, outDir });
+        const durationMs = Date.now() - started;
+        const run = { exitCode, durationMs, versions: runVersions, ...inputs };
+        writeFileSync(join(outDir, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
+        console.error(`${label} ${job} exited ${exitCode} after ${Math.round(durationMs / 1000)}s`);
+      }));
+      if (!hasCase(caseName)) {
+        console.error(`${label}: no case to score against`);
+        return;
+      }
+      // Score in the background, so the next PR's runs start without waiting for the judge. A failed score shouldn't
+      // lose the runs, which can be scored again with score.mjs.
+      scoring.push(scoreCase(runDir, caseName, baseline).catch(err => {
+        console.error(`${label}: scoring failed: ${err.message}`);
+        process.exitCode = 1;
+      }));
     }));
   }
-  console.error(`Results in ${runDir}`);
+  await Promise.all(scoring);
+  console.error(`Results in ${runDirs.join(' ')}`);
 };
 
 await main();
