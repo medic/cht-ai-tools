@@ -1,5 +1,5 @@
 {
-  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded: `chtAiTools.commit` is the commit the configuration was first benchmarked at, and later commits listed here change nothing the image or the review configuration uses (skills, hooks, commands, the plugin manifests, the Dockerfile, claude-settings.json, the models and options in run.mjs). The medic__cht-core__10620 runs were made at cht-ai-tools 6e561de, which changes only what run.json records and adds the scorer; their tree was dirty only from staged, uncommitted case files, which the image doesn't use. The medic__cht-core__11263 runs were made at c6660f2, which adds only cases and scorer changes; their tree was dirty only from staged benchmark scripts and case files, which the image doesn't use. They replace 11263's earlier runs (2026-10-05), which could not be rescored after the case gained items from these runs.",
+  "notes": "Scores of the current configuration, one entry per scored run. Replace this file when the configuration is deliberately changed. The versions are hardcoded: `chtAiTools.commit` is the commit the configuration was first benchmarked at, and later commits listed here change nothing the image or the review configuration uses (skills, hooks, commands, the plugin manifests, the Dockerfile, claude-settings.json, the models and options in run.mjs). The medic__cht-core__10620 runs were made at cht-ai-tools 6e561de, which changes only what run.json records and adds the scorer; their tree was dirty only from staged, uncommitted case files, which the image doesn't use. The medic__cht-core__11263 runs were made at c6660f2, which adds only cases and scorer changes; their tree was dirty only from staged benchmark scripts and case files, which the image doesn't use. They replace 11263's earlier runs (2026-10-05), which could not be rescored after the case gained items from these runs. The 10620 and 11263 runs were scored before the scorer numbered the report's bullets, told the judge that a repeated point matches the same item, and gave it each section's notes; their run directories are gone, so they can't be rescored with it. Every other run was scored with it. The runs of the other 11 cases (2026-10-13T23-37-17-1 to -3) were made at 8c501f8, which adds only parallel runs and scorer changes; their tree was dirty only from staged case files and scorer changes, which the image doesn't use. Those cases are still drafts, built from a manual review rather than from runs: findings the runs made that no item covers count as unmatched, so these scores will change as the cases are built from the runs. One score is settled by hand rather than taken from score.json's first pass: medic__cht-core__11054 run 2026-10-13T23-37-17-1's completeness-review unmatched is 6, the second pass's, since the first left a bullet that also lists cached accounts unmatched; the case's match rule now says it matches.",
   "versions": {
     "ocr": "v1.12.9",
     "claudeCode": "2.1.287",
@@ -270,6 +270,1147 @@
         "tool_calls_total": 30,
         "tool_calls_failure": 1,
         "duration_ms": 249236
+      }
+    },
+    {
+      "case": "medic__cht-core__10893",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "auto-purge-unconfirmed",
+          "config-ignores-facility-id",
+          "p2p-endpoints-no-permission-check",
+          "signing-key-race",
+          "purge-comment-contradicts-code",
+          "duplicated-p2p-helpers",
+          "db-sync-p2p-untested"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 72,
+        "total_tokens": 7025949,
+        "tool_calls_total": 243,
+        "tool_calls_failure": 0,
+        "duration_ms": 659153
+      },
+      "completeness-review": {
+        "found": [
+          "authorize-endpoint",
+          "facility-config-endpoint",
+          "revocation-and-telemetry-endpoints",
+          "p2p-ui-config-driven",
+          "status-page",
+          "soft-delete-pattern",
+          "new-edits-false",
+          "p2p-sync-settings",
+          "android-bridge",
+          "vault-signing-key",
+          "version-bump",
+          "e2e-tests-disabled",
+          "tasks-spec-blank-lines"
+        ],
+        "rejected": [],
+        "unmatched": 9,
+        "total_tokens": 4915761,
+        "tool_calls_total": 50,
+        "tool_calls_failure": 1,
+        "duration_ms": 327712
+      }
+    },
+    {
+      "case": "medic__cht-core__10893",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "auto-purge-unconfirmed",
+          "config-ignores-facility-id",
+          "p2p-endpoints-no-permission-check",
+          "signing-key-race",
+          "purge-comment-contradicts-code",
+          "duplicated-p2p-helpers",
+          "facility-path-walk",
+          "p2p-route-unguarded"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 70,
+        "total_tokens": 7285316,
+        "tool_calls_total": 249,
+        "tool_calls_failure": 0,
+        "duration_ms": 666538
+      },
+      "completeness-review": {
+        "found": [
+          "authorize-endpoint",
+          "revocation-and-telemetry-endpoints",
+          "p2p-ui-config-driven",
+          "status-page",
+          "soft-delete-pattern",
+          "new-edits-false",
+          "p2p-sync-settings",
+          "android-bridge",
+          "vault-signing-key",
+          "version-bump",
+          "e2e-tests-disabled",
+          "tasks-spec-blank-lines",
+          "use-cht-permissions"
+        ],
+        "rejected": [],
+        "unmatched": 11,
+        "total_tokens": 2623873,
+        "tool_calls_total": 58,
+        "tool_calls_failure": 2,
+        "duration_ms": 289965
+      }
+    },
+    {
+      "case": "medic__cht-core__10893",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "auto-purge-unconfirmed",
+          "config-ignores-facility-id",
+          "p2p-endpoints-no-permission-check",
+          "signing-key-race",
+          "revoked-users-still-authorized",
+          "purge-comment-contradicts-code",
+          "jwt-role-arbitrary",
+          "duplicated-p2p-helpers",
+          "sync-jsdoc-displaced"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 71,
+        "total_tokens": 7293422,
+        "tool_calls_total": 268,
+        "tool_calls_failure": 2,
+        "duration_ms": 655909
+      },
+      "completeness-review": {
+        "found": [
+          "authorize-endpoint",
+          "revocation-and-telemetry-endpoints",
+          "p2p-ui-config-driven",
+          "status-page",
+          "soft-delete-pattern",
+          "new-edits-false",
+          "p2p-sync-settings",
+          "android-bridge",
+          "vault-signing-key",
+          "version-bump",
+          "e2e-tests-disabled",
+          "tasks-spec-blank-lines",
+          "sync-paused-during-p2p",
+          "use-cht-permissions"
+        ],
+        "rejected": [],
+        "unmatched": 19,
+        "total_tokens": 4544231,
+        "tool_calls_total": 73,
+        "tool_calls_failure": 2,
+        "duration_ms": 387418
+      }
+    },
+    {
+      "case": "medic__cht-core__10998",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 144113,
+        "tool_calls_total": 9,
+        "tool_calls_failure": 0,
+        "duration_ms": 92548
+      },
+      "completeness-review": {
+        "found": [
+          "query-preserved",
+          "absolute-urls-keep-query",
+          "redirect-tests-added",
+          "query-now-checked"
+        ],
+        "rejected": [],
+        "unmatched": 1,
+        "total_tokens": 412099,
+        "tool_calls_total": 21,
+        "tool_calls_failure": 2,
+        "duration_ms": 126230
+      }
+    },
+    {
+      "case": "medic__cht-core__10998",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 48820,
+        "tool_calls_total": 3,
+        "tool_calls_failure": 0,
+        "duration_ms": 36071
+      },
+      "completeness-review": {
+        "found": [
+          "query-preserved",
+          "redirect-tests-added",
+          "query-now-checked"
+        ],
+        "rejected": [],
+        "unmatched": 3,
+        "total_tokens": 601345,
+        "tool_calls_total": 26,
+        "tool_calls_failure": 1,
+        "duration_ms": 167074
+      }
+    },
+    {
+      "case": "medic__cht-core__10998",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 59975,
+        "tool_calls_total": 4,
+        "tool_calls_failure": 0,
+        "duration_ms": 40329
+      },
+      "completeness-review": {
+        "found": [
+          "query-preserved",
+          "absolute-urls-keep-query",
+          "redirect-tests-added",
+          "query-now-checked"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 503783,
+        "tool_calls_total": 24,
+        "tool_calls_failure": 2,
+        "duration_ms": 149255
+      }
+    },
+    {
+      "case": "medic__cht-core__11004",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 32548,
+        "tool_calls_total": 2,
+        "tool_calls_failure": 0,
+        "duration_ms": 22906
+      },
+      "completeness-review": {
+        "found": [
+          "exact-boundaries-singular",
+          "days-break-unaffected",
+          "maintainer-months-expected",
+          "relative-dates-humanized"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 367865,
+        "tool_calls_total": 16,
+        "tool_calls_failure": 1,
+        "duration_ms": 121696
+      }
+    },
+    {
+      "case": "medic__cht-core__11004",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 48083,
+        "tool_calls_total": 3,
+        "tool_calls_failure": 0,
+        "duration_ms": 12045
+      },
+      "completeness-review": {
+        "found": [
+          "exact-boundaries-singular",
+          "days-break-unaffected",
+          "boundary-tests-added",
+          "existing-tests-still-pass",
+          "maintainer-months-expected",
+          "relative-dates-humanized"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 525524,
+        "tool_calls_total": 17,
+        "tool_calls_failure": 1,
+        "duration_ms": 170321
+      }
+    },
+    {
+      "case": "medic__cht-core__11004",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 47798,
+        "tool_calls_total": 3,
+        "tool_calls_failure": 0,
+        "duration_ms": 20817
+      },
+      "completeness-review": {
+        "found": [
+          "exact-boundaries-singular",
+          "days-break-unaffected",
+          "maintainer-months-expected",
+          "relative-dates-humanized"
+        ],
+        "rejected": [],
+        "unmatched": 5,
+        "total_tokens": 521158,
+        "tool_calls_total": 19,
+        "tool_calls_failure": 1,
+        "duration_ms": 175498
+      }
+    },
+    {
+      "case": "medic__cht-core__11015",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "fuzzy-candidates-not-normalized",
+          "fuse-options-misleading",
+          "duplicate-arabic-assertion"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 2252874,
+        "tool_calls_total": 97,
+        "tool_calls_failure": 0,
+        "duration_ms": 400342
+      },
+      "completeness-review": {
+        "found": [
+          "freetext-search-bar",
+          "matches-lineage-names-and-title",
+          "no-db-access",
+          "fuzzy-matching",
+          "diacritics-normalized",
+          "unit-tests",
+          "e2e-tests"
+        ],
+        "rejected": [
+          "fuse-installed"
+        ],
+        "unmatched": 4,
+        "total_tokens": 932924,
+        "tool_calls_total": 29,
+        "tool_calls_failure": 1,
+        "duration_ms": 202710
+      }
+    },
+    {
+      "case": "medic__cht-core__11015",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "fuzzy-candidates-not-normalized",
+          "fuse-options-misleading",
+          "duplicate-arabic-assertion"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 5,
+        "total_tokens": 2393668,
+        "tool_calls_total": 95,
+        "tool_calls_failure": 2,
+        "duration_ms": 573261
+      },
+      "completeness-review": {
+        "found": [
+          "freetext-search-bar",
+          "matches-lineage-names-and-title",
+          "no-db-access",
+          "fuzzy-matching",
+          "diacritics-normalized",
+          "e2e-tests"
+        ],
+        "rejected": [
+          "fuse-installed"
+        ],
+        "unmatched": 4,
+        "total_tokens": 1136142,
+        "tool_calls_total": 33,
+        "tool_calls_failure": 2,
+        "duration_ms": 217414
+      }
+    },
+    {
+      "case": "medic__cht-core__11015",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "fuzzy-candidates-not-normalized",
+          "fuzzy-results-reorder-list",
+          "fuse-options-misleading",
+          "duplicate-arabic-assertion"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 5,
+        "total_tokens": 2841770,
+        "tool_calls_total": 100,
+        "tool_calls_failure": 1,
+        "duration_ms": 686309
+      },
+      "completeness-review": {
+        "found": [
+          "freetext-search-bar",
+          "matches-lineage-names-and-title",
+          "no-db-access",
+          "fuzzy-matching",
+          "diacritics-normalized",
+          "e2e-tests"
+        ],
+        "rejected": [
+          "fuse-installed"
+        ],
+        "unmatched": 4,
+        "total_tokens": 1303017,
+        "tool_calls_total": 37,
+        "tool_calls_failure": 1,
+        "duration_ms": 197310
+      }
+    },
+    {
+      "case": "medic__cht-core__11045",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 30610,
+        "tool_calls_total": 2,
+        "tool_calls_failure": 0,
+        "duration_ms": 9838
+      },
+      "completeness-review": {
+        "found": [
+          "passwords-with-colons",
+          "listed-tests",
+          "missing-headers-object-test",
+          "colonless-now-throws"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 325831,
+        "tool_calls_total": 15,
+        "tool_calls_failure": 1,
+        "duration_ms": 104394
+      }
+    },
+    {
+      "case": "medic__cht-core__11045",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 33970,
+        "tool_calls_total": 2,
+        "tool_calls_failure": 0,
+        "duration_ms": 9213
+      },
+      "completeness-review": {
+        "found": [
+          "passwords-with-colons",
+          "listed-tests",
+          "missing-headers-object-test",
+          "colonless-now-throws"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 388046,
+        "tool_calls_total": 16,
+        "tool_calls_failure": 1,
+        "duration_ms": 125615
+      }
+    },
+    {
+      "case": "medic__cht-core__11045",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "colonless-header-500s"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 477568,
+        "tool_calls_total": 27,
+        "tool_calls_failure": 0,
+        "duration_ms": 132045
+      },
+      "completeness-review": {
+        "found": [
+          "passwords-with-colons",
+          "listed-tests",
+          "missing-headers-object-test",
+          "colonless-now-throws"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 603304,
+        "tool_calls_total": 23,
+        "tool_calls_failure": 1,
+        "duration_ms": 148858
+      }
+    },
+    {
+      "case": "medic__cht-core__11054",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "userctx-not-session",
+          "selector-clears-session-on-visit",
+          "hardcoded-strings",
+          "tabindex-removed",
+          "no-auth-on-switch",
+          "silent-restore-failure"
+        ],
+        "failed": [],
+        "rejected": [
+          "session-token-exposed"
+        ],
+        "unmatched": 7,
+        "total_tokens": 1708091,
+        "tool_calls_total": 110,
+        "tool_calls_failure": 4,
+        "duration_ms": 364276
+      },
+      "completeness-review": {
+        "found": [
+          "sidebar-switch-user",
+          "account-selector-lists",
+          "restore-selected-account",
+          "original-session-preserved",
+          "add-account-login",
+          "tests",
+          "offline-switching",
+          "outbound-test",
+          "tabindex-removal",
+          "readonly-refactor"
+        ],
+        "rejected": [],
+        "unmatched": 6,
+        "total_tokens": 1034204,
+        "tool_calls_total": 33,
+        "tool_calls_failure": 3,
+        "duration_ms": 249123
+      }
+    },
+    {
+      "case": "medic__cht-core__11054",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "userctx-not-session",
+          "hardcoded-strings",
+          "tabindex-removed",
+          "no-auth-on-switch",
+          "cache-unbounded",
+          "silent-restore-failure"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 9,
+        "total_tokens": 1523593,
+        "tool_calls_total": 101,
+        "tool_calls_failure": 1,
+        "duration_ms": 433998
+      },
+      "completeness-review": {
+        "found": [
+          "sidebar-switch-user",
+          "account-selector-lists",
+          "restore-selected-account",
+          "original-session-preserved",
+          "add-account-login",
+          "tests",
+          "offline-switching",
+          "account-isolation",
+          "outbound-test",
+          "tabindex-removal",
+          "readonly-refactor"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 1344853,
+        "tool_calls_total": 37,
+        "tool_calls_failure": 1,
+        "duration_ms": 279675
+      }
+    },
+    {
+      "case": "medic__cht-core__11054",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "userctx-not-session",
+          "restore-without-reload",
+          "selector-clears-session-on-visit",
+          "hardcoded-strings",
+          "tabindex-removed",
+          "no-auth-on-switch",
+          "silent-restore-failure"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 10,
+        "total_tokens": 1703576,
+        "tool_calls_total": 92,
+        "tool_calls_failure": 1,
+        "duration_ms": 438103
+      },
+      "completeness-review": {
+        "found": [
+          "sidebar-switch-user",
+          "account-selector-lists",
+          "restore-selected-account",
+          "original-session-preserved",
+          "add-account-login",
+          "tests",
+          "offline-switching",
+          "per-account-storage",
+          "outbound-test",
+          "tabindex-removal",
+          "readonly-refactor"
+        ],
+        "rejected": [],
+        "unmatched": 6,
+        "total_tokens": 1282242,
+        "tool_calls_total": 34,
+        "tool_calls_failure": 2,
+        "duration_ms": 239707
+      }
+    },
+    {
+      "case": "medic__cht-core__11069",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "lock-released-before-save",
+          "exists-validator-short-circuit",
+          "lock-per-process"
+        ],
+        "failed": [],
+        "rejected": [
+          "duration-collision"
+        ],
+        "unmatched": 0,
+        "total_tokens": 258142,
+        "tool_calls_total": 17,
+        "tool_calls_failure": 1,
+        "duration_ms": 233279
+      },
+      "completeness-review": {
+        "found": [
+          "concurrent-duplicates-rejected",
+          "lock-mechanism",
+          "single-process",
+          "lock-affects-exists-and-uniquewithin",
+          "rowdoc-rename"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 1102356,
+        "tool_calls_total": 30,
+        "tool_calls_failure": 2,
+        "duration_ms": 217612
+      }
+    },
+    {
+      "case": "medic__cht-core__11069",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "exists-validator-short-circuit",
+          "in-flight-doc-assumed-valid",
+          "lock-per-process",
+          "lock-untested"
+        ],
+        "failed": [],
+        "rejected": [
+          "duration-collision"
+        ],
+        "unmatched": 1,
+        "total_tokens": 342169,
+        "tool_calls_total": 21,
+        "tool_calls_failure": 1,
+        "duration_ms": 256076
+      },
+      "completeness-review": {
+        "found": [
+          "concurrent-duplicates-rejected",
+          "lock-mechanism",
+          "single-process",
+          "lock-affects-exists-and-uniquewithin",
+          "rowdoc-rename"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 743786,
+        "tool_calls_total": 27,
+        "tool_calls_failure": 2,
+        "duration_ms": 197823
+      }
+    },
+    {
+      "case": "medic__cht-core__11069",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "lock-released-before-save",
+          "lock-per-process",
+          "lock-untested"
+        ],
+        "failed": [],
+        "rejected": [
+          "duration-collision"
+        ],
+        "unmatched": 1,
+        "total_tokens": 247722,
+        "tool_calls_total": 16,
+        "tool_calls_failure": 0,
+        "duration_ms": 253443
+      },
+      "completeness-review": {
+        "found": [
+          "concurrent-duplicates-rejected",
+          "lock-mechanism",
+          "single-process",
+          "lock-affects-exists-and-uniquewithin",
+          "rowdoc-rename"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 1073778,
+        "tool_calls_total": 35,
+        "tool_calls_failure": 1,
+        "duration_ms": 227536
+      }
+    },
+    {
+      "case": "medic__cht-core__11084",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "existing-specs-break",
+          "boolean-overload",
+          "settings-refetched-per-call",
+          "no-integration-tests"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 7,
+        "total_tokens": 2688008,
+        "tool_calls_total": 85,
+        "tool_calls_failure": 0,
+        "duration_ms": 647756
+      },
+      "completeness-review": {
+        "found": [
+          "bs-interval-calculation",
+          "rules-engine-bs",
+          "uhc-bs",
+          "config-exposed",
+          "bs-tests",
+          "gregorian-unchanged",
+          "storage-format-kept",
+          "month-start-nullish"
+        ],
+        "rejected": [
+          "bikram-sambat-dependency-precondition"
+        ],
+        "unmatched": 3,
+        "total_tokens": 1661780,
+        "tool_calls_total": 39,
+        "tool_calls_failure": 1,
+        "duration_ms": 291025
+      }
+    },
+    {
+      "case": "medic__cht-core__11084",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "existing-specs-break",
+          "settings-refetched-per-call"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 8,
+        "total_tokens": 3536371,
+        "tool_calls_total": 95,
+        "tool_calls_failure": 0,
+        "duration_ms": 505035
+      },
+      "completeness-review": {
+        "found": [
+          "bs-interval-calculation",
+          "rules-engine-bs",
+          "uhc-bs",
+          "config-exposed",
+          "bs-tests",
+          "gregorian-unchanged",
+          "storage-format-kept",
+          "bs-config-flag",
+          "month-start-nullish"
+        ],
+        "rejected": [
+          "bikram-sambat-dependency-precondition"
+        ],
+        "unmatched": 3,
+        "total_tokens": 1808179,
+        "tool_calls_total": 49,
+        "tool_calls_failure": 1,
+        "duration_ms": 389485
+      }
+    },
+    {
+      "case": "medic__cht-core__11084",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "existing-specs-break",
+          "boolean-overload",
+          "settings-refetched-per-call"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 3095559,
+        "tool_calls_total": 88,
+        "tool_calls_failure": 1,
+        "duration_ms": 538346
+      },
+      "completeness-review": {
+        "found": [
+          "bs-interval-calculation",
+          "rules-engine-bs",
+          "targets-bs",
+          "uhc-bs",
+          "config-exposed",
+          "bs-tests",
+          "gregorian-unchanged",
+          "storage-format-kept",
+          "month-start-nullish"
+        ],
+        "rejected": [
+          "bikram-sambat-dependency-precondition"
+        ],
+        "unmatched": 4,
+        "total_tokens": 1784842,
+        "tool_calls_total": 43,
+        "tool_calls_failure": 1,
+        "duration_ms": 333616
+      }
+    },
+    {
+      "case": "medic__cht-core__11085",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "duplicates-find-first-defined-value",
+          "no-fallthrough-on-unparseable"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 467883,
+        "tool_calls_total": 21,
+        "tool_calls_failure": 0,
+        "duration_ms": 168628
+      },
+      "completeness-review": {
+        "found": [
+          "zero-weeks-sets-dates",
+          "lmp-date-zero-handled",
+          "truthy-checks-replaced",
+          "missing-empty-preserved",
+          "zero-week-regression-tests",
+          "null-undefined-empty-tests",
+          "intent-comments-removed",
+          "alias-fallthrough-changed",
+          "use-find-first-defined-value"
+        ],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 400462,
+        "tool_calls_total": 16,
+        "tool_calls_failure": 2,
+        "duration_ms": 126653
+      }
+    },
+    {
+      "case": "medic__cht-core__11085",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "duplicates-find-first-defined-value",
+          "no-fallthrough-on-unparseable"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 535465,
+        "tool_calls_total": 21,
+        "tool_calls_failure": 0,
+        "duration_ms": 241364
+      },
+      "completeness-review": {
+        "found": [
+          "zero-weeks-sets-dates",
+          "lmp-date-zero-handled",
+          "truthy-checks-replaced",
+          "missing-empty-preserved",
+          "zero-week-regression-tests",
+          "null-undefined-empty-tests",
+          "intent-comments-removed",
+          "alias-fallthrough-changed",
+          "use-find-first-defined-value"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 411870,
+        "tool_calls_total": 16,
+        "tool_calls_failure": 1,
+        "duration_ms": 126437
+      }
+    },
+    {
+      "case": "medic__cht-core__11085",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "no-fallthrough-on-unparseable",
+          "lmp-date-empty-not-skipped"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 273017,
+        "tool_calls_total": 15,
+        "tool_calls_failure": 0,
+        "duration_ms": 159889
+      },
+      "completeness-review": {
+        "found": [
+          "zero-weeks-sets-dates",
+          "lmp-date-zero-handled",
+          "truthy-checks-replaced",
+          "missing-empty-preserved",
+          "zero-week-regression-tests",
+          "null-undefined-empty-tests",
+          "intent-comments-removed",
+          "alias-fallthrough-changed",
+          "use-find-first-defined-value"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 455538,
+        "tool_calls_total": 17,
+        "tool_calls_failure": 2,
+        "duration_ms": 160731
+      }
+    },
+    {
+      "case": "medic__cht-core__11096",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "epoch-zero-lmp-date"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 163300,
+        "tool_calls_total": 10,
+        "tool_calls_failure": 0,
+        "duration_ms": 145749
+      },
+      "completeness-review": {
+        "found": [],
+        "rejected": [],
+        "unmatched": 6,
+        "total_tokens": 443029,
+        "tool_calls_total": 14,
+        "tool_calls_failure": 1,
+        "duration_ms": 162210
+      }
+    },
+    {
+      "case": "medic__cht-core__11096",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "stale-zero-docs"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 181669,
+        "tool_calls_total": 12,
+        "tool_calls_failure": 0,
+        "duration_ms": 85427
+      },
+      "completeness-review": {
+        "found": [
+          "zero-weeks-sets-dates",
+          "epoch-zero-lmp-date",
+          "no-lmp-still-nulls",
+          "tests-updated"
+        ],
+        "rejected": [],
+        "unmatched": 2,
+        "total_tokens": 840576,
+        "tool_calls_total": 21,
+        "tool_calls_failure": 1,
+        "duration_ms": 237261
+      }
+    },
+    {
+      "case": "medic__cht-core__11096",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 0,
+        "total_tokens": 57662,
+        "tool_calls_total": 5,
+        "tool_calls_failure": 0,
+        "duration_ms": 22562
+      },
+      "completeness-review": {
+        "found": [
+          "zero-weeks-sets-dates",
+          "epoch-zero-lmp-date",
+          "no-lmp-still-nulls",
+          "tests-updated"
+        ],
+        "rejected": [],
+        "unmatched": 4,
+        "total_tokens": 442398,
+        "tool_calls_total": 20,
+        "tool_calls_failure": 2,
+        "duration_ms": 186356
+      }
+    },
+    {
+      "case": "medic__cht-core__11337",
+      "run": "2026-10-13T23-37-17-1",
+      "code-review": {
+        "found": [
+          "bulkdocs-result-ignored"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 3,
+        "total_tokens": 1659192,
+        "tool_calls_total": 67,
+        "tool_calls_failure": 0,
+        "duration_ms": 556161
+      },
+      "completeness-review": {
+        "found": [
+          "backfill-existing-reports",
+          "late-arriving-reports",
+          "opt-in-config",
+          "existing-ids-kept",
+          "places-untouched"
+        ],
+        "rejected": [],
+        "unmatched": 6,
+        "total_tokens": 1220581,
+        "tool_calls_total": 31,
+        "tool_calls_failure": 3,
+        "duration_ms": 224560
+      }
+    },
+    {
+      "case": "medic__cht-core__11337",
+      "run": "2026-10-13T23-37-17-2",
+      "code-review": {
+        "found": [
+          "bulkdocs-result-ignored",
+          "backfill-failure-blocks-shortcode"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 1,
+        "total_tokens": 1608390,
+        "tool_calls_total": 55,
+        "tool_calls_failure": 1,
+        "duration_ms": 588697
+      },
+      "completeness-review": {
+        "found": [
+          "backfill-existing-reports",
+          "late-arriving-reports",
+          "opt-in-config",
+          "existing-ids-kept",
+          "places-untouched"
+        ],
+        "rejected": [],
+        "unmatched": 6,
+        "total_tokens": 732720,
+        "tool_calls_total": 25,
+        "tool_calls_failure": 1,
+        "duration_ms": 164728
+      }
+    },
+    {
+      "case": "medic__cht-core__11337",
+      "run": "2026-10-13T23-37-17-3",
+      "code-review": {
+        "found": [
+          "reports-written-before-contact-saved",
+          "bulkdocs-result-ignored",
+          "backfill-failure-blocks-shortcode"
+        ],
+        "failed": [],
+        "rejected": [],
+        "unmatched": 3,
+        "total_tokens": 1568669,
+        "tool_calls_total": 81,
+        "tool_calls_failure": 0,
+        "duration_ms": 524739
+      },
+      "completeness-review": {
+        "found": [
+          "backfill-existing-reports",
+          "late-arriving-reports",
+          "opt-in-config",
+          "existing-ids-kept",
+          "places-untouched"
+        ],
+        "rejected": [],
+        "unmatched": 5,
+        "total_tokens": 951796,
+        "tool_calls_total": 27,
+        "tool_calls_failure": 1,
+        "duration_ms": 183896
       }
     }
   ]

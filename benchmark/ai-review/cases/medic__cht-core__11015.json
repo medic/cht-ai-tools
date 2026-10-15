@@ -1,0 +1,184 @@
+{
+  "pr": "medic/cht-core#11015",
+  "title": "feat(#10694): add free text search to tasks page",
+  "issue": "medic/cht-core#10694",
+  "commits": {
+    "base": "3775e36dfecd9d8b0f27b1cd7c355f26949248ee",
+    "head": "9614e94dc31d0ffa8adf02b0e78d20291cbd47cf"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging: its one comment says it was closed in favour of #11142, which cherry-picked its commits. That comment names no defects, and there was no review. The issue's comments are about who picks it up and about generic filter-UI improvements (radio buttons, Apply button, 'Reset' wording) moved to #11184, none about the search itself. The issue body was later edited to link #11142 as the 'final solution', so a review that follows that link could see the fixes; a review limited to the PR, its diff and the issue text gets nothing given away. #11142's changes on top of this PR are the reference fixes: normalizing the Fuse candidates, clearFilters('search') on reset, clearing global filters on init, and fuzzy-pass unit tests. Alternative approaches: None expected. webapp already depends on fastest-levenshtein (xml-forms-context-utils.service.ts), but it gives whole-string edit distance, not the approximate substring matching a partial name query needs, so it isn't clearly better than fuse.js; a report citing it isn't scored either way until runs are judged. No existing text-normalization helper exists in webapp to reuse.",
+  "code-review": {
+    "notes": "`severity` is an estimate of the severity the finding deserves; it will be revisited against OCR's own ratings once runs exist. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "fuzzy-candidates-not-normalized",
+        "severity": "medium",
+        "summary": "The query is normalized (lowercased, NFD, combining marks stripped) but the Fuse index is built over the raw candidates. Fuse is case-insensitive by default but not diacritic-insensitive (ignoreDiacritics defaults to false), so in the fuzzy pass an accent counts as a mismatch: a slightly misspelt 'elodei' doesn't reach 'Élodie' at threshold 0.2, though it would against 'elodie'. The description's diacritic-insensitivity holds only for the substring pass. #11142 fixed it by indexing normalizeText(candidate).",
+        "locations": [
+          "webapp/src/ts/selectors/index.ts:62",
+          "webapp/src/ts/selectors/index.ts:65"
+        ],
+        "match": "Says the Fuse/fuzzy pass searches un-normalized candidates (or isn't diacritic-insensitive) while the query is normalized. Only saying the fuzzy pass is untested is not a match: that is fuzzy-pass-untested."
+      },
+      {
+        "id": "fuzzy-pass-untested",
+        "severity": "medium",
+        "summary": "No unit test reaches a fuzzy match: every positive test query ('alice', 'beta', 'anc', the Nepali/Arabic names, 'elodie') is a substring of a normalized candidate, so it's caught by the first pass, and the only query that reaches Fuse ('zzzznotfound') expects nothing. The Fuse.js matching the PR is built around, its threshold, and the substring-then-fuzzy ordering are untested; a fuzzy test with an accented name would have caught fuzzy-candidates-not-normalized. The diacritics test passes through the substring pass only.",
+        "locations": [
+          "webapp/tests/karma/ts/selectors/index.spec.ts:613",
+          "webapp/tests/karma/ts/selectors/index.spec.ts:686",
+          "webapp/tests/karma/ts/selectors/index.spec.ts:724"
+        ],
+        "match": "Says no test exercises the fuzzy (Fuse) matching, e.g. a typo query, or that every test query is an exact substring. Saying one specific assertion is duplicated is duplicate-arabic-assertion."
+      },
+      {
+        "id": "reset-clears-search",
+        "severity": "low",
+        "summary": "The tasks sidebar's Reset still calls globalActions.clearFilters() with no skip, which now also wipes the new filters.search, so resetting the sidebar filters throws away the free-text query (the freetext box, bound to filters.search, empties too). Reports' sidebar reset keeps the search with clearFilters('search'); #11142 made the tasks reset do the same. The file is unchanged by the PR but its behaviour changes because of it.",
+        "locations": [
+          "webapp/src/ts/modules/tasks/tasks-sidebar-filter.component.ts:124",
+          "webapp/src/ts/modules/reports/reports-sidebar-filter.component.ts:107"
+        ],
+        "match": "Says resetting the sidebar filters also clears (or should preserve) the free-text search, e.g. that it should call clearFilters('search') like Reports. A claim that the search box keeps showing the old text still matches, though it is wrong in detail: the box is bound to filters.search and empties."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "no-filter-clear-on-init",
+        "severity": "low",
+        "summary": "TasksComponent.ngOnInit doesn't clear global filters, so the selector trusts whatever filters.search is in the store when the page opens; #11142 added clearFilters() there 'so a search from another tab does not leak in'. Defensive: at head, Reports (reports-sidebar-filter ngOnDestroy), Contacts (ngOnInit/ngOnDestroy) and the search bar's own ngOnDestroy all clear the search when their pages close, so no path leaves one set today.",
+        "locations": [
+          "webapp/src/ts/modules/tasks/tasks.component.ts:135",
+          "webapp/src/ts/modules/reports/reports-sidebar-filter.component.ts:133"
+        ],
+        "match": "Says the tasks page should clear global filters / the search on init because a search from another page could carry over. Claiming that a Reports search does carry over today still matches, though it is wrong in detail."
+      },
+      {
+        "id": "fuzzy-results-reorder-list",
+        "severity": "low",
+        "summary": "filterTasksBySearch returns all substring matches followed by all fuzzy matches, so a search reorders the list away from its due-date/priority order (each group keeps the original order). The PR states the two-pass strategy, and #11142 kept it and tested it, so this is a disagreement with a stated choice.",
+        "locations": [
+          "webapp/src/ts/selectors/index.ts:70"
+        ],
+        "match": "Says the search results are no longer in the task list's original (due date/priority) order because substring matches are put before fuzzy ones."
+      },
+      {
+        "id": "fuse-options-misleading",
+        "severity": "low",
+        "summary": "FUSE_OPTIONS.distance: 50 has no effect, because Fuse ignores distance when ignoreLocation is true. The comment on minMatchCharLength ('skip fuzzy matching for very short queries') describes the separate query-length check at line 56: in Fuse it sets the minimum length of the matched characters in the item, not of the query.",
+        "locations": [
+          "webapp/src/ts/selectors/index.ts:38",
+          "webapp/src/ts/selectors/index.ts:39"
+        ],
+        "match": "Says `distance` is ignored when `ignoreLocation` is true, or that minMatchCharLength doesn't do what its comment says."
+      },
+      {
+        "id": "duplicate-arabic-assertion",
+        "severity": "low",
+        "summary": "In the Nepali/Arabic test, crossScriptState uses the same query ('فاطمة') and expectation as arabicState, so the 'cross-script' check adds nothing.",
+        "locations": [
+          "webapp/tests/karma/ts/selectors/index.spec.ts:681"
+        ],
+        "match": "Says the crossScriptState assertion duplicates the Arabic one."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. Requirements come from the issue (search bar on the tasks page, covering contact names in the lineage, searching the in-memory list without the database, fuzzy name matching) and the PR description's bullets. Report items for trivial details (the TasksFilters.search field, the package.json entry, the template checklist) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None.",
+      "required": [
+        {
+          "id": "freetext-search-bar",
+          "status": "Delivered",
+          "summary": "The tasks page's search bar shows the free-text box, and its value (filters.search) filters the task list through getFilteredTasksList, after the existing sidebar filters.",
+          "locations": [
+            "webapp/src/ts/modules/tasks/tasks.component.html:5",
+            "webapp/src/ts/selectors/index.ts:91"
+          ],
+          "match": "A Delivered item saying free-text search is enabled on the tasks page and filters the list. Separate items for the search bar being shown and for its value filtering the list together match."
+        },
+        {
+          "id": "matches-lineage-names-and-title",
+          "status": "Delivered",
+          "summary": "The search covers the task's contact name, every name in its lineage (from LineageModelGeneratorService) and the task title.",
+          "locations": [
+            "webapp/src/ts/selectors/index.ts:28",
+            "webapp/src/ts/modules/tasks/tasks.component.ts:217"
+          ],
+          "match": "A Delivered item saying the search matches contact names in the lineage (and/or contact name and title). Separate items for name, lineage and title together match."
+        },
+        {
+          "id": "no-db-access",
+          "status": "Delivered",
+          "summary": "The search runs in an NgRx selector over the task list already in the store; it makes no database query.",
+          "locations": [
+            "webapp/src/ts/selectors/index.ts:73"
+          ],
+          "match": "A Delivered item saying the search runs on the loaded task list without accessing the database."
+        },
+        {
+          "id": "fuzzy-matching",
+          "status": "Delivered",
+          "summary": "Queries of 3+ characters that match no candidate as a substring are fuzzy-matched with Fuse.js (threshold 0.2), over one shared index of the remaining tasks' candidates, after the substring pass.",
+          "locations": [
+            "webapp/src/ts/selectors/index.ts:56",
+            "webapp/src/ts/selectors/index.ts:64"
+          ],
+          "match": "A Delivered item for fuzzy name matching, the two-pass strategy or the single shared Fuse index. Separate items for these together match."
+        },
+        {
+          "id": "diacritics-normalized",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered",
+            "Pending verification"
+          ],
+          "summary": "Input and candidates are lowercased and stripped of combining marks for the substring pass, so 'elodie' finds 'Élodie', and Nepali/Arabic names match exactly. But the fuzzy pass indexes raw candidates (see code-review fuzzy-candidates-not-normalized), so the description's diacritic-insensitivity doesn't hold there.",
+          "locations": [
+            "webapp/src/ts/selectors/index.ts:16",
+            "webapp/src/ts/selectors/index.ts:62"
+          ],
+          "match": "A Delivered item for the lowercasing/diacritic normalization or the non-Latin script support. Not delivered or Pending verification match only when the reason is that the Fuse/fuzzy pass doesn't normalize its candidates."
+        },
+        {
+          "id": "unit-tests",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "Selector unit tests cover search by name, lineage and title, diacritics, Nepali/Arabic, empty search, no match, and search combined with another filter, as described. None reaches the fuzzy pass (see code-review fuzzy-pass-untested).",
+          "locations": [
+            "webapp/tests/karma/ts/selectors/index.spec.ts:613"
+          ],
+          "match": "A Delivered item for the unit tests. Not delivered matches only when the reason is that the fuzzy matching isn't tested."
+        },
+        {
+          "id": "e2e-tests",
+          "status": "Delivered",
+          "summary": "tasks-search.wdio-spec.js covers search by contact name, by task title, the no-match state, clearing the search, and search combined with a sidebar filter, as described.",
+          "locations": [
+            "tests/e2e/default/tasks/tasks-search.wdio-spec.js:67",
+            "tests/e2e/default/tasks/tasks-search.wdio-spec.js:129"
+          ],
+          "match": "A Delivered item for the e2e tests."
+        }
+      ],
+      "preconditions_to_confirm": [],
+      "rejected": [
+        {
+          "id": "fuse-installed",
+          "summary": "Precondition to confirm: the fuse.js dependency must be installed / available in the deployed webapp.",
+          "reason": "fuse.js is a build-time npm dependency, declared in webapp/package.json and the lockfile and bundled into the webapp; it is not an operational fact a deployment has to provide.",
+          "match": "Lists fuse.js (or installing the new dependency) as a precondition."
+        }
+      ]
+    },
+    "undisclosed_changes": {
+      "notes": "Every changed file (the e2e spec, package.json and its lockfile, the tasks template, the TasksFilters interface, the selector and its spec) is in the PR's change table, so the expected answer is None. The sidebar Reset now also clearing the search is a side effect of an unchanged file, covered by code-review reset-clears-search, not an undisclosed change.",
+      "required": []
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

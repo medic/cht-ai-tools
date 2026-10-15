@@ -1,0 +1,126 @@
+{
+  "pr": "medic/cht-core#10998",
+  "title": "fix(#10997): preserve query parameters in login redirect",
+  "issue": "medic/cht-core#10997",
+  "commits": {
+    "base": "3775e36dfecd9d8b0f27b1cd7c355f26949248ee",
+    "head": "41d9c06c6fea1c1b0834dc8e5974017fdc687c0c"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging, because the linked issue (still open, 'Needs Triage') hadn't been triaged. Its two comments (a stale-bot notice and that closing note) and the issue (no comments) were checked and give no findings away; there are no reviews or inline comments. The premise holds: the query was dropped by 062da0370 (#8286, an ESLint chore that replaced url.parse(...).path, which kept the query, with new URL(...).pathname), before the #9122 double-slash check existed. The defects come from feeding the query into hasDoubleSlash, which was written for paths.",
+  "code-review": {
+    "notes": "`severity` is the severity the finding deserves, estimated from a manual review, not yet from OCR runs; once runs exist it should follow the README (the most common OCR rating across the runs that reported it, the higher one on a tie). `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "percent-in-query-throws",
+        "severity": "medium",
+        "summary": "The query string now goes into hasDoubleSlash, which calls decodeURIComponent and recurses whenever decoding changes the length. A malformed escape (`?q=100%`) throws URIError, and so does a correctly encoded literal percent (`?q=100%25`): the first decode yields `100%`, the recursive one throws. Nothing catches it in sanitizeRequestedRedirect/getRedirectUrl, and redirectToApp calls getRedirectUrl after setting the session, userCtx and locale cookies, so login() answers 500 'Unexpected error logging in' (resetPassword also 500s) with the session cookie already on the response. Before, the query was dropped before the check, so these URLs logged in and redirected to the path.",
+        "locations": [
+          "api/src/controllers/login.js:138",
+          "api/src/controllers/login.js:110",
+          "api/src/controllers/login.js:273",
+          "api/src/controllers/login.js:398"
+        ],
+        "match": "Says a query containing a malformed or encoded percent sign makes decodeURIComponent in hasDoubleSlash throw, failing the login (or the redirect) with an error. Saying it is new because the query was not checked before is part of the same item. Saying the same for the pathname or hash only is not a match: that is decode-throws-preexisting."
+      },
+      {
+        "id": "double-slash-in-query-rejects",
+        "severity": "medium",
+        "summary": "hasDoubleSlash now tests the whole path including the query, so any query value containing `//` (e.g. `?url=https://example.com`, or `%2F%2F` encoded) makes sanitizeRequestedRedirect return undefined, and the user lands on the home URL instead of the requested path. Before, the same URL redirected to its path (without the query). A `//` in the query can't change the redirect's host, so this rejection guards nothing.",
+        "locations": [
+          "api/src/controllers/login.js:138",
+          "api/src/controllers/login.js:139",
+          "api/src/controllers/login.js:115"
+        ],
+        "match": "Says a `//` (or `://`) inside a query value now makes the whole redirect fall back to the home URL. Only saying a percent sign makes it throw is not a match: that is percent-in-query-throws."
+      },
+      {
+        "id": "tests-only-happy-path",
+        "severity": "low",
+        "summary": "The new tests cover only plain queries (`?search=malaria&sort=date`, with and without a hash, relative and absolute). Nothing tests a query containing `//`, `://` or an encoded `%`, which are the inputs the change now sends through hasDoubleSlash and which behave differently (see percent-in-query-throws and double-slash-in-query-rejects).",
+        "locations": [
+          "api/tests/mocha/controllers/login.spec.js:135",
+          "api/tests/mocha/controllers/login.spec.js:162"
+        ],
+        "match": "Says the new tests miss queries with `//`, a URL value, or percent-encoding / malformed escapes, i.e. the interaction with hasDoubleSlash. A generic 'add more tests' without naming such inputs is not a match."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "decode-throws-preexisting",
+        "severity": "medium",
+        "summary": "hasDoubleSlash's decodeURIComponent already threw before this PR for a malformed escape in the pathname or hash (e.g. `/reports%zz`, `#/x?q=100%`), with the same 500 after cookies are set. The PR didn't cause that; it widens it to the query. The fix is a try/catch in hasDoubleSlash or sanitizeRequestedRedirect that treats an undecodable path as unsafe.",
+        "locations": [
+          "api/src/controllers/login.js:110",
+          "api/src/controllers/login.js:139"
+        ],
+        "match": "Says decodeURIComponent in hasDoubleSlash can throw on a malformed pathname or hash, or that it needs a try/catch regardless of the query. Saying only that the query now triggers it is percent-in-query-throws."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "query-enables-open-redirect",
+        "summary": "Appending the query string to the redirect reintroduces an open redirect / lets an attacker bypass the #9122 double-slash protection.",
+        "reason": "The redirect is built from the parsed pathname, which always starts with a single `/`, followed by the query, so the query can't change the host. The query is also included in the hasDoubleSlash check (which is what causes double-slash-in-query-rejects). Absolute inputs are still reduced to a relative path.",
+        "match": "Says including the query makes the redirect open to another host or bypasses the double-slash check."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in, decided from the code at the PR head; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (ESLint passing, the '73 existing tests' count, the claim that resolveUrl already keeps the query, which is true) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None.",
+      "required": [
+        {
+          "id": "query-preserved",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered",
+            "Pending verification"
+          ],
+          "summary": "After login the user is redirected to the requested URL with its query string, with or without a hash (e.g. `/reports?search=malaria&sort=date#selected`). True for ordinary queries; a query containing `//` falls back to the home URL and one with a `%` escape can fail the login (see code-review double-slash-in-query-rejects and percent-in-query-throws).",
+          "locations": [
+            "api/src/controllers/login.js:138"
+          ],
+          "match": "A Delivered item saying the query (and hash) is now kept in the redirect. Not delivered or Pending verification matches only when it names a query containing `//` or a percent escape as not preserved."
+        },
+        {
+          "id": "absolute-urls-keep-query",
+          "status": "Delivered",
+          "summary": "Absolute redirect URLs are still reduced to a relative path, now keeping their query and hash (`http://test.com:1234/reports?search=malaria#selected` -> `/reports?search=malaria#selected`).",
+          "locations": [
+            "api/src/controllers/login.js:138",
+            "api/tests/mocha/controllers/login.spec.js:162"
+          ],
+          "match": "A Delivered item saying absolute URLs become relative paths that keep the query."
+        },
+        {
+          "id": "redirect-tests-added",
+          "status": "Delivered",
+          "summary": "Tests were added for relative URLs with queries, absolute URLs with queries, and queries with a hash; they pass against the change. They cover only plain queries (see code-review tests-only-happy-path).",
+          "locations": [
+            "api/tests/mocha/controllers/login.spec.js:135",
+            "api/tests/mocha/controllers/login.spec.js:162"
+          ],
+          "match": "A Delivered item for the new relative / absolute / query-plus-hash tests."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Both changed files are described, but the PR doesn't say that the query is now part of the double-slash check.",
+      "required": [
+        {
+          "id": "query-now-checked",
+          "summary": "The query string now goes through hasDoubleSlash, so requested URLs that used to redirect to their path now go to the home URL (query containing `//`) or fail the login with a 500 (query with a `%` escape). The PR describes only adding the query to the redirect.",
+          "locations": [
+            "api/src/controllers/login.js:138",
+            "api/src/controllers/login.js:139"
+          ],
+          "match": "Lists, as undisclosed, that the query is now subject to the double-slash / decoding check, or either of its effects (fallback to home, or an error)."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

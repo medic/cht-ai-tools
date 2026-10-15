@@ -1,0 +1,147 @@
+{
+  "pr": "medic/cht-core#11096",
+  "title": "fix(#11070): setExpectedBirthDate drops expected_date when weeks_since_lmp is 0",
+  "issue": "medic/cht-core#11070",
+  "commits": {
+    "base": "4bbcba90e18f99f946d60849c675bba78bfa34c3",
+    "head": "a0a932be835730d748a8b10af1e66ae44c153027"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging. The PR has one comment (a maintainer closing it with a link to the issue), no reviews and no inline comments; the issue (linked by the title only, no closing keyword) has two comments: a maintainer saying a pregnancy is never registered in the week it starts, so it is not a real-world case, and a closing note. None of them names the existing meaning of a 0 LMP or any of the regressions, so they give no findings away; the 'not a real-world case' comment does give a completeness review grounds to question the requirement. Competes with #11085 for the same issue. The change is two characters of logic in setExpectedBirthDate; the defects are what `!== undefined` lets through from the unchanged helpers, and that it overturns a deliberate behaviour and rewrites the tests that pin it.",
+  "code-review": {
+    "notes": "`severity` is an estimate of the severity the finding deserves, not yet taken from OCR runs; a comment that covers several items should be judged against the item that is its main point. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "zero-lmp-sentinel-overturned",
+        "severity": "high",
+        "summary": "A weeks-since-LMP of 0 is a deliberate sentinel in the base code, not a bug: the `if (!start)` branch is commented 'means baby was already born, chw just wants a registration', getWeeksSinceLMP's doc comment says it returns the value 'including 0', the test form's validation allows `min(0)`, and the tests 'zero lmp value only registers patient' and '...to null when lmp 0' pin the null dates. Changing `if (lmp)` to `lmp !== undefined` turns a registration-only submission into a pregnancy with LMP = reported date and EDD 40 weeks later, which can start ANC schedules for a woman who has already delivered. The PR rewrites both tests to the new behaviour rather than questioning them, and leaves the now-false comment in place.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:177",
+          "shared-libs/transitions/src/transitions/registration.js:183",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:153",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:274"
+        ],
+        "match": "Says 0 weeks is an intended 'registration only / baby already born' value (citing the comment, the existing tests or the 0-40 validation), so treating it as a 0-week pregnancy changes deliberate behaviour or the tests were rewritten to fit the change. Only saying the comment or test name is now stale is not a match: that is stale-zero-docs. Only saying empty or null weeks now produce dates is not a match: that is empty-weeks-coerced-to-zero."
+      },
+      {
+        "id": "lmp-date-null-empty-regression",
+        "severity": "high",
+        "summary": "getLMPDate is unchanged, and its `doc.fields[prop] && parseInt(...)` returns the raw value when it is falsy: null for `lmp_date: null` and '' for `lmp_date: ''` (isNaN(null) and isNaN('') are false). The base `if (lmpDate)` skipped those and fell back to weeks_since_lmp; `lmpDate !== undefined` now takes the date branch, moment(null)/moment('') is invalid, and toISOString() gives null. So a submission with an empty or null lmp_date and a valid weeks_since_lmp (e.g. an app form where the date question was left blank, which saves '') now gets lmp_date and expected_date of null where it used to get dates: the very failure the PR is fixing, for a more common input.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:173",
+          "shared-libs/transitions/src/transitions/registration.js:163"
+        ],
+        "match": "Says an lmp_date of null or '' (or any falsy non-undefined value from getLMPDate) now takes the lmpDate branch instead of falling back to weeks since LMP, losing dates that used to be computed. Still a match if it misstates what moment(null)/moment('') returns, as long as it names the lost fallback. Only saying lmp_date 0 now gives a 1970 date is not a match: that is epoch-zero-lmp-date."
+      },
+      {
+        "id": "empty-weeks-coerced-to-zero",
+        "severity": "medium",
+        "summary": "getWeeksSinceLMP is unchanged and uses Number(), which turns '', whitespace and null into 0. The base code then treated that 0 as 'no LMP' and nulled the dates; with `lmp !== undefined` an unanswered weeks_since_lmp/lmp field now produces LMP = reported date and EDD = reported date + 40 weeks, fabricating a pregnancy timeline. It also still returns that 0 before reaching a later alias, so `{weeks_since_lmp: '', lmp: 10}` gets dates for 0 weeks rather than 10. This contradicts the PR's claim that the `!start` guard still nulls the dates when no weeks value is provided.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:177",
+          "shared-libs/transitions/src/transitions/registration.js:150"
+        ],
+        "match": "Says an empty, blank or null weeks field is coerced to 0 by Number() and so now produces an LMP/EDD (or reaches the date branch) instead of null dates. Only saying a real 0 should mean registration-only is not a match: that is zero-lmp-sentinel-overturned."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "epoch-zero-lmp-date",
+        "severity": "low",
+        "summary": "With `lmpDate !== undefined`, `lmp_date: 0` now gives an LMP of 1970-01-01 and an EDD in 1970, and any weeks_since_lmp on the same doc is ignored (the base code fell back to it). The issue asks for epoch 0 to be treated as a valid date and the PR calls the change 'defense in depth', so this is a disagreement with a stated choice; 0 as a date is far more likely a placeholder than a real LMP.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:173"
+        ],
+        "match": "Says an lmp_date of 0 now produces a 1970 LMP/EDD (or overrides a weeks value) and is not a meaningful date. Comments about null or '' lmp_date are lmp-date-null-empty-regression."
+      },
+      {
+        "id": "stale-zero-docs",
+        "severity": "low",
+        "summary": "The PR leaves the comment 'means baby was already born, chw just wants a registration' on the `if (!start)` branch, which no longer runs for a 0 value, and keeps the test name 'zero lmp value only registers patient' while the test now asserts LMP and EDD are set.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:183",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:252"
+        ],
+        "match": "Says the 'baby already born' comment or the 'only registers patient' test name no longer matches the behaviour."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "getlmpdate-drops-zero",
+        "summary": "getLMPDate's `doc.fields[prop] && parseInt(...)` short-circuits on 0 and never returns it, so lmp_date 0 is still dropped and the PR's `lmpDate !== undefined` change is incomplete without fixing getLMPDate (as the issue says).",
+        "reason": "The short-circuit returns the falsy operand itself, 0, and isNaN(0) is false, so getLMPDate returns 0 and the new check does take it (giving a 1970 date). The issue's description of getLMPDate is wrong.",
+        "match": "Says getLMPDate still drops or never returns an lmp_date of 0, so 0 never reaches setExpectedBirthDate."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in, judged from the code; `acceptable` lists other buckets that are not counted as a miss. The issue's maintainer comment says a 0-week registration is not a real-world case, which a report may cite. Report items for trivial PR bullets (the test count, adding reported_date to a test doc) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings reviews are likely to make that are wrong.",
+      "required": [
+        {
+          "id": "zero-weeks-sets-dates",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The issue's expected behaviour: weeks_since_lmp 0 sets lmp_date to the reported date and expected_date 40 weeks later. `lmp !== undefined` does this. It overturns the base code's deliberate 'registration only' meaning of 0 (code-review zero-lmp-sentinel-overturned), and the issue's maintainer comment says the case doesn't occur.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:177"
+          ],
+          "match": "A Delivered item saying a 0 weeks value now produces lmp_date and expected_date. Pending verification matches only when it names the existing registration-only meaning of 0 or the maintainer's not-real-world comment."
+        },
+        {
+          "id": "epoch-zero-lmp-date",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "The issue's 'skips valid epoch-0 LMP date' and the PR's `lmpDate !== undefined` change: lmp_date 0 now gives a start date (1970). getLMPDate, which the issue says has the same problem, already returns 0, so leaving it unchanged doesn't stop this. It does pass null and '' through, which the new check now treats as dates (code-review lmp-date-null-empty-regression).",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:173",
+            "shared-libs/transitions/src/transitions/registration.js:163"
+          ],
+          "match": "A Delivered item saying lmp_date 0 is now used. Not delivered matches only when the reason is that null or '' lmp_date values now take the date branch and lose the weeks fallback; Not delivered because getLMPDate never returns 0 is getlmpdate-drops-zero."
+        },
+        {
+          "id": "no-lmp-still-nulls",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The PR says the `!start` guard is preserved, so dates are still null when neither an LMP date nor weeks_since_lmp is provided. Only when the fields are absent: an empty, blank or null weeks field is coerced to 0 by Number() and now yields LMP = reported date and an EDD (code-review empty-weeks-coerced-to-zero).",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:177",
+            "shared-libs/transitions/src/transitions/registration.js:150"
+          ],
+          "match": "Not delivered or Pending verification because an empty or null weeks value now produces dates. Delivered, or another bucket for some other reason, is a miss."
+        },
+        {
+          "id": "tests-updated",
+          "status": "Delivered",
+          "summary": "The two named tests are rewritten to assert LMP = reported date and EDD = +40 weeks for lmp 0. They now pin the new behaviour in place of the old intended one.",
+          "locations": [
+            "shared-libs/transitions/test/unit/pregnancy_registration.js:153",
+            "shared-libs/transitions/test/unit/pregnancy_registration.js:274"
+          ],
+          "match": "A Delivered item for the updated tests. Noting that they replace tests of intended behaviour is part of the same item."
+        }
+      ],
+      "preconditions_to_confirm": [],
+      "rejected": [
+        {
+          "id": "getlmpdate-not-fixed",
+          "summary": "Not delivered: the issue says getLMPDate's `&&` short-circuit drops 0, and the PR leaves getLMPDate unchanged, so lmp_date 0 is still ignored.",
+          "reason": "getLMPDate returns 0 (the short-circuit yields 0 and isNaN(0) is false), and `lmpDate !== undefined` uses it.",
+          "match": "Says the epoch-0 / getLMPDate requirement is not delivered because getLMPDate never returns 0."
+        }
+      ]
+    },
+    "undisclosed_changes": {
+      "notes": "Both changed files are described in the PR (the two conditions and the two rewritten tests), so the expected answer is None. The behaviour changes for null, '' and blank inputs are consequences of the described lines, scored under requirements and code review, not undisclosed changes.",
+      "required": []
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

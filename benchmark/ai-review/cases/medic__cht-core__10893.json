@@ -1,0 +1,463 @@
+{
+  "pr": "medic/cht-core#10893",
+  "title": "feat: p2p wifi hotspot sync - server apis and webapp integration",
+  "issue": null,
+  "commits": {
+    "base": "018037e56a7fb479cd091d59aafa9b66258b5a58",
+    "head": "dcb9e0f26439bb0c4e3dec508e94041a7d8ba704"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging. Its comments (a maintainer's praise plus a request to restore the PR template's checklist and license sections, the author's acknowledgement, a stale notice, and a closing note pointing to the breakdown of the work in #11284) were checked and give no findings away; it has no inline comments and no reviews. It has no linked issue, so the completeness review relies on the PR description alone. The large case in the set (+4470/-17, 53 files): the defects are on the API side (auth, key handling, an ignored route parameter, unit tests outside the unit-api glob) and in the webapp's transit-doc handling (purges that don't confirm the docs reached the server, a transit filter that is never refreshed). The Android half lives in medic/cht-android#431 and isn't part of the diff.",
+  "code-review": {
+    "notes": "`severity` is the severity the finding deserves, estimated from a manual review (no OCR runs yet); a comment that covers several items gives its severity only to the item that is its main point. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing. The PR is too large for every point to be listed: the items cover the API/sync side and the transit-doc services in depth, and the 964-line p2p-status component only where it drives sync and purge.",
+    "required": [
+      {
+        "id": "post-p2p-sync-purges-offline",
+        "severity": "high",
+        "summary": "After a host stops a P2P session, p2p-status.component's executePostP2pSyncAttempt calls dbSyncService.sync(true) and purges every transit batch whenever getLastToWriteFailures() is 0. But sync() doesn't reject when replication fails: replicateTo/replicateFrom catch the error and return it, checkDateService.check() swallows the offline failure, and lastToWriteFailures is only set on a successful replicate-to, so it keeps its previous value (0 on a fresh session). On a host that is offline, the normal case for this feature, the sync fails silently and markAllBatchesPushedAndPurge() marks all batches pushed_to_server and soft-deletes the relayed docs the host just received, before they ever reach the server.",
+        "locations": [
+          "webapp/src/ts/modules/p2p/p2p-status.component.ts:624",
+          "webapp/src/ts/modules/p2p/p2p-status.component.ts:629",
+          "webapp/src/ts/services/db-sync.service.ts:147",
+          "webapp/src/ts/services/db-sync.service.ts:173"
+        ],
+        "match": "Says the post-P2P sync in the status component purges transit docs without confirming the sync succeeded (e.g. a failed or offline sync leaves write failures at 0, so the docs are purged). The same complaint only about updateAfterSyncMedic in db-sync.service.ts is auto-purge-unconfirmed."
+      },
+      {
+        "id": "auto-purge-unconfirmed",
+        "severity": "medium",
+        "summary": "db-sync.service.ts's updateAfterSyncMedic purges all transit batches whenever syncState.to is Success and lastToWriteFailures is 0, but neither confirms the transit docs reached the server. getSyncState reports to=Success when the user lacks can_edit (replicateTo skips pushing entirely and lastToWriteFailures stays 0), and doc_write_failures only counts the last replicate-to call: a doc denied in an earlier run is checkpointed past (and DbSyncRetryService stops touching it after 3 retries), so a later run with nothing to push reports 0 failures and the purge soft-deletes it locally. markAllBatchesPushedAndPurge also marks every batch pushed, including one received after the replication read the changes feed. The peer may still hold its copy, so the loss is of the relayed copy.",
+        "locations": [
+          "webapp/src/ts/services/db-sync.service.ts:259",
+          "webapp/src/ts/services/db-sync.service.ts:237",
+          "webapp/src/ts/services/db-sync.service.ts:147",
+          "webapp/src/ts/services/p2p-transit-purge.service.ts:266"
+        ],
+        "match": "Says the auto-purge in db-sync.service.ts (to=Success with 0 write failures) can purge transit docs that never reached the server, for a concrete reason: no can_edit means nothing is pushed but the state is Success, failures from an earlier run aren't carried over, or all batches are marked pushed regardless. Only saying lastToWriteFailures isn't reset after an error is not a match: an error leaves syncState.to not Success, so no purge follows. The status component's post-P2P purge is post-p2p-sync-purges-offline."
+      },
+      {
+        "id": "p2p-api-tests-not-run",
+        "severity": "high",
+        "summary": "The five new API specs live in api/tests/p2p/, but `npm run unit-api` (what `npm test`/CI run) only globs api/tests/mocha/**/*.js, so none of them ever runs; the PR's test plan runs them by hand with `npx mocha api/tests/p2p/**/*.spec.js`. They also need UNIT_TEST_ENV for api/src/db.js to stub its databases.",
+        "locations": [
+          "package.json:49",
+          "api/tests/p2p/authorize.spec.js:1"
+        ],
+        "match": "Says the api/tests/p2p specs are outside the unit-api glob (or otherwise not picked up by the project's test run / CI) and should move under api/tests/mocha. Comments on what an individual spec asserts are not a match."
+      },
+      {
+        "id": "config-ignores-facility-id",
+        "severity": "medium",
+        "summary": "GET /api/v1/p2p/config/:facility_id never reads req.params.facility_id: getConfig returns the global p2p_sync settings for every caller, and the webapp calls it as /api/v1/p2p/config/_. The PR describes it as returning the configuration 'for a facility', so the route parameter is meaningless and the API contract is misleading.",
+        "locations": [
+          "api/src/p2p/routing.js:22",
+          "api/src/p2p/config.js:47",
+          "webapp/src/ts/modules/p2p/p2p-status.component.ts:231"
+        ],
+        "match": "Says the :facility_id parameter is ignored (or unused, or passed as a dummy `_`), so the endpoint isn't facility-specific."
+      },
+      {
+        "id": "p2p-endpoints-no-permission-check",
+        "severity": "medium",
+        "summary": "The config, revocation-list and telemetry handlers only call auth.getUserCtx, so any authenticated user, of any role and whether or not p2p_sync is enabled, can read the P2P config and the list of revoked users/devices and POST up to 1MB of telemetry that is written to the API log. The wildcard `app.all('/api/v1/p2p/*path', setAuthorized)` also exempts every /api/v1/p2p/ path from the offline-user firewall, matched or not. Only authorize checks enabled and the host/peer roles; none uses CHT's permission checks (auth.check).",
+        "locations": [
+          "api/src/p2p/routing.js:20",
+          "api/src/p2p/config.js:46",
+          "api/src/p2p/revocation-list.js:44",
+          "api/src/p2p/telemetry.js:14"
+        ],
+        "match": "Says config, revocation-list or telemetry (or the P2P routes in general) check only that the user is logged in, not a role, permission or that P2P is enabled; or that the wildcard setAuthorized is broader than needed. Saying the routes can be called without logging in is not a match: that is p2p-routes-unauthenticated (rejected)."
+      },
+      {
+        "id": "signing-key-race",
+        "severity": "medium",
+        "summary": "getKeyPair has no guard against concurrent first calls: each request that misses the cache gets a 404 from the vault, generates its own key pair and tries to put it; the losing put fails with a conflict that is only logged as a warning, and that request still sets cachedKeyPair to its unpersisted key. Devices then hold different server_public_keys, and tokens signed with the in-memory key stop verifying after a restart reloads the persisted one. The same happens whenever the vault put fails for any other reason.",
+        "locations": [
+          "api/src/p2p/authorize.js:64",
+          "api/src/p2p/authorize.js:101",
+          "api/src/p2p/authorize.js:105"
+        ],
+        "match": "Says concurrent first requests can generate different key pairs, or that a failed vault write leaves the server signing with a key that isn't persisted (lost on restart, different from what other devices received)."
+      },
+      {
+        "id": "replication-depth-zero-default",
+        "severity": "medium",
+        "summary": "authorize.js's getReplicationDepth and scope-manifest.js's getMaxReplicationDepth return 0 when no replication_depth setting matches the user's roles, but in CHT no setting means no depth limit (api/src/services/authorization.js getDepth uses -1). The token's replication_depth and the scope manifest therefore tell devices the user's scope is just their own facility when the user actually replicates the whole subtree; report_depth is ignored too.",
+        "locations": [
+          "api/src/p2p/authorize.js:173",
+          "api/src/p2p/scope-manifest.js:29",
+          "api/src/services/authorization.js:64"
+        ],
+        "match": "Says a missing replication_depth setting yields depth 0 where CHT treats it as unlimited, so the manifest/token understate the user's scope. Only saying the two depth helpers are duplicated is not a match: that is duplicated-p2p-helpers."
+      },
+      {
+        "id": "transit-index-never-refreshed",
+        "severity": "medium",
+        "summary": "P2pTransitFilterService.loadTransitIndex loads the transit index once and returns early on every later call; the only refresh() caller is the purge service. When a P2P session completes, the status component calls loadTransitStats, whose loadTransitIndex is then a no-op, so docs relayed in that session are not hidden from contacts, reports, search, tasks or targets until the app reloads or a purge runs.",
+        "locations": [
+          "webapp/src/ts/services/p2p-transit-filter.service.ts:27",
+          "webapp/src/ts/modules/p2p/p2p-status.component.ts:351",
+          "webapp/src/ts/services/p2p-transit-purge.service.ts:145"
+        ],
+        "match": "Says the transit index is cached and not reloaded after new transit docs arrive, so newly relayed docs show in the UI."
+      },
+      {
+        "id": "host-targets-include-transit",
+        "severity": "medium",
+        "summary": "The PR says transit docs are hidden from targets, but only TargetAggregatesService filters its contact list. The rules engine's allTaskData still loads every contact and report in the local DB, so transit contacts and reports feed the host's own Targets page (_fetchCurrentTargets is unchanged) and the target doc it writes and replicates to the server; task docs are also still generated for transit contacts, only hidden when fetched.",
+        "locations": [
+          "webapp/src/ts/services/rules-engine.service.ts:563",
+          "webapp/src/ts/services/target-aggregates.service.ts:297",
+          "webapp/src/ts/services/rules-engine.service.ts:462"
+        ],
+        "match": "Says transit docs still feed the rules engine's own target (or task) calculations even though task fetches and target aggregates are filtered. Only saying fetchTaskDocsFor doesn't call loadTransitIndex first is not a match."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "private-key-plaintext-in-vault",
+        "severity": "medium",
+        "summary": "The ECDSA private key is stored as a plaintext PEM in the medic-vault p2p-server-keys doc, while CHT's other vault secrets go through @medic/settings setCredentials, which encrypts them with the CouchDB secret. The vault is admin-only, so this matters for backups and admin access rather than for regular users.",
+        "locations": [
+          "api/src/p2p/authorize.js:97"
+        ],
+        "match": "Says the private key is stored unencrypted, or should go through the existing encrypted credentials mechanism."
+      },
+      {
+        "id": "revoked-users-still-authorized",
+        "severity": "medium",
+        "summary": "authorize reads the revocation list only for its version and never checks whether the requesting user is in revoked_users, so a revoked user can keep getting fresh 30-day tokens. Whether devices reject them depends on the Android side checking `sub` against the list.",
+        "locations": [
+          "api/src/p2p/authorize.js:265"
+        ],
+        "match": "Says authorize issues tokens without checking the revocation list for the user."
+      },
+      {
+        "id": "purge-comment-contradicts-code",
+        "severity": "low",
+        "summary": "P2pTransitPurgeService's class comment says it MUST use db.purge() and never a deleting write, but purgeDoc writes {_id, _rev, _deleted: true, purged: true}. The code matches the PR description and is safe because readOnlyFilter skips such docs; the comment is wrong.",
+        "locations": [
+          "webapp/src/ts/services/p2p-transit-purge.service.ts:42",
+          "webapp/src/ts/services/p2p-transit-purge.service.ts:164"
+        ],
+        "match": "Says the comment contradicts the soft-delete the code does. Claiming the soft-delete replicates to the server and deletes data there is wrong: readOnlyFilter excludes it."
+      },
+      {
+        "id": "jwt-role-arbitrary",
+        "severity": "low",
+        "summary": "buildPayload sets the token's `role` claim to the user's first role, which may not be a host or peer role at all; `permissions` carries the real P2P capability.",
+        "locations": [
+          "api/src/p2p/authorize.js:152"
+        ],
+        "match": "Says the role claim is just roles[0] and can be unrelated to P2P."
+      },
+      {
+        "id": "duplicated-p2p-helpers",
+        "severity": "low",
+        "summary": "getReplicationDepth (authorize.js) and getMaxReplicationDepth (scope-manifest.js) are identical; the p2p_sync defaults are duplicated between api/src/p2p/config.js and p2p-config.service.ts, and authorize/buildPayload read config.get('p2p_sync') raw instead of the exported getP2pConfig.",
+        "locations": [
+          "api/src/p2p/authorize.js:167",
+          "api/src/p2p/scope-manifest.js:23"
+        ],
+        "match": "Says the replication-depth helper or the p2p config defaults/reading are duplicated. A depth-0 complaint is replication-depth-zero-default."
+      },
+      {
+        "id": "facility-path-walk",
+        "severity": "low",
+        "summary": "getFacilityPath does one sequential db.medic.get per ancestor (capped at 5), although a contact doc already carries its whole parent chain; and a failed get is only warned, so the token silently gets a truncated facility_path.",
+        "locations": [
+          "api/src/p2p/authorize.js:212",
+          "api/src/p2p/authorize.js:202"
+        ],
+        "match": "Says the path walk makes needless per-level reads (the parent chain is on the doc), caps depth at 5, or silently truncates on error."
+      },
+      {
+        "id": "hand-rolled-der-conversion",
+        "severity": "low",
+        "summary": "derToRawSignature parses DER by hand to get the R||S form ES256 needs; Node's sign() can produce it directly with dsaEncoding: 'ieee-p1363'.",
+        "locations": [
+          "api/src/p2p/authorize.js:31",
+          "api/src/p2p/authorize.js:125"
+        ],
+        "match": "Suggests dsaEncoding: 'ieee-p1363' or a JWT library instead of the hand-written DER parsing."
+      },
+      {
+        "id": "jwt-signature-untested",
+        "severity": "low",
+        "summary": "The authorize success test only checks the token has three dot-separated parts; nothing verifies the signature against server_public_key, so the DER conversion and signing are untested.",
+        "locations": [
+          "api/tests/p2p/authorize.spec.js:118"
+        ],
+        "match": "Says the test never verifies the JWT signature or claims."
+      },
+      {
+        "id": "db-sync-p2p-untested",
+        "severity": "low",
+        "summary": "db-sync.service.spec.ts only adds providers for the new services (its markAllBatchesPushedAndPurge stub resolves undefined); nothing tests the auto-purge trigger, the lastToWriteFailures tracking or the pause-during-P2P skip.",
+        "locations": [
+          "webapp/tests/karma/ts/services/db-sync.service.spec.ts:156"
+        ],
+        "match": "Says the new db-sync behaviour (purge trigger, write-failure tracking, sync skip) has no tests."
+      },
+      {
+        "id": "sync-jsdoc-displaced",
+        "severity": "low",
+        "summary": "The new isP2pActive/shouldSkipSync/isP2pPausingSync methods were inserted between sync()'s JSDoc and sync(), so the 'Synchronize the local database...' comment now documents isP2pActive.",
+        "locations": [
+          "webapp/src/ts/services/db-sync.service.ts:418"
+        ],
+        "match": "Says sync()'s doc comment is now attached to the wrong method."
+      },
+      {
+        "id": "p2p-route-unguarded",
+        "severity": "low",
+        "summary": "The p2p route has no canActivate guard (other modules use AppRouteGuardProvider with data.permissions), so any user can open #/p2p by URL; only the menu entries are hidden. authorize still rejects users without a host/peer role.",
+        "locations": [
+          "webapp/src/ts/modules/p2p/p2p.routes.ts:8"
+        ],
+        "match": "Says the p2p route isn't guarded by role or permission."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "p2p-routes-unauthenticated",
+        "summary": "setAuthorized on /api/v1/p2p/* lets unauthenticated requests reach the P2P endpoints.",
+        "reason": "setAuthorized only exempts the requests from the offline-user firewall. Every P2P handler calls auth.getUserCtx(req), which rejects without a valid CouchDB session (401 Not logged in), and the error is sent through serverUtils.error. The real gap is the missing role/permission check, p2p-endpoints-no-permission-check.",
+        "match": "Claims the P2P endpoints can be called without being logged in."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently, so each item is matched by meaning, and one report item may cover several. There is no linked issue; requirements come from the PR description (summary, 'What's included', 'Key design decisions' and the test plan). `status` is the bucket it should land in, decided from the code; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (the 86 translation keys, the files-changed counts, the old-nav.less styling) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'.",
+      "required": [
+        {
+          "id": "authorize-endpoint",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "POST /api/v1/p2p/authorize checks P2P is enabled, the user has a facility and a host or peer role, and returns an ES256 (ECDSA P-256) JWT with the server public key, scope manifest and revocation list version.",
+          "locations": [
+            "api/src/p2p/authorize.js:228",
+            "api/src/p2p/authorize.js:249",
+            "api/src/p2p/authorize.js:267"
+          ],
+          "match": "A Delivered item for the authorize endpoint issuing the JWT to users with a configured role. Pending verification matches only when it names the signing-key race or unpersisted key (code-review signing-key-race) or the depth-0 manifest (replication-depth-zero-default)."
+        },
+        {
+          "id": "facility-config-endpoint",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "GET /api/v1/p2p/config/:facility_id returns the p2p_sync settings (with defaults), but not 'for a facility': the parameter is never read and the webapp passes `_`.",
+          "locations": [
+            "api/src/p2p/config.js:47",
+            "webapp/src/ts/modules/p2p/p2p-status.component.ts:231"
+          ],
+          "match": "Not delivered or Pending verification, when it says :facility_id is ignored so the config isn't facility-specific. Delivered, or another bucket for some other reason, is a miss."
+        },
+        {
+          "id": "revocation-and-telemetry-endpoints",
+          "status": "Delivered",
+          "summary": "GET /api/v1/p2p/revocation-list returns the p2p-revocation-list doc's data (empty list when missing), and POST /api/v1/p2p/telemetry validates device_id and sessions, logs them and answers 202.",
+          "locations": [
+            "api/src/p2p/revocation-list.js:41",
+            "api/src/p2p/telemetry.js:11"
+          ],
+          "match": "A Delivered item for either endpoint; separate items for the two together match. Noting that telemetry is only logged, not stored, is still Delivered: the PR says fire-and-forget."
+        },
+        {
+          "id": "p2p-ui-config-driven",
+          "status": "Delivered",
+          "summary": "The P2P menu entry appears in both the new sidebar and the old header dropdown when p2p_sync.enabled is set and the user has a role in host_roles or peer_roles; P2pConfigService reads p2p_sync from app_settings and no role names are hard-coded.",
+          "locations": [
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.ts:161",
+            "webapp/src/ts/components/header/header.component.html:96",
+            "webapp/src/ts/services/p2p-config.service.ts:74"
+          ],
+          "match": "A Delivered item for the menu visibility in both navs, the config service, or config-driven roles; separate items together match."
+        },
+        {
+          "id": "status-page",
+          "status": "Pending verification",
+          "acceptable": [
+            "Delivered"
+          ],
+          "summary": "The P2P page (one component, with history as an accordion rather than a separate page) shows host/peer controls, QR code, progress and past sessions, but all of it drives medicmobile_android.p2p* bridge methods from medic/cht-android#431, so it can't be confirmed from this diff.",
+          "locations": [
+            "webapp/src/ts/modules/p2p/p2p-status.component.ts:184",
+            "webapp/src/ts/modules/p2p/p2p-status.component.html:346"
+          ],
+          "match": "Pending verification or Delivered for the status page / history UI. Noting that history isn't a separate page is still a match."
+        },
+        {
+          "id": "transit-docs-hidden",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "Transit docs are filtered from contacts, search/reports, task fetches and target aggregates, but the transit index is loaded once and never reloaded after a P2P session (code-review transit-index-never-refreshed), and the rules engine's own target and task calculations still include them (host-targets-include-transit).",
+          "locations": [
+            "webapp/src/ts/services/p2p-transit-filter.service.ts:27",
+            "webapp/src/ts/services/rules-engine.service.ts:563"
+          ],
+          "match": "Not delivered or Pending verification, when it names the stale transit index or the unfiltered rules-engine targets/tasks. Delivered is a miss."
+        },
+        {
+          "id": "purge-after-confirmed-delivery",
+          "status": "Not delivered",
+          "summary": "The PR says transit docs are purged after server delivery is confirmed, but both purge triggers rely on a 0 write-failure count that doesn't confirm delivery: the post-P2P sync in the status component purges even when the sync failed or the host is offline, and db-sync's auto-purge runs when nothing was pushed (no can_edit) or a failed doc was checkpointed past (code-review post-p2p-sync-purges-offline, auto-purge-unconfirmed).",
+          "locations": [
+            "webapp/src/ts/modules/p2p/p2p-status.component.ts:624",
+            "webapp/src/ts/services/db-sync.service.ts:259"
+          ],
+          "match": "Not delivered because the purge can run without the docs having reached the server, for either trigger. Delivered, or Not delivered for another reason, is a miss."
+        },
+        {
+          "id": "soft-delete-pattern",
+          "status": "Delivered",
+          "summary": "Transit docs are soft-deleted as {_id, _rev, _deleted: true, purged: true}, which db-sync's readOnlyFilter keeps from replicating to the server, rather than db.remove().",
+          "locations": [
+            "webapp/src/ts/services/p2p-transit-purge.service.ts:164",
+            "webapp/src/ts/services/db-sync.service.ts:40"
+          ],
+          "match": "A Delivered item for the soft-delete pattern and its replication filter. Noting the stale 'MUST use db.purge()' comment alongside is still a match."
+        },
+        {
+          "id": "new-edits-false",
+          "status": "Pending verification",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "'Documents written with new_edits: false' isn't in this diff: P2P docs are written by the Android side (medic/cht-android#431).",
+          "locations": [],
+          "match": "Pending verification, or Not delivered when it says nothing in this PR writes with new_edits: false. Delivered is a miss."
+        },
+        {
+          "id": "api-unit-tests",
+          "status": "Pending verification",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "The API specs exist and are run by hand in the test plan, but they sit in api/tests/p2p/, outside the unit-api glob, so the project's unit run and CI never execute them (code-review p2p-api-tests-not-run).",
+          "locations": [
+            "package.json:49",
+            "api/tests/p2p/authorize.spec.js:1"
+          ],
+          "match": "Pending verification or Not delivered, when it says the specs are outside the unit-api glob / not run by CI. Delivered is a miss."
+        }
+      ],
+      "preconditions_to_confirm": [
+        {
+          "id": "p2p-sync-settings",
+          "summary": "A `p2p_sync` block in app_settings (enabled, host_roles, peer_roles, and optionally transit_relay, max_doc_size_kb, token_expiry_days, wifi_hotspot_idle_timeout_sec, pause_replication_during_sync); P2P is off without it.",
+          "locations": [
+            "api/src/p2p/config.js:5",
+            "webapp/src/ts/services/p2p-config.service.ts:47"
+          ],
+          "match": "Lists the p2p_sync app_settings configuration as needed."
+        },
+        {
+          "id": "android-bridge",
+          "summary": "The webapp depends on medicmobile_android.p2p* bridge methods (p2pInitialize, p2pStartHostMode, p2pGetTransitDocIds, p2pIsActive, p2pConfirmBatchPurged, ...) and calls back p2pPermissionRequestResolved, all provided by medic/cht-android#431, which must ship with or before this.",
+          "locations": [
+            "webapp/src/ts/modules/p2p/p2p-status.component.ts:242",
+            "webapp/src/ts/services/android-api.service.ts:217"
+          ],
+          "match": "Lists the cht-android#431 / medicmobile_android P2P bridge as a dependency."
+        },
+        {
+          "id": "vault-signing-key",
+          "summary": "The API stores its JWT signing key pair in the medic-vault DB as `p2p-server-keys` on first authorize; it must persist and be backed up, since losing or replacing it invalidates every issued token.",
+          "locations": [
+            "api/src/p2p/authorize.js:94"
+          ],
+          "match": "Lists the p2p-server-keys doc / signing key in the vault DB."
+        },
+        {
+          "id": "revocation-doc-maintained",
+          "summary": "The revocation list is read from a `p2p-revocation-list` doc in the medic DB that nothing in the PR creates or updates; admins have to maintain it by hand.",
+          "locations": [
+            "api/src/p2p/revocation-list.js:6"
+          ],
+          "match": "Lists the p2p-revocation-list doc as something that must be created or maintained."
+        }
+      ]
+    },
+    "undisclosed_changes": {
+      "notes": "Every changed file was walked. Not listed: scope-manifest.js (counted in the description's '6 new API endpoint files'), the non-English translation files (part of the 86 keys), p2p.less/inbox.less/app-routing (plumbing for the described page), and the android-api.service.ts callback (covered by the android-bridge precondition); report items for them match nothing.",
+      "required": [
+        {
+          "id": "version-bump",
+          "summary": "package.json and package-lock.json bump the version from 5.1.0 to 5.1.1.",
+          "locations": [
+            "package.json:3",
+            "package-lock.json:3",
+            "package-lock.json:9"
+          ],
+          "match": "Lists the version bump."
+        },
+        {
+          "id": "e2e-tests-disabled",
+          "summary": "Four existing e2e tests are disabled with xit: three in analytics.wdio-spec.js (no targets found, targets disabled, bad config), in the targets area the PR changes, and one in old-navigation.wdio-spec.js (messages navigation).",
+          "locations": [
+            "tests/e2e/default/targets/analytics.wdio-spec.js:134",
+            "tests/e2e/default/targets/analytics.wdio-spec.js:144",
+            "tests/e2e/default/targets/analytics.wdio-spec.js:155",
+            "tests/e2e/default-mobile/old-navigation/old-navigation.wdio-spec.js:54"
+          ],
+          "match": "Lists the disabled (xit) e2e tests, in either file."
+        },
+        {
+          "id": "tasks-spec-blank-lines",
+          "summary": "tasks.wdio-spec.js only gains two blank lines, unrelated noise.",
+          "locations": [
+            "tests/e2e/default/tasks/tasks.wdio-spec.js:100",
+            "tests/e2e/default/tasks/tasks.wdio-spec.js:134"
+          ],
+          "match": "Lists the whitespace-only change to tasks.wdio-spec.js."
+        },
+        {
+          "id": "sync-paused-during-p2p",
+          "summary": "db-sync's sync() now returns without syncing when the Android bridge reports P2P active and p2p_sync.pause_replication_during_sync is set (unless forced). The description calls the db-sync change append-only and its config example shows only enabled/host_roles/peer_roles; this setting and the others (transit_relay, max_doc_size_kb, token_expiry_days, wifi_hotspot_idle_timeout_sec) aren't described.",
+          "locations": [
+            "webapp/src/ts/services/db-sync.service.ts:458",
+            "api/src/p2p/config.js:16"
+          ],
+          "match": "Lists the sync skip while P2P is active, or the undocumented p2p_sync settings."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": [
+        {
+          "id": "use-cht-permissions",
+          "summary": "CHT already maps roles to capabilities through app_settings permissions: auth.check/assertPermissions in the API and AppRouteGuardProvider with route data.permissions (AuthService.has) in the webapp. A can_p2p_host/can_p2p_peer permission would give the endpoints, route and menu one consistent check instead of the separate host_roles/peer_roles lists checked only in authorize and the menus.",
+          "locations": [
+            "api/src/auth.js:81",
+            "webapp/src/ts/modules/trainings/trainings.routes.ts:12"
+          ],
+          "match": "Cites CHT's permission system (auth.check, assertPermissions, AuthService.has or the route guard) as the way to gate P2P."
+        },
+        {
+          "id": "use-medic-settings-credentials",
+          "summary": "@medic/settings setCredentials/getCredentials already store secrets in the vault encrypted with the CouchDB secret; the P2P private key could use it instead of a plaintext PEM doc.",
+          "locations": [
+            "shared-libs/settings/src/index.js:88",
+            "shared-libs/settings/src/index.js:99"
+          ],
+          "match": "Cites @medic/settings (setCredentials/getCredentials) or the existing credentials mechanism for storing the key."
+        },
+        {
+          "id": "reuse-replication-getdepth",
+          "summary": "api/src/services/authorization.js getDepth already resolves a user's replication depth (highest per role, -1 for unlimited, report_depth and replicate_primary_contacts), which the two new depth helpers reimplement and get wrong for the no-setting case.",
+          "locations": [
+            "api/src/services/authorization.js:64"
+          ],
+          "match": "Cites the existing getDepth (or the replication authorization service) for the depth calculation."
+        }
+      ]
+    }
+  }
+}

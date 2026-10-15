@@ -1,0 +1,106 @@
+{
+  "pr": "medic/cht-core#11045",
+  "title": "fix(#11033): split Basic Auth credentials at first colon only",
+  "issue": "medic/cht-core#11033",
+  "commits": {
+    "base": "3738b30a818935d5ced6212502b13838b912fbe1",
+    "head": "ed9f6a0aa101e215da6e66304d350f56e3512ed1"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging. Its only comment is a maintainer closing it because the linked issue wasn't triaged yet; there are no reviews or inline comments, and the issue's two comments are about who works on it, so nothing gives the findings away. The colon fix itself is sound; the defect is a behaviour change it slips in for credentials with no colon at all, which the description doesn't mention.",
+  "code-review": {
+    "notes": "`severity` is the severity the finding deserves, estimated from a manual review (no benchmark runs yet). `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "colonless-header-500s",
+        "severity": "medium",
+        "summary": "basicAuthCredentials now throws 'Corrupted Auth header' when the decoded credentials have no colon (including an empty `Basic ` header). Before, `split(':')` returned { username, password: undefined } and nothing in the try could throw, so the function never threw. Its callers don't catch it: the global rate-limiter middleware (app.use at routing.js:208) calls it via isLoggingIn with no try/catch, and Express 5 forwards the async middleware's rejection to the default error handler, so every request on every route with such a header now gets a 500 instead of reaching auth and getting a 401. users.js's two callers turn it into a 500 too (serverUtils.error on an Error with no code). The new test locks the throw in.",
+        "locations": [
+          "api/src/auth.js:90",
+          "api/src/auth.js:97",
+          "api/src/middleware/rate-limiter.js:15",
+          "api/src/routing.js:208",
+          "api/src/services/rate-limit.js:32",
+          "api/src/controllers/users.js:136",
+          "api/tests/mocha/auth.spec.js:251"
+        ],
+        "match": "Says a Basic header without a colon now throws where it didn't before, and that a caller (the rate limiter, rate-limit service or users controller) doesn't catch it, so the request errors (500) instead of being rejected as unauthorized. Only saying the no-colon case now throws, without saying the callers don't handle it or what the request then gets, is not a match. Only saying the throw is caught by its own catch is throw-to-own-catch."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "throw-to-own-catch",
+        "severity": "low",
+        "summary": "The no-colon branch throws an Error('missing colon separator') only for the surrounding catch to discard it and throw 'Corrupted Auth header' instead, so its message is never seen; throwing the final error directly (or returning false) is clearer. The catch was otherwise dead: Buffer.from(string, 'base64') doesn't throw.",
+        "locations": [
+          "api/src/auth.js:90",
+          "api/src/auth.js:96"
+        ],
+        "match": "Says the inner throw is immediately caught and replaced by the catch, so its message is lost or the control flow is needlessly indirect. A comment about callers not handling the throw is colonless-header-500s."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "username-with-colon",
+        "summary": "Splitting at the first colon breaks usernames that contain a colon.",
+        "reason": "RFC 7617 forbids a colon in the user-id, so the first colon is always the separator; the PR cites this.",
+        "match": "Says usernames containing a colon are now (or still) parsed wrongly."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. The RFC 7617 first-colon split is how passwords-with-colons is delivered, so it is part of that item, not its own. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings that are known to be wrong.",
+      "required": [
+        {
+          "id": "passwords-with-colons",
+          "status": "Delivered",
+          "summary": "basicAuthCredentials splits the decoded credentials at the first colon only, so a password containing colons (e.g. P@ss:word123) is kept whole, and the issue's POST /api/v1/users/alice with Basic auth validates the full password instead of returning 401.",
+          "locations": [
+            "api/src/auth.js:88",
+            "api/src/auth.js:94"
+          ],
+          "match": "A Delivered item saying passwords with colons are no longer truncated, or that credentials are split at the first colon."
+        },
+        {
+          "id": "listed-tests",
+          "status": "Delivered",
+          "summary": "auth.spec.js adds basicAuthCredentials tests for the normal case, a password with multiple colons, an empty password, a missing Authorization header and a non-Basic scheme.",
+          "locations": [
+            "api/tests/mocha/auth.spec.js:222",
+            "api/tests/mocha/auth.spec.js:237",
+            "api/tests/mocha/auth.spec.js:244"
+          ],
+          "match": "A Delivered item for the new basicAuthCredentials tests (any of the listed cases other than the missing headers object)."
+        },
+        {
+          "id": "missing-headers-object-test",
+          "status": "Not delivered",
+          "summary": "The description lists a test for 'a missing headers object', but there is none: the 'missing header' test passes `{ headers: {} }`, and no test passes a request without `headers`. The code handles it (`req?.headers?.authorization`), but the promised test isn't there.",
+          "locations": [
+            "api/tests/mocha/auth.spec.js:223",
+            "api/src/auth.js:82"
+          ],
+          "match": "Not delivered because no test covers a request without a headers object. Delivered is a miss."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Both changed files were walked. The description covers the colon fix and lists the tests, but not the behaviour change for credentials with no colon.",
+      "required": [
+        {
+          "id": "colonless-now-throws",
+          "summary": "Credentials with no colon (or an empty `Basic ` header) now make basicAuthCredentials throw 'Corrupted Auth header'; before, it returned { username, password: undefined } and never threw. The description doesn't mention this, and only the last new test shows it. Its callers don't catch it (see code-review colonless-header-500s).",
+          "locations": [
+            "api/src/auth.js:90",
+            "api/tests/mocha/auth.spec.js:251"
+          ],
+          "match": "Lists the new throw for credentials without a colon (or its test) as a behaviour change the description doesn't mention."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

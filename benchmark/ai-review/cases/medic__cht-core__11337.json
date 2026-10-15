@@ -1,0 +1,155 @@
+{
+  "pr": "medic/cht-core#11337",
+  "title": "fix(#9011): backfill patient IDs on related reports",
+  "issue": "medic/cht-core#9011",
+  "commits": {
+    "base": "10dcb98ff798567fa2a8231d2dc93b122c318dd1",
+    "head": "90794810e459f3bb6a93ee52cda326a4d831b8a9"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging (stale). The PR's only comments are two github-actions bot notices (issue-assignment check, stale), which pr-context.sh drops; there are no reviews or inline comments, so the PR itself gives nothing away. The PR discloses it was written by OpenAI Codex with little human involvement. Issue #9011 is still open and the completeness review reads its comments, which carry a requirement the PR misses: dianabarsan asked, about three hours after the PR was opened, for the behaviour to be opt-in and possibly limited to some contact types, because it can cause massive database updates. That counts as a stated requirement, not a giveaway, since the review is expected to find it. The backfill logic itself works on the happy path; its defects are in failure handling and ordering, and the missing opt-in.",
+  "code-review": {
+    "notes": "`severity` is an estimate of the severity the finding deserves, from a manual review; it is to be checked against OCR's own ratings once runs exist (the most common across the runs that reported it, the higher one on a tie; a comment that covers several items gives its severity only to the item that is its main point). `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "reports-written-before-contact-saved",
+        "severity": "medium",
+        "summary": "updateReports bulk-writes the new patient_id into the reports inside onMatch, before the transitions framework saves the contact that holds that id (finalizeChange, then saveForSentinel's db.medic.put, runs after every transition). If the contact save fails (e.g. a conflict because the CHW edited the contact meanwhile), the reports already point at a patient_id no contact has. The transition isn't recorded, so the next change to the contact generates a different id, and updateReports then skips the reports because they already have one: they stay linked to the orphan id for good.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:52",
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:95",
+          "shared-libs/transitions/src/transitions/index.js:309"
+        ],
+        "match": "Says the reports are updated before the contact (with its new patient_id) is saved, so a failed or retried contact save leaves reports with an id that doesn't match the contact. Only saying bulkDocs results aren't checked is not a match: that is bulkdocs-result-ignored."
+      },
+      {
+        "id": "bulkdocs-result-ignored",
+        "severity": "medium",
+        "summary": "db.medic.bulkDocs resolves with a per-document result array and doesn't reject on per-doc failures such as conflicts. updateReports never inspects it, so any report that fails to save is silently left without patient_id, with nothing logged. The late-arriving path only fixes it if that report changes again.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:52"
+        ],
+        "match": "Says the bulkDocs response isn't checked for per-document errors/conflicts, so failed report updates are silently lost. Saying a rejected bulkDocs or query makes the contact lose its patient_id is backfill-failure-blocks-shortcode."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "backfill-unconditional",
+        "severity": "medium",
+        "summary": "The backfill and the late-arriving report update run whenever generate_shortcode_on_contacts is enabled, with no setting to turn them on or off or limit them to contact types. Existing deployments that upgrade get new writes to report documents (fields.patient_id) they didn't ask for, though the PR ticks 'Backwards compatible'. A maintainer asked on #9011 for this to be opt-in (see the requirements item opt-in-config); a code review sees only the diff, so it is extra credit here.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:60",
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:95"
+        ],
+        "match": "Says the new report-updating behaviour is always on for anyone using the transition and should be configurable/opt-in (or scoped to contact types), or that it changes existing deployments' data without a switch."
+      },
+      {
+        "id": "backfill-failure-blocks-shortcode",
+        "severity": "medium",
+        "summary": "updateReports is chained into the person branch of onMatch, so if the reports_by_subject query or bulkDocs rejects, onMatch rejects. applyTransition then adds an error and returns false (err.changed is unset), and the contact's freshly assigned patient_id isn't saved unless another transition changed the doc. Generating the contact's id now depends on a report update succeeding, which it didn't before.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:95",
+          "shared-libs/transitions/src/transitions/index.js:387"
+        ],
+        "match": "Says a failure fetching or updating the reports makes the transition fail, so the contact doesn't get (or save) its patient_id, or that the backfill should be isolated with its own catch."
+      },
+      {
+        "id": "backfill-not-integration-tested",
+        "severity": "low",
+        "summary": "The new integration test covers only the late-arriving report (report saved after the patient got an id). Backfilling reports that already exist when the id is generated, the issue's main scenario, is tested only by a unit test that stubs getReportsBySubject and bulkDocs.",
+        "locations": [
+          "tests/integration/sentinel/transitions/generate-shortcode-on-contacts.spec.js:178",
+          "shared-libs/transitions/test/unit/transitions/generate_shortcode_on_contacts.js:147"
+        ],
+        "match": "Says there is no integration/e2e test of backfilling reports that existed before the patient_id was generated."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "fetches-all-reports",
+        "summary": "updateReports loads every report in the database (or does an unbounded scan) each time a person gets a patient_id.",
+        "reason": "getReportsBySubject queries medic-client/reports_by_subject with key = the contact's _id, so it returns only that person's reports, typically a handful for a newly created person. The real concern is the total volume of writes the always-on behaviour causes (backfill-unconditional).",
+        "match": "Says the backfill fetches all reports or scans the whole database. Saying the behaviour can cause many writes across a deployment and should be opt-in is backfill-unconditional, not this."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Requirements come from the PR description, issue #9011's body and its comments. Reports split and merge requirements differently, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (the AI disclaimer, the checklist) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings reviews are likely to make that are wrong.",
+      "required": [
+        {
+          "id": "backfill-existing-reports",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "When the transition generates a person's patient_id, updateReports fetches the person's reports via reports_by_subject and writes the id into those whose patient_uuid is the person and which lack a patient_id (the issue's request and the PR's first claim). It works on the happy path, but per-doc save failures are ignored and the reports are written before the contact is saved (code-review bulkdocs-result-ignored, reports-written-before-contact-saved).",
+          "locations": [
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:44",
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:95"
+          ],
+          "match": "A Delivered item for updating existing reports when the patient_id is generated. Pending verification matches only when it cites the unchecked bulkDocs result or the write-before-contact-save ordering."
+        },
+        {
+          "id": "late-arriving-reports",
+          "status": "Delivered",
+          "summary": "Reports synced after the patient already has a patient_id (dianabarsan's 'collection Y' case on #9011, and the PR's second claim) pass the new filter branch, since they have patient_uuid and a hydrated patient with a patient_id but no patient_id of their own, and onMatch copies the id in. The integration test covers it.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:17",
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:80"
+          ],
+          "match": "A Delivered item for reports submitted or synced after the patient got its id."
+        },
+        {
+          "id": "opt-in-config",
+          "status": "Not delivered",
+          "summary": "dianabarsan's comment on #9011 asks implementers to make this opt-in, since it can cause massive database updates, and possibly to limit it to some contact types. The PR has no configuration: the backfill and late-arriving updates run whenever generate_shortcode_on_contacts is enabled, for every person type.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:60",
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:95"
+          ],
+          "match": "Not delivered because there is no opt-in setting (or contact-type scoping) for the report updates. A report that doesn't list this requirement at all, or calls it Delivered, misses it."
+        },
+        {
+          "id": "existing-ids-kept",
+          "status": "Delivered",
+          "summary": "Reports that already have patient_id (top level or in fields) are left alone: hasReportPatientId guards both the filter and addPatientIdToReport.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:9",
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:26"
+          ],
+          "match": "A Delivered item saying existing report patient_ids aren't overwritten."
+        },
+        {
+          "id": "places-untouched",
+          "status": "Delivered",
+          "summary": "Places still only get a place_id; updateReports runs only for person types.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/generate_shortcode_on_contacts.js:91"
+          ],
+          "match": "A Delivered item saying place handling is unchanged."
+        },
+        {
+          "id": "tests-both-scenarios",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "Unit tests cover the filter, the late-arriving path, the backfill with mixed reports, places and the no-op case; an integration test covers the late-arriving path. The backfill is tested only with stubs (code-review backfill-not-integration-tested).",
+          "locations": [
+            "shared-libs/transitions/test/unit/transitions/generate_shortcode_on_contacts.js:147",
+            "tests/integration/sentinel/transitions/generate-shortcode-on-contacts.spec.js:178"
+          ],
+          "match": "A Delivered item for tests of the backfill and late-arriving scenarios. Pending verification matches only when it notes the backfill path has no integration test."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Walked all three changed files (the transition, its unit test, the integration spec). Everything they change is described: the transition now also matches reports, which is the 'normal hydrated transition path' the PR mentions. The expected answer is None. The missing opt-in is a requirement (opt-in-config), not an undisclosed change.",
+      "required": []
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

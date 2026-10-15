@@ -1,0 +1,332 @@
+{
+  "pr": "medic/cht-core#11054",
+  "title": "feat(#10720): add offline switch-user prototype with cached session restore",
+  "issue": "medic/cht-core#10720",
+  "commits": {
+    "base": "fc32f10b1a48d0cd327d3e2e27af43efcc8b65bc",
+    "head": "3762a885a9a8eb44d0955e9be2cda939f51edf5d"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging. Its only comment is the author's 'build is currently failing, i am working on this one right now'; there are no reviews or inline comments, so nothing gives findings away. The failing check is the SonarCloud quality gate (1 new issue, no longer visible); no GitHub Actions run exists for the head, so there is no known compile or test failure to find. The linked issue's thread has the maintainer's prototype spec (sidebar 'Switch user', account list, 'Add account' to login, no re-authentication on switch, original session cookie kept), which the requirements below use. The PR's core idea fails: what it caches and restores is the readable userCtx cookie, not the session, and the restore never reloads the app.",
+  "code-review": {
+    "notes": "`severity` is an estimate of the severity the finding deserves, from a manual review; it will be revisited against OCR's own ratings once runs exist. A comment that covers several items gives its severity only to the item that is its main point. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing, including disagreements with choices the PR states (no PIN on switch).",
+    "required": [
+      {
+        "id": "userctx-not-session",
+        "severity": "high",
+        "summary": "The cached 'session token' is the userCtx cookie (readable JSON: name, roles, home), not the session. The httpOnly AuthSession cookie, which is what the server authenticates, is never cached or restored, and each login overwrites it. So after a restore the server session still belongs to whoever logged in last. Online, SessionService.init() sees /_session's name differ from the restored userCtx name and calls logout(), which DELETEs /_session (ending the other user's server session too) and sends the user to the login page. If the restore happens offline, the app runs as the restored user until connectivity returns, then its replication and API calls go out under the other user's AuthSession: that user's documents replicate into the restored user's local DB and the restored user's writes are pushed as the other user.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:46",
+          "webapp/src/ts/services/session-cache.service.ts:70",
+          "webapp/src/ts/services/session.service.ts:96"
+        ],
+        "match": "Says the cached/restored value is only the userCtx cookie (or that the real AuthSession / server session is not cached or restored), so the restored user has no server session of their own. Saying the online check then logs the user out, or that sync runs under another user's session, is part of the same item. Only saying the token is stored unencrypted in localStorage is not a match (see rejected session-token-exposed)."
+      },
+      {
+        "id": "restore-without-reload",
+        "severity": "high",
+        "summary": "restoreSession sets location.href to `${pathname}#/home`. The app is already at that pathname (e.g. /medic/#/switch-user), so this is a fragment-only navigation and the page does not reload. The bootstrapper never runs for the selected user (no initial replication check, replication-id header stays the previous user's), and the running Angular app keeps the previous user's in-memory state, change listeners, sync and cached services, while new DbService.get() calls resolve to the selected user's local DB because userCtxCookieValue was cleared. The result is a mix of two users' state rather than a switch.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:73",
+          "webapp/src/ts/services/session-cache.service.ts:89"
+        ],
+        "match": "Says setting href to the same path with a different hash does not reload the page, so the app is not re-bootstrapped for the selected user and the previous user's state/services persist. Saying the server session isn't restored is userctx-not-session, not a match."
+      },
+      {
+        "id": "selector-clears-session-on-visit",
+        "severity": "medium",
+        "summary": "AccountSelectorComponent.ngOnInit calls cacheCurrentSessionForSelector(), which caches and then clears the active userCtx on every visit to #/switch-user. 'Add account' sends the user to login with redirect=#/switch-user, so a newly added user is logged out of the UI the moment the login returns and must pick themselves from the list again. Any other visit to the route (back button, bookmark, typed URL) does the same.",
+        "locations": [
+          "webapp/src/ts/components/account-selector/account-selector.component.ts:19",
+          "webapp/src/ts/services/session-cache.service.ts:39",
+          "webapp/src/ts/services/session-cache.service.ts:78"
+        ],
+        "match": "Says opening the selector route clears the active session, e.g. right after the 'Add account' login redirects back to it. Saying switchUser() clears the cookie before an account is picked, without naming the selector's ngOnInit or the add-account return, is session-cleared-before-choice."
+      },
+      {
+        "id": "session-cleared-before-choice",
+        "severity": "medium",
+        "summary": "switchUser() deletes the userCtx cookie before any account is chosen, but leaves the app running on #/switch-user. If the page is reloaded or the app restarts while on the selector (likely on a device handed over between shifts), the bootstrapper finds no userCtx and redirects to the login page, which can't log in offline, so the cached accounts are unreachable. Meanwhile the still-running app's background code that calls sessionService.userCtx().name (e.g. DbService.getUsername) gets null.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:33",
+          "webapp/src/js/bootstrapper/index.js:114"
+        ],
+        "match": "Says clearing the userCtx cookie before an account is selected leaves the user stranded at login after a reload/restart (especially offline), or leaves running app code without a userCtx. A comment only about the selector's ngOnInit clearing a freshly added account is selector-clears-session-on-visit."
+      },
+      {
+        "id": "logout-keeps-cached-account",
+        "severity": "medium",
+        "summary": "Nothing ever removes an entry from the cht-session-cache in localStorage: the normal 'Log out' (SessionService.logout) is unchanged, so a user who logs out stays listed and anyone with the device can 'restore' them offline without credentials. The PR states that switching has no PIN, but not that logging out no longer closes an account.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:52",
+          "webapp/src/ts/services/session.service.ts:42"
+        ],
+        "match": "Says logging out (or any other path) never removes the user from the cached-accounts list, so a logged-out account can still be selected. Saying only that switching has no PIN/password is no-auth-on-switch; saying only that the list has no size limit is cache-unbounded."
+      },
+      {
+        "id": "hardcoded-strings",
+        "severity": "low",
+        "summary": "The new user-facing strings ('Switch user' in the sidebar; 'Switch user', 'Select a cached account:', 'No cached accounts found. Add an account while online.', 'Add account' in the selector) are hard-coded English instead of translation keys, unlike 'Log Out' next to them. The PR leaves its 'Internationalised' checkbox unchecked.",
+        "locations": [
+          "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.html:96",
+          "webapp/src/ts/components/account-selector/account-selector.component.html:3",
+          "webapp/src/ts/components/account-selector/account-selector.component.html:20"
+        ],
+        "match": "Says the new UI text is not translated / not using the translate pipe or translation keys."
+      },
+      {
+        "id": "tabindex-removed",
+        "severity": "low",
+        "summary": "The PR removes tabindex=\"0\" and its comment from the last-sync relative date in the sidebar. The comment said it prevents the tooltip from showing when the menu opens on mobile, so the removal reintroduces that behaviour. It is unrelated to switching users.",
+        "locations": [
+          "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.html:66"
+        ],
+        "match": "Says removing the tabindex (and its comment) on the last-sync date brings back the mobile tooltip problem, or flags it as an unrelated behavioural change."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "no-auth-on-switch",
+        "severity": "low",
+        "summary": "Any person holding the device can open any cached account without a password or PIN. The PR states this as out of scope, and the maintainer's prototype spec in the issue says users 'should not be prompted to re-authenticate'.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:64"
+        ],
+        "match": "Says switching to a cached account needs no authentication. Saying a logged-out account stays selectable is logout-keeps-cached-account."
+      },
+      {
+        "id": "restored-cookie-attributes",
+        "severity": "low",
+        "summary": "restoreSession writes the userCtx cookie with no expiry (and without the Secure flag the API sets in production), so it becomes a browser-session cookie instead of the API's one-year cookie and can vanish when the browser or app restarts, sending the user to login.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:70"
+        ],
+        "match": "Says the restored cookie lacks the original's expiry/max-age or security attributes."
+      },
+      {
+        "id": "cache-unbounded",
+        "severity": "low",
+        "summary": "The cached-accounts list grows without limit; there is no cap, although the issue asks deployments to be able to cap cached accounts.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:52"
+        ],
+        "match": "Says there is no limit or cap on the number of cached accounts."
+      },
+      {
+        "id": "old-nav-missing",
+        "severity": "low",
+        "summary": "Only the new sidebar gets 'Switch user'; the old-navigation header menu (shown with can_view_old_navigation) still offers only 'Log Out', so those users can't switch. The PR leaves its old-design checkbox unchecked.",
+        "locations": [
+          "webapp/src/ts/components/header/header.component.html:126"
+        ],
+        "match": "Says the old navigation/header has no Switch user entry."
+      },
+      {
+        "id": "unrelated-outbound-test",
+        "severity": "low",
+        "summary": "A new outbound.spec.js test (debug logging and password masking) has nothing to do with switching users. The test itself is correct against outbound.js.",
+        "locations": [
+          "shared-libs/outbound/test/outbound.spec.js:467"
+        ],
+        "match": "Says the outbound test is unrelated to the PR's purpose."
+      },
+      {
+        "id": "silent-restore-failure",
+        "severity": "low",
+        "summary": "When restoreSession fails, selectAccount only console.warns; the user gets no feedback. Unlikely in practice, since the list comes from the same cache.",
+        "locations": [
+          "webapp/src/ts/components/account-selector/account-selector.component.ts:29"
+        ],
+        "match": "Says a failed restore is only logged and not shown to the user."
+      },
+      {
+        "id": "untested-service-paths",
+        "severity": "low",
+        "summary": "session-cache.service.spec.ts covers only cacheActiveSession, listCachedAccounts and a successful restoreSession; switchUser, cacheCurrentSessionForSelector, the cookie clearing and navigateToAddAccountLogin have no tests.",
+        "locations": [
+          "webapp/src/ts/services/session-cache.service.ts:31",
+          "webapp/src/ts/services/session-cache.service.ts:77"
+        ],
+        "match": "Says switchUser / clearing / add-account navigation in SessionCacheService are untested."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "session-token-exposed",
+        "summary": "Storing session tokens in plaintext localStorage lets XSS or anyone with the device steal them and hijack users' sessions.",
+        "reason": "What is stored is the userCtx cookie value (name, roles, home), which is already readable by page scripts and is not a credential; the AuthSession token is httpOnly and never touched. The real problem is the opposite: nothing that authenticates is cached (userctx-not-session). The PR also states encryption at rest is out of scope.",
+        "match": "Claims the localStorage cache holds credentials or session tokens that could be stolen to impersonate a user. A comment that says the stored value is only userCtx and not a session is userctx-not-session, not this. Calling the cached entries credentials in passing, in a comment whose point is something else (e.g. that the cache grows without limit), is not a match."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in, judged from the code at the PR head; `acceptable` lists other buckets that are not counted as a miss. Sources are the PR description, issue #10720 and the maintainer's prototype spec in its comments. The PR's 'Prototype scope notes' (no PIN, no encryption at rest) and trivial bullets (the route import, test-file names) are not requirements: report items for them, in any bucket, match nothing and are not scored. That includes an item restating a scope note as delivered, e.g. 'selecting an account prompts for no password or PIN'. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'.",
+      "required": [
+        {
+          "id": "sidebar-switch-user",
+          "status": "Delivered",
+          "summary": "A 'Switch user' item sits next to 'Log Out' in the sidebar, shown under the same canLogOut condition; it calls SessionCacheService.switchUser(), which routes to #/switch-user instead of logging out.",
+          "locations": [
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.html:94",
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.ts:88"
+          ],
+          "match": "A Delivered item for the sidebar Switch user action routing to the selector. A note that the old-nav header lacks it does not change the bucket."
+        },
+        {
+          "id": "account-selector-lists",
+          "status": "Delivered",
+          "summary": "A #/switch-user route renders AccountSelectorComponent, which lists the usernames in the localStorage cache.",
+          "locations": [
+            "webapp/src/ts/app-routing.module.ts:19",
+            "webapp/src/ts/components/account-selector/account-selector.component.ts:20"
+          ],
+          "match": "A Delivered item for the new route/selector listing cached accounts. That includes an item saying that after a switch both the previous and the new user appear in the list. An item saying the original user stays switchable or keeps their session is about original-session-preserved, not this. A Delivered item that lists accounts among other claims still matches for its listing, even when another of its claims is wrong (e.g. that the service also restores the selected account)."
+        },
+        {
+          "id": "restore-selected-account",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "Selecting an account should take the user back into the app logged in as that user, without re-authentication, offline too. restoreSession only rewrites the userCtx cookie (the AuthSession is not restored) and its fragment-only href change doesn't reload the app, so the bootstrapper never runs for the selected user; online, SessionService.init() logs them out on the next start. See code-review userctx-not-session and restore-without-reload.",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:70",
+            "webapp/src/ts/services/session-cache.service.ts:73"
+          ],
+          "match": "Not delivered because only the userCtx cookie is restored (no real session) or because the restore doesn't reload/re-bootstrap the app. Pending verification matches only when it names one of those as what needs checking. Delivered is a miss."
+        },
+        {
+          "id": "original-session-preserved",
+          "status": "Not delivered",
+          "summary": "The PR says it 'preserves original user session token in local cache so users remain switchable later', and the issue's spec says the original user's session cookie should not be removed. The AuthSession cookie is never cached, and the 'Add account' login overwrites it, so the original user's session is lost; only their userCtx metadata is kept.",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:46"
+          ],
+          "match": "Not delivered because what's kept is the userCtx cookie, not the session token / AuthSession. Delivered is a miss."
+        },
+        {
+          "id": "add-account-login",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "'Add account' sends the user to the standard /medic/login with a redirect back to #/switch-user, which keeps working only online, as specified. But on return the selector's ngOnInit clears the newly added user's session (code-review selector-clears-session-on-visit).",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:77",
+            "webapp/src/ts/components/account-selector/account-selector.component.ts:19"
+          ],
+          "match": "A Delivered item for the Add account redirect to login. Not delivered matches only when the reason is that returning to the selector logs the new user straight out, or that the login overwrites the previous user's session (original-session-preserved)."
+        },
+        {
+          "id": "tests",
+          "status": "Delivered",
+          "summary": "Unit tests were added for SessionCacheService and AccountSelectorComponent, and the sidebar spec covers switchUser. They mock everything around the service, so they can't catch the session problems; switchUser and the clearing paths of the service are untested.",
+          "locations": [
+            "webapp/tests/karma/ts/services/session-cache.service.spec.ts:76",
+            "webapp/tests/karma/ts/components/account-selector/account-selector.component.spec.ts:45",
+            "webapp/tests/karma/ts/components/sidebar-menu/sidebar-menu.component.spec.ts:192"
+          ],
+          "match": "A Delivered item for the new/updated unit tests, with or without a note about what they leave untested."
+        },
+        {
+          "id": "offline-switching",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "Issue: switch between accounts without internet, provided each logged in online once. The switch doesn't re-bootstrap the app (restore-without-reload), and a reload or restart while on the selector sends the user to a login page that can't work offline (session-cleared-before-choice). The PR also switches from an in-app page, not 'from the login screen' as the issue words it, which the maintainer's spec changed.",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:73",
+            "webapp/src/js/bootstrapper/index.js:114"
+          ],
+          "match": "Not delivered for a concrete reason in the code (no reload, no real session, stranded at login offline). Pending verification matches when it asks for an offline switch to be tested. Delivered is a miss; Not delivered only because switching isn't on the login screen is a miss too."
+        },
+        {
+          "id": "account-isolation",
+          "status": "Not delivered",
+          "summary": "Issue: User A must not be able to access User B's cached records (the reporter clarified UI-level isolation is enough). After a switch the previous user's in-memory app state stays loaded (restore-without-reload), and once online a restored user replicates under the last-logged-in user's AuthSession, pulling that user's documents into the restored user's local DB (userctx-not-session). Any device holder can also open any cached account, including logged-out ones.",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:73",
+            "webapp/src/ts/services/session-cache.service.ts:70",
+            "webapp/src/ts/services/session-cache.service.ts:52"
+          ],
+          "match": "Not delivered with a reason: data/state crossing between users after a switch, replication under the wrong session, or any device holder being able to open any cached (even logged-out) account. Not delivered only because there is no PIN counts too. Delivered (e.g. 'per-user PouchDBs already isolate data') is a miss."
+        },
+        {
+          "id": "per-account-storage",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered"
+          ],
+          "summary": "Issue: each account keeps its own locally cached data and credential hash. Per-user local DBs (medic-user-<name>) already exist and the PR relies on them; no credential hash is stored, consistent with the prototype's no-PIN scope.",
+          "locations": [
+            "webapp/src/js/bootstrapper/index.js:48"
+          ],
+          "match": "Delivered when it credits the existing per-user local DBs. Not delivered matches when the reason is that no per-account credential hash is stored."
+        },
+        {
+          "id": "account-cap",
+          "status": "Not delivered",
+          "summary": "Issue: N accounts per device, ideally configurable, and deployments able to cap cached accounts. There is no limit and no setting; the cache grows with every user who passes through the selector.",
+          "locations": [
+            "webapp/src/ts/services/session-cache.service.ts:52"
+          ],
+          "match": "Not delivered because there is no cap / configuration for the number of cached accounts. Separate items for 'N accounts' and 'cap' together match."
+        },
+        {
+          "id": "i18n",
+          "status": "Not delivered",
+          "summary": "The PR's checklist leaves 'Internationalised: All user facing text' unchecked, and the new strings are hard-coded English.",
+          "locations": [
+            "webapp/src/ts/components/account-selector/account-selector.component.html:3"
+          ],
+          "match": "Not delivered because the new text isn't translated. An item noting the unchecked box with the same conclusion matches."
+        }
+      ],
+      "preconditions_to_confirm": [
+        {
+          "id": "android-logout-permission",
+          "summary": "In the Android app the Switch user item shares Log Out's canLogOut flag, which there is the can_log_out_on_android permission; users without it can't reach Switch user.",
+          "locations": [
+            "webapp/src/ts/app.component.ts:373",
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.html:94"
+          ],
+          "match": "Lists the can_log_out_on_android permission (or that Switch user is hidden wherever Log Out is) as something to confirm."
+        }
+      ]
+    },
+    "undisclosed_changes": {
+      "notes": "Walked all 10 changed files. The new service, component, route, sidebar entry and their specs are described. The three items below are not. The readonly modifiers are trivial but still undescribed.",
+      "required": [
+        {
+          "id": "outbound-test",
+          "summary": "A new test in shared-libs/outbound/test/outbound.spec.js for debug logging and password masking, unrelated to switching users.",
+          "locations": [
+            "shared-libs/outbound/test/outbound.spec.js:467"
+          ],
+          "match": "Lists the outbound.spec.js test as an undisclosed change."
+        },
+        {
+          "id": "tabindex-removal",
+          "summary": "The sidebar's last-sync date loses tabindex=\"0\" and the comment explaining it stops the tooltip appearing when the menu opens on mobile.",
+          "locations": [
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.html:66"
+          ],
+          "match": "Lists the removed tabindex and/or its comment in sidebar-menu.component.html."
+        },
+        {
+          "id": "readonly-refactor",
+          "summary": "globalActions and router in SidebarMenuComponent are made readonly.",
+          "locations": [
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.ts:45",
+            "webapp/src/ts/components/sidebar-menu/sidebar-menu.component.ts:56"
+          ],
+          "match": "Lists the readonly modifiers added in sidebar-menu.component.ts."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

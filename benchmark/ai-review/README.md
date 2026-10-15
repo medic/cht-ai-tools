@@ -24,6 +24,8 @@ To score runs again, e.g. after a case changes:
 ANTHROPIC_API_KEY=$(op read "op://Private/platform.claude.com/password") npm run bench:ai-review:score -- bench-results/<timestamp>...
 ```
 
+Add `--case <owner>__<repo>__<pr>` (repeatable) to score only those cases, e.g. one whose scoring failed.
+
 Output goes to one directory per run, `bench-results/<timestamp>-<n>/`:
 
 ```

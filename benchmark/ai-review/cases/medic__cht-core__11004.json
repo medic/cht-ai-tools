@@ -1,0 +1,152 @@
+{
+  "pr": "medic/cht-core#11004",
+  "title": "fix(#11003): include boundary values in age break comparison",
+  "issue": "medic/cht-core#11003",
+  "commits": {
+    "base": "3775e36dfecd9d8b0f27b1cd7c355f26949248ee",
+    "head": "465b7181917d30988c9fd9ec3b20e5e714da2944"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging; the issue was closed as 'Won't fix: Not an issue'. The PR has no reviews or inline comments and one comment, a maintainer triage note (also posted on the issue) saying months are the expected unit for children up to ~18 months and that 24 months correctly shows '2 years'. That note hints at under-two-shown-as-one-year (and is the source of the maintainer-months-expected requirement), but it doesn't say the change affects all of 12–23 months, and it gives nothing away about the broken existing tests or the relative-date regression. The one-character change is not limited to the exact boundaries it describes.",
+  "code-review": {
+    "notes": "`severity` is the severity the finding deserves, estimated from a manual review, not yet from OCR runs; once runs exist it should follow the README (the most common OCR rating across the runs that reported it, the higher one on a tie). `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "existing-age-tests-fail",
+        "severity": "high",
+        "summary": "Two existing age tests in format-date.service.spec.ts now fail, though the PR says they still pass. 'shows months when less than 2 years old' (16 months 25 days, expects [16, true, 'MM', false]) now gets a years diff of -1, which passes `>= 1`, so relativeTime is called with [1, true, 'y', false]. 'shows days when less than 2 months old' (50 days, expects [50, true, 'dd', false]) now gets a months diff of -1 and is called with [1, true, 'M', false].",
+        "locations": [
+          "webapp/tests/karma/ts/services/format-date.service.spec.ts:124",
+          "webapp/tests/karma/ts/services/format-date.service.spec.ts:132",
+          "webapp/src/ts/services/format-date.service.ts:106"
+        ],
+        "match": "Says the existing 'less than 2 years' (16 months) and/or 'less than 2 months' (50 days) tests now fail or contradict the change. Only saying that ages of 12–23 months now display as 1 year, without connecting it to the existing tests, is not a match: that is under-two-shown-as-one-year."
+      },
+      {
+        "id": "under-two-shown-as-one-year",
+        "severity": "high",
+        "summary": "The change is not limited to the exact boundaries the PR and issue describe. moment's diff truncates, so every age from 12 to 23 months has a years diff of ±1 and now displays as '1 year' (e.g. 16 or 23 months), and every age from 30 to 59 days has a months diff of ±1 and now displays as '1 month'. Before, years were shown only from 2 years and months only from 2 months, which the existing tests and the maintainer's comment (months are expected for young children) treat as intended. For under-twos, where age in months matters clinically, this loses up to 11 months of precision.",
+        "locations": [
+          "webapp/src/ts/services/format-date.service.ts:106",
+          "webapp/src/ts/services/format-date.service.ts:39",
+          "webapp/src/ts/services/format-date.service.ts:40"
+        ],
+        "match": "Says ages between the boundaries (anywhere from 12 to 23 months, or 30 to 59 days) now show as '1 year' / '1 month', or that the old `>` was deliberate so that under-twos show months. Only saying that the existing 16-month or 50-day tests fail is not a match: that is existing-age-tests-fail."
+      },
+      {
+        "id": "relative-tomorrow-yesterday",
+        "severity": "high",
+        "summary": "getDateDiff is also used by relative(date, { withoutTime: true }), which calls relativeDate with humanize, and that maps quantity 1 / -1 to 'tomorrow' / 'yesterday'. Before, quantity ±1 could only come from the days unit (months and years needed |diff| >= 2). Now a date 30–59 days or 12–23 months away has quantity ±1 in months or years, so it renders as 'tomorrow' or 'yesterday'. This reaches report fields such as lmp_date, expected_date and birth_date (format-data-record), date of death, and the relativeDay pipe: an LMP 40 days ago shows 'yesterday'.",
+        "locations": [
+          "webapp/src/ts/services/format-date.service.ts:141",
+          "webapp/src/ts/services/format-date.service.ts:144",
+          "webapp/src/ts/services/format-date.service.ts:184",
+          "webapp/src/ts/services/format-data-record.service.ts:223"
+        ],
+        "match": "Says relative dates without time (the humanize path) now show 'tomorrow'/'yesterday' for dates about a month or a year away, because quantity 1 can now come from the months or years unit. Only saying age display changes is not a match: that is under-two-shown-as-one-year."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "days-fallback-unreachable",
+        "severity": "low",
+        "summary": "With `>=` and the days break's `min: 0`, the loop always returns at the days break, so the fallback `return { quantity: 0, ... }` after the loop is now unreachable. The PR's claim that `>= 0` matches the same values as `> 0` is wrong in detail (a 0-day diff now returns from the loop), though the result is identical: quantity 0 with the days key.",
+        "locations": [
+          "webapp/src/ts/services/format-date.service.ts:110"
+        ],
+        "match": "Says the fallback after the loop is now unreachable / dead code, or that `>= 0` does not match the same values as `> 0` while noting the output is the same. Claiming the 0-day output changes is not a match: that is days-break-changes-newborns."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "days-break-changes-newborns",
+        "summary": "Changing to `>=` changes the days break (min 0), so a newborn (0-day diff) now gets a different result or key than before.",
+        "reason": "Before, a 0-day diff fell through to the fallback `{ quantity: 0, key: { singular: 'd', plural: 'dd' } }`; now it returns from the days break with the same quantity and the same key. The output is identical, and the existing 'shows zero days old when just born' test still passes.",
+        "match": "Says the 0-day / newborn result changes because of the days break now matching 0."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in, decided from the code at the PR head; `acceptable` lists other buckets that are not counted as a miss. Report items for trivial PR bullets (ESLint passing, the quoted before/after snippet) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None.",
+      "required": [
+        {
+          "id": "exact-boundaries-singular",
+          "status": "Delivered",
+          "summary": "A patient exactly 1 year old displays as '1 year' (key 'y') instead of '12 months', and exactly 1 month old as '1 month' (key 'M') instead of ~30 days: the years and months breaks now match a diff of exactly 1.",
+          "locations": [
+            "webapp/src/ts/services/format-date.service.ts:106"
+          ],
+          "match": "A Delivered item saying exactly 1 year (and/or exactly 1 month) now displays in that unit. Separate items for the year and month boundaries together match. Delivered with a caveat that the change goes beyond the boundaries is still a match."
+        },
+        {
+          "id": "days-break-unaffected",
+          "status": "Delivered",
+          "summary": "The PR says the days break (min 0) is unaffected. The output is unchanged: a 0-day diff now returns from the loop instead of the fallback, with the same quantity and key.",
+          "locations": [
+            "webapp/src/ts/services/format-date.service.ts:106",
+            "webapp/src/ts/services/format-date.service.ts:110"
+          ],
+          "match": "A Delivered item saying day-based ages (including 0 days) are unchanged."
+        },
+        {
+          "id": "boundary-tests-added",
+          "status": "Delivered",
+          "summary": "Two tests were added for exactly 1 year ('y') and exactly 1 month ('M'); both pass against the change.",
+          "locations": [
+            "webapp/tests/karma/ts/services/format-date.service.spec.ts:151",
+            "webapp/tests/karma/ts/services/format-date.service.spec.ts:159"
+          ],
+          "match": "A Delivered item for the new exact-1-year / exact-1-month tests."
+        },
+        {
+          "id": "existing-tests-still-pass",
+          "status": "Not delivered",
+          "summary": "The PR says the existing tests for 16 months and 50 days continue to pass. They fail: 16 months 25 days now yields [1, 'y'] instead of [16, 'MM'], and 50 days [1, 'M'] instead of [50, 'dd'] (see code-review existing-age-tests-fail).",
+          "locations": [
+            "webapp/tests/karma/ts/services/format-date.service.spec.ts:124",
+            "webapp/tests/karma/ts/services/format-date.service.spec.ts:132"
+          ],
+          "match": "Not delivered because the 16-month and/or 50-day tests now fail. Delivered, Pending verification, or Not delivered for another reason is a miss."
+        },
+        {
+          "id": "maintainer-months-expected",
+          "status": "Not delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The maintainer's triage comment on the PR says months are the expected unit for a child up to ~18 months. The PR shows '1 year' from 12 months onward (any age 12–23 months), contradicting it.",
+          "locations": [
+            "webapp/src/ts/services/format-date.service.ts:106"
+          ],
+          "match": "An item citing the maintainer's comment that months are expected for young children and saying the PR conflicts with it. Not delivered, or Pending verification framed as needing a product decision, matches. Delivered is a miss."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Both changed files are described, but the one-character change does more than the PR says: it is described as affecting only exact boundary values.",
+      "required": [
+        {
+          "id": "whole-range-unit-change",
+          "summary": "Not only exact boundaries change: every age from 12 to 23 months now shows '1 year' and every age from 30 to 59 days '1 month' (see code-review under-two-shown-as-one-year).",
+          "locations": [
+            "webapp/src/ts/services/format-date.service.ts:106"
+          ],
+          "match": "Lists, as undisclosed, that ages between the boundaries (e.g. 13–23 months, 31–59 days) change unit, not just exact values."
+        },
+        {
+          "id": "relative-dates-humanized",
+          "summary": "relative(date, { withoutTime: true }) now shows 'tomorrow'/'yesterday' for dates 30–59 days or 12–23 months away (report date fields, date of death, relativeDay pipe). The PR describes only age display (see code-review relative-tomorrow-yesterday).",
+          "locations": [
+            "webapp/src/ts/services/format-date.service.ts:141",
+            "webapp/src/ts/services/format-date.service.ts:184"
+          ],
+          "match": "Lists, as undisclosed, an effect on relative dates (not ages), such as 'tomorrow'/'yesterday' for dates a month or year away. Only saying relative dates are also affected, without saying how, is a match only when it names relative()/relativeDate as a caller of getDateDiff."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": []
+    }
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "pr": "medic/cht-core#11085",
+  "title": "fix: handle zero-value LMP dates in pregnancy registration",
+  "issue": "medic/cht-core#11070",
+  "commits": {
+    "base": "b5007e8b82e7ce78875a3a7995741829edafc753",
+    "head": "63edca72da33171de311b6165c4e32160d93ac14"
+  },
+  "notes": "DRAFT: built from a manual review of the PR, not yet from benchmark runs; severities are estimates, and `rejected` items are wrong findings anticipated from that review, not ones runs have made. Closed without merging. The PR has one comment (a maintainer closing it with a link to the issue comment), no reviews and no inline comments; the issue (linked by 'Fixes #11070') has two comments: a maintainer saying a pregnancy is never registered in the week it starts, so it is not a real-world case, and a closing note. None of them names the existing meaning of a 0 LMP or any of the behaviour changes, so they give no findings away; the 'not a real-world case' comment does give a completeness review grounds to question the requirement. Competes with #11096 for the same issue. Unlike #11096 it rewrites getWeeksSinceLMP and getLMPDate, which avoids #11096's null/'' regressions but changes how the alias fields fall through and duplicates an existing helper.",
+  "code-review": {
+    "notes": "`severity` is an estimate of the severity the finding deserves, not yet taken from OCR runs; a comment that covers several items should be judged against the item that is its main point. `extra_credit` holds correct findings a review earns credit for but isn't marked down for missing.",
+    "required": [
+      {
+        "id": "zero-lmp-sentinel-overturned",
+        "severity": "high",
+        "summary": "A weeks-since-LMP of 0 is a deliberate sentinel in the base code, not a bug: the `if (!start)` branch was commented 'means baby was already born, chw just wants a registration', getWeeksSinceLMP's doc comment (kept by the PR) says it returns the value 'including 0', the test form's validation allows `min(0)`, and the tests 'zero lmp value only registers patient' and '...to null when lmp 0' pin the null dates. The `typeof lmp === 'number'` check turns a registration-only submission into a pregnancy with LMP = reported date and EDD 40 weeks later, which can start ANC schedules for a woman who has already delivered. The PR deletes the comment and renames and rewrites both tests to the new behaviour.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:185",
+          "shared-libs/transitions/src/transitions/registration.js:190",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:153",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:269"
+        ],
+        "match": "Says 0 weeks is an intended 'registration only / baby already born' value (citing the removed comment, the existing tests or the 0-40 validation), so treating it as a 0-week pregnancy changes deliberate behaviour or the tests were rewritten to fit the change. Only saying the comment was removed without saying it documented this behaviour is not a match."
+      },
+      {
+        "id": "duplicates-find-first-defined-value",
+        "severity": "low",
+        "summary": "The rewritten helpers re-implement findFirstDefinedValue, defined at the top of the same file and used by the DOB helpers: getLMPDate's `props.find(prop => fields[prop] !== undefined && fields[prop] !== null)` is the same lookup, and getDOB already shows the parseInt-and-isNaN pattern on top of it.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:170",
+          "shared-libs/transitions/src/transitions/registration.js:153",
+          "shared-libs/transitions/src/transitions/registration.js:25"
+        ],
+        "match": "Says the new first-present-field lookup duplicates findFirstDefinedValue (or the existing DOB helpers' pattern) and should reuse it."
+      }
+    ],
+    "extra_credit": [
+      {
+        "id": "epoch-zero-lmp-date",
+        "severity": "medium",
+        "summary": "`typeof lmpDate === 'number'` makes `lmp_date: 0` give an LMP of 1970-01-01 and an EDD in 1970, and any weeks_since_lmp on the same doc is ignored (the base code fell back to it). The new test 'sets lmp_date and expected_date correctly for lmp_date = 0' asserts the 1970 dates as correct. The issue asks for epoch 0 to be treated as a valid date and the PR states it, so this is a disagreement with a stated choice; 0 as a date is far more likely a placeholder than a real LMP.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:181",
+          "shared-libs/transitions/test/unit/pregnancy_registration.js:558"
+        ],
+        "match": "Says an lmp_date of 0 now produces a 1970 LMP/EDD (or overrides a weeks value), or that the new test enshrines a 1970 date as correct."
+      },
+      {
+        "id": "no-fallthrough-on-unparseable",
+        "severity": "low",
+        "summary": "Both helpers now stop at the first present alias and return undefined if it doesn't parse, where the base loops went on to the next alias on NaN. `{weeks_since_lmp: 'abc', lmp: 10}` and `{lmp_date: 'x', date_lmp: <valid ms>}` used to produce dates and now don't. Unlikely in practice, since a form rarely fills two aliases.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:161",
+          "shared-libs/transitions/src/transitions/registration.js:175"
+        ],
+        "match": "Says an unparseable value in an earlier alias field now stops the lookup instead of falling through to a later alias (lmp / date_lmp). Comments about '' in lmp_date are lmp-date-empty-not-skipped."
+      },
+      {
+        "id": "lmp-date-empty-not-skipped",
+        "severity": "low",
+        "summary": "getWeeksSinceLMP skips blank strings when choosing an alias but getLMPDate skips only null/undefined, so `lmp_date: ''` is chosen, parses to NaN and hides a valid date_lmp. The base code also ignored date_lmp in that case (it returned ''), so this is an inconsistency the rewrite keeps rather than a regression.",
+        "locations": [
+          "shared-libs/transitions/src/transitions/registration.js:170"
+        ],
+        "match": "Says getLMPDate doesn't skip empty strings the way getWeeksSinceLMP does, so an empty lmp_date masks date_lmp."
+      }
+    ],
+    "rejected": [
+      {
+        "id": "empty-lmp-date-blocks-weeks",
+        "summary": "An empty-string lmp_date passes getLMPDate's null/undefined check, so it is used as the LMP date and the weeks_since_lmp fallback never runs (or moment(NaN) produces an invalid date).",
+        "reason": "getLMPDate parses '' to NaN and returns undefined, so `typeof lmpDate === 'number'` is false and setExpectedBirthDate falls back to weeks_since_lmp, as before.",
+        "match": "Says an empty lmp_date now blocks the weeks-since-LMP fallback or yields an invalid date."
+      }
+    ]
+  },
+  "completeness-review": {
+    "requirements": {
+      "notes": "Reports split and merge requirements differently from run to run, so each item is matched by meaning, and one report item may cover several. `status` is the bucket it should land in, judged from the code; `acceptable` lists other buckets that are not counted as a miss. The issue's maintainer comment says a 0-week registration is not a real-world case, which a report may cite. Report items for trivial changes (the `doc?.fields` guard, the parseInt radix, chaining `.subtract` onto `startOf`) match nothing and are not scored. `preconditions_to_confirm` holds the operational facts the skill should list under 'Preconditions to confirm'; empty means it should say None. `rejected` holds findings reviews are likely to make that are wrong.",
+      "required": [
+        {
+          "id": "zero-weeks-sets-dates",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "The issue's expected behaviour and the PR's main claim: weeks_since_lmp 0 sets lmp_date to the reported date and expected_date 40 weeks later. `typeof lmp === 'number'` does this. It overturns the base code's deliberate 'registration only' meaning of 0 (code-review zero-lmp-sentinel-overturned), and the issue's maintainer comment says the case doesn't occur.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:185"
+          ],
+          "match": "A Delivered item saying a 0 weeks value now produces lmp_date and expected_date. Pending verification matches only when it names the existing registration-only meaning of 0 or the maintainer's not-real-world comment."
+        },
+        {
+          "id": "lmp-date-zero-handled",
+          "status": "Delivered",
+          "acceptable": [
+            "Pending verification"
+          ],
+          "summary": "'fixed handling for ... lmp_date = 0' and the issue's epoch-0 date: lmp_date 0 now gives a 1970-01-01 LMP and 1970 EDD, ignoring any weeks value (code-review epoch-zero-lmp-date).",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:181"
+          ],
+          "match": "A Delivered item saying lmp_date 0 is now used as a date. Pending verification matches only when it questions the resulting 1970 date."
+        },
+        {
+          "id": "truthy-checks-replaced",
+          "status": "Delivered",
+          "summary": "The truthy checks in setExpectedBirthDate are replaced by `typeof ... === 'number'`, and the helpers now look for the first non-null, non-undefined (and, for weeks, non-blank) field and return undefined for NaN.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:181",
+            "shared-libs/transitions/src/transitions/registration.js:185",
+            "shared-libs/transitions/src/transitions/registration.js:153",
+            "shared-libs/transitions/src/transitions/registration.js:170"
+          ],
+          "match": "A Delivered item for replacing the truthy checks with explicit type or null/undefined checks."
+        },
+        {
+          "id": "missing-empty-preserved",
+          "status": "Delivered",
+          "acceptable": [
+            "Not delivered",
+            "Pending verification"
+          ],
+          "summary": "'preserved existing behavior for missing or empty inputs': for a doc with one LMP field, absent, null and empty values still give null dates (or the weeks fallback for an empty lmp_date), as before. It doesn't hold across aliases: `{weeks_since_lmp: '', lmp: 10}` went from null dates to 10-week dates, `{lmp_date: null, date_lmp: <ms>}` from null dates to dates, and an unparseable earlier alias no longer falls through (code-review no-fallthrough-on-unparseable).",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:155",
+            "shared-libs/transitions/src/transitions/registration.js:161",
+            "shared-libs/transitions/src/transitions/registration.js:175"
+          ],
+          "match": "A Delivered item saying missing or empty inputs still give null dates. Not delivered or Pending verification matches only when it names a concrete input whose result changed, such as an empty or null field now falling through to a later alias, or an unparseable alias no longer falling through."
+        },
+        {
+          "id": "zero-week-regression-tests",
+          "status": "Delivered",
+          "summary": "'added regression coverage for zero-week pregnancy registrations': the setExpectedBirthDate and onMatch tests for lmp 0 now assert LMP = reported date (and EDD for the former). They replace tests that pinned the old, intended behaviour.",
+          "locations": [
+            "shared-libs/transitions/test/unit/pregnancy_registration.js:153",
+            "shared-libs/transitions/test/unit/pregnancy_registration.js:269"
+          ],
+          "match": "A Delivered item for the zero-week tests. Noting that they replace tests of intended behaviour is part of the same item."
+        },
+        {
+          "id": "null-undefined-empty-tests",
+          "status": "Delivered",
+          "summary": "'added validation coverage for null, undefined, and empty string cases': one new test checks null dates for `lmp` null, undefined and ''. It covers only the `lmp` alias through setExpectedBirthDate, not lmp_date or the alias fall-through, and it passes on the base code too.",
+          "locations": [
+            "shared-libs/transitions/test/unit/pregnancy_registration.js:162"
+          ],
+          "match": "A Delivered item for the null/undefined/empty test. Noting its narrow coverage is part of the same item."
+        }
+      ],
+      "preconditions_to_confirm": []
+    },
+    "undisclosed_changes": {
+      "notes": "Both changed files are touched by described changes, but the helper rewrite and the comment removals go beyond what the description says. Trivial refactors (the `doc?.fields` guard, the parseInt radix, chaining `.subtract`) are not scored.",
+      "required": [
+        {
+          "id": "intent-comments-removed",
+          "summary": "The PR deletes the comment on the `if (!start)` branch, 'means baby was already born, chw just wants a registration', which documented the 0-weeks behaviour the PR changes, and getLMPDate's doc comment. The description doesn't mention either.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:190",
+            "shared-libs/transitions/src/transitions/registration.js:164"
+          ],
+          "match": "Lists the removal of the 'baby already born' comment (or of the helpers' comments) as an undisclosed change."
+        },
+        {
+          "id": "alias-fallthrough-changed",
+          "summary": "getWeeksSinceLMP and getLMPDate change which alias field wins: null and blank (weeks) values are now skipped and the next alias used, and an unparseable value now ends the lookup instead of falling through. The description says only that truthy checks were replaced and that missing/empty behaviour is preserved.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:153",
+            "shared-libs/transitions/src/transitions/registration.js:161",
+            "shared-libs/transitions/src/transitions/registration.js:170",
+            "shared-libs/transitions/src/transitions/registration.js:175"
+          ],
+          "match": "Lists the rewrite of getWeeksSinceLMP / getLMPDate, or its change to how alias fields are chosen or fall through, as an undisclosed change. Only saying the getters now tolerate a null or undefined `doc` is not a match: that is the trivial `doc?.fields` guard."
+        }
+      ]
+    },
+    "alternative_approaches": {
+      "required": [
+        {
+          "id": "use-find-first-defined-value",
+          "summary": "findFirstDefinedValue, at the top of registration.js and used by the getYears/Months/Weeks/DaysSinceDOB helpers, already finds the first non-null, non-undefined alias; getDOB then parses it with parseInt and isNaN. The new helpers re-implement that lookup inline.",
+          "locations": [
+            "shared-libs/transitions/src/transitions/registration.js:25",
+            "shared-libs/transitions/src/transitions/registration.js:98"
+          ],
+          "match": "Cites findFirstDefinedValue, or the DOB helpers built on it, as the existing way to pick the LMP field."
+        }
+      ]
+    }
+  }
+}

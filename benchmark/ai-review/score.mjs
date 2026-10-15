@@ -3,9 +3,9 @@
  * Scores benchmark runs against the cases in cases/: an LLM judge matches each run's findings to the case's items, and
  * the score (found / failed / rejected / unmatched ids, plus metrics) is derived from those matches. See cases/README.md.
  *
- * Usage: node benchmark/ai-review/score.mjs <bench-results/run-dir>...
+ * Usage: node benchmark/ai-review/score.mjs [--case <case>]... <bench-results/run-dir>...
  *
- * Writes <run-dir>/<case>/score.json for every case the run has results for: the score, in the shape of an entry in
+ * Writes <run-dir>/<case>/score.json for every case the run has results for, or only for the cases named by --case: the score, in the shape of an entry in
  * baseline.json's `runs`, and each judge pass's per-finding matches and usage. The judge runs JUDGE_PASSES times and the
  * score is the first pass's. Prints a one-line summary per score, any disagreement between the passes, and any difference
  * from baseline.json's score for the same run.
@@ -16,6 +16,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CASES_DIR = join(HERE, 'cases');
@@ -99,7 +100,7 @@ const JUDGE_SYSTEM = `You score an AI code review of one pull request against an
 
 The key lists items, each with an id, a summary and a match rule. Its summaries are verified facts about the PR's code; you don't have the code, and don't need it. Required and extra-credit items are correct findings. Rejected items are known-wrong findings that reviews have made before.
 
-For every finding you are given, list the ids of the key items it matches. A finding matches an item when it makes the item's point as the item's match rule describes, including any condition the rule sets (a reason, a bucket) and excluding the near-misses it names. Mentioning the same code, file or topic is not enough. One finding may match several items when it makes several points; many findings match one; some match none. Judge what the finding says, not whether you agree with it.
+For every finding you are given, list the ids of the key items it matches. A finding matches an item when it makes the item's point as the item's match rule describes, including any condition the rule sets (a reason, a bucket) and excluding the near-misses it names. Mentioning the same code, file or topic is not enough. One finding may match several items when it makes several points; many findings match one; some match none. A finding that repeats or extends a point an earlier finding made still matches that point's item: don't leave it unmatched because the item is already found. Judge what the finding says, not whether you agree with it.
 
 Give a one-sentence reason for each decision, naming the deciding words of the finding.`;
 
@@ -112,6 +113,14 @@ const keyText = (items, intro) => `${intro}\n\n<key>\n${JSON.stringify(items.map
   ...(item.reason && { why_wrong: item.reason }),
   match: item.match,
 })), null, 2)}\n</key>`;
+
+/** The judge must return exactly one decision per ref it was given */
+const checkRefs = (decisions, refs) => {
+  const returned = decisions.map(d => d.ref).sort();
+  if (JSON.stringify(returned) !== JSON.stringify([...refs].sort())) {
+    throw new Error(`Judge returned decisions for ${returned.join(', ')}, expected ${refs.join(', ')}`);
+  }
+};
 
 /** Schema for a list of the judge's decisions, each with `fields` plus the ids it matches and a reason */
 const decisionsSchema = (listName, items, fields) => ({
@@ -193,10 +202,7 @@ const judgeCodeReview = async (items, { findings, metrics }) => {
     decisionsSchema('decisions', items, { ref: { type: 'string', enum: refs } }),
   );
   const { decisions } = output;
-  const returned = decisions.map(d => d.ref).sort();
-  if (JSON.stringify(returned) !== JSON.stringify([...refs].sort())) {
-    throw new Error(`Judge returned decisions for ${returned.join(', ')}, expected ${refs.join(', ')}`);
-  }
+  checkRefs(decisions, refs);
 
   // Comments that failed to post never reached the PR, so they only count as `failed`
   const posted = decisions.filter(d => d.ref.startsWith('posted-'));
@@ -217,6 +223,26 @@ const judgeCodeReview = async (items, { findings, metrics }) => {
 
 // ---- Completeness review
 
+/**
+ * The report's items: every bullet except a "None", with any lines it wraps onto. Numbered here rather than by the judge,
+ * so the judge can't merge or split them.
+ */
+const reportBullets = report => {
+  const bullets = [];
+  let open = false;
+  for (const line of report.split('\n')) {
+    if (/^\s*[-*]\s+/.test(line)) {
+      bullets.push(line.trim());
+      open = true;
+    } else if (!line.trim() || /^\s*#/.test(line) || /^\s*\*\*[^*]+\*\*:?\s*$/.test(line)) {
+      open = false;
+    } else if (open) {
+      bullets[bullets.length - 1] += ` ${line.trim()}`;
+    }
+  }
+  return bullets.filter(b => !/^[-*]\s+None\b/.test(b)).map((text, i) => ({ ref: `item-${i}`, text }));
+};
+
 const loadCompleteness = dir => {
   const run = readRun(dir);
   const report = readFileSync(join(dir, 'report.md'), 'utf8');
@@ -228,6 +254,7 @@ const loadCompleteness = dir => {
   const blocks = type => messages.filter(m => m.type === type).flatMap(m => m.message?.content ?? []);
   return {
     report,
+    bullets: reportBullets(report),
     metrics: {
       total_tokens: Object.values(result.modelUsage)
         .reduce((sum, u) => sum + u.inputTokens + u.outputTokens + u.cacheReadInputTokens + u.cacheCreationInputTokens, 0),
@@ -241,32 +268,33 @@ const loadCompleteness = dir => {
 // A case keeps rejected preconditions with the requirements, so the two sections count as one
 const sectionGroup = section => section === 'preconditions_to_confirm' ? 'requirements' : section;
 
-const judgeCompleteness = async (items, { report, metrics }) => {
+const judgeCompleteness = async (items, notes, { report, bullets, metrics }) => {
+  if (!bullets.length) {
+    return { score: { found: [], rejected: [], unmatched: 0, ...metrics }, judgment: { items: [] } };
+  }
+  const refs = bullets.map(b => b.ref);
   const { output, model, usage } = await judge(
     items,
     'The review is a completeness report: whether the PR delivers what its description and linked issue promise. ' +
       'Each item has the report section it belongs to; a requirement also has the bucket it should land in (status) ' +
-      'and other buckets that are acceptable.',
-    `<report>\n${report}\n</report>\n\n` +
-      'Split the report into its items: every bullet under Requirements, Preconditions to confirm, Undisclosed Changes ' +
-      'and Alternative Approaches. Skip a section that says "None". Give each item its section, its bucket (for ' +
-      'requirements; "none" otherwise), and its opening words as text. An item matches a key item only in that item\'s ' +
+      'and other buckets that are acceptable. The key\'s notes for each section say how its items are matched, and ' +
+      `which report items are trivial and not scored.\n\n<key_notes>\n${JSON.stringify(notes, null, 2)}\n</key_notes>`,
+    `<report>\n${report}\n</report>\n\n<report_items>\n${JSON.stringify(bullets, null, 2)}\n</report_items>\n\n` +
+      'The report items are the report\'s bullets, numbered in order. Return one decision per report item ref. Give ' +
+      'each its section (the one it sits under in the report), and its bucket (for requirements; "none" otherwise). ' +
+      'A report item matches a key item only in that item\'s ' +
       'section (requirements and preconditions_to_confirm count as one section), and a requirement only when its bucket is the status or an acceptable bucket and it meets the match rule. ' +
-      'Set trivial to true only for a Delivered requirement that matches nothing and states a trivial change (an ' +
-      'import, a rename, a file or test count); otherwise false.',
+      'Set trivial to true only for a report item that matches nothing and either is one the key notes for its section ' +
+      'say is not scored, or is a Delivered requirement that states a trivial change (an import, a rename, a file or ' +
+      'test count); otherwise false.',
     decisionsSchema('items', items, {
+      ref: { type: 'string', enum: refs },
       section: { type: 'string', enum: SECTIONS },
       bucket: { type: 'string', enum: [...BUCKETS, 'none'] },
-      text: { type: 'string' },
       trivial: { type: 'boolean' },
     }),
   );
-
-  // Every report item is one bullet, so a judge that skipped or invented an item shows up in the count
-  const bullets = report.split('\n').filter(line => /^\s*[-*]\s+(?!None\b)/.test(line)).length;
-  if (output.items.length !== bullets) {
-    throw new Error(`Judge returned ${output.items.length} report items, but the report has ${bullets} bullets`);
-  }
+  checkRefs(output.items, refs);
 
   // Hold the judge to the section and bucket rules, so a match it gets wrong there doesn't count
   const byId = Object.fromEntries(items.map(i => [i.id, i]));
@@ -275,14 +303,16 @@ const judgeCompleteness = async (items, { report, metrics }) => {
     return sectionGroup(item.section) === sectionGroup(reportItem.section) &&
       (!item.status || [item.status, ...(item.acceptable ?? [])].includes(reportItem.bucket));
   };
-  const reportItems = output.items.map(i => ({ ...i, counted: i.matches.filter(id => counts(i, id)) }));
+  const textByRef = Object.fromEntries(bullets.map(b => [b.ref, b.text]));
+  const reportItems = output.items
+    .sort((a, b) => refs.indexOf(a.ref) - refs.indexOf(b.ref))
+    .map(i => ({ ...i, text: textByRef[i.ref], counted: i.matches.filter(id => counts(i, id)) }));
   const ids = new Set(reportItems.flatMap(i => i.counted));
   return {
     score: {
       found: inOrder(items, ['required'], ids),
       rejected: inOrder(items, ['rejected'], ids),
-      unmatched: reportItems.filter(i => !i.counted.length &&
-        !(i.trivial && i.section === 'requirements' && i.bucket === 'Delivered')).length,
+      unmatched: reportItems.filter(i => !i.counted.length && !i.trivial).length,
       ...metrics,
     },
     judgment: { items: reportItems, model, usage },
@@ -300,7 +330,11 @@ export const hasCase = caseName => existsSync(join(CASES_DIR, `${caseName}.json`
 export const readBaseline = () => existsSync(BASELINE) ? readJson(BASELINE) : undefined;
 
 export const scoreCase = async (runDir, caseName, baseline) => {
-  const items = caseItems(readJson(join(CASES_DIR, `${caseName}.json`)));
+  const kase = readJson(join(CASES_DIR, `${caseName}.json`));
+  const items = caseItems(kase);
+  const notes = Object.fromEntries(['requirements', 'undisclosed_changes', 'alternative_approaches']
+    .filter(section => kase['completeness-review'][section]?.notes)
+    .map(section => [section, kase['completeness-review'][section].notes]));
   const dir = join(runDir, caseName);
   const run = basename(runDir);
   const codeReview = loadCodeReview(join(dir, 'code-review'));
@@ -309,7 +343,7 @@ export const scoreCase = async (runDir, caseName, baseline) => {
   const passes = await Promise.all(Array.from({ length: JUDGE_PASSES }, async () => {
     const [cr, cp] = await Promise.all([
       judgeCodeReview(items.filter(i => i.job === 'code-review'), codeReview),
-      judgeCompleteness(items.filter(i => i.job === 'completeness-review'), completeness),
+      judgeCompleteness(items.filter(i => i.job === 'completeness-review'), notes, completeness),
     ]);
     return {
       score: { case: caseName, run, 'code-review': cr.score, 'completeness-review': cp.score },
@@ -335,15 +369,20 @@ export const scoreCase = async (runDir, caseName, baseline) => {
 };
 
 const main = async () => {
-  const runDirs = process.argv.slice(2).map(d => resolve(d));
+  const { values, positionals } = parseArgs({ options: { case: { type: 'string', multiple: true } }, allowPositionals: true });
+  const runDirs = positionals.map(d => resolve(d));
   if (!runDirs.length) {
-    throw new Error('Usage: node benchmark/ai-review/score.mjs <bench-results/run-dir>...');
+    throw new Error('Usage: node benchmark/ai-review/score.mjs [--case <case>]... <bench-results/run-dir>...');
+  }
+  const unknown = (values.case ?? []).filter(c => !hasCase(c));
+  if (unknown.length) {
+    throw new Error(`No case ${unknown.join(', ')} in ${CASES_DIR}`);
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not set');
   }
   const work = runDirs.flatMap(runDir => readdirSync(runDir, { withFileTypes: true })
-    .filter(d => d.isDirectory() && hasCase(d.name))
+    .filter(d => d.isDirectory() && hasCase(d.name) && (!values.case || values.case.includes(d.name)))
     .map(d => [runDir, d.name]));
   if (!work.length) {
     throw new Error(`No results for a case in ${CASES_DIR}`);

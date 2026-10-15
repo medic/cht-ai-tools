@@ -88,7 +88,7 @@ One object per report section, each with a `required` list and an optional `reje
 - `alternative_approaches.required`: existing code in the repo that would solve the problem better, cited by path.
 - `rejected`, in the section where the wrong finding appeared. On 11263, an invented `@medic/logger` precondition goes in `requirements.rejected`, and the unused test declarations reported as an undisclosed change go in `undisclosed_changes.rejected`.
 
-Don't make one requirement two items because the report usually splits it, and don't add an item that can only be met by meeting another. On 11263, "the request completes" is part of `routing-responds-502`, since the 502 is how it completes. Report items for trivial PR bullets (an import, a rename, a test count) match nothing, aren't scored, and needn't be in the case. Say so in the section's `notes`.
+Don't make one requirement two items because the report usually splits it, and don't add an item that can only be met by meeting another. On 11263, "the request completes" is part of `routing-responds-502`, since the 502 is how it completes. Report items for trivial PR bullets (an import, a rename, a test count) match nothing, aren't scored, and needn't be in the case. Say so in the section's `notes`, naming them: the judge reads each section's `notes`, and doesn't count a report item they say isn't scored, in any section or bucket.
 
 ### 6. Write each item
 
@@ -107,9 +107,11 @@ Every item has an `id` and:
 ANTHROPIC_API_KEY=... npm run bench:ai-review:score -- bench-results/2026-10-05T14-57-09 bench-results/2026-10-05T15-07-06
 ```
 
+`--case medic__cht-core__11263` (repeatable) limits it to those cases. Without it, every case the runs have results for is scored.
+
 For every case a run has results for, it computes the metrics, has an LLM judge (Claude Opus 5.5, `JUDGE_MODEL` in the script) match each finding to the case's items, and derives the score from those matches. The judge runs twice (`JUDGE_PASSES`), at about $0.05 per job per pass on 11263, and the score is the first pass's. It writes `<run-dir>/<case>/score.json`, holding the score (`score`, in the shape of an entry in the baseline's `runs`), each pass's decision for every finding with its reason (`judgments`), and any difference between the passes' scores (`disagreements`). It prints a one-line summary per score saying whether the passes agree, every disagreement, and every difference from the baseline's score for the same run, which is how the judge is checked (see below). Settle a disagreement by reading the passes' reasons before using the score.
 
-The judge sees only the case and the findings, not the code, so a case's summaries must stand on their own. It is held to the rules below in code: a requirement only counts in an accepted bucket, an item only in its own section (Requirements and Preconditions to confirm count as one), and a comment that failed to post never counts as found. Read the `reason`s in `score.json` for any finding it left unmatched before adding it to a case.
+The judge sees only the case and the findings, not the code, so a case's summaries must stand on their own. It is held to the rules below in code: a requirement only counts in an accepted bucket, an item only in its own section (Requirements and Preconditions to confirm count as one), and a comment that failed to post never counts as found. The findings it judges are fixed in code too: OCR's comments, and the report's bullets (except "None"), each with a ref, and it must return exactly one decision per ref. Read the `reason`s in `score.json` for any finding it left unmatched before adding it to a case.
 
 Each score is:
 
@@ -121,11 +123,11 @@ Each score is:
 - **`completeness-review`:**
   - `found`: the `required` ids its report matches, across all sections, in an accepted bucket.
   - `rejected`: the `rejected` ids it matches.
-  - `unmatched`: the number of report items that match nothing and claim something. That means a requirement in an unaccepted bucket, or a precondition, undisclosed change or alternative the case doesn't list. Trivial Delivered items aren't counted.
+  - `unmatched`: the number of report items that match nothing and claim something. That means a requirement in an unaccepted bucket, or a precondition, undisclosed change or alternative the case doesn't list. Trivial items aren't counted: a Delivered item for an import, a rename or a file or test count, and any item the section's `notes` say isn't scored.
 - **Both jobs:** the metrics `total_tokens`, `tool_calls_total`, `tool_calls_failure` and `duration_ms`.
 
 Matching rules:
-- A finding matches an item when it meets the item's `match`. One finding may match several items (e.g. a comment making two points), and an item is found when any finding matches it.
+- A finding matches an item when it meets the item's `match`. One finding may match several items (e.g. a comment making two points), and an item is found when any finding matches it. A finding that repeats or extends an earlier finding's point matches the same item.
 - When a report puts one requirement in two buckets, the accepted one counts.
 - A finding needn't cite the item's `locations`. The run's severity isn't compared with the case's.
 - Unmatched findings are for a human to judge. A correct one is added to the case's `required` or `extra_credit`, a wrong one to `rejected`.
